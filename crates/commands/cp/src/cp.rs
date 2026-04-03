@@ -1298,10 +1298,8 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
     // 记录已复制文件的目标路径，以便检查重复和处理非致命错误。
     let mut copied_dest: HashSet<PathBuf> = HashSet::with_capacity(sour_path.len());
 
-    // 用于检测重复的源文件（通过inode和设备号）
-    #[cfg(unix)]
-    let mut processed_sources: HashSet<(u64, u64)> = HashSet::with_capacity(sour_path.len());
-    #[cfg(not(unix))]
+    // 将重复检测依据从 (device_id, inode) 改为绝对路径/规范化路径。
+    // 这样，互为硬链接的不同路径（如 a 和 b）就不会被误判为重复指定的同一个源文件。
     let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(sour_path.len());
 
     // 根据选项决定是否创建进度条
@@ -1327,12 +1325,10 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
             Ok(meta) => meta,
             Err(_) => {
                 // 如果无法获取元数据，仍然尝试复制，让 copy_source 处理错误
-                // 计算目标路径
                 let dest_path =
                     cp_construct_dest_path(source_path, target_path, cp_target_type, cp_opts)
                         .unwrap_or_else(|_| target_path.to_path_buf());
 
-                // 检查是否已创建过此目标
                 if fs::metadata(&dest_path).is_ok()
                     && !fs::symlink_metadata(&dest_path)?.file_type().is_symlink()
                     && copied_dest.contains(&dest_path)
@@ -1345,7 +1341,6 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                     )));
                 }
 
-                // 尝试复制源文件到目标路径
                 if let Err(error) = copy_source(
                     &process_bar,
                     source_path,
@@ -1364,71 +1359,34 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
         };
 
         // 检查源文件是否已经被处理过（检测重复源）
-        // 根据 GNU cp 行为：
-        // - NoBackup 模式下，输出警告并跳过重复源
-        // - NumberedBackup 或 ExistingBackup 模式下，静默处理重复源
-        //   * NumberedBackup: 静默跳过
-        //   * ExistingBackup: 静默尝试复制（可能触发 will not overwrite 错误）
-        // - SimpleBackup 模式下，输出警告并尝试复制
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            let source_key = (source_metadata.dev(), source_metadata.ino());
-            let is_duplicate = processed_sources.contains(&source_key);
-            if is_duplicate {
-                // 只有在 NoBackup 模式下才输出警告
-                if cp_opts.backup == CtBackupMode::NoBackup {
-                    let file_type = source_metadata.file_type();
-                    let source_type = if file_type.is_dir() {
-                        "directory"
-                    } else {
-                        "file"
-                    };
-                    ct_show_warning!(
-                        "source {} '{}' specified more than once",
-                        source_type,
-                        source_path.display()
-                    );
-                }
-                // NoBackup 或 NumberedBackup 模式下跳过，其他模式继续尝试复制
-                if cp_opts.backup == CtBackupMode::NoBackup
-                    || cp_opts.backup == CtBackupMode::NumberedBackup
-                {
-                    continue;
-                }
-            } else {
-                processed_sources.insert(source_key);
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            if let Ok(canonical) = source_path.canonicalize() {
-                let is_duplicate = processed_sources.contains(&canonical);
-                if is_duplicate {
-                    // 只有在 NoBackup 模式下才输出警告
-                    if cp_opts.backup == CtBackupMode::NoBackup {
-                        let file_type = source_metadata.file_type();
-                        let source_type = if file_type.is_dir() {
-                            "directory"
-                        } else {
-                            "file"
-                        };
-                        ct_show_warning!(
-                            "source {} '{}' specified more than once",
-                            source_type,
-                            source_path.display()
-                        );
-                    }
-                    // NoBackup 或 NumberedBackup 模式下跳过
-                    if cp_opts.backup == CtBackupMode::NoBackup
-                        || cp_opts.backup == CtBackupMode::NumberedBackup
-                    {
-                        continue;
-                    }
+        let canonical_source = source_path
+            .canonicalize()
+            .unwrap_or_else(|_| source_path.to_path_buf());
+
+        let is_duplicate = processed_sources.contains(&canonical_source);
+        if is_duplicate {
+            // 只有在 NoBackup 模式下才输出警告
+            if cp_opts.backup == CtBackupMode::NoBackup {
+                let file_type = source_metadata.file_type();
+                let source_type = if file_type.is_dir() {
+                    "directory"
                 } else {
-                    processed_sources.insert(canonical);
-                }
+                    "file"
+                };
+                ct_show_warning!(
+                    "source {} '{}' specified more than once",
+                    source_type,
+                    source_path.display()
+                );
             }
+            // NoBackup 或 NumberedBackup 模式下跳过，其他模式继续尝试复制
+            if cp_opts.backup == CtBackupMode::NoBackup
+                || cp_opts.backup == CtBackupMode::NumberedBackup
+            {
+                continue;
+            }
+        } else {
+            processed_sources.insert(canonical_source);
         }
 
         // 计算目标路径
@@ -1441,7 +1399,6 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
             && copied_dest.contains(&dest_path)
             && cp_opts.backup != CtBackupMode::NumberedBackup
         {
-            // 如果目标文件是本次复制过程中创建的，且不允许覆盖，则报错
             return Err(CpError::Error(format!(
                 "will not overwrite just-created '{}' with '{}'",
                 dest_path.display(),
@@ -1459,20 +1416,16 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
             &mut symlinked_files_info,
             &mut copy_files,
         ) {
-            // 如果发生错误，显示错误信息，并标记为非致命错误
             show_error_if_needed(&error);
             is_non_fatal_errors = true;
         }
-        // 将目标路径加入已复制文件集合中
         copied_dest.insert(dest_path.clone());
     }
 
-    // 如果创建了进度条，完成进度条显示
     if let Some(pb) = process_bar {
         pb.finish();
     }
 
-    // 如果发生过非致命错误，返回相应错误信息；否则，返回成功
     if is_non_fatal_errors {
         Err(CpError::NotAllFilesCopied)
     } else {

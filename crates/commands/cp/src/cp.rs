@@ -1298,8 +1298,8 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
     // 记录已复制文件的目标路径，以便检查重复和处理非致命错误。
     let mut copied_dest: HashSet<PathBuf> = HashSet::with_capacity(sour_path.len());
 
-    // 将重复检测依据从 (device_id, inode) 改为绝对路径/规范化路径。
-    // 这样，互为硬链接的不同路径（如 a 和 b）就不会被误判为重复指定的同一个源文件。
+    // 将重复检测依据从 (device_id, inode) 改为精确的字面路径。
+    // 严禁使用 canonicalize()，否则正常的软链接复制（解析后指向同一文件）会被误判为重复输入而跳过！
     let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(sour_path.len());
 
     // 根据选项决定是否创建进度条
@@ -1359,11 +1359,8 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
         };
 
         // 检查源文件是否已经被处理过（检测重复源）
-        let canonical_source = source_path
-            .canonicalize()
-            .unwrap_or_else(|_| source_path.to_path_buf());
-
-        let is_duplicate = processed_sources.contains(&canonical_source);
+        // 这里直接使用清理好的字面路径 source_path，不再解析软链接
+        let is_duplicate = processed_sources.contains(source_path);
         if is_duplicate {
             // 只有在 NoBackup 模式下才输出警告
             if cp_opts.backup == CtBackupMode::NoBackup {
@@ -1386,7 +1383,7 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                 continue;
             }
         } else {
-            processed_sources.insert(canonical_source);
+            processed_sources.insert(source_path.to_path_buf());
         }
 
         // 计算目标路径

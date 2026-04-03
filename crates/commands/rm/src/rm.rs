@@ -598,7 +598,6 @@ fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bo
                         }
                         Err(e) => {
                             if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
                                 ct_show_error!(
                                     "cannot remove {}: {}",
                                     display_path.quote(),
@@ -611,7 +610,6 @@ fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bo
                         }
                     }
                 } else {
-                    // directory can be read but is not empty
                     ct_show_error!(
                         "cannot remove {}: Directory not empty",
                         display_path.quote()
@@ -619,12 +617,10 @@ fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bo
                     return true;
                 }
             } else {
-                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
                 ct_show_error!("cannot remove {}: Is a directory", display_path.quote());
                 return true;
             }
         } else {
-            // GNU's rm shows this message if directory is empty but not readable
             ct_show_error!(
                 "cannot remove {}: Directory not empty",
                 display_path.quote()
@@ -632,7 +628,6 @@ fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bo
             return true;
         }
     }
-
     false
 }
 
@@ -647,7 +642,6 @@ fn remove_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
             }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
                     ct_show_error!(
                         "cannot remove {}: {}",
                         display_path.quote(),
@@ -660,18 +654,13 @@ fn remove_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
             }
         }
     }
-
     false
 }
 
 fn prompt_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
-    // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-
-    // We can't use metadata.permissions.readonly for directories because it only works on files
-    // So we have to handle whether a directory is writable manually
     if let Ok(metadata) = fs::metadata(local_path) {
         handle_writable_directory(local_path, display_path, options, &metadata)
     } else {
@@ -680,11 +669,9 @@ fn prompt_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bo
 }
 
 fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
-    // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-    // If interactive is Always we want to check if the file is symlink to prompt the right message
     if options.interactive == InteractiveMode::Always {
         if let Ok(metadata) = fs::symlink_metadata(local_path) {
             if metadata.is_symlink() {
@@ -692,7 +679,6 @@ fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
             }
         }
     }
-    // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
     match File::options().read(true).write(true).open(local_path) {
         Ok(file) => {
             let Ok(metadata) = file.metadata() else {
@@ -720,7 +706,7 @@ fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
 fn prompt_file_permission_readonly(local_path: &Path, display_path: &Path) -> bool {
     #[cfg(unix)]
     if unsafe { libc::geteuid() } == 0 {
-        return true; // root 不受只读保护限制，直接放行
+        return true;
     }
 
     match fs::metadata(local_path) {
@@ -736,8 +722,6 @@ fn prompt_file_permission_readonly(local_path: &Path, display_path: &Path) -> bo
     }
 }
 
-// For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to to check mode bits. But other os don't have something similar afaik
-// Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
 fn handle_writable_directory(
     _local_path: &Path,
@@ -747,11 +731,9 @@ fn handle_writable_directory(
 ) -> bool {
     use std::os::unix::fs::PermissionsExt;
     let mode = metadata.permissions().mode();
-    // Check if directory has user write permissions
     #[allow(clippy::unnecessary_cast)]
     let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
 
-    // 如果是 root，同样豁免只读权限限制
     let is_root = unsafe { libc::geteuid() } == 0;
 
     if !user_writable && !is_root {
@@ -763,7 +745,6 @@ fn handle_writable_directory(
     }
 }
 
-// For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
 fn handle_writable_directory(
     _local_path: &Path,
@@ -783,7 +764,6 @@ fn handle_writable_directory(
     }
 }
 
-// I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
 #[cfg(not(windows))]
 #[cfg(not(unix))]
 fn handle_writable_directory(
@@ -804,10 +784,6 @@ fn prompt_descend(display_path: &Path) -> bool {
 }
 
 fn normalize(path: &Path) -> PathBuf {
-    // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
-    // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
-    // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
-    // TODO: replace this once that lands
     ctcore::ct_fs::normalize_path(path)
 }
 
@@ -819,7 +795,7 @@ fn get_device(metadata: &Metadata) -> u64 {
 
 #[cfg(not(unix))]
 fn get_device(_metadata: &Metadata) -> u64 {
-    0 // Windows 等非 Unix 系统直接视为同设备
+    0
 }
 
 fn is_mount_point(path: &Path) -> bool {
@@ -834,81 +810,6 @@ fn is_mount_point(path: &Path) -> bool {
     false
 }
 
-fn interactive_remove_dir_all(
-    path: &Path,
-    options: &RMOptions,
-    top_dev: u64,
-    is_top_level: bool,
-) -> bool {
-    let mut had_err = false;
-
-    // 1. One file system 跨设备检测 (顶层参数本身不跳过)
-    if !is_top_level && options.one_fs {
-        if let Ok(meta) = fs::symlink_metadata(path) {
-            if get_device(&meta) != top_dev {
-                ct_show_error!(
-                    "skipping {}, since it's on a different device",
-                    path.quote()
-                );
-                return true;
-            }
-        }
-    }
-
-    // 2. 读取目录内容，判断是否为空
-    let mut is_empty = true;
-    let mut entries = Vec::new();
-    match fs::read_dir(path) {
-        Ok(iter) => {
-            for entry in iter {
-                match entry {
-                    Ok(e) => {
-                        is_empty = false;
-                        entries.push(e);
-                    }
-                    Err(e) => {
-                        ct_show_error!("cannot read directory {}: {}", path.quote(), e);
-                        had_err = true;
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            ct_show_error!("cannot read directory {}: {}", path.quote(), e);
-            had_err = true;
-        }
-    }
-
-    // 3. 询问是否深入目录
-    if options.interactive == InteractiveMode::Always && !is_empty && !prompt_descend(path) {
-        return had_err; // 用户选择不深入，直接跳过
-    }
-
-    // 4. 严格深度优先：先处理里面的子目录和文件
-    for entry in entries {
-        let entry_path = entry.path();
-        let is_dir = match entry.file_type() {
-            Ok(ft) => ft.is_dir(),
-            Err(_) => fs::symlink_metadata(&entry_path)
-                .map(|m| m.is_dir())
-                .unwrap_or(false),
-        };
-
-        if is_dir {
-            // 递归进入子目录
-            had_err |= interactive_remove_dir_all(&entry_path, options, top_dev, false);
-        } else {
-            // 删除普通文件
-            had_err |= remove_file(&entry_path, &entry_path, options);
-        }
-    }
-
-    // 5. 子项清理完毕，最后删除当前目录自己
-    had_err |= remove_dir(path, path, options);
-
-    had_err
-}
-
 #[cfg(not(windows))]
 fn is_symlink_dir(_metadata: &Metadata) -> bool {
     false
@@ -921,84 +822,6 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
 
     metadata.file_type().is_symlink()
         && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
-}
-
-/// 自定义的remove_dir_all函数，不使用fs库的remove_dir_all
-/// 递归删除目录及其所有内容
-fn custom_remove_dir_all(path: &Path, options: &RMOptions, top_dev: u64) -> std::io::Result<()> {
-    // 必须使用 symlink_metadata 以防跟踪进挂载的符号链接
-    let metadata = std::fs::symlink_metadata(path)?;
-
-    if metadata.is_dir() {
-        let entries = std::fs::read_dir(path)?;
-        let mut had_error = false;
-        let mut last_error = None;
-
-        for entry in entries {
-            match entry {
-                Ok(entry) => {
-                    let entry_path = entry.path();
-                    match std::fs::symlink_metadata(&entry_path) {
-                        Ok(entry_metadata) => {
-                            if entry_metadata.is_dir() {
-                                // 处理 --one-file-system 跨设备检测
-                                if options.one_fs && get_device(&entry_metadata) != top_dev {
-                                    ct_show_error!(
-                                        "skipping {}, since it's on a different device",
-                                        entry_path.quote()
-                                    );
-                                    had_error = true;
-                                    last_error =
-                                        Some(std::io::Error::other("crosses device boundary"));
-                                    continue;
-                                }
-
-                                if let Err(e) = custom_remove_dir_all(&entry_path, options, top_dev)
-                                {
-                                    ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
-                                    had_error = true;
-                                    last_error = Some(e);
-                                }
-                            } else if let Err(e) = std::fs::remove_file(&entry_path) {
-                                ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
-                                had_error = true;
-                                last_error = Some(e);
-                            }
-                        }
-                        Err(e) => {
-                            ct_show_error!("cannot remove {}: {}", entry_path.display(), e);
-                            had_error = true;
-                            last_error = Some(e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    ct_show_error!("failed to read directory entry: {}", e);
-                    had_error = true;
-                    last_error = Some(e);
-                }
-            }
-        }
-
-        if !had_error {
-            if let Err(e) = std::fs::remove_dir(path) {
-                ct_show_error!("cannot remove {}: {}", path.display(), e);
-                had_error = true;
-                last_error = Some(e);
-            }
-        }
-
-        // 如果有错误发生，返回最后一个错误
-        if had_error {
-            if let Some(err) = last_error {
-                return Err(err);
-            }
-        }
-    } else {
-        std::fs::remove_file(path)?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

@@ -1276,33 +1276,25 @@ fn show_error_if_needed(err: &CpError) {
 /**
  * 复制一个或多个源文件到目标位置。
  *
- * @param sources 源文件路径的数组，可以是单个文件或目录。
- * @param target 目标文件或目录的路径。
- * @param options 复制选项，包括是否递归、是否创建进度条等。
+ * @param sour_path 源文件路径的数组，可以是单个文件或目录。
+ * @param target_path 目标文件或目录的路径。
+ * @param cp_opts 复制选项，包括是否递归、是否创建进度条等。
  * @return CopyResult<()>，成功返回Ok(())，失败返回Err()，包含不致命的错误时返回非致命错误信息。
  */
 pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -> CopyResult<()> {
-    // 确定目标类型（文件、目录、链接等）
     let cp_target_type = CpTargetType::cp_determine(sour_path, target_path);
-    // 验证目标类型的正确性
     cp_verify_target_type(target_path, &cp_target_type)?;
 
-    // 初始化变量，用于处理复制过程中的状态
-    let mut is_non_fatal_errors = false; // 是否发生过非致命错误
-    let mut symlinked_files_info = HashSet::new(); // 处理过的符号链接文件
+    let mut is_non_fatal_errors = false;
+    let mut symlinked_files_info = HashSet::new();
 
-    // 用于记录已复制文件的信息，以便后续操作。
-    // 通过文件的inode和设备号作为唯一标识，来避免同名文件的冲突。
     let mut copy_files: HashMap<CtFileInformation, PathBuf> =
         HashMap::with_capacity(sour_path.len());
-    // 记录已复制文件的目标路径，以便检查重复和处理非致命错误。
-    let mut copied_dest: HashSet<PathBuf> = HashSet::with_capacity(sour_path.len());
 
-    // 将重复检测依据从 (device_id, inode) 改为精确的字面路径。
-    // 严禁使用 canonicalize()，否则正常的软链接复制（解析后指向同一文件）会被误判为重复输入而跳过！
-    let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(sour_path.len());
+    // 记录：目标路径 -> 生成它的源文件信息。用于防碰撞和防重复检测
+    let mut copied_dest_sources: HashMap<PathBuf, Option<CtFileInformation>> =
+        HashMap::with_capacity(sour_path.len());
 
-    // 根据选项决定是否创建进度条
     let process_bar = if cp_opts.progress_bar {
         let pb = ProgressBar::new(cp_disk_usage(sour_path, cp_opts.recursive)?)
             .with_style(
@@ -1318,27 +1310,33 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
         None
     };
 
-    // 遍历所有源文件，进行复制
     for source_path in sour_path {
-        // 获取源文件的元数据，用于检测重复和确定类型
         let source_metadata = match source_path.symlink_metadata() {
             Ok(meta) => meta,
             Err(_) => {
-                // 如果无法获取元数据，仍然尝试复制，让 copy_source 处理错误
+                // 即使无法获取元数据，也尝试计算目标路径以进行刚创建文件覆盖的防呆检查
                 let dest_path =
                     cp_construct_dest_path(source_path, target_path, cp_target_type, cp_opts)
                         .unwrap_or_else(|_| target_path.to_path_buf());
 
-                if fs::metadata(&dest_path).is_ok()
-                    && !fs::symlink_metadata(&dest_path)?.file_type().is_symlink()
-                    && copied_dest.contains(&dest_path)
+                if copied_dest_sources.contains_key(&dest_path)
                     && cp_opts.backup != CtBackupMode::NumberedBackup
                 {
-                    return Err(CpError::Error(format!(
-                        "will not overwrite just-created '{}' with '{}'",
-                        dest_path.display(),
-                        source_path.display()
-                    )));
+                    // 判断目标是否为刚刚创建的符号链接，动态切换错误提示
+                    let err_msg = if dest_path.is_symlink() {
+                        format!(
+                            "will not copy {} through just-created symlink {}",
+                            source_path.quote(),
+                            dest_path.quote()
+                        )
+                    } else {
+                        format!(
+                            "will not overwrite just-created '{}' with '{}'",
+                            dest_path.display(),
+                            source_path.display()
+                        )
+                    };
+                    return Err(CpError::Error(err_msg));
                 }
 
                 if let Err(error) = copy_source(
@@ -1353,17 +1351,25 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                     show_error_if_needed(&error);
                     is_non_fatal_errors = true;
                 }
-                copied_dest.insert(dest_path);
+                copied_dest_sources.insert(dest_path, None);
                 continue;
             }
         };
 
-        // 检查源文件是否已经被处理过（检测重复源）
-        // 这里直接使用清理好的字面路径 source_path，不再解析软链接
-        let is_duplicate = processed_sources.contains(source_path);
-        if is_duplicate {
-            // 只有在 NoBackup 模式下才输出警告
-            if cp_opts.backup == CtBackupMode::NoBackup {
+        // 计算目标路径并获取底层文件信息
+        let dest_path = cp_construct_dest_path(source_path, target_path, cp_target_type, cp_opts)
+            .unwrap_or_else(|_| target_path.to_path_buf());
+        let source_info =
+            CtFileInformation::from_path(source_path, cp_opts.cp_dereference(true)).ok();
+
+        // 碰撞检测：如果即将写入的目标路径已经被别人生成过了
+        if let Some(prev_source_info_opt) = copied_dest_sources.get(&dest_path) {
+            let is_same_source = source_info.is_some() && source_info == *prev_source_info_opt;
+
+            if cp_opts.backup == CtBackupMode::NumberedBackup {
+                // NumberedBackup 允许对同一个目标多次生成（会自动创建 .~1~ 等后缀），安全放行
+            } else if is_same_source && cp_opts.backup == CtBackupMode::NoBackup {
+                // 同一个源文件，在无备份模式下输入了多次，抛出 warning 并安全跳过
                 let file_type = source_metadata.file_type();
                 let source_type = if file_type.is_dir() {
                     "directory"
@@ -1375,33 +1381,31 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                     source_type,
                     source_path.display()
                 );
-            }
-            // NoBackup 或 NumberedBackup 模式下跳过，其他模式继续尝试复制
-            if cp_opts.backup == CtBackupMode::NoBackup
-                || cp_opts.backup == CtBackupMode::NumberedBackup
-            {
                 continue;
+            } else {
+                // 其他所有情况（如不同源碰撞，或相同源但在 SimpleBackup 模式下）
+                // 严禁覆盖在本次运行中刚刚创建的目标文件，直接报错拦截！
+
+                // 判断目标是否为刚刚创建的符号链接，动态切换错误提示
+                let err_msg = if dest_path.is_symlink() {
+                    format!(
+                        "will not copy {} through just-created symlink {}",
+                        source_path.quote(),
+                        dest_path.quote()
+                    )
+                } else {
+                    format!(
+                        "will not overwrite just-created '{}' with '{}'",
+                        dest_path.display(),
+                        source_path.display()
+                    )
+                };
+                return Err(CpError::Error(err_msg));
             }
-        } else {
-            processed_sources.insert(source_path.to_path_buf());
         }
 
-        // 计算目标路径
-        let dest_path = cp_construct_dest_path(source_path, target_path, cp_target_type, cp_opts)
-            .unwrap_or_else(|_| target_path.to_path_buf());
-
-        // 检查目标路径是否存在且不是符号链接，避免重复覆盖
-        if fs::metadata(&dest_path).is_ok()
-            && !fs::symlink_metadata(&dest_path)?.file_type().is_symlink()
-            && copied_dest.contains(&dest_path)
-            && cp_opts.backup != CtBackupMode::NumberedBackup
-        {
-            return Err(CpError::Error(format!(
-                "will not overwrite just-created '{}' with '{}'",
-                dest_path.display(),
-                source_path.display()
-            )));
-        }
+        // 记录这一次的成功生成，防止后续参数与之碰撞
+        copied_dest_sources.insert(dest_path.clone(), source_info);
 
         // 尝试复制源文件到目标路径
         if let Err(error) = copy_source(
@@ -1416,7 +1420,6 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
             show_error_if_needed(&error);
             is_non_fatal_errors = true;
         }
-        copied_dest.insert(dest_path.clone());
     }
 
     if let Some(pb) = process_bar {

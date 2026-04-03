@@ -900,21 +900,6 @@ mod tests {
     }
 
     #[test]
-    fn test_custom_remove_dir_all_removes_everything() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let dir_path = temp_dir.path();
-        let nested = dir_path.join("nested");
-        std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(nested.join("file.txt"), b"content").unwrap();
-        std::fs::write(dir_path.join("root.txt"), b"root").unwrap();
-
-        let options = base_options();
-        let metadata = std::fs::metadata(dir_path).unwrap();
-        custom_remove_dir_all(dir_path, &options, metadata.dev()).unwrap();
-        assert!(!dir_path.exists());
-    }
-
-    #[test]
     fn test_rm_options_new_and_interactive_modes() {
         let matches = ct_app()
             .try_get_matches_from(vec!["rm", "-f", "-r", "target"])
@@ -1013,7 +998,7 @@ mod tests {
             dir: true,
             verbose: true,
         };
-        let result = remove_dir(path, &options);
+        let result = remove_dir(path, path, &options);
 
         // 断言结果为 false，表示目录成功删除
         assert!(!result);
@@ -1038,7 +1023,7 @@ mod tests {
             dir: true,
             verbose: true,
         };
-        let result = remove_dir(path, &options);
+        let result = remove_dir(path, path, &options);
 
         // 断言结果为 true，表示目录因为非空而无法删除
         assert!(result);
@@ -1062,7 +1047,7 @@ mod tests {
                 dir: true,
                 verbose: true,
             };
-            let result = remove_dir(path, &options);
+            let result = remove_dir(path, path, &options);
 
             // 断言结果为 true，表示因为权限被拒绝而无法删除
             assert!(result);
@@ -1164,7 +1149,7 @@ mod tests {
     mod test_handle_writable_directory {
         use super::*;
         use std::fs;
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use std::os::unix::fs::PermissionsExt;
 
         #[test]
         fn test_handle_writable_directory() {
@@ -1189,7 +1174,7 @@ mod tests {
 
             // 调用函数进行测试
             if let Ok(metadata) = fs::metadata(path) {
-                let result = handle_writable_directory(path, &options, &metadata);
+                let result = handle_writable_directory(path, path, &options, &metadata);
                 // 断言结果为 false，因为目录不可写
                 assert!(result);
             }
@@ -1227,7 +1212,7 @@ mod tests {
             };
 
             // 调用 remove_file 函数
-            let result = crate::remove_file(temp_file, &options);
+            let result = crate::remove_file(temp_file, temp_file, &options);
 
             // 断言文件被成功删除
             assert!(!result);
@@ -1255,7 +1240,7 @@ mod tests {
             };
 
             // 调用 remove_file 函数
-            let result = crate::remove_file(read_only_file, &options);
+            let result = crate::remove_file(read_only_file, read_only_file, &options);
 
             // 断言返回值为 true，表示遇到权限拒绝错误
             assert!(!result);

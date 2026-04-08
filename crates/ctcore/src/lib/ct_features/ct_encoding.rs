@@ -806,6 +806,42 @@ mod test {
     }
 
     #[test]
+    fn test_data_decode_base32_ignore_garbage_ignores_lowercase_then_errors() {
+        let input = Cursor::new(b"jbsw!y3dp eblw64tmmq======\n".to_vec());
+        let mut data = Data::new(input, Format::Base32).ignore_garbage(true);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, vec![0xdf]);
+    }
+
+    #[test]
+    fn test_data_decode_base32hex_ignore_garbage_ignores_lowercase_then_errors() {
+        let input = Cursor::new(b"91imor3f!41bmusjccg======\n".to_vec());
+        let mut data = Data::new(input, Format::Base32Hex).ignore_garbage(true);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, b"HF@");
+    }
+
+    #[test]
+    fn test_data_decode_base32_unpadded_short_tail_is_accepted() {
+        let input = Cursor::new(b"MY".to_vec());
+        let mut data = Data::new(input, Format::Base32);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_ok());
+        assert_eq!(out, b"f");
+    }
+
+    #[test]
+    fn test_data_decode_base32_invalid_unpadded_tail_keeps_partial_output() {
+        let input = Cursor::new(b"ABC".to_vec());
+        let mut data = Data::new(input, Format::Base32);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, vec![0]);
+    }
+
+    #[test]
     fn test_data_encode_base58_propagates_write_error() {
         let input = Cursor::new(vec![1u8; 1024]);
         let mut data = Data::new(input, Format::Base58).line_wrap(0);

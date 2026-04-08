@@ -51,6 +51,12 @@ impl Tool for Printf {
 
 /// 主函数，用于处理命令行输入并格式化输出。
 pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
+    unsafe {
+        // Follow GNU printf semantics: initialize C locale from environment
+        // so localeconv() exposes LC_NUMERIC grouping/thousands_sep.
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr() as *const _);
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().get_matches_from(args);

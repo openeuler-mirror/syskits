@@ -196,6 +196,23 @@ fn ct_reopen_fd(fd: libc::c_int, path: &std::ffi::CStr, flags: libc::c_int) -> b
 }
 
 #[cfg(all(unix, feature = "libc"))]
+unsafe extern "C" fn ct_probe_stdout_closed_before_runtime() {
+    let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
+    STDOUT_CLOSED_AT_START.store(stdout_closed, Ordering::Relaxed);
+}
+
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+#[used]
+#[cfg_attr(target_os = "linux", unsafe(link_section = ".init_array"))]
+static CT_STDOUT_PROBE_INIT: unsafe extern "C" fn() = ct_probe_stdout_closed_before_runtime;
+
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+#[allow(dead_code)]
+fn ct_stdout_closed_before_main() -> bool {
+    STDOUT_CLOSED_AT_START.load(Ordering::Relaxed)
+}
+
+#[cfg(all(unix, feature = "libc"))]
 fn ct_stdout_is_sanitized_dev_null() -> bool {
     use std::os::unix::fs::MetadataExt;
 
@@ -215,6 +232,11 @@ fn ct_stdout_is_sanitized_dev_null() -> bool {
     };
 
     stdout_meta.dev() == dev_null_meta.dev() && stdout_meta.ino() == dev_null_meta.ino()
+}
+
+#[cfg(all(unix, feature = "libc", not(target_os = "linux")))]
+fn ct_stdout_closed_before_main() -> bool {
+    ct_stdout_is_sanitized_dev_null()
 }
 
 #[cfg(all(unix, feature = "libc"))]
@@ -296,6 +318,8 @@ pub fn ct_set_utility_is_second_arg() {
 // 因此，如果我们只需要第一个参数左右的信息，这样做就有些过分了。所以我们将其缓存起来。
 static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
 static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+static STDOUT_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
     let base_index = if ct_get_utility_is_second_arg() { 1 } else { 0 };

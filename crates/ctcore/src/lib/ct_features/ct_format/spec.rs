@@ -19,6 +19,7 @@ use super::{
     parse_escape_only,
 };
 use crate::ct_quoting_style::{CtQuotingStyle, escape_name};
+use std::ffi::CStr;
 use std::ffi::OsStr;
 use std::{io::Write, ops::ControlFlow};
 
@@ -42,12 +43,14 @@ pub enum Spec {
         precision: Option<CanAsterisk<usize>>,
         positive_sign: PositiveSign,
         alignment: NumberAlignment,
+        thousand_separate: bool,
     },
     UnsignedInt {
         variant: UnsignedIntVariant,
         width: Option<CanAsterisk<usize>>,
         precision: Option<CanAsterisk<usize>>,
         alignment: NumberAlignment,
+        thousand_separate: bool,
     },
     Float {
         variant: FloatVariant,
@@ -57,6 +60,7 @@ pub enum Spec {
         positive_sign: PositiveSign,
         alignment: NumberAlignment,
         precision: Option<CanAsterisk<usize>>,
+        thousand_separate: bool,
     },
 }
 
@@ -224,6 +228,7 @@ impl IndexedSpec {
                     alignment,
                     precision,
                     positive_sign,
+                    thousand_separate: flags.quote,
                 }
             }
             c @ (b'o' | b'u' | b'x' | b'X') => {
@@ -246,6 +251,7 @@ impl IndexedSpec {
                     precision,
                     width,
                     alignment,
+                    thousand_separate: flags.quote,
                 }
             }
             c @ (b'a' | b'A' | b'e' | b'E' | b'f' | b'F' | b'g' | b'G') => {
@@ -275,6 +281,7 @@ impl IndexedSpec {
                     case,
                     alignment,
                     positive_sign,
+                    thousand_separate: flags.quote,
                 }
             }
             _ => return Err(&start[..index]),
@@ -358,6 +365,7 @@ impl IndexedSpec {
                 precision,
                 positive_sign,
                 alignment,
+                thousand_separate,
             } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
                 let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(0);
@@ -367,20 +375,39 @@ impl IndexedSpec {
                     *alignment
                 };
                 let i = cursor.get_i64(self.arg_index);
-                num_format::SignedInt {
-                    width: w.unwrap_or(0),
-                    precision: p,
-                    positive_sign: *positive_sign,
-                    alignment: align,
+                let width = w.unwrap_or(0);
+
+                if !thousand_separate {
+                    num_format::SignedInt {
+                        width,
+                        precision: p,
+                        positive_sign: *positive_sign,
+                        alignment: align,
+                    }
+                    .fmt(writer, i)
+                    .map_err(FormatError::IoError)
+                } else {
+                    let mut raw = Vec::new();
+                    num_format::SignedInt {
+                        width: 0,
+                        precision: p,
+                        positive_sign: *positive_sign,
+                        alignment: NumberAlignment::Left,
+                    }
+                    .fmt(&mut raw, i)
+                    .map_err(FormatError::IoError)?;
+
+                    let grouped = group_number_thousands(&String::from_utf8_lossy(&raw));
+                    write_number_aligned(writer, &grouped, width, align)
+                        .map_err(FormatError::IoError)
                 }
-                .fmt(writer, i)
-                .map_err(FormatError::IoError)
             }
             Spec::UnsignedInt {
                 variant,
                 width,
                 precision,
                 alignment,
+                thousand_separate,
             } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
                 let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(0);
@@ -390,14 +417,32 @@ impl IndexedSpec {
                     *alignment
                 };
                 let i = cursor.get_u64(self.arg_index);
-                num_format::UnsignedInt {
-                    variant: *variant,
-                    precision: p,
-                    width: w.unwrap_or(0),
-                    alignment: align,
+                let width = w.unwrap_or(0);
+
+                if !thousand_separate {
+                    num_format::UnsignedInt {
+                        variant: *variant,
+                        precision: p,
+                        width,
+                        alignment: align,
+                    }
+                    .fmt(writer, i)
+                    .map_err(FormatError::IoError)
+                } else {
+                    let mut raw = Vec::new();
+                    num_format::UnsignedInt {
+                        variant: *variant,
+                        precision: p,
+                        width: 0,
+                        alignment: NumberAlignment::Left,
+                    }
+                    .fmt(&mut raw, i)
+                    .map_err(FormatError::IoError)?;
+
+                    let grouped = group_number_thousands(&String::from_utf8_lossy(&raw));
+                    write_number_aligned(writer, &grouped, width, align)
+                        .map_err(FormatError::IoError)
                 }
-                .fmt(writer, i)
-                .map_err(FormatError::IoError)
             }
             Spec::Float {
                 variant,
@@ -407,6 +452,7 @@ impl IndexedSpec {
                 positive_sign,
                 alignment,
                 precision,
+                thousand_separate,
             } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
                 let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(6);
@@ -416,18 +462,215 @@ impl IndexedSpec {
                     *alignment
                 };
                 let f = cursor.get_f64(self.arg_index);
-                num_format::Float {
-                    width: w.unwrap_or(0),
-                    precision: p,
-                    variant: *variant,
-                    case: *case,
-                    force_decimal: *force_decimal,
-                    positive_sign: *positive_sign,
-                    alignment: align,
+                let width = w.unwrap_or(0);
+
+                if !thousand_separate {
+                    num_format::Float {
+                        width,
+                        precision: p,
+                        variant: *variant,
+                        case: *case,
+                        force_decimal: *force_decimal,
+                        positive_sign: *positive_sign,
+                        alignment: align,
+                    }
+                    .fmt(writer, f)
+                    .map_err(FormatError::IoError)
+                } else {
+                    let mut raw = Vec::new();
+                    num_format::Float {
+                        width: 0,
+                        precision: p,
+                        variant: *variant,
+                        case: *case,
+                        force_decimal: *force_decimal,
+                        positive_sign: *positive_sign,
+                        alignment: NumberAlignment::Left,
+                    }
+                    .fmt(&mut raw, f)
+                    .map_err(FormatError::IoError)?;
+
+                    let grouped = group_number_thousands(&String::from_utf8_lossy(&raw));
+                    write_number_aligned(writer, &grouped, width, align)
+                        .map_err(FormatError::IoError)
                 }
-                .fmt(writer, f)
-                .map_err(FormatError::IoError)
             }
+        }
+    }
+}
+
+fn group_number_thousands(number: &str) -> String {
+    let Some((sep, grouping)) = locale_thousands_grouping() else {
+        return number.to_string();
+    };
+
+    group_number_thousands_with(number, &sep, &grouping)
+}
+
+fn group_number_thousands_with(number: &str, sep: &str, grouping: &[u8]) -> String {
+    if sep.is_empty() || grouping.is_empty() {
+        return number.to_string();
+    }
+
+    let (num_with_no_exp, exp) = match number.find(['e', 'E', 'p', 'P']) {
+        Some(idx) => (&number[..idx], &number[idx..]),
+        None => (number, ""),
+    };
+
+    let (sign, rest) = match num_with_no_exp.as_bytes().first().copied() {
+        Some(b'+') | Some(b'-') | Some(b' ') => (&num_with_no_exp[..1], &num_with_no_exp[1..]),
+        _ => ("", num_with_no_exp),
+    };
+
+    if rest.starts_with("0x") || rest.starts_with("0X") || rest.is_empty() {
+        return number.to_string();
+    }
+
+    let (int_part, frac_part) = match rest.find('.') {
+        Some(dot_idx) => (&rest[..dot_idx], &rest[dot_idx..]),
+        None => (rest, ""),
+    };
+
+    if int_part.len() <= 3 || !int_part.bytes().all(|c| c.is_ascii_digit()) {
+        return number.to_string();
+    }
+
+    let grouped = apply_locale_grouping(int_part, sep, grouping);
+    if grouped == int_part {
+        return number.to_string();
+    }
+
+    let mut output =
+        String::with_capacity(sign.len() + grouped.len() + frac_part.len() + exp.len());
+    output.push_str(sign);
+    output.push_str(&grouped);
+    output.push_str(frac_part);
+    output.push_str(exp);
+    output
+}
+
+fn locale_thousands_grouping() -> Option<(String, Vec<u8>)> {
+    unsafe {
+        let lc = crate::libc::localeconv();
+        if lc.is_null() {
+            return None;
+        }
+
+        let sep_ptr = (*lc).thousands_sep;
+        let grouping_ptr = (*lc).grouping;
+        if sep_ptr.is_null() || grouping_ptr.is_null() {
+            return None;
+        }
+
+        let sep = CStr::from_ptr(sep_ptr).to_bytes();
+        if sep.is_empty() {
+            return None;
+        }
+
+        let mut grouping = Vec::new();
+        for idx in 0..16 {
+            let g = *grouping_ptr.add(idx) as u8;
+            if g == 0 {
+                if grouping.is_empty() {
+                    return None;
+                }
+                grouping.push(0);
+                break;
+            }
+
+            if g == u8::MAX || g == 127 {
+                break;
+            }
+
+            grouping.push(g);
+        }
+
+        if grouping.is_empty() {
+            return None;
+        }
+
+        Some((String::from_utf8_lossy(sep).into_owned(), grouping))
+    }
+}
+
+fn apply_locale_grouping(int_part: &str, sep: &str, grouping: &[u8]) -> String {
+    let mut groups = Vec::new();
+    let mut end = int_part.len();
+    let mut grouping_idx = 0usize;
+    let mut last_size = 0usize;
+    let mut repeat_last = false;
+
+    while end > 0 {
+        let size = if repeat_last {
+            last_size
+        } else if let Some(&g) = grouping.get(grouping_idx) {
+            if g == 0 {
+                repeat_last = true;
+                last_size
+            } else {
+                let new_size = g as usize;
+                last_size = new_size;
+                if grouping_idx + 1 < grouping.len() {
+                    grouping_idx += 1;
+                }
+                new_size
+            }
+        } else {
+            last_size
+        };
+
+        if size == 0 {
+            break;
+        }
+
+        let start = end.saturating_sub(size);
+        groups.push(&int_part[start..end]);
+        end = start;
+    }
+
+    if groups.is_empty() || end > 0 {
+        groups.push(&int_part[..end]);
+    }
+
+    groups.reverse();
+    groups.join(sep)
+}
+
+fn write_number_aligned(
+    mut writer: impl Write,
+    text: &str,
+    width: usize,
+    alignment: NumberAlignment,
+) -> std::io::Result<()> {
+    if text.len() >= width {
+        return writer.write_all(text.as_bytes());
+    }
+
+    let pad_len = width - text.len();
+    match alignment {
+        NumberAlignment::Left => {
+            writer.write_all(text.as_bytes())?;
+            write!(writer, "{: >pad_len$}", "", pad_len = pad_len)
+        }
+        NumberAlignment::RightSpace => {
+            write!(writer, "{: >pad_len$}", "", pad_len = pad_len)?;
+            writer.write_all(text.as_bytes())
+        }
+        NumberAlignment::RightZero => {
+            let mut sign_len = 0;
+            let bytes = text.as_bytes();
+            if matches!(bytes.first(), Some(b'+') | Some(b'-') | Some(b' ')) {
+                sign_len = 1;
+            }
+
+            let mut prefix_len = sign_len;
+            if text[sign_len..].starts_with("0x") || text[sign_len..].starts_with("0X") {
+                prefix_len += 2;
+            }
+
+            writer.write_all(&bytes[..prefix_len])?;
+            write!(writer, "{:0>pad_len$}", "", pad_len = pad_len)?;
+            writer.write_all(&bytes[prefix_len..])
         }
     }
 }
@@ -595,6 +838,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -612,6 +856,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -629,6 +874,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -646,6 +892,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -663,6 +910,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::Left,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -680,6 +928,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::Plus,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -697,6 +946,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::Space,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -714,6 +964,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightSpace,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -731,6 +982,7 @@ mod tests {
             precision: None,
             alignment: NumberAlignment::RightZero,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
@@ -749,6 +1001,7 @@ mod tests {
             precision: Some(precision_value),
             alignment: NumberAlignment::Left,
             positive_sign: PositiveSign::None,
+            thousand_separate: false,
         };
         assert_eq!(IndexedSpec::parse(&mut input), Err(rest));
         // assert_eq!(Spec::parse(&mut input), Err([Spec::EscapedString, 100]));

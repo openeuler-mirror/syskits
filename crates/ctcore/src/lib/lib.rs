@@ -207,12 +207,11 @@ unsafe extern "C" fn ct_probe_stdout_closed_before_runtime() {
 static CT_STDOUT_PROBE_INIT: unsafe extern "C" fn() = ct_probe_stdout_closed_before_runtime;
 
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
-#[allow(dead_code)]
 fn ct_stdout_closed_before_main() -> bool {
     STDOUT_CLOSED_AT_START.load(Ordering::Relaxed)
 }
 
-#[cfg(all(unix, feature = "libc"))]
+#[cfg(all(unix, feature = "libc", not(target_os = "linux")))]
 fn ct_stdout_is_sanitized_dev_null() -> bool {
     use std::os::unix::fs::MetadataExt;
 
@@ -244,8 +243,9 @@ pub fn ct_ensure_standard_fds() {
     use std::ffi::CString;
 
     let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
-    let stdout_sanitized = ct_stdout_is_sanitized_dev_null();
-    STDOUT_WAS_CLOSED.store(stdout_closed || stdout_sanitized, Ordering::Relaxed);
+    let stdout_closed_before_main = ct_stdout_closed_before_main();
+    let stdout_missing = stdout_closed || stdout_closed_before_main;
+    STDOUT_WAS_CLOSED.store(stdout_missing, Ordering::Relaxed);
 
     let dev_null = CString::new("/dev/null").expect("literal has no NUL");
     let dev_full = CString::new("/dev/full").expect("literal has no NUL");
@@ -254,9 +254,7 @@ pub fn ct_ensure_standard_fds() {
         let _ = ct_reopen_fd(libc::STDIN_FILENO, &dev_null, libc::O_RDONLY);
     }
 
-    if (stdout_closed || stdout_sanitized)
-        && !ct_reopen_fd(libc::STDOUT_FILENO, &dev_full, libc::O_WRONLY)
-    {
+    if stdout_missing && !ct_reopen_fd(libc::STDOUT_FILENO, &dev_full, libc::O_WRONLY) {
         let _ = ct_reopen_fd(libc::STDOUT_FILENO, &dev_null, libc::O_WRONLY);
     }
 

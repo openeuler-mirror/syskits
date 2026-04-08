@@ -139,6 +139,139 @@ fn decode_base64_short_tail(f: Format, input: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
+fn base32_value(f: Format, byte: u8) -> Option<u8> {
+    match f {
+        Base32 => match byte {
+            b'A'..=b'Z' => Some(byte - b'A'),
+            b'2'..=b'7' => Some(byte - b'2' + 26),
+            _ => None,
+        },
+        Base32Hex => match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'A'..=b'V' => Some(byte - b'A' + 10),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn decode_base32_quantum<W: Write>(
+    format: Format,
+    block: &[u8],
+    mut writer: W,
+) -> io::Result<bool> {
+    if block.len() < 8 {
+        return Ok(false);
+    }
+
+    let mut out = [0_u8; 5];
+    let mut out_len: usize;
+
+    let a = match base32_value(format, block[0]) {
+        Some(v) => v,
+        None => return Ok(false),
+    };
+    let b = match base32_value(format, block[1]) {
+        Some(v) => v,
+        None => return Ok(false),
+    };
+
+    out[0] = (a << 3) | (b >> 2);
+    out_len = 1;
+
+    if block[2] == b'=' {
+        if block[3] != b'='
+            || block[4] != b'='
+            || block[5] != b'='
+            || block[6] != b'='
+            || block[7] != b'='
+        {
+            if out_len > 0 {
+                writer.write_all(&out[..out_len])?;
+            }
+            return Ok(false);
+        }
+    } else {
+        let c = match base32_value(format, block[2]) {
+            Some(v) => v,
+            None => {
+                writer.write_all(&out[..out_len])?;
+                return Ok(false);
+            }
+        };
+        let d = match base32_value(format, block[3]) {
+            Some(v) => v,
+            None => {
+                writer.write_all(&out[..out_len])?;
+                return Ok(false);
+            }
+        };
+
+        out[1] = (b << 6) | (c << 1) | (d >> 4);
+        out_len = 2;
+
+        if block[4] == b'=' {
+            if block[5] != b'=' || block[6] != b'=' || block[7] != b'=' {
+                writer.write_all(&out[..out_len])?;
+                return Ok(false);
+            }
+        } else {
+            let e = match base32_value(format, block[4]) {
+                Some(v) => v,
+                None => {
+                    writer.write_all(&out[..out_len])?;
+                    return Ok(false);
+                }
+            };
+
+            out[2] = (d << 4) | (e >> 1);
+            out_len = 3;
+
+            if block[5] == b'=' {
+                if block[6] != b'=' || block[7] != b'=' {
+                    writer.write_all(&out[..out_len])?;
+                    return Ok(false);
+                }
+            } else {
+                let f = match base32_value(format, block[5]) {
+                    Some(v) => v,
+                    None => {
+                        writer.write_all(&out[..out_len])?;
+                        return Ok(false);
+                    }
+                };
+                let g = match base32_value(format, block[6]) {
+                    Some(v) => v,
+                    None => {
+                        writer.write_all(&out[..out_len])?;
+                        return Ok(false);
+                    }
+                };
+
+                out[3] = (e << 7) | (f << 2) | (g >> 3);
+                out_len = 4;
+
+                if block[7] != b'=' {
+                    let h = match base32_value(format, block[7]) {
+                        Some(v) => v,
+                        None => {
+                            writer.write_all(&out[..out_len])?;
+                            return Ok(false);
+                        }
+                    };
+                    out[4] = (g << 5) | h;
+                    out_len = 5;
+                }
+            }
+        }
+    }
+
+    if out_len > 0 {
+        writer.write_all(&out[..out_len])?;
+    }
+    Ok(true)
+}
+
 pub struct Data<R: Read> {
     line_wrap: usize,
     ignore_garbage: bool,
@@ -155,10 +288,10 @@ impl<R: Read> Data<R> {
             input,
             format,
             alphabet: match format {
-                Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz234567=",
+                Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
                 Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
                 Base64Url => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
-                Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUVabcdefghijklmnopqrstuv=",
+                Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
                 Base16 => b"0123456789ABCDEFabcdef",
                 Base2Lsbf => b"01",
                 Base2Msbf => b"01",
@@ -189,6 +322,8 @@ impl<R: Read> Data<R> {
             Format::Base58 => None,
         };
 
+        let invalid_input = || io::Error::new(io::ErrorKind::InvalidData, "invalid input");
+        let use_base32_compat = matches!(self.format, Base32 | Base32Hex);
         let mut read_buf = [0; 8192];
         let mut char_buf = Vec::with_capacity(8192);
         loop {
@@ -211,13 +346,21 @@ impl<R: Read> Data<R> {
 
             if let Some(block_size) = decode_block {
                 while char_buf.len() >= block_size {
-                    let mut block = char_buf[..block_size].to_vec();
-                    if matches!(self.format, Base16 | Base32 | Base32Hex) {
-                        block.make_ascii_uppercase();
+                    if use_base32_compat {
+                        let ok = decode_base32_quantum(self.format, &char_buf[..8], &mut writer)?;
+                        if !ok {
+                            return Err(invalid_input().into());
+                        }
+                        char_buf.drain(..8);
+                    } else {
+                        let mut block = char_buf[..block_size].to_vec();
+                        if matches!(self.format, Base16) {
+                            block.make_ascii_uppercase();
+                        }
+                        let decoded = decode(self.format, &block)?;
+                        writer.write_all(&decoded)?;
+                        char_buf.drain(..block_size);
                     }
-                    let decoded = decode(self.format, &block)?;
-                    writer.write_all(&decoded)?;
-                    char_buf.drain(..block_size);
                 }
             }
         }
@@ -226,13 +369,28 @@ impl<R: Read> Data<R> {
             return Ok(());
         }
 
-        if matches!(self.format, Base16 | Base32 | Base32Hex) {
+        if use_base32_compat {
+            if char_buf.contains(&b'=') {
+                return Err(invalid_input().into());
+            }
+
+            while char_buf.len() < 8 {
+                char_buf.push(b'=');
+            }
+            let ok = decode_base32_quantum(self.format, &char_buf, &mut writer)?;
+            if ok {
+                return Ok(());
+            }
+            return Err(invalid_input().into());
+        }
+
+        if matches!(self.format, Base16) {
             char_buf.make_ascii_uppercase();
         }
 
         if matches!(self.format, Base64 | Base64Url) {
             if char_buf.len() == 1 {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid input").into());
+                return Err(invalid_input().into());
             }
 
             if char_buf.len() < 4 {
@@ -246,7 +404,7 @@ impl<R: Read> Data<R> {
                 if let Some(decoded) = decoded {
                     writer.write_all(&decoded)?;
                 }
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid input").into());
+                return Err(invalid_input().into());
             }
         }
 

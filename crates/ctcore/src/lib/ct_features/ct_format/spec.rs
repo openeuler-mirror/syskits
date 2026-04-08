@@ -829,6 +829,7 @@ fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ct_format::argument::FormatArgument;
 
     #[test]
     fn test_parse_simple_specifier() {
@@ -1005,6 +1006,113 @@ mod tests {
         };
         assert_eq!(IndexedSpec::parse(&mut input), Err(rest));
         // assert_eq!(Spec::parse(&mut input), Err([Spec::EscapedString, 100]));
+    }
+
+    #[test]
+    fn test_parse_specifier_with_quote_flag() {
+        let mut input: &[u8] = b"'d";
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+            thousand_separate: true,
+        };
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
+    }
+
+    #[test]
+    fn test_group_number_thousands_with_standard_grouping() {
+        assert_eq!(
+            group_number_thousands_with("123456789", ",", &[3, 0]),
+            "123,456,789"
+        );
+        assert_eq!(
+            group_number_thousands_with("-1234567.89", ",", &[3, 0]),
+            "-1,234,567.89"
+        );
+        assert_eq!(
+            group_number_thousands_with("1234567e+08", ",", &[3, 0]),
+            "1,234,567e+08"
+        );
+    }
+
+    #[test]
+    fn test_group_number_thousands_with_non_repeating_grouping() {
+        assert_eq!(
+            group_number_thousands_with("123456789", ",", &[3, 2]),
+            "12,34,56,789"
+        );
+    }
+
+    #[test]
+    fn test_write_specifier_with_quote_flag_groups_signed_integer() {
+        let mut input: &[u8] = b"'d";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let args = vec![FormatArgument::SignedInt(1_234_567)];
+        let mut cursor = ArgCursor::new(&args);
+        let mut out = Vec::new();
+        spec.write(&mut out, &mut cursor).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        if let Some((sep, _)) = locale_thousands_grouping() {
+            assert!(out.contains(&sep), "output should contain locale separator");
+        } else {
+            assert_eq!(out, "1234567");
+        }
+    }
+
+    #[test]
+    fn test_write_specifier_with_quote_flag_groups_unsigned_integer() {
+        let mut input: &[u8] = b"'u";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let args = vec![FormatArgument::UnsignedInt(1_234_567)];
+        let mut cursor = ArgCursor::new(&args);
+        let mut out = Vec::new();
+        spec.write(&mut out, &mut cursor).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        if let Some((sep, _)) = locale_thousands_grouping() {
+            assert!(out.contains(&sep), "output should contain locale separator");
+        } else {
+            assert_eq!(out, "1234567");
+        }
+    }
+
+    #[test]
+    fn test_write_specifier_with_quote_flag_groups_float() {
+        let mut input: &[u8] = b"'.2f";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let args = vec![FormatArgument::Float(12_345.678)];
+        let mut cursor = ArgCursor::new(&args);
+        let mut out = Vec::new();
+        spec.write(&mut out, &mut cursor).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        if let Some((sep, _)) = locale_thousands_grouping() {
+            assert!(out.contains(&sep), "output should contain locale separator");
+        } else {
+            assert_eq!(out, "12345.68");
+        }
+    }
+
+    #[test]
+    fn test_write_specifier_with_quote_flag_zero_padding_after_sign() {
+        let mut input: &[u8] = b"'+010d";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let args = vec![FormatArgument::SignedInt(1234)];
+        let mut cursor = ArgCursor::new(&args);
+        let mut out = Vec::new();
+        spec.write(&mut out, &mut cursor).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        if let Some((sep, _)) = locale_thousands_grouping() {
+            assert!(
+                out.starts_with("+") && out.contains(&sep),
+                "output should preserve sign and contain locale separator"
+            );
+        } else {
+            assert_eq!(out, "+000001234");
+        }
     }
 
     #[test]

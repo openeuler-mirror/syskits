@@ -719,8 +719,8 @@ fn move_files_into_dir(
     // 用于存储已移动文件的目标路径，避免重复移动
     let mut moved_dests: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
-    // 【核心修复1】将重复检测依据从 (device_id, inode) 改为绝对路径/规范化路径。
-    // 这样，互为硬链接的不同路径（如 a/f 和 b/g）就不会被误判为重复指定的同一个源文件。
+    // 记录已处理的源参数路径，用于检测同一参数被重复传入。
+    // 注意：这里不能使用 canonicalize()，否则不同的符号链接路径会因解析到同一目标而被误判为重复。
     let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
     // 标记是否发生过错误
@@ -778,11 +778,9 @@ fn move_files_into_dir(
         };
 
         // 检查源文件是否已经被处理过（检测重复源）
-        let canonical_source = source_path
-            .canonicalize()
-            .unwrap_or_else(|_| source_path.to_path_buf());
+        let source_key = source_path.to_path_buf();
 
-        if processed_sources.contains(&canonical_source) {
+        if processed_sources.contains(&source_key) {
             if source_path.symlink_metadata().is_err() {
                 ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
                 set_ct_exit_code(1);
@@ -805,7 +803,7 @@ fn move_files_into_dir(
             }
             continue;
         }
-        processed_sources.insert(canonical_source);
+        processed_sources.insert(source_key);
 
         // 确定目标路径
         let targetpath = match source_path.file_name() {

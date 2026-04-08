@@ -379,6 +379,33 @@ pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::R
 mod test {
     use super::*;
     use std::io::Cursor;
+
+    struct AlwaysFailWriter;
+
+    impl Write for AlwaysFailWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct FailOnNewlineWriter;
+
+    impl Write for FailOnNewlineWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if buf.contains(&b'\n') {
+                return Err(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe"));
+            }
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
     #[test]
     fn test_encode_base32() {
         let input = [
@@ -618,5 +645,21 @@ mod test {
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"5jXu");
+    }
+
+    #[test]
+    fn test_data_encode_base58_propagates_write_error() {
+        let input = Cursor::new(vec![1u8; 1024]);
+        let mut data = Data::new(input, Format::Base58).line_wrap(0);
+        let result = data.encode(AlwaysFailWriter);
+        assert!(matches!(result, Err(CtEncodeError::InvalidInput)));
+    }
+
+    #[test]
+    fn test_data_encode_base58_propagates_trailing_newline_write_error() {
+        let input = Cursor::new(b"hello".to_vec());
+        let mut data = Data::new(input, Format::Base58).line_wrap(76);
+        let result = data.encode(FailOnNewlineWriter);
+        assert!(matches!(result, Err(CtEncodeError::InvalidInput)));
     }
 }

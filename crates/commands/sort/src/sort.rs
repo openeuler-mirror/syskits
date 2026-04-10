@@ -1156,6 +1156,9 @@ fn sort_handle_settings(
     matches: ArgMatches,
 ) -> CTResult<(SortGlobalConfigs, Vec<OsString>, TmpDirWrapper, SortOutput)> {
     let mut settings = SortGlobalConfigs::default();
+    let random_source = matches
+        .get_one::<String>(sort_flags::SORT_RANDOM_SOURCE)
+        .map(String::as_str);
 
     // 检查用户是否指定了一个以零结尾的文件列表作为输入，否则从参数中读取文件
     let mut files: Vec<OsString> = sort_get_settings_files(&matches)?;
@@ -1163,7 +1166,7 @@ fn sort_handle_settings(
     let (mode, is_salt) = sort_get_settings_mode(&matches);
     settings.mode = mode;
     if is_salt {
-        settings.salt = Some(sort_get_rand_string());
+        settings.salt = Some(sort_resolve_random_salt(random_source)?);
     }
 
     settings.is_dictionary_order = matches.get_flag(sort_flags::SORT_DICTIONARY_ORDER);
@@ -1209,7 +1212,7 @@ fn sort_handle_settings(
         for value in values {
             let selector = SortFieldSelector::parse(value, &settings)?;
             if selector.settings.mode == SortMode::SortRandom && settings.salt.is_none() {
-                settings.salt = Some(sort_get_rand_string());
+                settings.salt = Some(sort_resolve_random_salt(random_source)?);
             }
             settings.selectors.push(selector);
         }
@@ -2053,6 +2056,30 @@ fn sort_general_numeric_compare(
 
 fn sort_get_rand_string() -> [u8; 16] {
     thread_rng().sample(rand::distributions::Standard)
+}
+
+fn sort_get_random_salt_from_file(path: &str) -> CTResult<[u8; 16]> {
+    let mut file = File::open(path).map_err(|error| SortError::SortOpenFailed {
+        path: path.to_string(),
+        error,
+    })?;
+
+    let mut salt = [0u8; 16];
+    file.read_exact(&mut salt)
+        .map_err(|error| SortError::SortReadFailed {
+            path: PathBuf::from(path),
+            error,
+        })?;
+
+    Ok(salt)
+}
+
+fn sort_resolve_random_salt(random_source: Option<&str>) -> CTResult<[u8; 16]> {
+    if let Some(path) = random_source {
+        return sort_get_random_salt_from_file(path);
+    }
+
+    Ok(sort_get_rand_string())
 }
 
 fn sort_get_hash<T: Hash>(t: &T) -> u64 {

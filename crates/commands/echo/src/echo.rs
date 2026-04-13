@@ -356,6 +356,26 @@ mod tests {
         assert!(tool.execute(&args).is_ok());
     }
 
+    #[test]
+    fn test_echo_parse_args_rejects_invalid_short_cluster() {
+        let (no_newline, escaped, values) =
+            echo_parse_args(&["-nex".to_string(), "foo".to_string()], false);
+
+        assert!(!no_newline);
+        assert!(!escaped);
+        assert_eq!(values, vec!["-nex".to_string(), "foo".to_string()]);
+    }
+
+    #[test]
+    fn test_echo_parse_args_accepts_valid_short_cluster() {
+        let (no_newline, escaped, values) =
+            echo_parse_args(&["-En".to_string(), "foo".to_string()], false);
+
+        assert!(no_newline);
+        assert!(!escaped);
+        assert_eq!(values, vec!["foo".to_string()]);
+    }
+
 
     mod tests_echo_main {
         use crate::echo_main;

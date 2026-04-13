@@ -2893,6 +2893,11 @@ mod tests {
         use crate::cp_localize_to_target;
         use crate::cp_write_verbose_output;
         use crate::ct_app;
+        #[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+        use crate::{
+            cp_apply_explicit_selinux_context, cp_handle_default_selinux_context_err,
+            cp_selinux_is_ignorable_err,
+        };
 
         use crate::CpOffloadReflinkDebug;
         use crate::CpOptions;
@@ -3018,6 +3023,62 @@ mod tests {
                 }
                 Ok(_) => panic!("expected conflict error"),
                 Err(_) => panic!("unexpected error variant"),
+            }
+        }
+
+        #[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+        #[test]
+        fn test_cp_selinux_is_ignorable_err() {
+            let enotsup = io::Error::from_raw_os_error(libc::ENOTSUP);
+            let enodata = io::Error::from_raw_os_error(libc::ENODATA);
+            let eperm = io::Error::from_raw_os_error(libc::EPERM);
+
+            assert!(cp_selinux_is_ignorable_err(&enotsup));
+            assert!(cp_selinux_is_ignorable_err(&enodata));
+            assert!(!cp_selinux_is_ignorable_err(&eperm));
+        }
+
+        #[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+        #[test]
+        fn test_cp_handle_default_selinux_context_err_ignores_enodata() {
+            let dir = Builder::new().prefix("cp_selinux_ctx").tempdir().unwrap();
+            let dest = dir.path().join("dst");
+            let err = io::Error::from_raw_os_error(libc::ENODATA);
+
+            assert!(cp_handle_default_selinux_context_err(&dest, &err).is_ok());
+        }
+
+        #[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+        #[test]
+        fn test_cp_handle_default_selinux_context_err_propagates_non_ignorable_error() {
+            let dir = Builder::new().prefix("cp_selinux_ctx").tempdir().unwrap();
+            let dest = dir.path().join("dst");
+            let err = io::Error::from_raw_os_error(libc::EPERM);
+
+            match cp_handle_default_selinux_context_err(&dest, &err) {
+                Err(CpError::Error(msg)) => {
+                    assert!(msg.contains("failed to set the security context"));
+                    assert!(msg.contains(dest.to_string_lossy().as_ref()));
+                }
+                Ok(_) => panic!("expected SELinux context error"),
+                Err(_) => panic!("unexpected error variant"),
+            }
+        }
+
+        #[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+        #[test]
+        fn test_cp_apply_explicit_selinux_context_unsupported_kernel_is_non_fatal() {
+            let dir = Builder::new().prefix("cp_selinux_ctx").tempdir().unwrap();
+            let dest = dir.path().join("dst");
+            File::create(&dest).unwrap();
+
+            let explicit_ctx = Some("bad\0ctx".to_string());
+            let result = cp_apply_explicit_selinux_context(&dest, &explicit_ctx);
+
+            if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.is_err());
             }
         }
 

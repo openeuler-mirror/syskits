@@ -379,6 +379,8 @@ fn finish_mktemp_output(
 ) -> CTResult<()> {
     let path = path_res?;
 
+    // close-stdout 兼容：仅在已经生成了最终输出、即将写 stdout 时再报 write error，
+    // 这样参数或模板错误仍会按 GNU 行为优先返回。
     if stdout_initially_closed || ctcore::ct_stdout_was_closed() {
         return Err(CTsageError::new(1, "write error"));
     }

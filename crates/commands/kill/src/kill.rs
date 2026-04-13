@@ -285,7 +285,7 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
         kill_table(writer)
     } else if matches.get_flag(kill_flags::LIST) {
         // 如果是列表模式，调用kill_list函数，并传入第一个进程ID或信号
-        kill_list(writer, pids_or_signals.first(), compat_mode)
+        kill_list(writer, &pids_or_signals, compat_mode)
     } else {
         // 否则，执行kill命令并处理信号
         kill_exec(obs_signal, matches, &pids_or_signals)
@@ -943,7 +943,7 @@ fn kill_with_timeout(
 /// # 返回值
 /// * `Option<usize>`: 如果找到并移除了过时的信号，则返回信号值；否则返回 `None`。
 fn kill_handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
-    if args.len() > 2 {
+    if args.len() > 1 {
         // 检查参数数量是否超过两个，因为过时信号的存在至少需要两个参数
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {
@@ -1184,16 +1184,16 @@ fn kill_print_signals_coreutils<W: Write>(writer: &mut W) -> CTResult<()> {
 ///
 /// # Returns
 /// - `CTResult<()>`: 一个结果类型，表示操作成功或失败。
-fn kill_list<W: Write>(
-    writer: &mut W,
-    opt_arg: Option<&String>,
-    mode: KillCompatMode,
-) -> CTResult<()> {
-    if let Some(arg) = opt_arg {
-        kill_print_signal(writer, arg)
-    } else {
-        kill_print_signals(writer, mode)
+fn kill_list<W: Write>(writer: &mut W, args: &[String], mode: KillCompatMode) -> CTResult<()> {
+    if args.is_empty() {
+        return kill_print_signals(writer, mode);
     }
+
+    for arg in args {
+        kill_print_signal(writer, arg)?;
+    }
+
+    Ok(())
 }
 
 /// 将信号名称解析为对应的信号值。
@@ -1511,8 +1511,8 @@ mod tests {
         #[test]
         fn kill_list_with_valid_signal_name_prints_signal_value() {
             let mut output = Cursor::new(Vec::new());
-            let signal_name = Some("HUP".to_string());
-            kill_list(&mut output, signal_name.as_ref(), KillCompatMode::Coreutils).unwrap();
+            let signal_name = vec!["HUP".to_string()];
+            kill_list(&mut output, &signal_name, KillCompatMode::Coreutils).unwrap();
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert_eq!(output_str.trim(), "1"); // Assuming HUP corresponds to signal value 1
         }
@@ -1520,8 +1520,8 @@ mod tests {
         #[test]
         fn kill_list_with_invalid_signal_name_returns_error() {
             let mut output = Cursor::new(Vec::new());
-            let signal_name = Some("INVALID".to_string());
-            let result = kill_list(&mut output, signal_name.as_ref(), KillCompatMode::Coreutils);
+            let signal_name = vec!["INVALID".to_string()];
+            let result = kill_list(&mut output, &signal_name, KillCompatMode::Coreutils);
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
@@ -1530,7 +1530,7 @@ mod tests {
         #[test]
         fn kill_list_with_no_argument_prints_all_signals() {
             let mut output = Cursor::new(Vec::new());
-            kill_list(&mut output, None, KillCompatMode::Coreutils).unwrap();
+            kill_list(&mut output, &[], KillCompatMode::Coreutils).unwrap();
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             // 检查输出包含基本信号和 RT 信号
             assert!(output_str.contains("HUP"));
@@ -1542,8 +1542,8 @@ mod tests {
         #[test]
         fn kill_list_with_empty_string_returns_error() {
             let mut output = Cursor::new(Vec::new());
-            let signal_name = Some("".to_string());
-            let result = kill_list(&mut output, signal_name.as_ref(), KillCompatMode::Coreutils);
+            let signal_name = vec!["".to_string()];
+            let result = kill_list(&mut output, &signal_name, KillCompatMode::Coreutils);
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert_eq!(err.to_string(), "unknown signal name ''");
@@ -1552,16 +1552,12 @@ mod tests {
         #[test]
         fn kill_list_with_numeric_signal_value_prints_signal_name() {
             let mut output = Cursor::new(Vec::new());
-            let signal_value = Some("15".to_string()); // Assuming 15 corresponds to SIGTERM
-            kill_list(
-                &mut output,
-                signal_value.as_ref(),
-                KillCompatMode::Coreutils,
-            )
-            .unwrap();
+            let signal_value = vec!["15".to_string()]; // Assuming 15 corresponds to SIGTERM
+            kill_list(&mut output, &signal_value, KillCompatMode::Coreutils).unwrap();
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert_eq!(output_str.trim(), "TERM"); // Assuming 15 corresponds to SIGTERM
         }
+
     }
     #[cfg(test)]
     mod kill_print_signals_tests {
@@ -1891,6 +1887,7 @@ mod tests {
             assert_eq!(result, Some(15)); // Assuming 15 corresponds to SIGTERM
             assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
         }
+
 
         #[test]
         fn kill_handle_obsolete_with_mixed_valid_and_invalid_signals() {

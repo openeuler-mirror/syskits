@@ -947,8 +947,18 @@ fn kill_handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         // 检查参数数量是否超过两个，因为过时信号的存在至少需要两个参数
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {
+            let first = signal.as_bytes().first().copied()?;
+            if !first.is_ascii_digit() && !first.is_ascii_uppercase() {
+                return None;
+            }
+
+            let normalized = if first.is_ascii_uppercase() {
+                signal.to_ascii_uppercase()
+            } else {
+                signal.to_string()
+            };
             // 尝试移除信号前缀以判断是否为过时信号
-            let opt_signal = get_ct_signal_by_name_or_value(signal);
+            let opt_signal = get_ct_signal_by_name_or_value(&normalized);
             if opt_signal.is_some() {
                 // 返回前移除信号参数
                 args.remove(1);
@@ -1558,6 +1568,15 @@ mod tests {
             assert_eq!(output_str.trim(), "TERM"); // Assuming 15 corresponds to SIGTERM
         }
 
+        #[test]
+        fn kill_list_with_multiple_arguments_prints_each_signal() {
+            let mut output = Cursor::new(Vec::new());
+            let signal_values = vec!["HUP".to_string(), "TERM".to_string()];
+            kill_list(&mut output, &signal_values, KillCompatMode::Coreutils).unwrap();
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert_eq!(output_str, "1\n15\n");
+        }
+
     }
     #[cfg(test)]
     mod kill_print_signals_tests {
@@ -1886,6 +1905,33 @@ mod tests {
             let result = kill_handle_obsolete(&mut args);
             assert_eq!(result, Some(15)); // Assuming 15 corresponds to SIGTERM
             assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_with_signal_only() {
+            let mut args = vec!["kill".to_string(), "-TERM".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(15));
+            assert_eq!(args, vec!["kill".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_accepts_title_case_signal_name() {
+            let mut args = vec!["kill".to_string(), "-Cont".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, Some(18));
+            assert_eq!(args, vec!["kill".to_string(), "1234".to_string()]);
+        }
+
+        #[test]
+        fn kill_handle_obsolete_rejects_lowercase_signal_name() {
+            let mut args = vec!["kill".to_string(), "-cont".to_string(), "1234".to_string()];
+            let result = kill_handle_obsolete(&mut args);
+            assert_eq!(result, None);
+            assert_eq!(
+                args,
+                vec!["kill".to_string(), "-cont".to_string(), "1234".to_string()]
+            );
         }
 
 

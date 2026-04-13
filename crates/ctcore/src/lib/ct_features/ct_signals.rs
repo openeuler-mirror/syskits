@@ -419,3 +419,31 @@ fn test_signal_name_by_value() {
         }
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn parse_rt_signal_rejects_signed_offsets() {
+    assert_eq!(parse_rt_signal("RTMIN+-1"), None);
+    assert_eq!(parse_rt_signal("RTMAX--1"), None);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn parse_rt_signal_checks_both_rt_boundaries() {
+    use std::sync::OnceLock;
+
+    static RT_RANGE: OnceLock<(i32, i32)> = OnceLock::new();
+    let (rtmin, rtmax) = RT_RANGE.get_or_init(|| (libc::SIGRTMIN(), libc::SIGRTMAX()));
+    let width = rtmax - rtmin;
+
+    assert_eq!(
+        parse_rt_signal(&format!("RTMIN+{width}")),
+        Some(*rtmax as usize)
+    );
+    assert_eq!(
+        parse_rt_signal(&format!("RTMAX-{width}")),
+        Some(*rtmin as usize)
+    );
+    assert_eq!(parse_rt_signal(&format!("RTMIN+{}", width + 1)), None);
+    assert_eq!(parse_rt_signal(&format!("RTMAX-{}", width + 1)), None);
+}

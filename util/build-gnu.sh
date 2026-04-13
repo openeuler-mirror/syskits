@@ -66,23 +66,39 @@ cd "${path_SYSKITS}"
 CARGO_BUILD_FLAGS=""
 [ ! -z "${CARGO_FEATURE_FLAGS}" ] && CARGO_BUILD_FLAGS="${CARGO_BUILD_FLAGS} ${CARGO_FEATURE_FLAGS}"
 
+# 清理上一轮 GNU 适配留下的包装脚本/链接，避免覆盖真正的 syskits 可执行文件。
+rm -f "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/coreutils" \
+    "${SYSKITS_BUILD_DIR}/ginstall" "${SYSKITS_BUILD_DIR}/kill"
+
+# cargo 的顶层二进制与 deps 中的哈希产物是硬链接；如果上一轮被包装脚本污染，
+# 需要先清理 syskits 这个 package 的产物，才能恢复真正的 multicall 二进制。
+cargo clean -p syskits
+
 # 构建整个 workspace
 cargo build ${CARGO_BUILD_FLAGS}
 
 echo "==== Creating symlinks for multicall binary ===="
 
 for binary in $("${SYSKITS_BUILD_DIR}/syskits" --list); do
-    ln -vf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/${binary}"
+    [ "${binary}" = "kill" ] && continue
+    ln -svf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/${binary}"
 done
 
 # 创建 coreutils 软链接，用于 multicall binary 测试
-ln -vf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/coreutils"
+ln -svf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/coreutils"
 
 # 专门为 ginstall 创建一个包装脚本，将其请求转发给 syskits 的 install
 # 必须放在下面那个检查缺失工具的循环之前，防止它被变成 false
 echo '#!/bin/bash' > "${SYSKITS_BUILD_DIR}/ginstall"
 echo 'exec -a install "${0%/*}/install" "$@"' >> "${SYSKITS_BUILD_DIR}/ginstall"
 chmod +x "${SYSKITS_BUILD_DIR}/ginstall"
+
+# GNU kill 测试需要显式切到 coreutils 兼容模式。
+rm -f "${SYSKITS_BUILD_DIR}/kill"
+echo '#!/bin/bash' > "${SYSKITS_BUILD_DIR}/kill"
+echo 'export SYSKITS_KILL_MODE=coreutils' >> "${SYSKITS_BUILD_DIR}/kill"
+echo 'exec -a kill "${0%/*}/syskits" "$@"' >> "${SYSKITS_BUILD_DIR}/kill"
+chmod +x "${SYSKITS_BUILD_DIR}/kill"
 
 # 进入GNU目录
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"

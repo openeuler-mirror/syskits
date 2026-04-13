@@ -848,6 +848,16 @@ mod tests {
     }
 
     #[test]
+    fn test_clap_error_wrapper_help_exit_code_on_output_failure() {
+        let wrapper =
+            clap::Error::raw(clap::error::ErrorKind::DisplayHelp, "help").with_exit_code(125);
+        assert_eq!(wrapper.code(), 0);
+
+        wrapper.note_output_failed();
+        assert_eq!(wrapper.code(), 125);
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_base_nix_error_conversion() {
         use super::{CTIoError, FromIo};

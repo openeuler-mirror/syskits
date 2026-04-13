@@ -2555,6 +2555,7 @@ fn copy_file(
         progress_bar.inc(fs::metadata(sour_path)?.len());
     }
 
+    // GNU cp 行为：即便 verbose 输出失败，复制副作用也应已发生。
     if cp_opts.verbose {
         cp_print_verbose_output(cp_opts.parents, progress_bar, sour_path, dest_path)?;
         // 对于“stdout 初始关闭并被运行时兜底重定向”的场景（close-stdout 语义），
@@ -2828,6 +2829,18 @@ mod tests {
             }
         }
 
+        struct FailingFlushWriter;
+
+        impl Write for FailingFlushWriter {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, "flush failed"))
+            }
+        }
+
         #[test]
         fn test_cp_localize_to_target() {
             let root = Path::new("a/source/");
@@ -2862,6 +2875,14 @@ mod tests {
         #[test]
         fn test_cp_write_verbose_output_propagates_io_error() {
             let mut writer = FailingWriter;
+            let err = cp_write_verbose_output(&mut writer, false, Path::new("a"), Path::new("b"))
+                .unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
+        }
+
+        #[test]
+        fn test_cp_write_verbose_output_propagates_flush_error() {
+            let mut writer = FailingFlushWriter;
             let err = cp_write_verbose_output(&mut writer, false, Path::new("a"), Path::new("b"))
                 .unwrap_err();
             assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);

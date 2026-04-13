@@ -184,6 +184,74 @@ impl Tool for Echo {
     }
 }
 
+fn echo_is_help_or_version_request(args: &[String], posix_mode: bool) -> bool {
+    !posix_mode
+        && matches!(
+            args,
+            [arg] if arg == "--help" || arg == "-h" || arg == "--version" || arg == "-V"
+        )
+}
+
+fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<String>) {
+    let mut no_newline = false;
+    let mut escaped = false;
+    let mut values = Vec::new();
+
+    if posix_mode {
+        // POSIXLY_CORRECT 模式：
+        // 只有单独的 -n 作为第一个参数时才启用选项处理
+        // 此时 -E 被忽略（跳过），其他参数原样输出
+        if args_vec.first().is_some_and(|arg| arg == "-n") {
+            no_newline = true;
+            for arg in args_vec.iter().skip(1) {
+                if arg == "-E" {
+                    continue;
+                }
+                values.push(arg.clone());
+            }
+        } else {
+            values = args_vec.to_vec();
+        }
+        // POSIX 模式下始终启用转义
+        escaped = true;
+    } else {
+        let mut parsing_options = true;
+        for arg in args_vec {
+            if parsing_options {
+                if arg == "--" {
+                    values.push(arg.clone());
+                    parsing_options = false;
+                    continue;
+                }
+
+                if let Some(rest) = arg.strip_prefix('-')
+                    && !rest.is_empty()
+                    && rest.chars().all(|c| matches!(c, 'n' | 'e' | 'E'))
+                {
+                    for c in rest.chars() {
+                        match c {
+                            'n' => no_newline = true,
+                            'e' => escaped = true,
+                            'E' => escaped = false,
+                            _ => unreachable!("filtered by chars().all"),
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            values.push(arg.clone());
+            parsing_options = false;
+        }
+    }
+
+    if values.is_empty() {
+        values.push(String::new());
+    }
+
+    (no_newline, escaped, values)
+}
+
 pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -211,76 +279,6 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
 
     echo_execute(no_newline, escaped, &values)
         .map_err_context(|| "could not write to stdout".to_string())
-}
-
-fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<String>) {
-    let mut no_newline = false;
-    let mut escaped = false;
-    let mut values = Vec::new();
-
-    if posix_mode {
-        if args_vec.first() == Some(&"-n".to_string()) {
-            no_newline = true;
-            for arg in args_vec.iter().skip(1) {
-                if arg == "-E" {
-                    continue;
-                }
-                values.push(arg.clone());
-            }
-        } else {
-            values = args_vec.to_vec();
-        }
-        escaped = true;
-    } else {
-        let mut parsing_options = true;
-        for arg in args_vec {
-            if parsing_options {
-                if arg == "-n" {
-                    no_newline = true;
-                    continue;
-                } else if arg == "-e" {
-                    escaped = true;
-                    continue;
-                } else if arg == "-E" {
-                    escaped = false;
-                    continue;
-                } else if arg == "--" {
-                    values.push(arg.clone());
-                    parsing_options = false;
-                    continue;
-                } else if let Some(rest) = arg.strip_prefix('-')
-                    && !rest.is_empty()
-                    && rest.chars().all(|c| matches!(c, 'n' | 'e' | 'E'))
-                {
-                    for c in rest.chars() {
-                        match c {
-                            'n' => no_newline = true,
-                            'e' => escaped = true,
-                            'E' => escaped = false,
-                            _ => unreachable!("filtered by chars().all"),
-                        }
-                    }
-                    continue;
-                }
-            }
-            values.push(arg.clone());
-            parsing_options = false;
-        }
-    }
-
-    if values.is_empty() {
-        values.push(String::new());
-    }
-
-    (no_newline, escaped, values)
-}
-
-fn echo_is_help_or_version_request(args: &[String], posix_mode: bool) -> bool {
-    !posix_mode
-        && matches!(
-            args,
-            [arg] if arg == "--help" || arg == "-h" || arg == "--version" || arg == "-V"
-        )
 }
 
 pub fn ct_app() -> Command {
@@ -379,26 +377,6 @@ mod tests {
     }
 
     #[test]
-    fn test_echo_parse_args_rejects_invalid_short_cluster() {
-        let (no_newline, escaped, values) =
-            echo_parse_args(&["-nex".to_string(), "foo".to_string()], false);
-
-        assert!(!no_newline);
-        assert!(!escaped);
-        assert_eq!(values, vec!["-nex".to_string(), "foo".to_string()]);
-    }
-
-    #[test]
-    fn test_echo_parse_args_accepts_valid_short_cluster() {
-        let (no_newline, escaped, values) =
-            echo_parse_args(&["-En".to_string(), "foo".to_string()], false);
-
-        assert!(no_newline);
-        assert!(!escaped);
-        assert_eq!(values, vec!["foo".to_string()]);
-    }
-
-    #[test]
     fn test_echo_is_help_or_version_request() {
         assert!(echo_is_help_or_version_request(
             &["--help".to_string()],
@@ -421,6 +399,25 @@ mod tests {
         assert!(!echo_is_help_or_version_request(&["--".to_string()], false));
     }
 
+    #[test]
+    fn test_echo_parse_args_rejects_invalid_short_cluster() {
+        let (no_newline, escaped, values) =
+            echo_parse_args(&["-nex".to_string(), "foo".to_string()], false);
+
+        assert!(!no_newline);
+        assert!(!escaped);
+        assert_eq!(values, vec!["-nex".to_string(), "foo".to_string()]);
+    }
+
+    #[test]
+    fn test_echo_parse_args_accepts_valid_short_cluster() {
+        let (no_newline, escaped, values) =
+            echo_parse_args(&["-En".to_string(), "foo".to_string()], false);
+
+        assert!(no_newline);
+        assert!(!escaped);
+        assert_eq!(values, vec!["foo".to_string()]);
+    }
 
     mod tests_echo_main {
         use crate::echo_main;

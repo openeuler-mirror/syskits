@@ -550,7 +550,7 @@ pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     for file_group in file_groups {
-        let result_options = pr_build_options(&matches, &file_group, &args.join(" "));
+        let result_options = pr_build_options(&matches, &file_group, &args);
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
@@ -586,7 +586,18 @@ fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option_regex = Regex::new(r"^[-+]\d+.*").unwrap();
 
     let mut recreated_args = Vec::with_capacity(args.len());
+    let mut stop_rewrite = false;
     for arg in args {
+        if stop_rewrite {
+            recreated_args.push(arg.clone());
+            continue;
+        }
+        if arg == "--" {
+            stop_rewrite = true;
+            recreated_args.push(arg.clone());
+            continue;
+        }
+
         // GNU pr accepts old-style column counts merged into -t (e.g. -t2 == -t -2).
         if let Some(old_column_count) = arg.strip_prefix("-t") {
             if !old_column_count.is_empty() && old_column_count.chars().all(|c| c.is_ascii_digit())
@@ -653,7 +664,7 @@ fn pr_parse_usize(arg_matches: &ArgMatches, opt: &str) -> Option<Result<usize, P
 fn pr_build_options(
     arg_matches: &ArgMatches,
     paths: &[&str],
-    args: &str,
+    args: &[String],
 ) -> Result<PrOutputOptions, PrError> {
     let number = parse_number(arg_matches)?;
     let (start_page, end_page) = parse_start_end_page(arg_matches, args)?;
@@ -885,10 +896,15 @@ fn parse_col_sep_for_printing(
 
 fn parse_column_mode_options(
     arg_matches: &ArgMatches,
-    args: &str,
+    args: &[String],
 ) -> Result<Option<PrColumnModeOptions>, PrError> {
     let mut column_option_value = None;
-    let mut tokens = args.split_whitespace().peekable();
+    let mut tokens = args
+        .iter()
+        .map(std::string::String::as_str)
+        .skip(1)
+        .take_while(|token| *token != "--")
+        .peekable();
     while let Some(token) = tokens.next() {
         let parse_old_style = |unparsed_num: &str| {
             unparsed_num.parse::<usize>().map_err(|_e| {
@@ -992,38 +1008,48 @@ fn parse_column_width(arg_matches: &ArgMatches) -> Result<usize, PrError> {
 
 fn parse_start_end_page(
     arg_matches: &ArgMatches,
-    args: &str,
+    args: &[String],
 ) -> Result<(usize, Option<usize>), PrError> {
+    let args_before_double_dash = args
+        .iter()
+        .map(std::string::String::as_str)
+        .skip(1)
+        .take_while(|token| *token != "--")
+        .collect::<Vec<_>>();
+
     // +page 选项的优先级低于 --pages
-    let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
-    let res = page_plus_re.captures(args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
-        let x: Vec<_> = unparsed_num.split(':').collect();
-        x[0].to_string().parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument {}", "+", unparsed_num.quote()))
-        })
-    });
-    let start_page_in_plus_option = match res {
-        Some(res) => res?,
-        None => 1,
-    };
-    let res = page_plus_re
-        .captures(args)
-        .map(|i| i.get(1).unwrap().as_str().trim())
-        .filter(|i| i.contains(':'))
-        .map(|unparsed_num| {
-            let x: Vec<_> = unparsed_num.split(':').collect();
-            x[1].to_string().parse::<usize>().map_err(|_e| {
+    let page_plus_re = Regex::new(r"^\+(\d+)(?::(\d*))?$").unwrap();
+    let plus_capture = args_before_double_dash
+        .iter()
+        .find_map(|token| page_plus_re.captures(token));
+
+    let (start_page_in_plus_option, end_page_in_plus_option) = match plus_capture {
+        Some(captures) => {
+            let start_raw = captures.get(1).unwrap().as_str();
+            let start_page = start_raw.parse::<usize>().map_err(|_e| {
                 PrError::EncounteredErrors(format!(
                     "invalid {} argument {}",
                     "+",
-                    unparsed_num.quote()
+                    start_raw.quote()
                 ))
-            })
-        });
-    let end_page_in_plus_option = match res {
-        Some(res) => Some(res?),
-        None => None,
+            })?;
+
+            let end_page = match captures.get(2) {
+                Some(end) => {
+                    let end_raw = end.as_str();
+                    Some(end_raw.parse::<usize>().map_err(|_e| {
+                        PrError::EncounteredErrors(format!(
+                            "invalid {} argument {}",
+                            "+",
+                            format!("{start_raw}:{end_raw}").quote()
+                        ))
+                    })?)
+                }
+                None => None,
+            };
+            (start_page, end_page)
+        }
+        None => (1, None),
     };
 
     let invalid_pages_map = |i: String| {
@@ -5785,9 +5811,9 @@ mod tests {
         fn test_parse_start_end_page_invalid_format() {
             // 测试无效的页码格式
             let args = create_matches_with_args("--pages=5:3");
-            let args_str = "--pages=5:3";
+            let args_str = build_args("--pages=5:3");
 
-            let result = parse_start_end_page(&args, args_str);
+            let result = parse_start_end_page(&args, &args_str);
 
             // 起始页大于结束页，应该返回错误
             assert!(result.is_err());
@@ -6469,7 +6495,8 @@ mod tests {
         #[test]
         fn test_parse_col_sep_for_printing_join_lines_defaults_to_tab() {
             let matches = create_matches_with_args("-J --column=3");
-            let column_mode_options = parse_column_mode_options(&matches, "-J --column=3").unwrap();
+            let argv = build_args("-J --column=3");
+            let column_mode_options = parse_column_mode_options(&matches, &argv).unwrap();
             let result = parse_col_sep_for_printing(&matches, None, &column_mode_options, true);
             assert_eq!(result, PR_TAB.to_string());
 
@@ -6484,7 +6511,7 @@ mod tests {
 
             // 测试 is_across_mode 为 true 的情况
             let matches = create_matches_with_args("--column=2 -a");
-            let result = parse_column_mode_options(&matches, "--column=2 -a").unwrap();
+            let result = parse_column_mode_options(&matches, &build_args("--column=2 -a")).unwrap();
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 2);
@@ -6492,7 +6519,7 @@ mod tests {
 
             // 测试 is_across_mode 为 false 的情况
             let matches = create_matches_with_args("--column=2");
-            let result = parse_column_mode_options(&matches, "--column=2").unwrap();
+            let result = parse_column_mode_options(&matches, &build_args("--column=2")).unwrap();
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 2);
@@ -6500,38 +6527,60 @@ mod tests {
 
             // 测试命令行中直接使用 -3 格式
             let matches = create_matches_with_args("");
-            let result = parse_column_mode_options(&matches, " -3 ").unwrap();
+            let result = parse_column_mode_options(&matches, &build_args("-3")).unwrap();
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 3);
 
             // 测试旧式 -t2 语法（等价于 -t -2）
             let matches = create_matches_with_args("-t");
-            let result = parse_column_mode_options(&matches, " -t2 ").unwrap();
+            let result = parse_column_mode_options(&matches, &build_args("-t2")).unwrap();
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 2);
 
             // 测试列参数按出现顺序覆盖（最后的 -2 覆盖 --columns=1）
             let matches = create_matches_with_args("--columns=1");
-            let result = parse_column_mode_options(&matches, " --columns=1 -2 ").unwrap();
+            let result =
+                parse_column_mode_options(&matches, &build_args("--columns=1 -2")).unwrap();
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 2);
 
             // 测试无效的 -column 格式
             let matches = create_matches_with_args("");
-            let result = parse_column_mode_options(&matches, " -abc ");
+            let result = parse_column_mode_options(&matches, &build_args("-abc"));
             assert!(result.unwrap().is_none());
 
             // -0 不是合法的列数
             let matches = create_matches_with_args("");
-            let result = parse_column_mode_options(&matches, " -0 ");
+            let result = parse_column_mode_options(&matches, &build_args("-0"));
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
                 "pr: invalid number of columns: '0'"
             );
+
+            // `--` 之后的 token 都是操作数，不应再触发列模式解析
+            let matches = create_matches_with_args("-t -- --column=2");
+            let result =
+                parse_column_mode_options(&matches, &build_args("-t -- --column=2")).unwrap();
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_parse_column_mode_options_with_date_format_containing_double_dash() {
+            let argv = vec![
+                "pr".to_string(),
+                "--date-format=-- Date/Time --".to_string(),
+                "-t2".to_string(),
+            ];
+            let matches = ct_app()
+                .try_get_matches_from(["pr", "--date-format=-- Date/Time --", "-t"])
+                .unwrap();
+            let result = parse_column_mode_options(&matches, &argv).unwrap();
+            let options = result.expect("expected column mode options from -2");
+            assert_eq!(options.columns, 2);
         }
 
         #[test]
@@ -6605,24 +6654,24 @@ mod tests {
 
             // 测试 +5 语法
             let matches = create_matches_with_args("");
-            let args = " +5 ";
-            let result = parse_start_end_page(&matches, args).unwrap();
+            let args = build_args("+5");
+            let result = parse_start_end_page(&matches, &args).unwrap();
             assert_eq!(result.0, 5); // start_page
             assert_eq!(result.1, None); // end_page
 
             // 测试 +5:10 语法
             let matches = create_matches_with_args("");
-            let args = " +5:10 ";
-            let result = parse_start_end_page(&matches, args).unwrap();
+            let args = build_args("+5:10");
+            let result = parse_start_end_page(&matches, &args).unwrap();
             assert_eq!(result.0, 5); // start_page
             assert_eq!(result.1, Some(10)); // end_page
 
             // 测试无效的 +page 语法
             let matches = create_matches_with_args("");
-            let args = " +abc ";
+            let args = build_args("+abc");
             // 注意：由于正则表达式的匹配方式，+abc可能不会被解析为+page格式，
             // 因此可能会返回默认的start_page=1，不产生错误
-            let result = parse_start_end_page(&matches, args);
+            let result = parse_start_end_page(&matches, &args);
             if result.is_ok() {
                 let (start_page, end_page) = result.unwrap();
                 assert_eq!(start_page, 1); // 默认值
@@ -6631,8 +6680,8 @@ mod tests {
 
             // 测试另一种格式的无效 +page 语法，这个会导致实际解析错误
             let matches = create_matches_with_args("");
-            let args = " +1a:10 ";
-            let result = parse_start_end_page(&matches, args);
+            let args = build_args("+1a:10");
+            let result = parse_start_end_page(&matches, &args);
             assert!(result.is_err() || result.unwrap().0 == 1);
         }
 
@@ -6642,15 +6691,15 @@ mod tests {
 
             // 测试有效的 --pages 参数
             let matches = create_matches_with_args("--pages=5:10");
-            let args = "";
-            let result = parse_start_end_page(&matches, args).unwrap();
+            let args = build_args("");
+            let result = parse_start_end_page(&matches, &args).unwrap();
             assert_eq!(result.0, 5); // start_page
             assert_eq!(result.1, Some(10)); // end_page
 
             // 测试无效的 --pages 参数 (非数字)
             let matches = create_matches_with_args("--pages=abc");
-            let args = "";
-            let result = parse_start_end_page(&matches, args);
+            let args = build_args("");
+            let result = parse_start_end_page(&matches, &args);
             assert!(result.is_err());
             let err = result.unwrap_err();
             match err {
@@ -6662,8 +6711,8 @@ mod tests {
 
             // 测试无效的 --pages 参数范围 (起始页大于结束页)
             let matches = create_matches_with_args("--pages=10:5");
-            let args = "";
-            let result = parse_start_end_page(&matches, args);
+            let args = build_args("");
+            let result = parse_start_end_page(&matches, &args);
             assert!(result.is_err());
             let err = result.unwrap_err();
             match err {
@@ -6675,10 +6724,30 @@ mod tests {
 
             // 测试 --pages 参数优先级高于 +page 语法
             let matches = create_matches_with_args("--pages=7:15");
-            let args = " +5:10 ";
-            let result = parse_start_end_page(&matches, args).unwrap();
+            let args = build_args("+5:10");
+            let result = parse_start_end_page(&matches, &args).unwrap();
             assert_eq!(result.0, 7); // start_page 来自 --pages
             assert_eq!(result.1, Some(15)); // end_page 来自 --pages
+        }
+
+        #[test]
+        fn test_parse_start_end_page_ignores_plus_syntax_after_double_dash() {
+            let args = create_matches_with_args("-t -- +5:10");
+            let argv = build_args("-t -- +5:10");
+            let result = parse_start_end_page(&args, &argv).unwrap();
+            assert_eq!(result, (1, None));
+        }
+
+        #[test]
+        fn test_parse_start_end_page_with_date_format_containing_double_dash() {
+            let argv = vec![
+                "pr".to_string(),
+                "--date-format=-- Date/Time --".to_string(),
+                "+5:7".to_string(),
+            ];
+            let args = ct_app().try_get_matches_from(&argv).unwrap();
+            let result = parse_start_end_page(&args, &argv).unwrap();
+            assert_eq!(result, (5, Some(7)));
         }
     }
 

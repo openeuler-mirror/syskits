@@ -30,7 +30,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show;
 use ctcore::ct_signals::{ALL_SIGNALS, get_ct_signal_by_name_or_value};
 use nix::sys::signal::{self, Signal};
@@ -246,10 +246,15 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    // 根据兼容模式限制可用选项
+    kill_validate_mode_options(compat_mode, &matches)?;
+
     // 检查 -l/-t 与 -s 的冲突
     let has_list_or_table =
         matches.get_flag(kill_flags::LIST) || matches.get_flag(kill_flags::TABLE);
-    let has_signal = obs_signal.is_some() || matches.contains_id(kill_flags::SIGNAL);
+    let has_signal = obs_signal.is_some()
+        || matches.contains_id(kill_flags::SIGNAL)
+        || matches.contains_id(kill_flags::SIGNAL_NUM);
 
     if has_list_or_table && has_signal {
         let err_message = "cannot combine signal with -l or -t";
@@ -474,6 +479,50 @@ fn kill_exec_bash(sig_value: usize, operands: &[String]) -> CTResult<()> {
     } else {
         Err(CtSimpleError::new(1, "failed to send signal"))
     }
+}
+
+fn kill_invalid_option_error(option: &str) -> Box<dyn CTError> {
+    let display_name = if let Some(long) = option.strip_prefix("--") {
+        long
+    } else if let Some(short) = option.strip_prefix('-') {
+        short
+    } else {
+        option
+    };
+
+    CtSimpleError::new(
+        1,
+        format!("invalid option -- '{display_name}'\nTry 'kill --help' for more information."),
+    )
+}
+
+fn kill_validate_mode_options(mode: KillCompatMode, matches: &ArgMatches) -> CTResult<()> {
+    if !mode.supports_signum_option() && matches.contains_id(kill_flags::SIGNAL_NUM) {
+        return Err(kill_invalid_option_error("-n"));
+    }
+
+    if !mode.supports_util_linux_options() {
+        if matches.contains_id(kill_flags::QUEUE) {
+            return Err(kill_invalid_option_error("-q"));
+        }
+        if matches.get_flag(kill_flags::PID_ONLY) {
+            return Err(kill_invalid_option_error("-p"));
+        }
+        if matches.get_flag(kill_flags::ALL) {
+            return Err(kill_invalid_option_error("-a"));
+        }
+        if matches.get_flag(kill_flags::REQUIRE_HANDLER) {
+            return Err(kill_invalid_option_error("-r"));
+        }
+        if matches.contains_id(kill_flags::TIMEOUT) {
+            return Err(kill_invalid_option_error("--timeout"));
+        }
+        if matches.get_flag(kill_flags::VERBOSE) {
+            return Err(kill_invalid_option_error("--verbose"));
+        }
+    }
+
+    Ok(())
 }
 
 fn kill_errno_description(errno: i32) -> String {
@@ -739,6 +788,7 @@ fn kill_with_sigqueue(sig: Signal, pids: &[i32], value: i32) -> CTResult<()> {
 
     // nix Signal 转换为 i32
     let sig_num: c_int = sig as c_int;
+    let mut had_failure = false;
 
     for &pid in pids {
         // libc sigval 是一个 union,在 aarch64 linux 上只有 sival_ptr 字段
@@ -754,11 +804,20 @@ fn kill_with_sigqueue(sig: Signal, pids: &[i32], value: i32) -> CTResult<()> {
             )
         };
         if ret != 0 {
+            had_failure = true;
             let err = std::io::Error::last_os_error();
             eprintln!("kill: sigqueue failed for pid {pid}: {err}");
         }
     }
-    Ok(())
+
+    if had_failure {
+        Err(CtSimpleError::new(
+            1,
+            "failed to send signal to one or more processes",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// 检查进程是否有指定信号的处理器 (util-linux -r/--require-handler)
@@ -817,6 +876,7 @@ fn kill_with_timeout(
 ) -> CTResult<()> {
     use std::thread;
     use std::time::{Duration, Instant};
+    let mut had_failure = false;
 
     for &pid in pids {
         // 发送初始信号
@@ -824,8 +884,9 @@ fn kill_with_timeout(
             eprintln!("sending signal {} to pid {}", sig as i32, pid);
         }
         let pid_nix = Pid::from_raw(pid);
-        if signal::kill(pid_nix, sig).is_err() {
-            eprintln!("kill: failed to send signal to {pid}");
+        if let Err(err) = signal::kill(pid_nix, sig) {
+            had_failure = true;
+            eprintln!("kill: failed to send signal to {pid}: {err}");
             continue;
         }
 
@@ -850,11 +911,21 @@ fn kill_with_timeout(
                     follow_up_signal as i32, pid
                 );
             }
-            let _ = signal::kill(pid_nix, follow_up_signal);
+            if let Err(err) = signal::kill(pid_nix, follow_up_signal) {
+                had_failure = true;
+                eprintln!("kill: failed to send follow-up signal to {pid}: {err}",);
+            }
         }
     }
 
-    Ok(())
+    if had_failure {
+        Err(CtSimpleError::new(
+            1,
+            "failed to send signal to one or more processes",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// 移除过时的信号参数并返回对应的信号值。
@@ -1240,7 +1311,7 @@ impl Tool for Kill {
                 }
             }
         } else {
-            kill_main(&mut out, args.iter().skip(1).cloned())
+            kill_main(&mut out, args.iter().cloned())
         }
     }
 }
@@ -2041,6 +2112,50 @@ mod tests {
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 0);
+        }
+    }
+
+    #[cfg(test)]
+    mod kill_mode_option_tests {
+        use super::*;
+
+        #[test]
+        fn kill_mode_coreutils_rejects_pid_option() {
+            let args = [ctcore::ct_util_name(), "-p", "1"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = kill_validate_mode_options(KillCompatMode::Coreutils, &matches);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("invalid option -- 'p'"));
+        }
+
+        #[test]
+        fn kill_mode_util_linux_rejects_signum_option() {
+            let args = [ctcore::ct_util_name(), "-n", "9", "1"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = kill_validate_mode_options(KillCompatMode::UtilLinux, &matches);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("invalid option -- 'n'"));
+        }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    mod kill_linux_failure_exit_tests {
+        use super::*;
+
+        #[test]
+        fn kill_with_sigqueue_returns_error_when_send_fails() {
+            let result = kill_with_sigqueue(Signal::SIGTERM, &[i32::MAX], 1);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 1);
+        }
+
+        #[test]
+        fn kill_with_timeout_returns_error_when_initial_send_fails() {
+            let result = kill_with_timeout(Signal::SIGTERM, &[i32::MAX], 1, Signal::SIGKILL, false);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 1);
         }
     }
 

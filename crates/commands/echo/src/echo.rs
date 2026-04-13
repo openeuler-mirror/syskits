@@ -193,6 +193,20 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|s| s.to_string_lossy().into_owned())
         .collect();
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
+
+    if echo_is_help_or_version_request(&args_vec, posix_mode) {
+        let mut command = ct_app();
+        if args_vec[0] == "--help" || args_vec[0] == "-h" {
+            command
+                .print_help()
+                .map_err_context(|| "could not write help to stdout".to_string())?;
+        } else {
+            print!("{}", command.render_version());
+        }
+        println!();
+        return Ok(());
+    }
+
     let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);
 
     echo_execute(no_newline, escaped, &values)
@@ -259,6 +273,14 @@ fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<St
     }
 
     (no_newline, escaped, values)
+}
+
+fn echo_is_help_or_version_request(args: &[String], posix_mode: bool) -> bool {
+    !posix_mode
+        && matches!(
+            args,
+            [arg] if arg == "--help" || arg == "-h" || arg == "--version" || arg == "-V"
+        )
 }
 
 pub fn ct_app() -> Command {

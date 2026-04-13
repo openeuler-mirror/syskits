@@ -331,6 +331,10 @@ fn chroot_parse_user_spec(
 ) -> Result<(Option<&str>, Option<&str>), CTResult<()>> {
     match user_spec_str {
         Some(u) => {
+            if u.matches(':').count() > 1 {
+                return Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()));
+            }
+
             if let Some((user_part, group_part)) = u.split_once(':') {
                 let user = if user_part.is_empty() {
                     None

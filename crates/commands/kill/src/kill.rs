@@ -292,22 +292,16 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
 
     let mut index = 0usize;
     let mut listing = false;
-    let mut listing_count = 0; // 新增：统计列表选项数量
     let mut saw_signal = false;
-    let mut signal_count = 0; // 新增：统计信号指定次数
     let mut sigspec = String::from("TERM");
     let mut sig_value = 15usize;
 
     while index < args.len() {
         let word = args[index].as_str();
 
-        // 检查列表选项 (-l, -L, -t)
-        if kill_is_exact_short_option(word, 'l')
-            || kill_is_exact_short_option(word, 'L')
-            || kill_is_exact_short_option(word, 't')
-        {
+        // 检查列表选项 (-l, -L)
+        if kill_is_exact_short_option(word, 'l') || kill_is_exact_short_option(word, 'L') {
             listing = true;
-            listing_count += 1; // 计数
             index += 1;
             continue;
         }
@@ -324,7 +318,6 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
             sigspec = args[index].clone();
             sig_value = kill_parse_signal_value_bash(&sigspec).unwrap_or(BASH_NO_SIGNAL);
             saw_signal = true;
-            signal_count += 1; // 计数
             index += 1;
             continue;
         }
@@ -333,11 +326,17 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         if let Some(rest) = word.strip_prefix("-s")
             && !rest.is_empty()
         {
-            // 移除 is_ascii_alphabetic 检查，允许数字信号如 -s0
+            // bash 兼容: 附着式 -sNUM (如 -s0/-s15) 无效；分离式 -s 0 才有效
+            if rest.bytes().all(|b| b.is_ascii_digit()) {
+                sigspec = format!("s{rest}");
+                sig_value = BASH_NO_SIGNAL;
+                saw_signal = true;
+                index += 1;
+                continue;
+            }
             sigspec = rest.to_string();
             sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
             saw_signal = true;
-            signal_count += 1;
             index += 1;
             continue;
         }
@@ -350,7 +349,6 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
             sigspec = rest.to_string();
             sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
             saw_signal = true;
-            signal_count += 1;
             index += 1;
             continue;
         }
@@ -368,7 +366,6 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         }
 
         // 旧式信号指定 (-SIG)
-        // 注意：bash 只接受大写的信号名称，或者首字母大写的名称，但不接受全小写
         if word.starts_with('-') && !saw_signal {
             let rest = &word[1..];
 
@@ -377,39 +374,18 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
                 sigspec = rest.to_string();
                 sig_value = num;
                 saw_signal = true;
-                signal_count += 1;
                 index += 1;
                 continue;
             }
 
-            // 检查是否看起来像信号名（首字母是大写）
-            if rest
-                .chars()
-                .next()
-                .map(|c| c.is_ascii_uppercase())
-                .unwrap_or(false)
-            {
-                sigspec = rest.to_string();
-                sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
-                saw_signal = true;
-                signal_count += 1; // 计数
-                index += 1;
-                continue;
-            } else {
-                // 如果不是以大写字母开头（如 -cont），则视为无效
-                return Err(CtSimpleError::new(
-                    1,
-                    format!("{rest}: invalid signal specification"),
-                ));
-            }
+            sigspec = rest.to_string();
+            sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
+            saw_signal = true;
+            index += 1;
+            continue;
         }
 
         break;
-    }
-
-    // 新增：检查冲突
-    if listing_count > 1 || (listing_count > 0 && signal_count > 0) {
-        return Err(CtSimpleError::new(1, "cannot combine signal with -l or -t"));
     }
 
     let operands = &args[index..];
@@ -533,10 +509,8 @@ fn kill_list_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
 
 fn kill_print_signal_bash<W: Write>(writer: &mut W, signal_name_or_value: &str) -> CTResult<()> {
     if let Ok(mut num) = signal_name_or_value.parse::<i32>() {
-        // 支持标准退出状态码 (128) 和 ksh 风格 (256)
-        if num >= 256 {
-            num -= 256;
-        } else if num >= 128 {
+        // 支持标准退出状态码 (128)
+        if num >= 128 {
             num -= 128;
         }
         if num >= 0
@@ -568,18 +542,8 @@ fn kill_parse_signal_value_bash(signal: &str) -> Option<usize> {
         return None;
     }
 
-    // 严格匹配：要求全大写，以兼容 bash 行为（-cont 应该失败，-CONT 应该成功）
-    // 但保留对首字母大写的支持（如 -Cont）
-    let normalized = if signal
-        .chars()
-        .next()
-        .map(|c| c.is_ascii_uppercase())
-        .unwrap_or(false)
-    {
-        signal.to_ascii_uppercase()
-    } else {
-        return None; // 不以大写字母开头，无效
-    };
+    // bash 兼容: 信号名称大小写不敏感（如 -cont、-Cont、-CONT 都可接受）
+    let normalized = signal.to_ascii_uppercase();
 
     let has_sig_prefix = normalized.starts_with("SIG");
     let name = normalized.strip_prefix("SIG").unwrap_or(&normalized);
@@ -1909,6 +1873,16 @@ mod tests {
         }
 
         #[test]
+        fn kill_main_with_list_and_signal_option_is_ok() {
+            let args = ["-l", "-s", "TERM"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_ok());
+            let output_str = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output_str.contains("HUP"));
+        }
+
+        #[test]
         fn kill_main_with_signal_and_pid() {
             let args = [ctcore::ct_util_name(), "-s", "0", "invalid_pid"];
 
@@ -1960,6 +1934,64 @@ mod tests {
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert_eq!(output_str, "1\n15\n");
+        }
+
+        #[test]
+        fn kill_main_with_t_flag_is_invalid_signal_spec() {
+            let args = ["-t"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.code(), 1);
+            assert!(err.to_string().contains("invalid signal specification"));
+        }
+
+        #[test]
+        fn kill_main_with_t_and_s_without_pid_returns_usage() {
+            let args = ["-t", "-s", "1"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.code(), 2);
+            assert_eq!(err.to_string(), BASH_KILL_USAGE);
+        }
+
+        #[test]
+        fn kill_main_with_lowercase_signal_name_is_accepted() {
+            let args = ["-cont", "invalid_pid"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("arguments must be process or job IDs")
+            );
+        }
+
+        #[test]
+        fn kill_main_with_attached_s_zero_is_invalid() {
+            let args = ["-s0", "0"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.code(), 1);
+            assert!(err.to_string().contains("invalid signal specification"));
+        }
+
+        #[test]
+        fn kill_main_with_list_271_is_invalid() {
+            let args = ["-l", "271"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.code(), 1);
+            assert!(err.to_string().contains("invalid signal specification"));
         }
 
         #[test]

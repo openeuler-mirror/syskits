@@ -34,6 +34,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show;
@@ -42,11 +43,9 @@ use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::convert::TryInto;
 use std::ffi::CStr;
+use std::ffi::OsString;
 use std::io::Error;
 use std::io::Write;
-
-use ctcore::Tool;
-use std::ffi::OsString;
 use sys_locale::get_locale;
 
 /// Kill 命令兼容模式
@@ -706,7 +705,10 @@ fn kill_exec(
     #[cfg(target_os = "linux")]
     let pids: Vec<i32> = if require_handler {
         pids.into_iter()
-            .filter(|&pid| check_signal_handler(pid, sig, verbose))
+            .filter(|&pid| match sig {
+                KillSignal::Signal(sig) => check_signal_handler(pid, sig, verbose),
+                KillSignal::Null => true,
+            })
             .collect()
     } else {
         pids
@@ -715,7 +717,7 @@ fn kill_exec(
     // --verbose 模式: 打印将要发送信号的 PID (移到 -r 过滤后)
     if verbose && !require_handler {
         for pid in &pids {
-            eprintln!("sending signal {} to pid {}", sig as i32, pid);
+            eprintln!("sending signal {} to pid {}", sig.as_raw(), pid);
         }
     }
 
@@ -730,7 +732,15 @@ fn kill_exec(
             let follow_up: Signal = (follow_up_sig as i32)
                 .try_into()
                 .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
-            return kill_with_timeout(sig, &pids, timeout_ms, follow_up, verbose);
+            return match sig {
+                KillSignal::Signal(sig) => {
+                    kill_with_timeout(sig, &pids, timeout_ms, follow_up, verbose)
+                }
+                KillSignal::Null => Err(CtSimpleError::new(
+                    1,
+                    "signal 0 cannot be used with --timeout",
+                )),
+            };
         }
     }
 
@@ -740,13 +750,33 @@ fn kill_exec(
         let val: i32 = val_str
             .parse()
             .map_err(|_| CtSimpleError::new(1, format!("argument error: {val_str}")))?;
-        return kill_with_sigqueue(sig, &pids, val);
+        return match sig {
+            KillSignal::Signal(sig) => kill_with_sigqueue(sig, &pids, val),
+            KillSignal::Null => Err(CtSimpleError::new(
+                1,
+                "signal 0 cannot be used with --queue",
+            )),
+        };
     }
 
     // 向指定的进程发送信号。
     kill(sig, &pids);
 
     Ok(())
+}
+
+enum KillSignal {
+    Null,
+    Signal(Signal),
+}
+
+impl KillSignal {
+    fn as_raw(&self) -> i32 {
+        match self {
+            Self::Null => 0,
+            Self::Signal(sig) => *sig as i32,
+        }
+    }
 }
 
 /// 根据提供的参数获取信号值用于进程终止
@@ -760,7 +790,7 @@ fn kill_exec(
 ///
 /// # 返回
 /// 返回一个`CTResult`，包含转换后的`Signal`值，如果转换失败，则包含一个错误。
-fn kill_get_signal_value(obs_signal: Option<usize>, matches: ArgMatches) -> CTResult<Signal> {
+fn kill_get_signal_value(obs_signal: Option<usize>, matches: ArgMatches) -> CTResult<KillSignal> {
     let sig = if let Some(signal) = obs_signal {
         signal
     } else if let Some(signal) = matches.get_one::<String>(kill_flags::SIGNAL) {
@@ -773,12 +803,15 @@ fn kill_get_signal_value(obs_signal: Option<usize>, matches: ArgMatches) -> CTRe
         // 如果没有提供信号值，则使用默认的15（SIGTERM）
         15_usize //SIGTERM
     };
+    if sig == 0 {
+        return Ok(KillSignal::Null);
+    }
     // 将获取到的信号值转换为i32，并尝试将其转换为`Signal`类型，如果失败，则返回一个错误
     let kill_signal: Signal = (sig as i32)
         .try_into()
         .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
 
-    Ok(kill_signal)
+    Ok(KillSignal::Signal(kill_signal))
 }
 
 /// 使用 sigqueue(2) 发送信号 (util-linux -q/--queue)
@@ -1281,11 +1314,16 @@ fn kill_parse_pids(pids: &[String]) -> CTResult<Vec<i32>> {
 ///
 /// # Remarks
 /// 此函数会尝试向每个指定的进程发送信号如果发送信号失败，会使用`ct_show!`宏记录错误
-fn kill(sig: Signal, pids: &[i32]) {
+fn kill(sig: KillSignal, pids: &[i32]) {
     // 遍历进程ID列表
     for &pid in pids {
         // 尝试向进程发送信号
-        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
+        let result = match sig {
+            KillSignal::Null => signal::kill(Pid::from_raw(pid), None),
+            KillSignal::Signal(sig) => signal::kill(Pid::from_raw(pid), sig),
+        };
+
+        if let Err(e) = result {
             // 如果发送信号失败，使用`ct_show!`宏记录错误
             ct_show!(
                 Error::from_raw_os_error(e as i32)

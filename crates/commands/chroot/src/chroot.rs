@@ -1142,7 +1142,7 @@ mod tests {
 
     #[cfg(test)]
     mod tests_private_fn {
-        use crate::{chroot_enter, chroot_set_user};
+        use crate::{chroot_enter, chroot_parse_user_spec, chroot_set_user};
         use crate::{chroot_set_groups_from_str, chroot_set_main_group};
 
         #[test]
@@ -1153,6 +1153,19 @@ mod tests {
                 Err(_) => 1,
             };
             assert_eq!(err, 0);
+        }
+
+        #[test]
+        fn test_parse_user_spec_rejects_extra_colons() {
+            let userspec = String::from("a:b:c");
+            let result = chroot_parse_user_spec(Some(&userspec));
+
+            let err = result
+                .expect_err("userspec with more than one colon must be invalid")
+                .expect_err("invalid userspec should return an error");
+
+            assert_eq!(format!("{err}"), "invalid userspec: 'a:b:c'");
+            assert_eq!(err.code(), 125);
         }
 
         #[test]
@@ -1318,7 +1331,7 @@ mod tests {
                 println!("Skipping test_enter_chroot_skip_chdir: requires root privileges");
                 return;
             }
-            let root = Path::new("/home/user");
+            let root = Path::new("/");
             let result = chroot_enter(root, true);
             assert!(result.is_ok());
         }

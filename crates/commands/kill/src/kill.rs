@@ -9,21 +9,26 @@
  * See the Mulan PSL v2 for more details.
  */
 
-//! 向一个任务发送一个信号
-//! 定义三种兼容模式: Bash, UtilLinux, Coreutils
-//! 通过 SYSKITS_KILL_MODE 环境变量切换
+//! 向一个任务发送一个信号。
+//! 支持三种兼容模式: Bash / UtilLinux / Coreutils，可通过 `SYSKITS_KILL_MODE` 切换。
+//!
+//! 说明:
+//! - 默认 Bash 模式使用 Bash 风格参数解析。
+//! - 为了统一 syskits 入口体验，Bash 模式对单独的 `--help/-h/--version/-V`
+//!   会走 clap 输出帮助/版本；其他参数仍走 Bash 兼容解析路径。
+//!
 //! Flag                    Bash       util-linux   coreutils    syskits     说明
 //! -s, --signal            支持        支持          支持         支持         指定信号名
 //! -l, --list              支持        支持          支持         支持         列出信号
 //! -L                      支持(同-l)   支持(同-t)   支持(同-t)    支持         信号表格别名
-//! -t, --table             不支持      不支持        支持          模式限制     表格格式输出
-//! -n                      支持        不支持        支持          模式限制    信号编号
-//! -p, --pid               不支持      支持          不支持        支持        只打印PID
-//! --verbose               不支持      支持          不支持        支持        详细输出
-//! -q, --queue             不支持      支持          不支持        支持        sigqueue发送
-//! -a, --all               不支持      支持          不支持        支持        不限制UID
-//! -r, --require-handler   不支持      支持          不支持        支持        需要handler
-//! --timeout               不支持      支持          不支持        支持        超时跟进信号
+//! -t, --table             扩展支持     不支持        支持          模式限制     表格格式输出
+//! -n                      支持        不支持        支持          模式限制     信号编号
+//! -p, --pid               不支持      支持          不支持        支持         只打印PID
+//! --verbose               不支持      支持          不支持        支持         详细输出
+//! -q, --queue             不支持      支持          不支持        支持         sigqueue发送
+//! -a, --all               不支持      支持          不支持        支持         不限制UID
+//! -r, --require-handler   不支持      支持          不支持        支持         需要handler
+//! --timeout               不支持      支持          不支持        支持         超时跟进信号
 
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -1920,6 +1925,50 @@ mod tests {
     }
 
     #[cfg(test)]
+    mod kill_mode_option_tests {
+        use super::*;
+
+        #[test]
+        fn kill_mode_coreutils_rejects_pid_option() {
+            let args = [ctcore::ct_util_name(), "-p", "1"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = kill_validate_mode_options(KillCompatMode::Coreutils, &matches);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("invalid option -- 'p'"));
+        }
+
+        #[test]
+        fn kill_mode_util_linux_rejects_signum_option() {
+            let args = [ctcore::ct_util_name(), "-n", "9", "1"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let result = kill_validate_mode_options(KillCompatMode::UtilLinux, &matches);
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("invalid option -- 'n'"));
+        }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    mod kill_linux_failure_exit_tests {
+        use super::*;
+
+        #[test]
+        fn kill_with_sigqueue_returns_error_when_send_fails() {
+            let result = kill_with_sigqueue(Signal::SIGTERM, &[i32::MAX], 1);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 1);
+        }
+
+        #[test]
+        fn kill_with_timeout_returns_error_when_initial_send_fails() {
+            let result = kill_with_timeout(Signal::SIGTERM, &[i32::MAX], 1, Signal::SIGKILL, false);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 1);
+        }
+    }
+
+    #[cfg(test)]
     mod kill_main_tests {
         use super::*;
         use std::ffi::OsString;
@@ -2112,50 +2161,6 @@ mod tests {
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 0);
-        }
-    }
-
-    #[cfg(test)]
-    mod kill_mode_option_tests {
-        use super::*;
-
-        #[test]
-        fn kill_mode_coreutils_rejects_pid_option() {
-            let args = [ctcore::ct_util_name(), "-p", "1"];
-            let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = kill_validate_mode_options(KillCompatMode::Coreutils, &matches);
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(err.to_string().contains("invalid option -- 'p'"));
-        }
-
-        #[test]
-        fn kill_mode_util_linux_rejects_signum_option() {
-            let args = [ctcore::ct_util_name(), "-n", "9", "1"];
-            let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = kill_validate_mode_options(KillCompatMode::UtilLinux, &matches);
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(err.to_string().contains("invalid option -- 'n'"));
-        }
-    }
-
-    #[cfg(all(test, target_os = "linux"))]
-    mod kill_linux_failure_exit_tests {
-        use super::*;
-
-        #[test]
-        fn kill_with_sigqueue_returns_error_when_send_fails() {
-            let result = kill_with_sigqueue(Signal::SIGTERM, &[i32::MAX], 1);
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().code(), 1);
-        }
-
-        #[test]
-        fn kill_with_timeout_returns_error_when_initial_send_fails() {
-            let result = kill_with_timeout(Signal::SIGTERM, &[i32::MAX], 1, Signal::SIGKILL, false);
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().code(), 1);
         }
     }
 

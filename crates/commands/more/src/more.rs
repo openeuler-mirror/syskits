@@ -518,6 +518,7 @@ fn parse_arguments(args: impl Iterator<Item = OsString>) -> CTResult<ArgMatches>
 /// Normalize more-specific argument syntax
 fn normalize_more_args(args: impl Iterator<Item = OsString>) -> Vec<OsString> {
     let mut normalized = Vec::new();
+    let mut end_of_options = false;
 
     for (index, arg) in args.enumerate() {
         if index == 0 {
@@ -525,7 +526,17 @@ fn normalize_more_args(args: impl Iterator<Item = OsString>) -> Vec<OsString> {
             continue;
         }
 
+        if end_of_options {
+            normalized.push(arg);
+            continue;
+        }
+
         let arg_lossy = arg.to_string_lossy();
+        if arg_lossy == "--" {
+            end_of_options = true;
+            normalized.push(arg);
+            continue;
+        }
 
         // -<number> -> --lines <number>
         if let Some(rest) = arg_lossy.strip_prefix('-') {

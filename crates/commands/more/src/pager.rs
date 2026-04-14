@@ -404,6 +404,15 @@ impl Pager {
         }
     }
 
+    /// Draw the current screen and prompt without changing pager state.
+    pub(crate) fn draw_current_screen(
+        &mut self,
+        stdout: &mut Stdout,
+        stderr: &mut Stderr,
+    ) -> io::Result<()> {
+        self.draw_screen(stdout, stderr)
+    }
+
     /// Draw the current screen
     fn draw_screen(&mut self, stdout: &mut Stdout, stderr: &mut Stderr) -> io::Result<()> {
         // Clear prompt
@@ -666,6 +675,11 @@ impl Pager {
     pub fn current_line(&self) -> usize {
         self.current_line
     }
+
+    #[cfg(test)]
+    pub(crate) fn prompt_len(&self) -> usize {
+        self.renderer.prompt_len()
+    }
 }
 
 /// Result of pager action
@@ -793,5 +807,23 @@ mod tests {
         assert!(!opts.silent);
         assert!(!opts.exit_on_eof);
         assert_eq!(opts.from_line, 0);
+    }
+
+    #[test]
+    fn test_draw_current_screen_renders_prompt() {
+        let mut pager = Pager::new(
+            "line1\nline2\nline3",
+            3,
+            80,
+            PagerOptions::default(),
+            None,
+            None,
+        );
+        let mut stdout = std::io::stdout();
+        let mut stderr = std::io::stderr();
+
+        pager.draw_current_screen(&mut stdout, &mut stderr).unwrap();
+
+        assert!(pager.prompt_len() > 0);
     }
 }

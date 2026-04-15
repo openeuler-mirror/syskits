@@ -232,9 +232,7 @@ fn numfmt_remove_suffix(i: f64, s: Option<NumfmtSuffix>, u: &NumfmtUnit) -> Resu
             NumfmtRawSuffix::R => Ok(i * NUMFMT_IEC_BASES[9]),
             NumfmtRawSuffix::Q => Ok(i * NUMFMT_IEC_BASES[10]),
         },
-        (None, &NumfmtUnit::Iec(true)) => {
-            Err(format!("missing 'i' suffix in input: '{i}' (e.g Ki/Mi/Gi)"))
-        }
+        (None, &NumfmtUnit::Iec(true)) => Ok(i),
         (Some((raw_suffix, false)), &NumfmtUnit::Iec(true)) => Err(format!(
             "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
         )),
@@ -989,6 +987,7 @@ mod tests {
                 assert_eq!(result, i * base);
             }
         }
+
     }
     #[cfg(test)]
     mod transform_from_tests {

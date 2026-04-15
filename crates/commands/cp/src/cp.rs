@@ -40,7 +40,7 @@ use ctcore::ct_fs::{
 };
 use ctcore::{ct_backup_control, ct_update_control};
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
-use ctcore::{ct_prompt_yes, ct_show_error, ct_show_warning, ct_util_name};
+use ctcore::{ct_prompt_yes, ct_show_error, ct_show_warning};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -720,12 +720,10 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
         let (sour_path, target_path) = cp_parse_path_args(paths_buf, &cp_options)?;
 
         if let Err(error) = cp_copy(&sour_path, &target_path, &cp_options) {
-            if let CpError::NotAllFilesCopied = error {
-                // 对于这个非致命错误，不做任何处理
-            } else {
+            if !matches!(error, CpError::NotAllFilesCopied) {
                 ct_show_error!("{}", error);
+                set_ct_exit_code(EXIT_ERR);
             }
-            set_ct_exit_code(EXIT_ERR);
         }
     }
 
@@ -1253,12 +1251,14 @@ fn show_error_if_needed(err: &CpError) {
         }
         // 如果文件复制被跳过（例如，因为使用了交互式模式且用户拒绝了覆盖），则记录此情况
         CpError::Skipped => {
+            set_ct_exit_code(EXIT_ERR);
             // 此处参考了touch a b && echo "n"|cp -i a b && echo $?的用法，
             // 类似情况下，GNU cp 9.2会返回一个错误码
         }
         // 对于所有其他类型的错误，显示标准错误信息
         _ => {
             ct_show_error!("{}", err);
+            set_ct_exit_code(EXIT_ERR);
         }
     }
 }
@@ -1560,10 +1560,7 @@ fn copy_source(
 impl CpOverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
-            Self::NoClobber => {
-                eprintln!("{}: not replacing {}", ct_util_name(), path.quote());
-                Err(CpError::NotAllFilesCopied)
-            }
+            Self::NoClobber => Err(CpError::NotAllFilesCopied),
             Self::Interactive(_) => {
                 let mut prompt = format!("overwrite {}?", path.quote());
 
@@ -2517,6 +2514,10 @@ fn copy_file(
         return Ok(());
     }
 
+    if cp_file_or_link_exists(dest_path) && cp_opts.overwrite == CpOverwriteMode::NoClobber {
+        cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
+    }
+
     if cp_file_or_link_exists(dest_path) {
         // 仅当明确开启硬链接模式（-l），且两者已经是同文件硬链接时，才静默跳过。
         // 其他模式下必须让它掉入 handle_existing_dest 去触发 "are the same file" 错误。
@@ -2560,22 +2561,7 @@ fn copy_file(
     // 准备上下文并获取源文件元数据以进行复制。
     let context = cp_context_for(sour_path, dest_path);
 
-    let source_metadata = {
-        let result = if cp_opts.cp_dereference(source_in_command_line) {
-            fs::metadata(sour_path)
-        } else {
-            fs::symlink_metadata(sour_path)
-        };
-        // 对齐 GNU 的 stat 报错标准格式，并剥离底层的 "(os error 2)"
-        result.map_err(|err| {
-            let err_msg = if err.kind() == std::io::ErrorKind::NotFound {
-                "No such file or directory".to_string()
-            } else {
-                err.to_string()
-            };
-            CpError::Error(format!("cannot stat {}: {}", sour_path.quote(), err_msg))
-        })?
-    };
+    let source_metadata = cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
 
     // 计算目标文件权限，基于源文件及选项。
     let dest_permissions =
@@ -2654,6 +2640,26 @@ fn copy_file(
     }
 
     Ok(())
+}
+
+fn cp_source_metadata(
+    sour_path: &Path,
+    cp_opts: &CpOptions,
+    source_in_command_line: bool,
+) -> CopyResult<Metadata> {
+    let result = if cp_opts.cp_dereference(source_in_command_line) {
+        fs::metadata(sour_path)
+    } else {
+        fs::symlink_metadata(sour_path)
+    };
+    result.map_err(|err| {
+        let err_msg = if err.kind() == std::io::ErrorKind::NotFound {
+            "No such file or directory".to_string()
+        } else {
+            err.to_string()
+        };
+        CpError::Error(format!("cannot stat {}: {}", sour_path.quote(), err_msg))
+    })
 }
 
 #[cfg(unix)]

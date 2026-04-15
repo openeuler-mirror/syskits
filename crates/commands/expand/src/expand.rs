@@ -1095,8 +1095,10 @@ mod tests {
     mod tests_expand_functions {
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
-            DEFAULT_TABSTOP, ExpandParseError, RemainingMode, expand_next_tabstop, expand_open,
-            expand_shortcuts, expand_tabstops_parse,
+            CharType, DEFAULT_TABSTOP, ExpandCharInfo, ExpandOptions, ExpandParseError,
+            ExpandState, RemainingMode, UTF8_BOM, expand_line, expand_next_char_info,
+            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
+            expand_to_writer,
         };
 
         use crate::is_digit_or_comma;
@@ -1295,6 +1297,118 @@ mod tests {
             assert_eq!(output, content);
 
             std::fs::remove_file(file_path).unwrap();
+        }
+
+        fn test_options(tabstop: usize) -> ExpandOptions {
+            test_options_with_utf8(tabstop, false)
+        }
+
+        fn test_options_with_utf8(tabstop: usize, uflag: bool) -> ExpandOptions {
+            ExpandOptions {
+                files: vec![],
+                tabstops: vec![tabstop],
+                tspaces: " ".repeat(tabstop),
+                iflag: false,
+                uflag,
+                remaining_mode: RemainingMode::None,
+            }
+        }
+
+        #[test]
+        fn test_expand_line_keeps_column_state_across_chunks() {
+            let opts = test_options(3);
+            let mut output = Vec::new();
+            let mut state = ExpandState::default();
+
+            let first = vec![b'a'; 65_536];
+            expand_line(&first, &mut output, &opts.tabstops, &opts, &mut state).unwrap();
+            expand_line(b"\tX\n", &mut output, &opts.tabstops, &opts, &mut state).unwrap();
+
+            let expected = [vec![b'a'; 65_536], b"  X\n".to_vec()].concat();
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_expand_line_resets_state_after_newline() {
+            let opts = test_options(3);
+            let mut output = Vec::new();
+            let mut state = ExpandState::default();
+
+            expand_line(b"a\t\n", &mut output, &opts.tabstops, &opts, &mut state).unwrap();
+            expand_line(b"\tX\n", &mut output, &opts.tabstops, &opts, &mut state).unwrap();
+
+            assert_eq!(output, b"a  \n   X\n");
+            assert_eq!(state, ExpandState::default());
+        }
+
+        #[test]
+        fn test_expand_next_char_info_handles_wide_utf8_characters() {
+            let (c_type, c_width, n_bytes) = match expand_next_char_info(true, "　".as_bytes(), 0)
+            {
+                ExpandCharInfo::Parsed {
+                    c_type,
+                    c_width,
+                    n_bytes,
+                } => (c_type, c_width, n_bytes),
+                ExpandCharInfo::Incomplete => panic!("unexpected incomplete sequence"),
+            };
+
+            assert_eq!(c_type, CharType::Other);
+            assert_eq!(c_width, 2);
+            assert_eq!(n_bytes, "　".len());
+        }
+
+        #[test]
+        fn test_expand_line_carries_partial_utf8_between_chunks() {
+            let opts = test_options_with_utf8(3, true);
+            let mut output = Vec::new();
+            let mut state = ExpandState::default();
+
+            let mut first = vec![b'a'; 65_535];
+            first.push("　".as_bytes()[0]);
+            expand_line(&first, &mut output, &opts.tabstops, &opts, &mut state).unwrap();
+
+            let mut second = "　".as_bytes()[1..].to_vec();
+            second.extend_from_slice(b"\tX\n");
+            let mut merged = std::mem::take(&mut state.pending_utf8);
+            merged.extend_from_slice(&second);
+            expand_line(&merged, &mut output, &opts.tabstops, &opts, &mut state).unwrap();
+
+            let expected = [
+                vec![b'a'; 65_535],
+                "　".as_bytes().to_vec(),
+                b" X\n".to_vec(),
+            ]
+            .concat();
+            assert_eq!(output, expected);
+            assert_eq!(state, ExpandState::default());
+        }
+
+        #[test]
+        fn test_expand_to_writer_skips_bom_after_first_file() {
+            let mut first = tempfile::NamedTempFile::new().unwrap();
+            let mut second = tempfile::NamedTempFile::new().unwrap();
+            first.write_all(&UTF8_BOM).unwrap();
+            first.write_all(b"a\tb\n").unwrap();
+            second.write_all(&UTF8_BOM).unwrap();
+            second.write_all(b"c\td\n").unwrap();
+
+            let options = ExpandOptions {
+                files: vec![
+                    first.path().to_string_lossy().to_string(),
+                    second.path().to_string_lossy().to_string(),
+                ],
+                tabstops: vec![8],
+                tspaces: " ".repeat(8),
+                iflag: false,
+                uflag: true,
+                remaining_mode: RemainingMode::None,
+            };
+
+            let mut output = Vec::new();
+            expand_to_writer(&options, &mut output).unwrap();
+
+            assert_eq!(output, b"\xEF\xBB\xBFa       b\nc       d\n");
         }
     }
 }

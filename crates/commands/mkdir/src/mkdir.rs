@@ -25,6 +25,7 @@ use ctcore::ct_show_if_err;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 #[cfg(target_os = "linux")]
 use ctcore::libc;
@@ -39,6 +40,14 @@ use std::os::unix::ffi::OsStrExt;
 
 const MKDIR_DEFAULT_PERM: u32 = 0o777;
 
+fn mkdir_create_error(path: &Path, err: &str) -> String {
+    t!(
+        "mkdir.cannot_create",
+        dir = path.quote().to_string(),
+        err = err.to_string()
+    )
+}
+
 mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -46,6 +55,29 @@ mod mkdir_flags {
     pub const CTX: &str = "ctx";
     pub const CONTEXT: &str = "context";
     pub const DIRS: &str = "dirs";
+}
+
+enum SecurityContextRequest {
+    Absent,
+    Default,
+    Explicit(OsString),
+}
+
+impl SecurityContextRequest {
+    fn explicit_context(&self) -> Option<&OsString> {
+        match self {
+            Self::Explicit(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn is_set(&self) -> bool {
+        !matches!(self, Self::Absent)
+    }
+
+    fn warn_on_unsupported(&self) -> bool {
+        matches!(self, Self::Explicit(_))
+    }
 }
 
 #[cfg(windows)]
@@ -110,25 +142,14 @@ impl Tool for Mkdir {
 }
 
 pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
-    // 从环境变量读取 locale,符合 GNU coreutils 行为
-    let lang_code = std::env::var("LANG")
-        .ok()
-        .map(|lang| {
-            // 处理 LANG=C 或 LANG=C.UTF-8 等情况,使用英文
-            if lang.starts_with("C.") || lang == "C" || lang == "POSIX" {
-                String::from("en-US")
-            } else if lang.starts_with("zh") {
-                String::from("zh-CN")
-            } else if lang.starts_with("en") {
-                String::from("en-US")
-            } else {
-                // 其他情况尝试解析
-                lang.replace('_', "-")
-            }
-        })
-        .unwrap_or_else(|| String::from("en-US"));
+    let lang_code = mkdir_locale();
     rust_i18n::set_locale(&lang_code);
-    let mut args = args.collect_lossy();
+    let raw_args: Vec<OsString> = args.into_iter().collect();
+    let context_request = parse_security_context_request(&raw_args);
+    let mut args = raw_args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
 
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
     // 可能需要移除 MODE 前缀 '-'（例如 "chmod -x FILE"）。
@@ -147,18 +168,9 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     }
     let is_verbose = matches.get_flag(mkdir_flags::VERBOSE);
     let is_recursive = matches.get_flag(mkdir_flags::PARENTS);
-    let has_z_flag = matches.get_flag(mkdir_flags::CTX);
 
     // 判断用户是否显式传递了 -m 参数
     let specified_mode = matches.get_one::<String>(mkdir_flags::MODE).is_some();
-
-    let has_context_flag =
-        matches.value_source(mkdir_flags::CONTEXT) == Some(clap::parser::ValueSource::CommandLine);
-    let context = matches
-        .get_one::<OsString>(mkdir_flags::CONTEXT)
-        .filter(|v| !v.is_empty());
-    let set_context = has_z_flag || has_context_flag;
-    let warn_on_unsupported = context.is_some();
 
     match mkdir_get_mode(&matches, is_mode_had_minus_prefix) {
         Ok(mode) => mkdir_exec(
@@ -167,12 +179,69 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
             mode,
             specified_mode,
             is_verbose,
-            context,
-            set_context,
-            warn_on_unsupported,
+            context_request.explicit_context(),
+            context_request.is_set(),
+            context_request.warn_on_unsupported(),
         ),
         Err(f) => Err(CtSimpleError::new(1, f)),
     }
+}
+
+fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
+    let mut request = SecurityContextRequest::Absent;
+
+    for arg in args.iter().skip(1) {
+        if arg == "-Z" || arg == "--context" {
+            request = SecurityContextRequest::Default;
+            continue;
+        }
+
+        if let Some(value) = arg.to_str().and_then(|arg| arg.strip_prefix("--context=")) {
+            request = SecurityContextRequest::Explicit(OsString::from(value));
+        }
+    }
+
+    request
+}
+
+fn map_locale_name(locale: &str) -> String {
+    if locale.starts_with("C.") || locale == "C" || locale == "POSIX" {
+        String::from("en-US")
+    } else if locale.starts_with("zh") {
+        String::from("zh-CN")
+    } else if locale.starts_with("en") {
+        String::from("en-US")
+    } else {
+        locale.replace('_', "-")
+    }
+}
+
+#[cfg(test)]
+fn preferred_locale_from_values<'a>(
+    values: impl IntoIterator<Item = Option<&'a str>>,
+) -> Option<String> {
+    values
+        .into_iter()
+        .flatten()
+        .find(|value| !value.is_empty())
+        .map(map_locale_name)
+}
+
+fn preferred_locale_from_env() -> Option<String> {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = std::env::var(key) {
+            if !value.is_empty() {
+                return Some(map_locale_name(&value));
+            }
+        }
+    }
+    None
+}
+
+fn mkdir_locale() -> String {
+    preferred_locale_from_env()
+        .or_else(|| get_locale().map(|locale| map_locale_name(&locale)))
+        .unwrap_or_else(|| String::from("en-US"))
 }
 
 pub fn ct_app() -> Command {
@@ -294,7 +363,7 @@ pub fn mkdir(
 
     if path.exists() && path.is_dir() {
         if !is_recursive {
-            let err_message = format!("cannot create directory {}: File exists", path.quote());
+            let err_message = mkdir_create_error(path, "File exists");
             return Err(CtSimpleError::new(1, err_message));
         }
         return Ok(());
@@ -353,7 +422,7 @@ fn mkdir_create_dir(
     }
 
     if path.exists() && !is_recursive {
-        let err_message = format!("cannot create directory {}: File exists", path.quote());
+        let err_message = mkdir_create_error(path, "File exists");
         return Err(CtSimpleError::new(1, err_message));
     }
 
@@ -387,7 +456,7 @@ fn mkdir_create_dir(
         if path.is_dir() {
             Ok(())
         } else {
-            let msg = format!("cannot create directory {}: {}", path.quote(), e);
+            let msg = mkdir_create_error(path, &e.to_string());
             Err(CtSimpleError::new(1, msg))
         }
     } else {
@@ -2290,4 +2359,5 @@ mod tests {
             );
         }
     }
+
 }

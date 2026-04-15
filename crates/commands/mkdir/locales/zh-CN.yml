@@ -9,3 +9,4 @@ mkdir:
   about: '如果目录不存在,则创建目录。'
   after_help: "每个模式的格式为'[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
   verbose_created: "已创建目录"
+  cannot_create: "无法创建目录 %{dir}: %{err}"

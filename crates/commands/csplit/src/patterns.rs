@@ -184,14 +184,43 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
 }
 
 fn bre_to_rust_regex(pattern: &str) -> String {
-    pattern
-        .replace(r"\{", "{")
-        .replace(r"\}", "}")
-        .replace(r"\(", "(")
-        .replace(r"\)", ")")
-        .replace(r"\+", "+")
-        .replace(r"\?", "?")
-        .replace(r"\|", "|")
+    let mut out = String::with_capacity(pattern.len());
+    let mut chars = pattern.chars().peekable();
+    let mut in_bracket = false;
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                if !in_bracket && matches!(next, '{' | '}' | '(' | ')' | '+' | '?' | '|') {
+                    out.push(next);
+                } else {
+                    out.push('\\');
+                    out.push(next);
+                }
+            } else {
+                out.push('\\');
+            }
+            continue;
+        }
+
+        if ch == '[' {
+            in_bracket = true;
+            out.push(ch);
+            continue;
+        }
+        if ch == ']' && in_bracket {
+            in_bracket = false;
+            out.push(ch);
+            continue;
+        }
+
+        if !in_bracket && matches!(ch, '{' | '}' | '(' | ')' | '+' | '?' | '|') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+
+    out
 }
 
 /// Asserts the line numbers are in increasing order, starting at 1.

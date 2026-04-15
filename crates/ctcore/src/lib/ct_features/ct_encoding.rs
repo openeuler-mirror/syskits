@@ -403,6 +403,10 @@ impl<R: Read> Data<R> {
                     .or_else(|| decode_base64_short_tail(self.format, &char_buf));
                 if let Some(decoded) = decoded {
                     writer.write_all(&decoded)?;
+                    if char_buf.contains(&b'=') {
+                        return Err(invalid_input().into());
+                    }
+                    return Ok(());
                 }
                 return Err(invalid_input().into());
             }

@@ -37,14 +37,16 @@ pub fn print_loadavg() -> String {
 }
 
 #[cfg(unix)]
-pub fn process_utmpx(path: Option<&str>) -> (Option<time_t>, usize) {
+pub fn process_utmpx(path: Option<&str>) -> (Option<time_t>, usize, Option<std::io::Error>) {
     use ctcore::ct_utmpx::*;
 
     let mut n_users = 0;
     let mut boot_time = None;
-
-    let records = if let Some(p) = path {
-        CtUtmpx::iter_all_records_from(p)
+    let records = if let Some(path) = path {
+        if let Err(err) = std::fs::File::open(path) {
+            return (None, 0, Some(err));
+        }
+        CtUtmpx::iter_all_records_from(path)
     } else {
         CtUtmpx::iter_all_records()
     };
@@ -61,12 +63,27 @@ pub fn process_utmpx(path: Option<&str>) -> (Option<time_t>, usize) {
             _ => continue,
         }
     }
-    (boot_time, n_users)
+    (boot_time, n_users, None)
 }
 
 #[cfg(unix)]
 pub fn get_uptime(boot_time: Option<time_t>) -> i64 {
     get_uptime_by_proc(boot_time, "/proc/uptime")
+}
+
+#[cfg(unix)]
+pub fn get_uptime_from_boot_time(boot_time: Option<time_t>) -> i64 {
+    match boot_time {
+        Some(t) => {
+            let now = Local::now().timestamp();
+            #[cfg(target_pointer_width = "64")]
+            let boot_time: i64 = t;
+            #[cfg(not(target_pointer_width = "64"))]
+            let boot_time: i64 = t.into();
+            now - boot_time
+        }
+        None => -1,
+    }
 }
 
 #[cfg(unix)]
@@ -233,5 +250,6 @@ mod tests {
             let result = get_uptime_by_proc(Some(boot_time), "/nonexistent/path");
             assert!(result >= 12345);
         }
+
     }
 }

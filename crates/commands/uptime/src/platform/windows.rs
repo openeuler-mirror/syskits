@@ -22,8 +22,8 @@ pub fn print_loadavg() -> String {
 }
 
 #[cfg(windows)]
-pub fn process_utmpx() -> (Option<time_t>, usize) {
-    (None, 0) // TODO: change 0 to number of users
+pub fn process_utmpx(_path: Option<&str>) -> (Option<time_t>, usize, Option<std::io::Error>) {
+    (None, 0, None) // TODO: change 0 to number of users
 }
 
 #[cfg(windows)]

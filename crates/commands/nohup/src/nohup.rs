@@ -97,6 +97,10 @@ fn write_nohup_msg(msg: &str) -> io::Result<()> {
     handle.flush()
 }
 
+fn nohup_append_msg(path: &str) -> String {
+    format!("ignoring input and appending output to {}", path.quote())
+}
+
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -208,10 +212,7 @@ fn nohup_find_stdout() -> CTResult<File> {
         .open(Path::new(NOHUP_OUT))
     {
         Ok(file) => {
-            let msg = format!(
-                "ignoring input and appending output to {}",
-                NOHUP_OUT.quote()
-            );
+            let msg = nohup_append_msg(NOHUP_OUT);
             if write_nohup_msg(&msg).is_err() {
                 std::process::exit(125);
             }
@@ -227,10 +228,7 @@ fn nohup_find_stdout() -> CTResult<File> {
             let path_buf_str = path_buf.to_str().unwrap();
             match OpenOptions::new().create(true).append(true).open(&path_buf) {
                 Ok(file) => {
-                    let msg = format!(
-                        "ignoring input and appending output to {}",
-                        NOHUP_OUT.quote()
-                    );
+                    let msg = nohup_append_msg(path_buf_str);
                     if write_nohup_msg(&msg).is_err() {
                         std::process::exit(125);
                     }

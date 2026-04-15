@@ -211,14 +211,18 @@ fn handle_tailable_file(
         Ok(mut file) => {
             header_printer.print_input(input);
 
-            let reader = if should_use_bounded_io(&mut file, options, offset) {
-                tail_bounded(&mut file, options, buffer)?;
-                BufReader::new(file)
-            } else {
-                let mut reader = BufReader::new(file);
-                tail_unbounded(&mut reader, options, buffer)?;
-                reader
-            };
+            let reader =
+                if let Some(count) = prepare_char_device_negative_bytes_tail(&mut file, options) {
+                    tail_limited_bytes(&mut file, count, buffer)?;
+                    BufReader::new(file)
+                } else if should_use_bounded_io(&mut file, options, offset) {
+                    tail_bounded(&mut file, options, buffer)?;
+                    BufReader::new(file)
+                } else {
+                    let mut reader = BufReader::new(file);
+                    tail_unbounded(&mut reader, options, buffer)?;
+                    reader
+                };
 
             observer.add_path(
                 path,
@@ -292,6 +296,34 @@ fn supports_bounded_bytes(file_type: &FileType) -> bool {
     {
         file_type.is_file()
     }
+}
+
+#[cfg(unix)]
+fn prepare_char_device_negative_bytes_tail(file: &mut File, options: &TailOptions) -> Option<u64> {
+    if options.presume_input_pipe {
+        return None;
+    }
+
+    let count = match &options.mode {
+        TailFilterMode::Bytes(TailSignum::Negative(count)) => *count,
+        _ => return None,
+    };
+
+    let offset = i64::try_from(count).ok()?;
+    if !file.metadata().ok()?.file_type().is_char_device() {
+        return None;
+    }
+
+    file.seek(SeekFrom::End(-offset)).ok()?;
+    Some(count)
+}
+
+#[cfg(not(unix))]
+fn prepare_char_device_negative_bytes_tail(
+    _file: &mut File,
+    _options: &TailOptions,
+) -> Option<u64> {
+    None
 }
 
 fn handle_file_open_error(
@@ -613,6 +645,25 @@ fn handle_bounded_bytes(
         }
         _ => {}
     }
+    Ok(())
+}
+
+fn tail_limited_bytes<T: Read>(
+    reader: &mut T,
+    count: u64,
+    buffer: Option<&mut Vec<u8>>,
+) -> CTResult<()> {
+    let stdout = stdout();
+    let mut multi_writer = MultiWriter::new();
+
+    multi_writer.add_writer(BufWriter::new(stdout.lock()));
+    if let Some(buf) = buffer {
+        multi_writer.add_writer(BufWriter::new(buf));
+    }
+
+    let mut limited = reader.take(count);
+    io::copy(&mut limited, &mut multi_writer)?;
+    multi_writer.flush()?;
     Ok(())
 }
 

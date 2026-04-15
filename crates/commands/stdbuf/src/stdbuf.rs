@@ -395,6 +395,30 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn test_stdbuf_main_help_exit_code_is_zero() {
+        let args = [ctcore::ct_util_name(), "--help"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 0);
+    }
+
+    #[test]
+    fn test_stdbuf_main_version_exit_code_is_zero() {
+        let args = [ctcore::ct_util_name(), "--version"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 0);
+    }
+
+    #[test]
+    fn test_stdbuf_main_invalid_usage_exit_code_is_125() {
+        let args = [ctcore::ct_util_name(), "--invalid-argument"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 125);
+    }
+
     // Helper function to create ArgMatches with specific values for testing
     fn create_arg_matches(
         input: Option<&str>,

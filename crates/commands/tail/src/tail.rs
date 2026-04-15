@@ -1158,6 +1158,33 @@ mod test_tail_bounded_unbounded {
         assert_eq!(output, b"x");
     }
 
+    #[test]
+    #[serial]
+    fn test_tail_limited_bytes_stops_without_eof() {
+        let mut reader = io::repeat(b'x');
+        let mut buffer = Vec::new();
+
+        tail_limited_bytes(&mut reader, 64, Some(&mut buffer)).unwrap();
+
+        assert_eq!(buffer, vec![b'x'; 64]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn test_tail_char_device_negative_bytes_is_limited() {
+        let path = Path::new("/dev/zero");
+        if !path.exists() {
+            return;
+        }
+
+        let options = create_basic_options(TailFilterMode::Bytes(TailSignum::Negative(64)));
+        let output = tail_path_to_buffer(path, &options);
+
+        assert_eq!(output.len(), 64);
+        assert!(output.iter().all(|byte| *byte == 0));
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_special_files_avoid_bounded_io_for_negative_bytes() {

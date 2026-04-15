@@ -628,6 +628,141 @@ fn get_default_format() -> String {
     "%c".to_string()
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StrftimePad {
+    Default,
+    Zero,
+    Space,
+    None,
+    Plus,
+}
+
+fn parse_strftime_width(width: &str) -> Option<usize> {
+    if width.is_empty() {
+        None
+    } else {
+        Some(width.parse::<usize>().unwrap_or(usize::MAX))
+    }
+}
+
+fn format_gnu_number(
+    value: u64,
+    negative: bool,
+    digits: usize,
+    width: Option<usize>,
+    pad: StrftimePad,
+    always_output_sign: bool,
+) -> String {
+    format_gnu_number_string(
+        &value.to_string(),
+        negative,
+        digits,
+        width,
+        pad,
+        always_output_sign,
+    )
+}
+
+fn format_gnu_number_string(
+    number: &str,
+    negative: bool,
+    digits: usize,
+    width: Option<usize>,
+    pad: StrftimePad,
+    always_output_sign: bool,
+) -> String {
+    let width = width.unwrap_or(digits);
+    let pad = match pad {
+        StrftimePad::Default => StrftimePad::Zero,
+        other => other,
+    };
+    let sign = if negative {
+        Some('-')
+    } else if always_output_sign {
+        Some('+')
+    } else {
+        None
+    };
+    let shortage = width.saturating_sub(number.len() + usize::from(sign.is_some()));
+    let mut out = String::with_capacity(width.max(number.len() + usize::from(sign.is_some())));
+
+    if let Some(sign) = sign {
+        if pad == StrftimePad::Space {
+            out.push_str(&" ".repeat(shortage));
+        }
+        out.push(sign);
+    }
+    if pad != StrftimePad::None && !(sign.is_some() && pad == StrftimePad::Space) {
+        let pad_char = if pad == StrftimePad::Space { ' ' } else { '0' };
+        out.push_str(&pad_char.to_string().repeat(shortage));
+    }
+    out.push_str(number);
+    out
+}
+
+fn res_width_from_nsec(res_nsec: i64) -> usize {
+    let mut width = 9;
+    let mut temp = res_nsec;
+    while temp > 0 && temp % 10 == 0 && width > 1 {
+        temp /= 10;
+        width -= 1;
+    }
+    width
+}
+
+fn format_gnu_nanoseconds(ns: u32, width: Option<usize>, pad: StrftimePad) -> String {
+    let mut width = width.unwrap_or_else(|| {
+        if pad == StrftimePad::None {
+            let (_, res_nsec) = get_clock_resolution();
+            res_width_from_nsec(res_nsec)
+        } else {
+            9
+        }
+    });
+    if width == 0 {
+        width = 9;
+    }
+
+    let mut n = ns;
+    let mut ndigs = 9usize;
+    while width < ndigs || (1 < ndigs && n % 10 == 0) {
+        ndigs -= 1;
+        n /= 10;
+    }
+
+    let mut out = format!("{n:0ndigs$}");
+    if pad != StrftimePad::None && width > ndigs {
+        let pad_char = if pad == StrftimePad::Space { ' ' } else { '0' };
+        out.push_str(&pad_char.to_string().repeat(width - ndigs));
+    }
+    out
+}
+
+fn format_gnu_timezone(
+    dt: &DateTime<FixedOffset>,
+    colons: usize,
+    width: Option<usize>,
+    pad: StrftimePad,
+) -> String {
+    let offset_secs = dt.offset().local_minus_utc();
+    let negative = offset_secs < 0;
+    let abs_secs = offset_secs.abs();
+    let hours = abs_secs / 3600;
+    let minutes = (abs_secs % 3600) / 60;
+    let seconds = abs_secs % 60;
+
+    let (digits, number) = match colons {
+        0 => (5, format!("{}", hours * 100 + minutes)),
+        1 => (6, format!("{hours}:{minutes:02}")),
+        2 => (9, format!("{hours}:{minutes:02}:{seconds:02}")),
+        _ if seconds == 0 && minutes == 0 => (3, format!("{hours}")),
+        _ if seconds == 0 => (6, format!("{hours}:{minutes:02}")),
+        _ => (9, format!("{hours}:{minutes:02}:{seconds:02}")),
+    };
+
+    format_gnu_number_string(&number, negative, digits, width, pad, true)
+}
+
 #[cfg(target_os = "linux")]
 fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<String> {
     // 检测当前环境语言
@@ -650,6 +785,7 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
         if c == '%' {
             let mut has_minus = false;
             let mut has_plus = false;
+            let mut pad = StrftimePad::Default;
             let mut colons = 0;
             let mut flags_str = String::new();
             let mut width_str = String::new();
@@ -663,11 +799,18 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                     || next == '#'
                     || next == '+'
                 {
-                    if next == '-' {
-                        has_minus = true;
-                    }
-                    if next == '+' {
-                        has_plus = true;
+                    match next {
+                        '-' => {
+                            has_minus = true;
+                            pad = StrftimePad::None;
+                        }
+                        '_' => pad = StrftimePad::Space,
+                        '0' => pad = StrftimePad::Zero,
+                        '+' => {
+                            has_plus = true;
+                            pad = StrftimePad::Plus;
+                        }
+                        _ => {}
                     }
                     flags_str.push(next);
                     chars.next();
@@ -730,84 +873,51 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                         fmt_adjusted.push_str(&s_val);
                     }
                     'N' | 'f' => {
-                        let ns = dt.nanosecond();
-                        let mut ns_str = format!("{ns:09}");
-                        let width = if !width_str.is_empty() {
-                            width_str.parse::<usize>().unwrap_or(9).min(9)
-                        } else if has_minus {
-                            let (_, res_nsec) = get_clock_resolution();
-                            let mut w = 9;
-                            let mut temp = res_nsec;
-                            while temp > 0 && temp % 10 == 0 && w > 1 {
-                                temp /= 10;
-                                w -= 1;
-                            }
-                            w
-                        } else {
-                            9
-                        };
-                        ns_str.truncate(width);
-                        fmt_adjusted.push_str(&ns_str);
+                        fmt_adjusted.push_str(&format_gnu_nanoseconds(
+                            dt.nanosecond(),
+                            parse_strftime_width(&width_str),
+                            pad,
+                        ));
                     }
                     'z' => {
-                        let offset_secs = dt.offset().local_minus_utc();
-                        let abs_secs = offset_secs.abs();
-                        let hours = abs_secs / 3600;
-                        let minutes = (abs_secs % 3600) / 60;
-                        let seconds = abs_secs % 60;
-                        let sign = if offset_secs < 0 { "-" } else { "+" };
-
-                        let tz_str = if colons == 1 {
-                            format!("{sign}{hours:02}:{minutes:02}")
-                        } else if colons == 2 {
-                            format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
-                        } else if colons >= 3 {
-                            if seconds == 0 && minutes == 0 {
-                                format!("{sign}{hours:02}")
-                            } else if seconds == 0 {
-                                format!("{sign}{hours:02}:{minutes:02}")
-                            } else {
-                                format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
-                            }
-                        } else {
-                            format!("{sign}{hours:02}{minutes:02}")
-                        };
-
-                        let mut s = tz_str;
-                        let w = width_str.parse::<usize>().unwrap_or(0);
-                        if w > s.len() && !has_minus {
-                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
-                            if pad_char == '0' && (s.starts_with('+') || s.starts_with('-')) {
-                                let sign_char = s.remove(0);
-                                s = format!("{sign_char}{}{s}", "0".repeat(w - s.len() - 1));
-                            } else {
-                                s = format!("{}{s}", pad_char.to_string().repeat(w - s.len()));
-                            }
-                        }
-                        fmt_adjusted.push_str(&s);
+                        fmt_adjusted.push_str(&format_gnu_timezone(
+                            dt,
+                            colons,
+                            parse_strftime_width(&width_str),
+                            pad,
+                        ));
                     }
                     'C' => {
                         // 世纪数：年份除以 100。需要处理 '+' 标志和宽度填充
                         let century = dt.year() / 100;
-                        let mut s = format!("{century}");
-                        if has_plus && century >= 0 {
-                            s = format!("+{s}");
-                        }
-                        let w = width_str.parse::<usize>().unwrap_or(0);
-                        if w > s.len() && !has_minus {
-                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
-                            if pad_char == '0' && (s.starts_with('+') || s.starts_with('-')) {
-                                let sign_char = s.remove(0);
-                                s = format!("{sign_char}{}{s}", "0".repeat(w - s.len() - 1));
-                            } else {
-                                s = format!("{}{s}", pad_char.to_string().repeat(w - s.len()));
-                            }
-                        }
-                        fmt_adjusted.push_str(&s);
+                        let width = parse_strftime_width(&width_str);
+                        let always_sign = has_plus && century >= 0 && width.is_some_and(|w| 2 < w);
+                        fmt_adjusted.push_str(&format_gnu_number(
+                            century.unsigned_abs() as u64,
+                            century < 0,
+                            2,
+                            width,
+                            pad,
+                            always_sign,
+                        ));
                     }
                     'q' => {
                         let quarter = (dt.month0() / 3) + 1;
                         fmt_adjusted.push_str(&quarter.to_string());
+                    }
+                    'Y' if !use_alt_era => {
+                        let year = dt.year();
+                        let width = parse_strftime_width(&width_str);
+                        let always_sign =
+                            has_plus && year >= 0 && (9999 < year || width.is_some_and(|w| 4 < w));
+                        fmt_adjusted.push_str(&format_gnu_number(
+                            year.unsigned_abs() as u64,
+                            year < 0,
+                            4,
+                            width,
+                            pad,
+                            always_sign,
+                        ));
                     }
                     'Y' | 'y' if use_alt_era => {
                         // 手动计算泰国佛历、波斯历和埃塞俄比亚历，绕过 glibc 文字污染！
@@ -876,6 +986,10 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
         } else {
             fmt_adjusted.push(c);
         }
+    }
+
+    if !fmt_adjusted.contains('%') {
+        return Ok(fmt_adjusted);
     }
 
     let c_fmt =

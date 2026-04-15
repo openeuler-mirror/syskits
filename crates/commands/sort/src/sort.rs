@@ -3819,6 +3819,69 @@ mod tests {
             assert_eq!(token_buffer, expected);
         }
 
+        #[test]
+        fn test_tokenize_with_multibyte_separator() {
+            let line = "Apple＠10＠20";
+            let separator = '＠';
+            let mut token_buffer = Vec::new();
+            tokenize_with_separator(line, separator, &mut token_buffer);
+
+            assert_eq!(token_buffer.len(), 3);
+            assert_eq!(&line[token_buffer[0].clone()], "Apple");
+            assert_eq!(&line[token_buffer[1].clone()], "10");
+            assert_eq!(&line[token_buffer[2].clone()], "20");
+        }
+    }
+
+    #[cfg(test)]
+    mod obsolete_key_tests {
+        use super::{preprocess_sort_args, traditional_sort_usage};
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_preprocess_obsolete_single_key() {
+            if !traditional_sort_usage() {
+                return;
+            }
+            let args = vec![
+                OsString::from("sort"),
+                OsString::from("+0.1n"),
+                OsString::from("in"),
+            ];
+            let processed = preprocess_sort_args(args);
+            assert_eq!(
+                processed,
+                vec![
+                    OsString::from("sort"),
+                    OsString::from("-k"),
+                    OsString::from("1.2n"),
+                    OsString::from("in"),
+                ]
+            );
+        }
+
+        #[test]
+        fn test_preprocess_obsolete_range_key() {
+            if !traditional_sort_usage() {
+                return;
+            }
+            let args = vec![
+                OsString::from("sort"),
+                OsString::from("+1"),
+                OsString::from("-1.2R"),
+                OsString::from("in"),
+            ];
+            let processed = preprocess_sort_args(args);
+            assert_eq!(
+                processed,
+                vec![
+                    OsString::from("sort"),
+                    OsString::from("-k"),
+                    OsString::from("2,2.2R"),
+                    OsString::from("in"),
+                ]
+            );
+        }
     }
 
     mod tokenize_default_tests {
@@ -3904,70 +3967,6 @@ mod tests {
                 Field::from(54..1055), // 非常长的字符串
             ];
             assert_eq!(token_buffer, expected);
-        }
-
-        #[test]
-        fn test_tokenize_with_multibyte_separator() {
-            let line = "Apple＠10＠20";
-            let separator = '＠';
-            let mut token_buffer = Vec::new();
-            tokenize_with_separator(line, separator, &mut token_buffer);
-
-            assert_eq!(token_buffer.len(), 3);
-            assert_eq!(&line[token_buffer[0].clone()], "Apple");
-            assert_eq!(&line[token_buffer[1].clone()], "10");
-            assert_eq!(&line[token_buffer[2].clone()], "20");
-        }
-    }
-
-    #[cfg(test)]
-    mod obsolete_key_tests {
-        use super::{preprocess_sort_args, traditional_sort_usage};
-        use std::ffi::OsString;
-
-        #[test]
-        fn test_preprocess_obsolete_single_key() {
-            if !traditional_sort_usage() {
-                return;
-            }
-            let args = vec![
-                OsString::from("sort"),
-                OsString::from("+0.1n"),
-                OsString::from("in"),
-            ];
-            let processed = preprocess_sort_args(args);
-            assert_eq!(
-                processed,
-                vec![
-                    OsString::from("sort"),
-                    OsString::from("-k"),
-                    OsString::from("1.2n"),
-                    OsString::from("in"),
-                ]
-            );
-        }
-
-        #[test]
-        fn test_preprocess_obsolete_range_key() {
-            if !traditional_sort_usage() {
-                return;
-            }
-            let args = vec![
-                OsString::from("sort"),
-                OsString::from("+1"),
-                OsString::from("-1.2R"),
-                OsString::from("in"),
-            ];
-            let processed = preprocess_sort_args(args);
-            assert_eq!(
-                processed,
-                vec![
-                    OsString::from("sort"),
-                    OsString::from("-k"),
-                    OsString::from("2,2.2R"),
-                    OsString::from("in"),
-                ]
-            );
         }
     }
 

@@ -988,6 +988,11 @@ mod tests {
             }
         }
 
+        #[test]
+        fn test_iec_i_without_suffix_is_accepted() {
+            let result = numfmt_remove_suffix(1.0, None, &NumfmtUnit::Iec(true)).unwrap();
+            assert_eq!(result, 1.0);
+        }
     }
     #[cfg(test)]
     mod transform_from_tests {
@@ -1609,8 +1614,7 @@ mod tests {
             config.transform.from = NumfmtUnit::Iec(true);
             config.transform.to = NumfmtUnit::Auto;
             let s = "123456789";
-            let shell_expected_output =
-                "missing 'i' suffix in input: '123456789' (e.g Ki/Mi/Gi)".to_string();
+            let shell_expected_output = "Unit 'auto' isn't supported with --to options".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
             assert!(output.is_err());
             assert_eq!(output.unwrap_err(), shell_expected_output);
@@ -1670,11 +1674,10 @@ mod tests {
             config.transform.from = NumfmtUnit::Iec(true);
             config.transform.to = NumfmtUnit::None;
             let s = "102420484096";
-            let shell_expected_output =
-                "missing 'i' suffix in input: '102420484096' (e.g Ki/Mi/Gi)".to_string();
+            let shell_expected_output = "102420484096".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            assert!(output.is_err());
-            assert_eq!(output.unwrap_err(), shell_expected_output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
         }
 
         #[test]
@@ -1767,11 +1770,10 @@ mod tests {
             config.transform.from = NumfmtUnit::Iec(true);
             config.transform.to = NumfmtUnit::Si;
             let s = "102420484096";
-            let shell_expected_output =
-                "missing 'i' suffix in input: '102420484096' (e.g Ki/Mi/Gi)".to_string();
+            let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            assert!(output.is_err());
-            assert_eq!(output.unwrap_err(), shell_expected_output);
+            assert!(output.is_ok());
+            assert_eq!(output.unwrap(), shell_expected_output);
         }
 
         #[test]

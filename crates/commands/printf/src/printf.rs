@@ -14,7 +14,7 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::io::stdout;
+use std::io::{Write, stdout};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ops::ControlFlow;
 
@@ -71,6 +71,8 @@ pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     let mut args_slice = var.as_slice();
+    let stdout = stdout();
+    let mut handle = stdout.lock();
 
     // 核心大循环：不断重复 format 字符串，直到所有参数耗尽
     loop {
@@ -80,10 +82,15 @@ pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
             // 这里改用 CtSimpleError
             let item = item.map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             match item
-                .write(stdout(), &mut cursor)
+                .write(&mut handle, &mut cursor)
                 .map_err(|e| CtSimpleError::new(1, e.to_string()))?
             {
-                ControlFlow::Break(()) => return Ok(()),
+                ControlFlow::Break(()) => {
+                    handle
+                        .flush()
+                        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                    return Ok(());
+                }
                 ControlFlow::Continue(()) => {}
             }
         }
@@ -102,6 +109,10 @@ pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
         // 往前推进切片窗口
         args_slice = &args_slice[consumed..];
     }
+
+    handle
+        .flush()
+        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
 
     Ok(())
 }

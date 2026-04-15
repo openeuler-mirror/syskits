@@ -251,5 +251,11 @@ mod tests {
             assert!(result >= 12345);
         }
 
+        #[test]
+        fn test_process_utmpx_with_missing_file() {
+            let (_boot_time, user_count, err) = process_utmpx(Some("/nonexistent/utmp-file"));
+            assert_eq!(user_count, 0);
+            assert!(err.is_some());
+        }
     }
 }

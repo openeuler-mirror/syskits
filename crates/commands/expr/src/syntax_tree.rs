@@ -222,7 +222,7 @@ impl SyntaxTreeStringOp {
                     RegexOptions::REGEX_OPTION_NONE,
                     Syntax::posix_basic(),
                 )
-                .map_err(|e| ExprError::RegexError(e.description().to_string()))?;
+                .map_err(|_| ExprError::RegexError("Invalid regular expression".to_string()))?;
 
                 let mut region = Region::new();
                 let text = EncodedBytes::from_parts(&left, encoding);

@@ -1818,28 +1818,6 @@ pub(crate) fn copy_attributes_with_deref(
         }
     })?;
 
-    cp_handle_preserve(&attr.mode, || -> CopyResult<()> {
-        if !dest_path.is_symlink() {
-            fs::set_permissions(dest_path, sour_metadata.permissions()).context(str)?;
-            #[cfg(feature = "feat_acl")]
-            exacl::getfacl(source_path, None)
-                .and_then(|acl| exacl::setfacl(&[dest_path], &acl, None))
-                .map_err(|err| CpError::Error(err.to_string()))?;
-        }
-        Ok(())
-    })?;
-
-    cp_handle_preserve(&attr.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&sour_metadata);
-        let mtime = FileTime::from_last_modification_time(&sour_metadata);
-        if dest_path.is_symlink() {
-            filetime::set_symlink_file_times(dest_path, atime, mtime)?;
-        } else {
-            filetime::set_file_times(dest_path, atime, mtime)?;
-        }
-        Ok(())
-    })?;
-
     #[cfg(feature = "feat_selinux")]
     cp_handle_preserve(&attr.context, || -> CopyResult<()> {
         let is_required = match attr.context {
@@ -1879,6 +1857,11 @@ pub(crate) fn copy_attributes_with_deref(
         }
         Ok(())
     })?;
+
+    #[cfg(target_os = "linux")]
+    let temporarily_added_owner_write = maybe_make_dest_user_writable_for_xattr(dest_path, attr)?;
+    #[cfg(not(target_os = "linux"))]
+    let temporarily_added_owner_write: Option<u32> = None;
 
     cp_handle_preserve(&attr.xattr, || -> CopyResult<()> {
         let is_required = match attr.xattr {
@@ -1934,6 +1917,18 @@ pub(crate) fn copy_attributes_with_deref(
             }
         }
         Ok(())
+    })
+    .and_then(|_| {
+        if let Some(original_mode) = temporarily_added_owner_write {
+            restore_dest_mode_after_xattr(dest_path, original_mode)?;
+        }
+        Ok(())
+    })
+    .or_else(|err| {
+        if let Some(original_mode) = temporarily_added_owner_write {
+            restore_dest_mode_after_xattr(dest_path, original_mode)?;
+        }
+        Err(err)
     })?;
 
     // 处理显式指定的 -Z 或 --context，强制覆盖目标的安全上下文
@@ -1944,6 +1939,61 @@ pub(crate) fn copy_attributes_with_deref(
         }
     }
 
+    cp_handle_preserve(&attr.mode, || -> CopyResult<()> {
+        if !dest_path.is_symlink() {
+            fs::set_permissions(dest_path, sour_metadata.permissions()).context(str)?;
+            #[cfg(feature = "feat_acl")]
+            exacl::getfacl(source_path, None)
+                .and_then(|acl| exacl::setfacl(&[dest_path], &acl, None))
+                .map_err(|err| CpError::Error(err.to_string()))?;
+        }
+        Ok(())
+    })?;
+
+    cp_handle_preserve(&attr.timestamps, || -> CopyResult<()> {
+        let atime = FileTime::from_last_access_time(&sour_metadata);
+        let mtime = FileTime::from_last_modification_time(&sour_metadata);
+        if dest_path.is_symlink() {
+            filetime::set_symlink_file_times(dest_path, atime, mtime)?;
+        } else {
+            filetime::set_file_times(dest_path, atime, mtime)?;
+        }
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn maybe_make_dest_user_writable_for_xattr(
+    dest_path: &Path,
+    attr: &CpAttributes,
+) -> CopyResult<Option<u32>> {
+    if !matches!(attr.xattr, CpPreserve::Yes { .. }) || dest_path.is_symlink() {
+        return Ok(None);
+    }
+
+    let mut permissions = dest_path.symlink_metadata()?.permissions();
+    let original_mode = permissions.mode();
+    if (original_mode & libc::S_IWUSR) != 0 {
+        return Ok(None);
+    }
+
+    permissions.set_mode(original_mode | libc::S_IWUSR);
+    fs::set_permissions(dest_path, permissions).context(format!(
+        "temporarily adding owner write permission to {}",
+        dest_path.quote()
+    ))?;
+
+    Ok(Some(original_mode))
+}
+
+#[cfg(target_os = "linux")]
+fn restore_dest_mode_after_xattr(dest_path: &Path, original_mode: u32) -> CopyResult<()> {
+    let mut permissions = dest_path.symlink_metadata()?.permissions();
+    permissions.set_mode(original_mode);
+    fs::set_permissions(dest_path, permissions)
+        .context(format!("restoring permissions of {}", dest_path.quote()))?;
     Ok(())
 }
 
@@ -2663,16 +2713,17 @@ fn cp_source_metadata(
 }
 
 #[cfg(unix)]
-fn handle_no_preserve_mode(cp_opts: &CpOptions, _org_mode: u32) -> u32 {
-    let (is_preserve_mode, _) = cp_opts.cp_preserve_mode();
-    if !is_preserve_mode {
+fn handle_no_preserve_mode(cp_opts: &CpOptions, org_mode: u32) -> u32 {
+    let (is_preserve_mode, explicit_no_preserve_mode) = cp_opts.cp_preserve_mode();
+    let preserve_xattr = matches!(cp_opts.attributes.xattr, CpPreserve::Yes { .. });
+    if !is_preserve_mode && (!preserve_xattr || explicit_no_preserve_mode) {
         use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
         // 无论是否显式 --no-preserve=mode，只要不带 -p，就使用默认权限 (666)
         // 随后由 umask 过滤为 644
         const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
         return MODE_RW_UGO;
     }
-    _org_mode
+    org_mode
 }
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a

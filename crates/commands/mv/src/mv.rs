@@ -2000,6 +2000,27 @@ mod tests {
     }
 
     #[test]
+    fn test_mv_update_older_interactive_still_prompts_for_newer_source() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source.txt");
+        let target = temp.path().join("target.txt");
+        fs::write(&source, b"new").unwrap();
+        fs::write(&target, b"old").unwrap();
+
+        let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        File::open(&target).unwrap().set_modified(old_time).unwrap();
+
+        let mut opts = temp_mv_opts();
+        opts.overwrite = MvOverwriteMode::Interactive;
+        opts.update = CtUpdateMode::ReplaceIfOlder;
+
+        let err = mv_rename(&source, &target, &opts, None, None).unwrap_err();
+        assert!(err.to_string().is_empty());
+        assert_eq!(fs::read(&source).unwrap(), b"new");
+        assert_eq!(fs::read(&target).unwrap(), b"old");
+    }
+
+    #[test]
     fn test_mv_handle_two_paths_self_subdirectory_error() {
         let temp = tempdir().unwrap();
         let source = temp.path().join("dir");

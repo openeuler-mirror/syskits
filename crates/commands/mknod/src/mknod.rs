@@ -73,6 +73,25 @@ enum MknodFileType {
     Fifo,
 }
 
+enum SecurityContextRequest {
+    Absent,
+    Default,
+    Explicit(OsString),
+}
+
+impl SecurityContextRequest {
+    fn explicit_context(&self) -> Option<&OsString> {
+        match self {
+            Self::Explicit(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn is_set(&self) -> bool {
+        !matches!(self, Self::Absent)
+    }
+}
+
 // Unix平台的_mknod实现。
 #[cfg(unix)]
 fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
@@ -110,7 +129,9 @@ fn set_security_context(
 ) -> Result<(), String> {
     if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
         if context.is_some() {
-            eprintln!("mknod: warning: ignoring --context; it requires an SELinux-enabled kernel");
+            eprintln!(
+                "mknod: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+            );
         }
         return Ok(());
     }
@@ -175,11 +196,30 @@ pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
     CString::new(os_str.as_bytes()).expect("Failed to convert OsStr to CString")
 }
 
+fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
+    let mut request = SecurityContextRequest::Absent;
+
+    for arg in args.iter().skip(1) {
+        if arg == "-Z" || arg == "--context" {
+            request = SecurityContextRequest::Default;
+            continue;
+        }
+
+        if let Some(value) = arg.to_str().and_then(|arg| arg.strip_prefix("--context=")) {
+            request = SecurityContextRequest::Explicit(OsString::from(value));
+        }
+    }
+
+    request
+}
+
 pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let raw_args: Vec<OsString> = args.into_iter().collect();
+    let context_request = parse_security_context_request(&raw_args);
     // 从命令行参数中解析选项和参数
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = ct_app().try_get_matches_from(raw_args)?;
 
     let mode = get_mode(&args_match).map_err(|e| CtSimpleError::new(1, e))?;
 
@@ -190,7 +230,7 @@ pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let file_type = args_match.get_one::<MknodFileType>("type").unwrap();
 
     // 根据文件类型执行不同的操作
-    mknod_processing(&args_match, mode, file_name, file_type)
+    mknod_processing(&args_match, mode, file_name, file_type, &context_request)
 }
 
 fn mknod_processing(
@@ -198,6 +238,7 @@ fn mknod_processing(
     mode: mode_t,
     file_name: &str,
     file_type: &MknodFileType,
+    context_request: &SecurityContextRequest,
 ) -> CTResult<()> {
     // 提前计算包含文件类型的完整 mode
     let full_mode = match file_type {
@@ -206,14 +247,9 @@ fn mknod_processing(
         MknodFileType::Fifo => libc::S_IFIFO | mode,
     };
 
-    let has_z_flag = args_match.get_flag("ctx");
-    let has_context_flag =
-        args_match.value_source("context") == Some(clap::parser::ValueSource::CommandLine);
-
-    if has_z_flag || has_context_flag {
-        let context = args_match.get_one::<OsString>("context");
+    if context_request.is_set() {
         // 传入 full_mode 而不是 mode
-        set_security_context(context, file_name, full_mode)
+        set_security_context(context_request.explicit_context(), file_name, full_mode)
             .map_err(|e| CtSimpleError::new(1, e))?;
     }
     // 如果既没有-Z也没有--context，则不设置SELinux上下文

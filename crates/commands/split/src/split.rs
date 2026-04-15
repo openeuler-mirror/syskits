@@ -10164,6 +10164,7 @@ mod tests {
         use crate::FilenameSuffixError;
         use crate::SpliceSettingsError;
         use crate::StrategyError;
+        use crate::split_find_invalid_io_blksize_opt;
         use crate::split_should_extract_obs_lines;
 
         #[test]
@@ -10268,6 +10269,31 @@ mod tests {
         #[test]
         fn test_should_extract_obs_lines_h() {
             assert!(split_should_extract_obs_lines("-h", &false, &false));
+        }
+
+        #[test]
+        fn test_find_invalid_io_blksize_opt_stops_after_double_dash() {
+            let args = vec![
+                std::ffi::OsString::from(ctcore::ct_util_name()),
+                std::ffi::OsString::from("--"),
+                std::ffi::OsString::from("--io-blksize"),
+                std::ffi::OsString::from("out_"),
+            ];
+            assert_eq!(split_find_invalid_io_blksize_opt(&args), None);
+        }
+
+        #[test]
+        fn test_find_invalid_io_blksize_opt_detects_before_double_dash() {
+            let args = vec![
+                std::ffi::OsString::from(ctcore::ct_util_name()),
+                std::ffi::OsString::from("--io-blksize=4"),
+                std::ffi::OsString::from("--"),
+                std::ffi::OsString::from("input"),
+            ];
+            assert_eq!(
+                split_find_invalid_io_blksize_opt(&args),
+                Some("--io-blksize=4".to_string())
+            );
         }
 
         #[test]

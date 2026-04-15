@@ -872,6 +872,37 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_recursive_default_follows_cmdline_symlink_directory() {
+        let temp_dir = Builder::new()
+            .prefix("chmod_symlink_recursive")
+            .tempdir()
+            .unwrap();
+        let target_dir = temp_dir.path().join("target_dir");
+        let link_dir = temp_dir.path().join("link_to_dir");
+        let child = target_dir.join("child.txt");
+
+        fs::create_dir_all(&target_dir).unwrap();
+        File::create(&child).unwrap();
+        fs::set_permissions(&target_dir, Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(&child, Permissions::from_mode(0o600)).unwrap();
+        std::os::unix::fs::symlink(&target_dir, &link_dir).unwrap();
+
+        let args = [
+            ctcore::ct_util_name(),
+            "-R",
+            "700",
+            link_dir.to_str().unwrap(),
+        ];
+        let result = chmod_main(args.iter().map(OsString::from));
+        assert!(result.is_ok());
+
+        let child_mode = fs::metadata(&child).unwrap().permissions().mode() & 0o777;
+        assert_eq!(child_mode, 0o700);
+    }
+
     #[test]
     fn test_ct_app_arg_changes() {
         let command = ct_app();

@@ -373,6 +373,25 @@ mod tests {
             let result = expr_main(args.iter().map(OsString::from));
             assert_eq!(result.unwrap(), "20");
         }
+
+        #[test]
+        fn test_expr_main_invalid_regex_is_normalized() {
+            let args = [ctcore::ct_util_name(), "a", ":", "["];
+            let err = expr_main(args.iter().map(OsString::from)).unwrap_err();
+            assert_eq!(err.to_string(), "Invalid regular expression");
+        }
+    }
+
+    mod tests_expr_error {
+        use super::ExprError;
+
+        #[test]
+        fn test_regex_error_display_preserves_message() {
+            assert_eq!(
+                ExprError::RegexError("premature end of char-class".to_string()).to_string(),
+                "premature end of char-class"
+            );
+        }
     }
 
     mod tests_false_app {

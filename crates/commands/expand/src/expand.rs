@@ -76,6 +76,7 @@ pub mod opt_flags {
 static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
+const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -91,6 +92,32 @@ enum CharType {
     Backspace,
     Tab,
     Other,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ExpandState {
+    column: usize,
+    is_init: bool,
+    pending_utf8: Vec<u8>,
+}
+
+impl Default for ExpandState {
+    fn default() -> Self {
+        Self {
+            column: 0,
+            is_init: true,
+            pending_utf8: Vec::new(),
+        }
+    }
+}
+
+enum ExpandCharInfo {
+    Parsed {
+        c_type: CharType,
+        c_width: usize,
+        n_bytes: usize,
+    },
+    Incomplete,
 }
 
 /// Decide whether the character is either a space or a comma.
@@ -481,64 +508,140 @@ fn expand_next_tabstop(tabstops: &[usize], colum: usize, remaining_mode: &Remain
 ///
 /// # 返回值
 /// 返回一个 `std::io::Result<()>`，表示操作是否成功完成。如果遇到 I/O 错误，则返回相应的错误结果。
+fn utf8_sequence_len(first_byte: u8) -> Option<usize> {
+    match first_byte {
+        0x00..=0x7F => Some(1),
+        0xC2..=0xDF => Some(2),
+        0xE0..=0xEF => Some(3),
+        0xF0..=0xF4 => Some(4),
+        _ => None,
+    }
+}
+
+fn expand_char_info_from_char(ch: char) -> ExpandCharInfo {
+    let n_bytes = ch.len_utf8();
+    let c_type = if ch == '\t' {
+        CharType::Tab
+    } else if ch == '\x08' {
+        CharType::Backspace
+    } else {
+        CharType::Other
+    };
+    let c_width = if matches!(c_type, CharType::Tab | CharType::Backspace) {
+        0
+    } else {
+        UnicodeWidthChar::width(ch).unwrap_or(0)
+    };
+    ExpandCharInfo::Parsed {
+        c_type,
+        c_width,
+        n_bytes,
+    }
+}
+
+fn expand_next_char_info(is_u_flag: bool, buf: &[u8], byte: usize) -> ExpandCharInfo {
+    if !is_u_flag {
+        let c_type = match buf[byte] {
+            0x09 => CharType::Tab,
+            0x08 => CharType::Backspace,
+            _ => CharType::Other,
+        };
+        return ExpandCharInfo::Parsed {
+            c_type,
+            c_width: 1,
+            n_bytes: 1,
+        };
+    }
+
+    let slice = &buf[byte..];
+    match from_utf8(slice) {
+        Ok(s) => match s.chars().next() {
+            Some(ch) => expand_char_info_from_char(ch),
+            None => ExpandCharInfo::Parsed {
+                c_type: CharType::Other,
+                c_width: 1,
+                n_bytes: 1,
+            },
+        },
+        Err(e) => {
+            let valid = e.valid_up_to();
+            if valid > 0 {
+                let prefix = from_utf8(&slice[..valid]).unwrap_or_default();
+                if let Some(ch) = prefix.chars().next() {
+                    return expand_char_info_from_char(ch);
+                }
+            }
+
+            if e.error_len().is_none()
+                && utf8_sequence_len(slice[0]).is_some_and(|expected| expected > slice.len())
+            {
+                return ExpandCharInfo::Incomplete;
+            }
+
+            ExpandCharInfo::Parsed {
+                c_type: CharType::Other,
+                c_width: 1,
+                n_bytes: 1,
+            }
+        }
+    }
+}
+
+fn expand_raw_bytes(
+    buffer: &[u8],
+    output: &mut impl Write,
+    state: &mut ExpandState,
+) -> std::io::Result<()> {
+    for &byte in buffer {
+        if byte == b'\n' {
+            state.column = 0;
+            state.is_init = true;
+        } else {
+            state.column = state.column.saturating_add(1);
+            if byte != b' ' {
+                state.is_init = false;
+            }
+        }
+        output.write_all(&[byte])?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn expand_line(
-    buffer: &mut Vec<u8>,
-    output: &mut BufWriter<std::io::Stdout>,
+    buffer: &[u8],
+    output: &mut impl Write,
     tabstops: &[usize],
     opts: &ExpandOptions,
+    state: &mut ExpandState,
 ) -> std::io::Result<()> {
     use self::CharType::*;
 
-    // 初始化列数、字节位置和是否处于行起始的标志。
-    let mut colum = 0;
     let mut byte = 0;
-    let mut is_init = true;
 
     // 遍历缓冲区中的每个字符。
     while byte < buffer.len() {
-        // 根据是否启用 Unicode 模式，确定字符类型、宽度和字节数。
-        let (c_type, c_width, n_bytes) = if opts.uflag {
-            let n_bytes = char::from(buffer[byte]).len_utf8();
-
-            if byte + n_bytes > buffer.len() {
-                // 处理由于无效 UTF-8 导致的缓冲区越界。
-                (Other, 1, 1)
-            } else if let Ok(t) = from_utf8(&buffer[byte..byte + n_bytes]) {
-                match t.chars().next() {
-                    Some('\t') => (Tab, 0, n_bytes),
-                    Some('\x08') => (Backspace, 0, n_bytes),
-                    Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), n_bytes),
-                    None => {
-                        // 如果起始位置无效，则将该字节视为普通字符。
-                        (Other, 1, 1)
-                    }
-                }
-            } else {
-                (Other, 1, 1) // 假设非 UTF-8 字符宽度为 1。
+        let (c_type, c_width, n_bytes) = match expand_next_char_info(opts.uflag, buffer, byte) {
+            ExpandCharInfo::Parsed {
+                c_type,
+                c_width,
+                n_bytes,
+            } => (c_type, c_width, n_bytes),
+            ExpandCharInfo::Incomplete => {
+                state.pending_utf8.extend_from_slice(&buffer[byte..]);
+                break;
             }
-        } else {
-            (
-                match buffer[byte] {
-                    // 在严格 ASCII 模式下，每个字符均视为宽度为 1。
-                    0x09 => Tab,
-                    0x08 => Backspace,
-                    _ => Other,
-                },
-                1,
-                1,
-            )
         };
 
         // 根据字符类型更新列数并输出相应字符。
         match c_type {
             Tab => {
                 // 计算到下一个制表位需要多少空格。
-                let nts = expand_next_tabstop(tabstops, colum, &opts.remaining_mode);
-                colum += nts;
+                let nts = expand_next_tabstop(tabstops, state.column, &opts.remaining_mode);
+                state.column += nts;
 
                 // 根据选项扩展制表符为空格或保留制表符。
-                if is_init || !opts.iflag {
+                if state.is_init || !opts.iflag {
                     if nts <= opts.tspaces.len() {
                         output.write_all(&opts.tspaces.as_bytes()[..nts])?;
                     } else {
@@ -549,18 +652,24 @@ fn expand_line(
                 }
             }
             _ => {
+                let byte_is_newline = buffer[byte] == b'\n';
+
                 // 更新列数，处理退格符和非标准字符。
-                colum = if c_type == Other {
-                    colum + c_width
-                } else if colum > 0 {
-                    colum - 1
+                state.column = if byte_is_newline {
+                    0
+                } else if c_type == Other {
+                    state.column + c_width
+                } else if state.column > 0 {
+                    state.column - 1
                 } else {
                     0
                 };
 
                 // 如果当前字符不是空格，则标记行首空格处理完成。
-                if buffer[byte] != 0x20 {
-                    is_init = false;
+                if byte_is_newline {
+                    state.is_init = true;
+                } else if buffer[byte] != 0x20 {
+                    state.is_init = false;
                 }
 
                 output.write_all(&buffer[byte..byte + n_bytes])?;
@@ -569,10 +678,6 @@ fn expand_line(
 
         byte += n_bytes; // 移动到下一个字符。
     }
-
-    // 刷新输出并清空缓冲区。
-    output.flush()?;
-    buffer.truncate(0); // 清空缓冲区。
 
     Ok(())
 }
@@ -586,11 +691,12 @@ fn expand_line(
  * @param options 一个包含文件列表和扩展设置的结构体引用。
  * @return CTResult<()>，如果成功则返回Ok(())，如果遇到错误则返回Err()。
  */
-fn expand(options: &ExpandOptions) -> CTResult<()> {
-    // 创建一个缓冲写入器，用于写入标准输出。
-    let mut output = BufWriter::new(stdout());
+fn expand_to_writer<W: Write>(options: &ExpandOptions, output: &mut W) -> CTResult<()> {
     let tabstops = options.tabstops.as_ref();
     let mut buffer = Vec::new();
+    let mut state = ExpandState::default();
+    let mut is_first_file = true;
+    let mut first_file_has_bom = false;
 
     for file in &options.files {
         if Path::new(file).is_dir() {
@@ -600,6 +706,7 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
         }
         match expand_open(file) {
             Ok(mut fh) => {
+                let mut is_first_chunk = true;
                 loop {
                     buffer.clear();
                     // 通过 take 限制单次读取上限为 64KB。
@@ -618,10 +725,31 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
                         break;
                     }
 
-                    // expand_line 中有写入操作，现在它会及时执行并触发 ENOSPC
-                    if let Err(e) = expand_line(&mut buffer, &mut output, tabstops, options) {
+                    if is_first_chunk {
+                        if buffer.starts_with(&UTF8_BOM) {
+                            if is_first_file && !first_file_has_bom {
+                                output.write_all(&UTF8_BOM)?;
+                                first_file_has_bom = true;
+                            }
+                            buffer.drain(..UTF8_BOM.len());
+                        }
+                        is_first_chunk = false;
+                    }
+
+                    if !state.pending_utf8.is_empty() {
+                        let mut merged = std::mem::take(&mut state.pending_utf8);
+                        merged.extend_from_slice(&buffer);
+                        buffer = merged;
+                    }
+
+                    if buffer.is_empty() {
+                        continue;
+                    }
+
+                    if let Err(e) = expand_line(&buffer, output, tabstops, options, &mut state) {
                         return Err(ctcore::ct_error::CtSimpleError::new(1, e.to_string()));
                     }
+                    output.flush()?;
                 }
             }
             Err(e) => {
@@ -630,8 +758,19 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
                 continue;
             }
         }
+
+        if !state.pending_utf8.is_empty() {
+            let pending = std::mem::take(&mut state.pending_utf8);
+            expand_raw_bytes(&pending, output, &mut state)?;
+        }
+        is_first_file = false;
     }
     Ok(())
+}
+
+fn expand(options: &ExpandOptions) -> CTResult<()> {
+    let mut output = BufWriter::new(stdout());
+    expand_to_writer(options, &mut output)
 }
 
 #[derive(Default)]

@@ -3180,6 +3180,81 @@ mod tests {
         }
 
         #[test]
+        fn test_cp_copy_missing_source_with_no_clobber_still_errors() {
+            use crate::EXIT_ERR;
+            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+
+            let dir = Builder::new()
+                .prefix("cp_no_clobber_missing_source")
+                .tempdir()
+                .unwrap();
+            let missing_source = dir.path().join("missing");
+            let existing_dest = dir.path().join("dest");
+            fs::write(&existing_dest, b"existing").unwrap();
+            set_ct_exit_code(0);
+
+            let args = [
+                ctcore::ct_util_name().to_string(),
+                "-n".to_string(),
+                missing_source.display().to_string(),
+                existing_dest.display().to_string(),
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let opts = CpOptions::cp_from_matches(&matches).unwrap();
+
+            match cp_copy(std::slice::from_ref(&missing_source), &existing_dest, &opts) {
+                Err(CpError::NotAllFilesCopied) => {}
+                other => panic!("expected NotAllFilesCopied, got {other:?}"),
+            }
+            assert_eq!(get_ct_exit_code(), EXIT_ERR);
+            set_ct_exit_code(0);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_cp_archive_no_preserve_mode_uses_umask_filtered_defaults() {
+            use std::ffi::OsString;
+            use std::os::unix::fs::PermissionsExt;
+
+            let dir = Builder::new()
+                .prefix("cp_archive_no_preserve_mode")
+                .tempdir()
+                .unwrap();
+            let source = dir.path().join("source");
+            let dest = dir.path().join("dest");
+
+            fs::write(&source, b"payload").unwrap();
+            let mut source_permissions = fs::metadata(&source).unwrap().permissions();
+            source_permissions.set_mode(0o731);
+            fs::set_permissions(&source, source_permissions).unwrap();
+
+            let original_umask = unsafe { libc::umask(0o077) };
+
+            let args = [
+                ctcore::ct_util_name().to_string(),
+                "-a".to_string(),
+                "--no-preserve=mode".to_string(),
+                source.display().to_string(),
+                dest.display().to_string(),
+            ];
+            let result = crate::cp_main(args.into_iter().map(OsString::from));
+
+            unsafe {
+                libc::umask(original_umask);
+            }
+
+            match result {
+                Ok(0) => {}
+                other => panic!("expected success, got {other:?}"),
+            }
+
+            assert_eq!(
+                fs::metadata(&dest).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+
+        #[test]
         fn test_cmp() {
             let no1 = CpPreserve::No { explicit: false };
             let no2 = CpPreserve::No { explicit: true };

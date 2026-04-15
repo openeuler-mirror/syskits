@@ -379,13 +379,30 @@ fn finish_mktemp_output(
 ) -> CTResult<()> {
     let path = path_res?;
 
+    let cleanup_created_path = |path: &PathBuf| {
+        if let Ok(metadata) = std::fs::symlink_metadata(path) {
+            if metadata.is_dir() {
+                let _ = std::fs::remove_dir(path);
+            } else {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    };
+
     // close-stdout 兼容：仅在已经生成了最终输出、即将写 stdout 时再报 write error，
     // 这样参数或模板错误仍会按 GNU 行为优先返回。
     if stdout_initially_closed || ctcore::ct_stdout_was_closed() {
+        cleanup_created_path(&path);
         return Err(CTsageError::new(1, "write error"));
     }
 
-    ct_println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
+    match ct_println_verbatim(&path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            cleanup_created_path(&path);
+            Err(e.map_err_context(|| "failed to print directory name".to_owned()))
+        }
+    }
 }
 
 pub fn ct_app() -> Command {

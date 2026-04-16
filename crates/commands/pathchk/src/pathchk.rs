@@ -348,7 +348,7 @@ fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResul
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 writer,
-                "pathchk: non-portable character '{invalid}' in file name '{path_segment}'"
+                "pathchk: nonportable character '{invalid}' in file name '{path_segment}'"
             )?;
             return Ok(false);
         }

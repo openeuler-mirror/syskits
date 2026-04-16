@@ -57,29 +57,6 @@ mod mkdir_flags {
     pub const DIRS: &str = "dirs";
 }
 
-enum SecurityContextRequest {
-    Absent,
-    Default,
-    Explicit(OsString),
-}
-
-impl SecurityContextRequest {
-    fn explicit_context(&self) -> Option<&OsString> {
-        match self {
-            Self::Explicit(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    fn is_set(&self) -> bool {
-        !matches!(self, Self::Absent)
-    }
-
-    fn warn_on_unsupported(&self) -> bool {
-        matches!(self, Self::Explicit(_))
-    }
-}
-
 #[cfg(windows)]
 fn mkdir_get_mode(
     _arg_matches: &ArgMatches,
@@ -145,7 +122,6 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = mkdir_locale();
     rust_i18n::set_locale(&lang_code);
     let raw_args: Vec<OsString> = args.into_iter().collect();
-    let context_request = parse_security_context_request(&raw_args);
     let mut args = raw_args
         .iter()
         .map(|arg| arg.to_string_lossy().into_owned())
@@ -172,6 +148,18 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     // 判断用户是否显式传递了 -m 参数
     let specified_mode = matches.get_one::<String>(mkdir_flags::MODE).is_some();
 
+    let mut context = None;
+    let mut set_context = matches.get_flag(mkdir_flags::CTX);
+    let mut warn_on_unsupported = false;
+
+    if let Some(ctx) = matches.get_one::<OsString>(mkdir_flags::CONTEXT) {
+        set_context = true;
+        if !ctx.is_empty() {
+            context = Some(ctx);
+            warn_on_unsupported = true;
+        }
+    }
+
     match mkdir_get_mode(&matches, is_mode_had_minus_prefix) {
         Ok(mode) => mkdir_exec(
             dirs,
@@ -179,29 +167,12 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
             mode,
             specified_mode,
             is_verbose,
-            context_request.explicit_context(),
-            context_request.is_set(),
-            context_request.warn_on_unsupported(),
+            context,
+            set_context,
+            warn_on_unsupported,
         ),
         Err(f) => Err(CtSimpleError::new(1, f)),
     }
-}
-
-fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
-    let mut request = SecurityContextRequest::Absent;
-
-    for arg in args.iter().skip(1) {
-        if arg == "-Z" || arg == "--context" {
-            request = SecurityContextRequest::Default;
-            continue;
-        }
-
-        if let Some(value) = arg.to_str().and_then(|arg| arg.strip_prefix("--context=")) {
-            request = SecurityContextRequest::Explicit(OsString::from(value));
-        }
-    }
-
-    request
 }
 
 fn map_locale_name(locale: &str) -> String {
@@ -2361,11 +2332,7 @@ mod tests {
     }
 
     mod tests_locale_selection {
-        use super::{
-            SecurityContextRequest, map_locale_name, parse_security_context_request,
-            preferred_locale_from_values,
-        };
-        use std::ffi::OsString;
+        use super::{map_locale_name, preferred_locale_from_values};
 
         #[test]
         fn test_map_locale_name_c_locale() {
@@ -2385,29 +2352,6 @@ mod tests {
 
             let locale = preferred_locale_from_values([None, None, Some("C")]);
             assert_eq!(locale, Some("en-US".to_string()));
-        }
-
-        #[test]
-        fn test_parse_security_context_request_distinguishes_empty_value() {
-            let args = vec![
-                OsString::from("mkdir"),
-                OsString::from("--context="),
-                OsString::from("dir"),
-            ];
-            match parse_security_context_request(&args) {
-                SecurityContextRequest::Explicit(value) => assert!(value.is_empty()),
-                _ => panic!("expected explicit empty context"),
-            }
-
-            let args = vec![
-                OsString::from("mkdir"),
-                OsString::from("--context"),
-                OsString::from("dir"),
-            ];
-            assert!(matches!(
-                parse_security_context_request(&args),
-                SecurityContextRequest::Default
-            ));
         }
     }
 }

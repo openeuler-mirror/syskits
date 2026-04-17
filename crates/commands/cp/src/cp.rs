@@ -2997,10 +2997,12 @@ mod tests {
         use std::fs;
         use std::io::{self, Write};
 
+        use crate::DirectorySourceKey;
         use crate::cp_aligned_ancestors;
         use crate::cp_copy;
         use crate::cp_disk_usage;
         use crate::cp_disk_usage_directory;
+        use crate::is_duplicate_directory_source;
 
         use crate::CpError;
         use crate::cp_localize_to_target;
@@ -3018,6 +3020,7 @@ mod tests {
         use crate::CpSparseDebug;
 
         use std::cmp::Ordering;
+        use std::collections::HashMap;
         use std::fs::File;
         use std::path::{Path, PathBuf};
         use tempfile::Builder;
@@ -3054,6 +3057,34 @@ mod tests {
             let actual = cp_localize_to_target(root, source, target).unwrap();
             let expected = Path::new("target/c.txt");
             assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_duplicate_directory_source_tracks_same_directory_entity() {
+            let temp_dir = Builder::new().prefix("test_cp_dup_dir").tempdir().unwrap();
+            let source_dir = temp_dir.path().join("b");
+            fs::create_dir(&source_dir).unwrap();
+
+            let metadata = fs::symlink_metadata(&source_dir).unwrap();
+            let mut processed_directories = HashMap::new();
+            let dest_path = temp_dir.path().join("dest").join("b");
+
+            assert!(!is_duplicate_directory_source(
+                &mut processed_directories,
+                &metadata,
+                Path::new("./b"),
+                &dest_path
+            ));
+            assert_eq!(
+                processed_directories.get(&DirectorySourceKey::from_metadata(&metadata)),
+                Some(&dest_path)
+            );
+            assert!(is_duplicate_directory_source(
+                &mut processed_directories,
+                &metadata,
+                Path::new("b"),
+                &dest_path
+            ));
         }
 
         #[test]

@@ -702,6 +702,47 @@ pub fn mv(files: &[OsString], mv_options: &MvOpts) -> CTResult<()> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct DirectorySourceKey {
+    dev: u64,
+    ino: u64,
+}
+
+impl DirectorySourceKey {
+    fn from_metadata(metadata: &fs::Metadata) -> Self {
+        Self {
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+        }
+    }
+}
+
+fn is_duplicate_directory_source(
+    processed_directories: &mut HashMap<DirectorySourceKey, OsString>,
+    source_metadata: &fs::Metadata,
+    source_path: &Path,
+    target_name: &OsStr,
+) -> bool {
+    let directory_key = DirectorySourceKey::from_metadata(source_metadata);
+
+    if let Some(previous_target_name) = processed_directories.get(&directory_key) {
+        if previous_target_name == target_name {
+            ct_show!(CtSimpleError::new(
+                0,
+                format!(
+                    "warning: source directory '{}' specified more than once",
+                    source_path.display()
+                ),
+            ));
+            return true;
+        }
+        return false;
+    }
+
+    processed_directories.insert(directory_key, target_name.to_os_string());
+    false
+}
+
 #[allow(clippy::cognitive_complexity)]
 /**
  * 将多个文件移动到指定的目标目录。
@@ -719,9 +760,9 @@ fn move_files_into_dir(
     // 用于存储已移动文件的目标路径，避免重复移动
     let mut moved_dests: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
-    // 记录已处理的源参数路径，用于检测同一参数被重复传入。
-    // 注意：这里不能使用 canonicalize()，否则不同的符号链接路径会因解析到同一目标而被误判为重复。
-    let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
+    // 记录已处理的目录源实体，用于将 `./b` 和 `b` 这类同一目录识别为重复源。
+    let mut processed_directories: HashMap<DirectorySourceKey, OsString> =
+        HashMap::with_capacity(mv_files.len());
 
     // 标记是否发生过错误
     let mut has_error = false;
@@ -777,43 +818,29 @@ fn move_files_into_dir(
             }
         };
 
-        // 检查源文件是否已经被处理过（检测重复源）
-        let source_key = source_path.to_path_buf();
-
-        if processed_sources.contains(&source_key) {
-            if source_path.symlink_metadata().is_err() {
-                ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
-                set_ct_exit_code(1);
-                has_error = true;
-            } else {
-                let file_type = source_metadata.file_type();
-                let source_type = if file_type.is_dir() {
-                    "directory"
-                } else {
-                    "file"
-                };
-                ct_show!(CtSimpleError::new(
-                    0,
-                    format!(
-                        "warning: source {} '{}' specified more than once",
-                        source_type,
-                        source_path.display()
-                    ),
-                ));
-            }
-            continue;
-        }
-        processed_sources.insert(source_key);
-
         // 确定目标路径
-        let targetpath = match source_path.file_name() {
-            Some(name) => target_directory.join(name),
+        let target_name = match source_path.file_name() {
+            Some(name) => name.to_os_string(),
             None => {
                 ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
                 has_error = true;
                 continue;
             }
         };
+        let targetpath = target_directory.join(&target_name);
+
+        let file_type = source_metadata.file_type();
+        if file_type.is_dir()
+            && !file_type.is_symlink()
+            && is_duplicate_directory_source(
+                &mut processed_directories,
+                &source_metadata,
+                source_path,
+                &target_name,
+            )
+        {
+            continue;
+        }
 
         // 检查是否已存在相同目标路径的文件，并根据备份选项处理
         if moved_dests.contains(&targetpath) && mv_opts.backup != CtBackupMode::NumberedBackup {
@@ -831,22 +858,15 @@ fn move_files_into_dir(
 
         // 检查是否尝试将目录移动到自身
         if let Some(canonical_target) = canonical_target_dir.as_ref() {
-            let file_type = source_metadata.file_type();
             if file_type.is_dir() && !file_type.is_symlink() {
                 if let Ok(canonical_source) = source_path.canonicalize() {
                     if canonical_target.starts_with(&canonical_source) {
-                        let subdir_path = target_directory.join(
-                            source_path
-                                .file_name()
-                                .map(|s| s.to_string_lossy().into_owned())
-                                .unwrap_or_default(),
-                        );
                         ct_show!(CtSimpleError::new(
                             1,
                             format!(
                                 "cannot move '{}' to a subdirectory of itself, '{}'",
                                 source_path.display(),
-                                subdir_path.display()
+                                targetpath.display()
                             )
                         ));
                         has_error = true;
@@ -2939,5 +2959,6 @@ mod tests {
             assert!(symlink_meta.file_type().is_symlink());
             assert_eq!(fs::read_link(&dest_path).unwrap(), real_dir);
         }
+
     }
 }

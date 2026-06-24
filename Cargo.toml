@@ -266,6 +266,8 @@ blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
 digest = "0.10.7"
+rust-i18n = "2"
+sys-locale = "0.2" 
 
 ctcore = { version = ">=0.0.1", package = "ctcore", path = "src/ctcore" }
 ctcore_procs = { version = ">=0.0.1", package = "ctcore_procs", path = "src/ctcore_procs" }

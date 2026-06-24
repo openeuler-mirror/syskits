@@ -13,7 +13,7 @@ use clap::builder::ValueParser;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
-use ctcore::ct_fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, CtBirthTime, FsMeta};
+use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
 use ctcore::libc::mode_t;
 use ctcore::{
     ct_entries, ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error,

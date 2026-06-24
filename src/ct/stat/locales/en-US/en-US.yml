@@ -1,0 +1,64 @@
+dereference: "follow links"
+file-system: "display file system status instead of file status"
+terse: "print the information in terse form"
+ct_format: "use the specified FORMAT instead of the default;
+        output a newline after each use of FORMAT"
+printf: "like --ct_format, but interpret backslash escapes,
+        and do not output a mandatory trailing newline;
+        if you want a newline, include \\n in FORMAT"
+help: "Print help"
+version: "Print version"
+about: "Display file or file system status."
+usage: "stat [OPTION]... FILE..."
+long_usage: 
+  "Valid format sequences for files (without `--file-system`):\n
+
+  - `%a`: access rights in octal (note '#' and '0' printf flags)\n
+  - `%A`: access rights in human readable form\n
+  - `%b`: number of blocks allocated (see %B)\n
+  - `%B`: the size in bytes of each block reported by %b\n
+  - `%C`: SELinux security context string\n
+  - `%d`: device number in decimal\n
+  - `%D`: device number in hex\n
+  - `%f`: raw mode in hex\n
+  - `%F`: file type\n
+  - `%g`: group ID of owner\n
+  - `%G`: group name of owner\n
+  - `%h`: number of hard links\n
+  - `%i`: inode number\n
+  - `%m`: mount point\n
+  - `%n`: file name\n
+  - `%N`: quoted file name with dereference (follow) if symbolic link\n
+  - `%o`: optimal I/O transfer size hint\n
+  - `%s`: total size, in bytes\n
+  - `%t`: major device type in hex, for character/block device special files\n
+  - `%T`: minor device type in hex, for character/block device special files\n
+  - `%u`: user ID of owner\n
+  - `%U`: user name of owner\n
+  - `%w`: time of file birth, human-readable; - if unknown\n
+  - `%W`: time of file birth, seconds since Epoch; 0 if unknown\n
+  - `%x`: time of last access, human-readable\n
+  - `%X`: time of last access, seconds since Epoch\n
+  - `%y`: time of last data modification, human-readable\n
+  - `%Y`: time of last data modification, seconds since Epoch\n
+  - `%z`: time of last status change, human-readable\n
+  - `%Z`: time of last status change, seconds since Epoch\n
+
+  Valid format sequences for file systems:\n
+
+  - `%a`: free blocks available to non-superuser\n
+  - `%b`: total data blocks in file system\n
+  - `%c`: total file nodes in file system\n
+  - `%d`: free file nodes in file system\n
+  - `%f`: free blocks in file system\n
+  - `%i`: file system ID in hex\n
+  - `%l`: maximum length of filenames\n
+  - `%n`: file name\n
+  - `%s`: block size (for faster transfers)\n
+  - `%S`: fundamental block size (for block counts)\n
+  - `%t`: file system type in hex\n
+  - `%T`: file system type in human readable form\n
+
+  NOTE: your shell may have its own version of stat, which usually supersedes\n
+  the version described here.  Please refer to your shell's documentation\n
+  for details about the options it supports."

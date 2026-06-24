@@ -619,4 +619,57 @@ mod tests {
             );
         }
     }
+
+    #[cfg(test)]
+    mod tac_error_tests {
+        use super::*;
+        use regex::Error as RegexError;
+
+        #[test]
+        fn test_tac_error_invalid_regex() {
+            let regex_error = RegexError::Syntax("invalid regex".to_string());
+            let error = TacError::InvalidRegex(regex_error);
+            assert_eq!(
+                error.to_string(),
+                "invalid regular expression: invalid regex"
+            );
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_tac_error_invalid_argument() {
+            let error = TacError::InvalidArgument("test.txt".to_string());
+            assert_eq!(error.to_string(), "test.txt: read error: Invalid argument");
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_tac_error_file_not_found() {
+            let error = TacError::FileNotFound("test.txt".to_string());
+            assert_eq!(
+                error.to_string(),
+                "failed to open 'test.txt' for reading: No such file or directory"
+            );
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_tac_error_read_error() {
+            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "read error");
+            let error = TacError::ReadError("test.txt".to_string(), io_error);
+            assert_eq!(
+                error.to_string(),
+                "failed to read from test.txt: read error"
+            );
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_tac_error_write_error() {
+            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "write error");
+            let error = TacError::WriteError(io_error);
+            assert_eq!(error.to_string(), "failed to write to stdout: write error");
+            assert_eq!(error.code(), 1);
+        }
+    }
 }

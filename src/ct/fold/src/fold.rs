@@ -178,7 +178,7 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
                     let error_msg = match e.kind() {
                         std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
                         std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
-                        _ => e.to_string()
+                        _ => e.to_string(),
                     };
                     eprintln!("fold: {}: {}", filename, error_msg);
                     continue;

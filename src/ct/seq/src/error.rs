@@ -79,7 +79,10 @@ mod tests {
     #[test]
     fn test_error_codes() {
         assert_eq!(SeqError::NoArguments.code(), 2);
-        assert_eq!(SeqError::ParseError("123".into(), ParseNumberError::Float).code(), 1);
+        assert_eq!(
+            SeqError::ParseError("123".into(), ParseNumberError::Float).code(),
+            1
+        );
         assert_eq!(SeqError::ZeroIncrement("0".into()).code(), 1);
         assert_eq!(SeqError::IoError("test".into()).code(), 3);
     }
@@ -95,7 +98,10 @@ mod tests {
             "invalid Zero increment value: '0'"
         );
         assert_eq!(SeqError::NoArguments.to_string(), "missing operand");
-        assert_eq!(SeqError::IoError("test".into()).to_string(), "IO error: test");
+        assert_eq!(
+            SeqError::IoError("test".into()).to_string(),
+            "IO error: test"
+        );
     }
 
     #[test]

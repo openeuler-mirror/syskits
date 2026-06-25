@@ -1196,4 +1196,194 @@ mod tests {
             dest_meta.modified().unwrap()
         );
     }
+
+    #[test]
+    fn test_installer_new() {
+        // 创建基本的命令行参数
+        let mut cmd = Command::new("test");
+        cmd = cmd
+            .arg(ct_backup_control::arguments::backup())
+            .arg(ct_backup_control::arguments::backup_no_args())
+            .arg(ct_backup_control::arguments::suffix())
+            .arg(
+                Arg::new(install_options::INSTALL_TARGET_DIRECTORY)
+                    .short('t')
+                    .long(install_options::INSTALL_TARGET_DIRECTORY)
+                    .value_name("DIRECTORY"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_FILES)
+                    .value_name("FILES")
+                    .num_args(1..)
+                    .required(false),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_COMPARE)
+                    .short('C')
+                    .long(install_options::INSTALL_COMPARE)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_PRESERVE_TIMESTAMPS)
+                    .short('p')
+                    .long(install_options::INSTALL_PRESERVE_TIMESTAMPS)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_STRIP)
+                    .short('s')
+                    .long(install_options::INSTALL_STRIP)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_STRIP_PROGRAM)
+                    .long(install_options::INSTALL_STRIP_PROGRAM)
+                    .value_name("PROGRAM"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_VERBOSE)
+                    .short('v')
+                    .long(install_options::INSTALL_VERBOSE)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_MODE)
+                    .short('m')
+                    .long(install_options::INSTALL_MODE)
+                    .value_name("MODE"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_OWNER)
+                    .short('o')
+                    .long(install_options::INSTALL_OWNER)
+                    .value_name("OWNER"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_GROUP)
+                    .short('g')
+                    .long(install_options::INSTALL_GROUP)
+                    .value_name("GROUP"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_DIRECTORY)
+                    .short('d')
+                    .long(install_options::INSTALL_DIRECTORY)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_CREATE_LEADING)
+                    .short('D')
+                    .long(install_options::INSTALL_CREATE_LEADING)
+                    .action(ArgAction::SetFalse),
+            );
+
+        // 测试目录模式
+        let matches = cmd
+            .clone()
+            .try_get_matches_from(vec!["test", "-d"])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        assert_eq!(installer.main_function, MainFunction::Directory);
+
+        // 测试权限模式
+        let matches = cmd
+            .clone()
+            .try_get_matches_from(vec!["test", "-m", "644"])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        assert_eq!(installer.specified_mode, Some(0o644));
+
+        // 测试互斥选项
+        let mut cmd = Command::new("test");
+        cmd = cmd
+            .arg(ct_backup_control::arguments::backup())
+            .arg(ct_backup_control::arguments::backup_no_args())
+            .arg(ct_backup_control::arguments::suffix())
+            .arg(
+                Arg::new(install_options::INSTALL_TARGET_DIRECTORY)
+                    .short('t')
+                    .long(install_options::INSTALL_TARGET_DIRECTORY)
+                    .value_name("DIRECTORY"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_FILES)
+                    .value_name("FILES")
+                    .num_args(1..)
+                    .required(false),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_COMPARE)
+                    .short('C')
+                    .long(install_options::INSTALL_COMPARE)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_PRESERVE_TIMESTAMPS)
+                    .short('p')
+                    .long(install_options::INSTALL_PRESERVE_TIMESTAMPS)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_STRIP)
+                    .short('s')
+                    .long(install_options::INSTALL_STRIP)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_STRIP_PROGRAM)
+                    .long(install_options::INSTALL_STRIP_PROGRAM)
+                    .value_name("PROGRAM"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_VERBOSE)
+                    .short('v')
+                    .long(install_options::INSTALL_VERBOSE)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_MODE)
+                    .short('m')
+                    .long(install_options::INSTALL_MODE)
+                    .value_name("MODE"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_OWNER)
+                    .short('o')
+                    .long(install_options::INSTALL_OWNER)
+                    .value_name("OWNER"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_GROUP)
+                    .short('g')
+                    .long(install_options::INSTALL_GROUP)
+                    .value_name("GROUP"),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_DIRECTORY)
+                    .short('d')
+                    .long(install_options::INSTALL_DIRECTORY)
+                    .action(ArgAction::SetTrue),
+            );
+
+        let matches = cmd
+            .try_get_matches_from(vec![
+                "test", "-C", "-p", "-s", "-v", "-m", "644", "-o", "user", "-g", "group", "-d",
+            ])
+            .unwrap();
+        assert!(Installer::new(&matches).is_err());
+
+        // 测试默认值
+        let installer = Installer::default();
+
+        assert_eq!(installer.main_function, MainFunction::Standard);
+        assert_eq!(installer.specified_mode, None);
+        assert_eq!(installer.backup_mode, CtBackupMode::NoBackup);
+        assert!(!installer.verbose);
+        assert!(!installer.preserve_timestamps);
+        assert!(!installer.compare);
+        assert!(!installer.strip);
+        assert_eq!(installer.strip_program, DEFAULT_STRIP_PROGRAM);
+        assert!(!installer.create_leading);
+        assert!(installer.target_dir.is_none());
+    }
 }

@@ -534,4 +534,43 @@ mod tests {
             assert_eq!(output, b"1233o");
         }
     }
+
+    /// 测试主函数入口
+    mod main_tests {
+        use super::*;
+
+        #[test]
+        fn test_tr_main() {
+            let mut input = Cursor::new(b"hello world");
+            let mut output = Vec::new();
+
+            // 测试基本功能
+            let args = vec!["tr", "aeiou", "12345"];
+            tr_main(
+                &mut input,
+                &mut output,
+                args.iter().map(|s| OsString::from(s)),
+            )
+            .unwrap();
+
+            assert_eq!(output, b"h2ll4 w4rld");
+        }
+
+        #[test]
+        fn test_tr_main_invalid_args() {
+            let mut input = Cursor::new(b"");
+            let mut output = Vec::new();
+
+            // 测试无效参数
+            let args = vec!["tr"];
+            assert!(
+                tr_main(
+                    &mut input,
+                    &mut output,
+                    args.iter().map(|s| OsString::from(s))
+                )
+                .is_err()
+            );
+        }
+    }
 }

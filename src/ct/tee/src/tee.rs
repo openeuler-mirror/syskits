@@ -489,7 +489,6 @@ mod tests {
             assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
         }
     }
-
     #[cfg(test)]
     mod named_reader_tests {
         use super::*;
@@ -602,6 +601,7 @@ mod tests {
 #[cfg(test)]
 mod test_basic {
     use super::*;
+    use std::io::Cursor;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -654,5 +654,35 @@ mod test_basic {
             Some(&OutputErrorMode::Exit),
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_error() {
+        let writer = NamedWriter {
+            name: "test".to_string(),
+            inner: Box::new(Cursor::new(Vec::new())),
+        };
+        let mut ignored_errors = 0;
+
+        // 测试 Warn 模式
+        let result = process_error(
+            Some(&OutputErrorMode::Warn),
+            Error::new(ErrorKind::Other, "test error"),
+            &writer,
+            &mut ignored_errors,
+        );
+        assert!(result.is_ok());
+        assert_eq!(ignored_errors, 1);
+
+        // 测试 Exit 模式
+        ignored_errors = 0;
+        let result = process_error(
+            Some(&OutputErrorMode::Exit),
+            Error::new(ErrorKind::Other, "test error"),
+            &writer,
+            &mut ignored_errors,
+        );
+        assert!(result.is_err());
+        assert_eq!(ignored_errors, 0);
     }
 }

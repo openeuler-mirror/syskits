@@ -672,4 +672,78 @@ mod tests {
             assert_eq!(error.code(), 1);
         }
     }
+
+    #[cfg(test)]
+    mod file_operations_tests {
+        use super::*;
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_read_from_file_success() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"test content").unwrap();
+            let result = read_from_file(temp_file.path());
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), b"test content");
+        }
+
+        #[test]
+        fn test_read_from_file_nonexistent() {
+            let result = read_from_file(Path::new("nonexistent.txt"));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("failed to read from"));
+        }
+
+        #[test]
+        fn test_validate_file_path_directory() {
+            let result = validate_file_path(Path::new("."));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("Invalid argument"));
+        }
+
+        #[test]
+        fn test_validate_file_path_nonexistent() {
+            let result = validate_file_path(Path::new("nonexistent.txt"));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("No such file or directory"));
+        }
+
+        #[test]
+        fn test_validate_file_path_valid() {
+            let temp_file = NamedTempFile::new().unwrap();
+            let result = validate_file_path(temp_file.path());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        #[ignore]
+        fn test_get_file_data_stdin() {
+            // This test is ignored because it requires real stdin
+            // In a real environment, we would need integration tests
+            // or a more sophisticated mock setup
+            let result = get_file_data("-");
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_get_file_data_regular_file() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"test content").unwrap();
+            let result = get_file_data(temp_file.path().to_str().unwrap());
+            assert!(result.is_ok());
+            match result.unwrap() {
+                FileData::Mapped(_) | FileData::Buffer(_) => (),
+            }
+        }
+
+        #[test]
+        fn test_get_file_data_nonexistent() {
+            let result = get_file_data("nonexistent.txt");
+            assert!(result.is_err());
+        }
+    }
 }

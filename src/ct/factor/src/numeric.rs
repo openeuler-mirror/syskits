@@ -176,3 +176,252 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         ModularInteger::residue(&result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quickcheck::quickcheck;
+
+    #[test]
+    fn test_int_trait_u32() {
+        // 测试 u32 类型的基本操作
+        let a: u32 = 42;
+        let b: u32 = 13;
+
+        // 测试基本运算
+        assert_eq!(a.wrapping_add(b), 55);
+        assert_eq!(a.wrapping_sub(b), 29);
+        assert_eq!(a.wrapping_mul(b), 546);
+
+        // 测试位运算
+        assert_eq!(a.wrapping_shl(2), 168);
+        assert_eq!(a.wrapping_shr(2), 10);
+
+        // 测试其他操作
+        assert_eq!(a.leading_zeros(), 26);
+        assert_eq!(a.trailing_zeros(), 1);
+    }
+
+    #[test]
+    fn test_int_trait_u64() {
+        // 测试 u64 类型的基本操作
+        let a: u64 = 42;
+        let b: u64 = 13;
+
+        // 测试基本运算
+        assert_eq!(a.wrapping_add(b), 55);
+        assert_eq!(a.wrapping_sub(b), 29);
+        assert_eq!(a.wrapping_mul(b), 546);
+
+        // 测试位运算
+        assert_eq!(a.wrapping_shl(2), 168);
+        assert_eq!(a.wrapping_shr(2), 10);
+
+        // 测试其他操作
+        assert_eq!(a.leading_zeros(), 58);
+        assert_eq!(a.trailing_zeros(), 1);
+    }
+
+    #[test]
+    fn test_double_int_trait_u32() {
+        // 测试 u32 类型的溢出操作
+        let a: u32 = 0xFFFFFFFF; // 最大的 u32 值
+        let b: u32 = 2;
+
+        // 测试加法溢出
+        let (sum, overflow) = a.overflowing_add(b);
+        assert_eq!(sum, 1);
+        assert_eq!(overflow, true);
+    }
+
+    #[test]
+    fn test_double_int_trait_u64() {
+        // 测试 u64 类型的溢出操作
+        let a: u64 = 0xFFFFFFFFFFFFFFFF; // 最大的 u64 值
+        let b: u64 = 2;
+
+        // 测试加法溢出
+        let (sum, overflow) = a.overflowing_add(b);
+        assert_eq!(sum, 1);
+        assert_eq!(overflow, true);
+    }
+
+    #[test]
+    fn test_montgomery_new() {
+        // 测试 Montgomery 结构的创建
+        let m = Montgomery::<u32>::new(17);
+        assert_eq!(m.modulus, 17);
+
+        let m = Montgomery::<u64>::new(101);
+        assert_eq!(m.modulus, 101);
+    }
+
+    #[test]
+    fn test_montgomery_to_mod_and_to_u64() {
+        // 测试 Montgomery 域的转换
+        let m = Montgomery::<u32>::new(17);
+
+        // 转换到 Montgomery 域再转换回来
+        let a_mod = m.to_mod(5);
+        assert_eq!(m.to_u64(a_mod), 5);
+
+        // 对于大于模数的值，应该先取模
+        let val = 20 % 17;
+        let b_mod = m.to_mod(val);
+        assert_eq!(m.to_u64(b_mod), 3); // 20 % 17 = 3
+
+        // 在某些实现中，Montgomery表示法可能与原值相同
+        // 所以我们不再断言它们一定不相等
+    }
+
+    #[test]
+    fn test_montgomery_add() {
+        // 测试 Montgomery 加法
+        let m = Montgomery::<u32>::new(17);
+
+        // 转换到 Montgomery 域
+        let a_mod = m.to_mod(5);
+        let b_mod = m.to_mod(7);
+
+        // 测试加法
+        let sum_mod = m.add(a_mod, b_mod);
+        assert_eq!(m.to_u64(sum_mod), 12);
+
+        // 测试溢出加法
+        let c_mod = m.to_mod(15);
+        let sum_mod = m.add(a_mod, c_mod);
+        assert_eq!(m.to_u64(sum_mod), 3); // (5 + 15) % 17 = 20 % 17 = 3
+    }
+
+    #[test]
+    fn test_montgomery_mul() {
+        // 测试 Montgomery 乘法
+        let m = Montgomery::<u32>::new(17);
+
+        // 转换到 Montgomery 域
+        let a_mod = m.to_mod(5);
+        let b_mod = m.to_mod(7);
+
+        // 测试乘法
+        let prod_mod = m.mul(a_mod, b_mod);
+        assert_eq!(m.to_u64(prod_mod), 35 % 17);
+
+        // 测试大数乘法
+        let c_mod = m.to_mod(15);
+        let prod_mod = m.mul(c_mod, c_mod);
+        assert_eq!(m.to_u64(prod_mod), 225 % 17);
+    }
+
+    #[test]
+    fn test_montgomery_pow() {
+        // 测试 Montgomery 幂运算
+        let m = Montgomery::<u32>::new(17);
+
+        // 转换到 Montgomery 域
+        let a_mod = m.to_mod(5);
+
+        // 测试幂运算
+        let pow_mod = m.pow(a_mod, 3);
+        assert_eq!(m.to_u64(pow_mod), 125 % 17);
+
+        // 测试大指数
+        let pow_mod = m.pow(a_mod, 10);
+        assert_eq!(m.to_u64(pow_mod), 5u64.pow(10) % 17);
+    }
+
+    #[test]
+    fn test_montgomery_one() {
+        // 测试 Montgomery 的单位元
+        let m = Montgomery::<u32>::new(17);
+
+        // 获取单位元
+        let one_mod = m.one();
+        assert_eq!(m.to_u64(one_mod), 1);
+
+        // 测试乘法单位元性质
+        let a_mod = m.to_mod(5);
+        let prod_mod = m.mul(a_mod, one_mod);
+        assert_eq!(m.to_u64(prod_mod), 5);
+    }
+
+    #[test]
+    fn test_montgomery_minus_one() {
+        // 测试 Montgomery 的负单位元
+        let m = Montgomery::<u32>::new(17);
+
+        // 获取负单位元
+        let minus_one_mod = m.minus_one();
+        assert_eq!(m.to_u64(minus_one_mod), 16); // -1 % 17 = 16
+
+        // 测试负单位元性质
+        let a_mod = m.to_mod(5);
+        let prod_mod = m.mul(a_mod, minus_one_mod);
+        assert_eq!(m.to_u64(prod_mod), 12); // (5 * -1) % 17 = -5 % 17 = 12
+    }
+
+    quickcheck! {
+        // 使用 quickcheck 进行随机测试
+        fn quickcheck_montgomery_add_commutative(a: u32, b: u32) -> bool {
+            // 确保模数不为 0 或 1，且为奇数
+            let modulus = if a <= 1 || a % 2 == 0 { 17u64 } else { a as u64 };
+
+            // 确保输入不超过模数
+            let x = b as u64 % modulus;
+            let y = (b as u64 / 2) % modulus;
+
+            let m = Montgomery::<u64>::new(modulus);
+            let x_mod = m.to_mod(x);
+            let y_mod = m.to_mod(y);
+
+            // 测试加法交换律
+            let sum1 = m.add(x_mod, y_mod);
+            let sum2 = m.add(y_mod, x_mod);
+
+            m.to_u64(sum1) == m.to_u64(sum2)
+        }
+
+        fn quickcheck_montgomery_mul_commutative(a: u32, b: u32) -> bool {
+            // 确保模数不为 0 或 1，且为奇数
+            let modulus = if a <= 1 || a % 2 == 0 { 17u64 } else { a as u64 };
+
+            // 确保输入不超过模数
+            let x = b as u64 % modulus;
+            let y = (b as u64 / 2) % modulus;
+
+            let m = Montgomery::<u64>::new(modulus);
+            let x_mod = m.to_mod(x);
+            let y_mod = m.to_mod(y);
+
+            // 测试乘法交换律
+            let prod1 = m.mul(x_mod, y_mod);
+            let prod2 = m.mul(y_mod, x_mod);
+
+            m.to_u64(prod1) == m.to_u64(prod2)
+        }
+
+        fn quickcheck_montgomery_mul_distributive(a: u32, b: u32, _c: u32) -> bool {
+            // 确保模数不为 0 或 1，且为奇数
+            let modulus = if a <= 1 || a % 2 == 0 { 17u64 } else { a as u64 };
+
+            // 确保输入不超过模数
+            let x = b as u64 % modulus;
+            let y = (b as u64 / 2) % modulus;
+            let z = (b as u64 / 3) % modulus;
+
+            let m = Montgomery::<u64>::new(modulus);
+            let x_mod = m.to_mod(x);
+            let y_mod = m.to_mod(y);
+            let z_mod = m.to_mod(z);
+
+            // 测试乘法分配律: x * (y + z) = x * y + x * z
+            let sum_mod = m.add(y_mod, z_mod);
+            let left = m.mul(x_mod, sum_mod);
+
+            let prod1 = m.mul(x_mod, y_mod);
+            let prod2 = m.mul(x_mod, z_mod);
+            let right = m.add(prod1, prod2);
+
+            m.to_u64(left) == m.to_u64(right)
+        }
+    }
+}

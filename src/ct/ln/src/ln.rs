@@ -574,3 +574,218 @@ impl Default for LnSettings {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_link_files_in_dir() {
+        let temp = tempdir().unwrap();
+        
+        // 创建源文件
+        let source = temp.path().join("source.txt");
+        fs::write(&source, "test content").unwrap();
+        
+        // 创建目标目录
+        let target_dir = temp.path().join("target");
+        fs::create_dir(&target_dir).unwrap();
+
+        let settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            backup: CtBackupMode::NoBackup,
+            suffix: String::new(),
+            is_symbolic: true,
+            is_relative: false,
+            is_logical: false,
+            target_dir: None,
+            is_no_target_dir: false,
+            is_no_dereference: false,
+            is_verbose: true,
+        };
+
+        // 测试基本链接创建
+        let files = vec![source.clone()];
+        assert!(link_files_in_dir(&files, &target_dir, &settings).is_ok());
+        assert!(target_dir.join("source.txt").exists());
+        
+        // 测试多文件链接
+        let source2 = temp.path().join("source2.txt");
+        fs::write(&source2, "test content 2").unwrap();
+        let files = vec![source.clone(), source2.clone()];
+        assert!(link_files_in_dir(&files, &target_dir, &settings).is_ok());
+        
+        // 测试重复文件
+        let files = vec![source.clone(), source.clone()];
+        assert!(link_files_in_dir(&files, &target_dir, &settings).is_err());
+    }
+
+    #[test]
+    fn test_relative_path() {
+        let temp = tempdir().unwrap();
+        
+        let src = temp.path().join("src/file.txt");
+        let dst = temp.path().join("dst/link.txt");
+        
+        fs::create_dir_all(src.parent().unwrap()).unwrap();
+        fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        fs::write(&src, "test").unwrap();
+        
+        let rel_path = relative_path(&src, &dst);
+        assert!(rel_path.to_str().unwrap().contains("../src/file.txt"));
+    }
+
+    #[test]
+    fn test_link() {
+        let temp = tempdir().unwrap();
+        
+        // 创建源文件
+        let source = temp.path().join("source.txt");
+        fs::write(&source, "test content").unwrap();
+        
+        let target = temp.path().join("target.txt");
+        
+        let settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            backup: CtBackupMode::SimpleBackup,
+            suffix: String::from("~"),
+            is_symbolic: true,
+            is_relative: false,
+            is_logical: false,
+            target_dir: None,
+            is_no_target_dir: false,
+            is_no_dereference: false,
+            is_verbose: true,
+        };
+
+        // 测试基本链接
+        assert!(ln_link(&source, &target, &settings).is_ok());
+        assert!(target.exists());
+        
+        // 测试备份
+        fs::write(&target, "old content").unwrap();
+        assert!(ln_link(&source, &target, &settings).is_ok());
+        assert!(target.exists());
+        assert!(temp.path().join("target.txt~").exists());
+        
+        // 测试硬链接
+        let settings = LnSettings {
+            is_symbolic: false,
+            ..settings
+        };
+        let hard_target = temp.path().join("hard_target.txt");
+        assert!(ln_link(&source, &hard_target, &settings).is_ok());
+        assert_eq!(fs::read(&source).unwrap(), fs::read(&hard_target).unwrap());
+    }
+
+    #[test]
+    fn test_backup_paths() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("test.txt");
+        fs::write(&path, "test").unwrap();
+
+        // 测试简单备份
+        let backup = ln_simple_backup_path(&path, "~");
+        assert_eq!(backup.file_name().unwrap(), "test.txt~");
+
+        // 测试编号备份
+        let backup = ln_numbered_backup_path(&path);
+        assert!(backup.to_str().unwrap().contains(".~1~"));
+
+        // 测试已存在备份
+        let backup = ln_existing_backup_path(&path, "~");
+        assert!(backup.to_str().unwrap().ends_with('~'));
+    }
+
+    #[test]
+    fn test_overwrite_modes() {
+        assert_ne!(OverwriteMode::Force, OverwriteMode::Interactive);
+        assert_ne!(OverwriteMode::Interactive, OverwriteMode::NoClobber);
+        assert_ne!(OverwriteMode::NoClobber, OverwriteMode::Force);
+    }
+
+    #[test]
+    fn test_ln_exec() {
+        let temp = tempdir().unwrap();
+        
+        // 创建测试文件和目录
+        let source = temp.path().join("source.txt");
+        fs::write(&source, "test content").unwrap();
+        
+        let target_dir = temp.path().join("target");
+        fs::create_dir(&target_dir).unwrap();
+
+        let settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            backup: CtBackupMode::NoBackup,
+            suffix: String::new(),
+            is_symbolic: true,
+            is_relative: false,
+            is_logical: false,
+            target_dir: None,
+            is_no_target_dir: false,
+            is_no_dereference: false,
+            is_verbose: false,
+        };
+
+        // 测试第一种形式：直接链接到文件
+        let files = vec![source.clone(), temp.path().join("link.txt")];
+        assert!(ln_exec(&files, &settings).is_ok());
+        assert!(temp.path().join("link.txt").exists());
+
+        // 测试第二种形式：单文件链接到当前目录
+        let files = vec![source.clone()];
+        let settings = LnSettings {
+            is_no_target_dir: false,
+            ..settings
+        };
+        assert!(ln_exec(&files, &settings).is_ok());
+        assert!(Path::new("source.txt").exists());
+
+        // 测试第三种形式：多文件链接到目录
+        let source2 = temp.path().join("source2.txt");
+        fs::write(&source2, "test content 2").unwrap();
+        let files = vec![source.clone(), source2.clone(), target_dir.clone()];
+        assert!(ln_exec(&files, &settings).is_ok());
+        assert!(target_dir.join("source.txt").exists());
+        assert!(target_dir.join("source2.txt").exists());
+
+        // 测试第四种形式：使用 -t 选项
+        let new_target = temp.path().join("new_target");
+        fs::create_dir(&new_target).unwrap();
+        let settings = LnSettings {
+            target_dir: Some(new_target.to_string_lossy().into_owned()),
+            ..settings
+        };
+        let files = vec![source.clone(), source2.clone()];
+        assert!(ln_exec(&files, &settings).is_ok());
+        assert!(new_target.join("source.txt").exists());
+        assert!(new_target.join("source2.txt").exists());
+
+        // 测试错误情况
+        
+        // 测试缺少目标文件
+        let files = vec![source.clone()];
+        let settings = LnSettings {
+            target_dir: None,
+            is_no_target_dir: true,
+            ..settings
+        };
+        assert!(ln_exec(&files, &settings).is_err());
+
+        // 测试多余的操作数
+        let files = vec![source.clone(), source2.clone(), source.clone()];
+        assert!(ln_exec(&files, &settings).is_err());
+
+        // 测试目标不是目录
+        let not_dir = temp.path().join("not_dir.txt");
+        fs::write(&not_dir, "not a directory").unwrap();
+        let files = vec![source.clone(), source2.clone(), not_dir];
+        let settings = LnSettings {
+            is_no_target_dir: false,
+            ..settings
+        };
+        assert!(ln_exec(&files, &settings).is_err());
+    }
+}

@@ -1456,4 +1456,92 @@ mod tests {
         assert!(target_dir.join("source.txt").exists());
         assert!(target_dir.join("source2.txt").exists());
     }
+
+    #[test]
+    fn test_install_error_display() {
+        // 测试 Unimplemented
+        let err = InstallError::Unimplemented("test".to_string());
+        assert_eq!(err.to_string(), "Unimplemented feature: test");
+
+        // 测试 DirNeedsArg
+        let err = InstallError::DirNeedsArg();
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "{} with -d requires at least one argument.",
+                ctcore::ct_util_name()
+            )
+        );
+
+        // 测试 ChmodFailed
+        let err = InstallError::ChmodFailed(PathBuf::from("/test/path"));
+        assert_eq!(err.to_string(), "failed to chmod '/test/path'");
+
+        // 测试 ChownFailed
+        let err =
+            InstallError::ChownFailed(PathBuf::from("/test/path"), "permission denied".to_string());
+        assert_eq!(
+            err.to_string(),
+            "failed to chown '/test/path': permission denied"
+        );
+
+        // 测试 InvalidTarget
+        let err = InstallError::InvalidTarget(PathBuf::from("/test/path"));
+        assert_eq!(
+            err.to_string(),
+            "invalid target '/test/path': No such file or directory"
+        );
+
+        // 测试 TargetDirIsntDir
+        let err = InstallError::TargetDirIsntDir(PathBuf::from("/test/path"));
+        assert_eq!(err.to_string(), "target '/test/path' is not a directory");
+
+        // 测试 InvalidUser
+        let err = InstallError::InvalidUser("testuser".to_string());
+        assert_eq!(err.to_string(), "invalid user: 'testuser'");
+
+        // 测试 InvalidGroup
+        let err = InstallError::InvalidGroup("testgroup".to_string());
+        assert_eq!(err.to_string(), "invalid group: 'testgroup'");
+    }
+
+    #[test]
+    fn test_chown_optional_user_group() {
+        let temp = tempdir().unwrap();
+        let test_file = temp.path().join("test_file");
+        File::create(&test_file).unwrap();
+
+        // 测试默认情况（不设置所有者和组）
+        let installer = Installer {
+            owner_id: None,
+            group_id: None,
+            ..Default::default()
+        };
+        assert!(chown_optional_user_group(&test_file, &installer).is_ok());
+
+        // 测试只设置组
+        let installer = Installer {
+            owner_id: None,
+            group_id: Some(getegid()),
+            ..Default::default()
+        };
+        assert!(chown_optional_user_group(&test_file, &installer).is_ok());
+
+        // 测试同时设置所有者和组
+        let installer = Installer {
+            owner_id: Some(geteuid()),
+            group_id: Some(getegid()),
+            ..Default::default()
+        };
+        assert!(chown_optional_user_group(&test_file, &installer).is_ok());
+
+        // 测试文件不存在的情况
+        let nonexistent = temp.path().join("nonexistent");
+        let installer = Installer {
+            owner_id: Some(geteuid()),
+            group_id: Some(getegid()),
+            ..Default::default()
+        };
+        assert!(chown_optional_user_group(&nonexistent, &installer).is_err());
+    }
 }

@@ -284,6 +284,7 @@ fn print_seq(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
 
     #[test]
     fn test_seq_options_default() {
@@ -406,5 +407,22 @@ mod tests {
             String::from_utf8(output.clone()).unwrap(),
             "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n"
         );
+    }
+
+    #[test]
+    fn test_seq_main() {
+        // 测试格式化选项
+        let result = seq_main(
+            std::iter::once(OsString::from("seq"))
+                .chain(["-w", "1", "3"].iter().map(|s| OsString::from(*s))),
+        );
+        assert!(result.is_ok());
+
+        // 测试分隔符选项
+        let result = seq_main(
+            std::iter::once(OsString::from("seq"))
+                .chain(["-s", ",", "1", "3"].iter().map(|s| OsString::from(*s))),
+        );
+        assert!(result.is_ok());
     }
 }

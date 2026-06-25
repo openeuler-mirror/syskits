@@ -1079,3 +1079,121 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_need_copy() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let dest = temp.path().join("dest");
+
+        // 创建源文件
+        File::create(&source).unwrap();
+
+        // 测试目标文件不存在的情况
+        let installer = Installer {
+            main_function: MainFunction::Standard,
+            specified_mode: None,
+            backup_mode: CtBackupMode::NoBackup,
+            suffix: String::new(),
+            owner_id: None,
+            group_id: None,
+            verbose: false,
+            preserve_timestamps: false,
+            compare: false,
+            strip: false,
+            strip_program: String::from(DEFAULT_STRIP_PROGRAM),
+            create_leading: false,
+            target_dir: None,
+        };
+        assert!(installer.need_copy(&source, &dest).unwrap());
+
+        // 创建目标文件并测试
+        File::create(&dest).unwrap();
+        assert!(installer.need_copy(&source, &dest).unwrap());
+    }
+
+    #[test]
+    fn test_perform_backup() {
+        let temp = tempdir().unwrap();
+        let dest = temp.path().join("dest");
+
+        // 创建目标文件
+        File::create(&dest).unwrap();
+
+        let installer = Installer {
+            backup_mode: CtBackupMode::SimpleBackup,
+            suffix: String::from("~"),
+            verbose: true,
+            ..Default::default()
+        };
+
+        let backup = perform_backup(&dest, &installer).unwrap();
+        assert!(backup.is_some());
+        assert!(backup.unwrap().ends_with("dest~"));
+    }
+
+    #[test]
+    fn test_copy_file() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let dest = temp.path().join("dest");
+
+        // 创建源文件
+        std::fs::write(&source, "test content").unwrap();
+
+        // 测试复制
+        copy_file(&source, &dest).unwrap();
+
+        assert!(dest.exists());
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
+    }
+
+    #[test]
+    fn test_set_ownership_and_permissions() {
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("test");
+
+        // 创建测试文件
+        File::create(&file).unwrap();
+
+        let installer = Installer {
+            specified_mode: Some(0o644),
+            owner_id: None,
+            group_id: None,
+            ..Default::default()
+        };
+
+        set_ownership_and_permissions(&file, &installer).unwrap();
+
+        let metadata = std::fs::metadata(&file).unwrap();
+        assert_eq!(metadata.mode() & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_preserve_timestamps() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let dest = temp.path().join("dest");
+
+        // 创建源文件和目标文件
+        File::create(&source).unwrap();
+        File::create(&dest).unwrap();
+
+        preserve_timestamps(&source, &dest).unwrap();
+
+        let source_meta = std::fs::metadata(&source).unwrap();
+        let dest_meta = std::fs::metadata(&dest).unwrap();
+
+        assert_eq!(
+            source_meta.modified().unwrap(),
+            dest_meta.modified().unwrap()
+        );
+    }
+}

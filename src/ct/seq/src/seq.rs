@@ -306,4 +306,26 @@ mod tests {
         assert!(options.is_equal_width);
         assert!(options.format.is_none());
     }
+
+    #[test]
+    fn test_ct_app() {
+        let mut app = ct_app();
+
+        // 测试基本命令行参数
+        assert!(app.get_arguments().any(|arg| arg.get_id() == SEQ_SEPARATOR));
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == SEQ_TERMINATOR)
+        );
+        assert!(
+            app.get_arguments()
+                .any(|arg| arg.get_id() == SEQ_EQUAL_WIDTH)
+        );
+        assert!(app.get_arguments().any(|arg| arg.get_id() == SEQ_FORMAT));
+
+        // 测试帮助信息
+        let help_text = app.render_help().to_string();
+        assert!(help_text.contains("Separator character"));
+        assert!(help_text.contains("Terminator character"));
+    }
 }

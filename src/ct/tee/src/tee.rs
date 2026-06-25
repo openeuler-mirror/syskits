@@ -410,4 +410,83 @@ mod tests {
         assert_eq!(options.files, vec!["file.txt"]);
         assert!(options.output_error.is_none());
     }
+
+    #[cfg(test)]
+    mod named_writer_tests {
+        use super::*;
+        use std::io::{self, Cursor};
+
+        #[test]
+        fn test_named_writer_write_success() {
+            let data = b"Hello, world!";
+            let mut writer = NamedWriter {
+                inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let result = writer.write(data);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), data.len());
+        }
+
+        #[test]
+        fn test_named_writer_write_error() {
+            struct ErrorWriter;
+
+            impl Write for ErrorWriter {
+                fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+                    Err(io::Error::new(io::ErrorKind::Other, "write error"))
+                }
+
+                fn flush(&mut self) -> Result<()> {
+                    Ok(())
+                }
+            }
+
+            let mut writer = NamedWriter {
+                inner: Box::new(ErrorWriter) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let data = b"Hello, world!";
+            let result = writer.write(data);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
+        }
+
+        #[test]
+        fn test_named_writer_flush_success() {
+            let mut writer = NamedWriter {
+                inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let result = writer.flush();
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_named_writer_flush_error() {
+            struct ErrorWriter;
+
+            impl Write for ErrorWriter {
+                fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+                    Ok(_buf.len())
+                }
+
+                fn flush(&mut self) -> Result<()> {
+                    Err(io::Error::new(io::ErrorKind::Other, "flush error"))
+                }
+            }
+
+            let mut writer = NamedWriter {
+                inner: Box::new(ErrorWriter) as Box<dyn Write>,
+                name: "test".to_string(),
+            };
+
+            let result = writer.flush();
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
+        }
+    }
 }

@@ -1084,6 +1084,7 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
 mod tests {
     use super::*;
     use std::fs::File;
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
 
@@ -1543,5 +1544,57 @@ mod tests {
             ..Default::default()
         };
         assert!(chown_optional_user_group(&nonexistent, &installer).is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))] // strip 命令在 Windows 上不可用
+    fn test_strip_file() {
+        let temp = tempdir().unwrap();
+
+        // 创建一个简单的二进制文件
+        let exec_file = temp.path().join("test_exec");
+        let mut file = File::create(&exec_file).unwrap();
+        // 写入一些机器码，确保文件可以被 strip
+        file.write_all(&[
+            0x7f, 0x45, 0x4c, 0x46, // ELF 魔数
+            0x02, 0x01, 0x01, 0x00, // 其他 ELF 头部信息
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ])
+        .unwrap();
+
+        // 设置可执行权限
+        std::fs::set_permissions(&exec_file, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        // 测试正常情况
+        let installer = Installer {
+            strip_program: String::from(DEFAULT_STRIP_PROGRAM),
+            ..Default::default()
+        };
+
+        // 如果 strip 命令不可用，跳过测试
+        if !std::path::Path::new(DEFAULT_STRIP_PROGRAM).exists() {
+            return;
+        }
+
+        assert!(strip_file(&exec_file, &installer).is_ok());
+        assert!(exec_file.exists()); // 文件应该还存在
+
+        // 测试以连字符开头的文件名
+        let hyphen_file = temp.path().join("-test_exec");
+        std::fs::copy(&exec_file, &hyphen_file).unwrap();
+        assert!(strip_file(&hyphen_file, &installer).is_ok());
+        assert!(hyphen_file.exists());
+
+        // 测试无效的 strip 程序
+        let installer = Installer {
+            strip_program: String::from("nonexistent_strip"),
+            ..Default::default()
+        };
+        let test_file = temp.path().join("test_fail");
+        std::fs::copy(&exec_file, &test_file).unwrap();
+
+        let result = strip_file(&test_file, &installer);
+        assert!(result.is_err());
+        assert!(!test_file.exists()); // 失败时文件应该被删除
     }
 }

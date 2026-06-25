@@ -318,4 +318,119 @@ mod tests {
             assert!(complement_arg.get_short().unwrap() == 'c');
         }
     }
+
+    /// 测试配置标志相关功能
+    mod flags_tests {
+        use super::*;
+        use clap::ArgMatches;
+
+        fn create_matches(args: &[&str]) -> ArgMatches {
+            ct_app().get_matches_from(args)
+        }
+
+        #[test]
+        fn test_tr_flags_validation() {
+            // 测试空参数
+            let matches = create_matches(&["tr"]);
+            assert!(matches!(
+                TrFlags::new(&matches).unwrap_err().to_string(),
+                s if s.contains("missing operand")
+            ));
+
+            // 测试单个参数（需要两个参数时）
+            let matches = create_matches(&["tr", "set1"]);
+            assert!(matches!(
+                TrFlags::new(&matches).unwrap_err().to_string(),
+                s if s.contains("missing operand after") && s.contains("Two strings must be given when translating")
+            ));
+
+            // 测试删除操作（只需要一个参数）
+            let matches = create_matches(&["tr", "-d", "set1"]);
+            let flags = TrFlags::new(&matches).unwrap();
+            assert!(!flags.is_complement_flag);
+            assert!(flags.is_delete_flag);
+            assert!(!flags.is_squeeze_flag);
+            assert!(!flags.is_truncate_set1_flag);
+            assert_eq!(flags.sets, vec!["set1"]);
+
+            // 测试所有标志
+            let matches = create_matches(&["tr", "-c", "-d", "-s", "-t", "set1", "set2"]);
+            let flags = TrFlags::new(&matches).unwrap();
+            assert!(flags.is_complement_flag);
+            assert!(flags.is_delete_flag);
+            assert!(flags.is_squeeze_flag);
+            assert!(flags.is_truncate_set1_flag);
+            assert_eq!(flags.sets, vec!["set1", "set2"]);
+        }
+
+        #[test]
+        fn test_validate_sets_not_empty() {
+            // 测试空集合
+            // let matches = create_matches(&["tr"]);
+            let flags = TrFlags {
+                sets: vec![],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_not_empty().unwrap_err().to_string(),
+                s if s.contains("missing operand")
+            ));
+        }
+
+        #[test]
+        fn test_validate_sets_count() {
+            // 测试删除和压缩时需要两个集合
+            let flags = TrFlags {
+                is_delete_flag: true,
+                is_squeeze_flag: true,
+                sets: vec!["set1".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("Two strings must be given when deleting and squeezing")
+            ));
+
+            // 测试翻译时需要两个集合
+            let flags = TrFlags {
+                sets: vec!["set1".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("Two strings must be given when translating")
+            ));
+
+            // 测试仅删除时不能有第二个集合
+            let flags = TrFlags {
+                is_delete_flag: true,
+                sets: vec!["set1".to_string(), "set2".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("Only one string may be given when deleting without squeezing")
+            ));
+
+            // 测试不能有第三个集合
+            let flags = TrFlags {
+                sets: vec!["set1".to_string(), "set2".to_string(), "set3".to_string()],
+                ..Default::default()
+            };
+            assert!(matches!(
+                flags.validate_sets_count().unwrap_err().to_string(),
+                s if s.contains("extra operand")
+            ));
+        }
+
+        #[test]
+        fn test_validate_backslash_ending() {
+            // 测试反斜杠结尾的警告
+            let flags = TrFlags {
+                sets: vec!["set1\\".to_string()],
+                ..Default::default()
+            };
+            assert!(flags.validate_backslash_ending().is_ok());
+        }
+    }
 }

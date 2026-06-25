@@ -746,4 +746,89 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    #[cfg(test)]
+    mod tac_buffer_tests {
+        use super::*;
+
+        #[test]
+        fn test_tac_buffer_simple() {
+            let mut output = Vec::new();
+            let data = b"line1\nline2\nline3";
+            tac_buffer(&mut output, data, false, "\n").unwrap();
+            assert_eq!(output, b"line3line2\nline1\n");
+        }
+
+        #[test]
+        fn test_tac_buffer_before() {
+            let mut output = Vec::new();
+            let data = b"line1\nline2\nline3";
+            tac_buffer(&mut output, data, true, "\n").unwrap();
+            assert_eq!(output, b"line3\nline2\nline1");
+        }
+
+        #[test]
+        fn test_tac_buffer_custom_separator() {
+            let mut output = Vec::new();
+            let data = b"line1:line2:line3";
+            tac_buffer(&mut output, data, false, ":").unwrap();
+            assert_eq!(output, b"line3line2:line1:");
+        }
+
+        #[test]
+        fn test_tac_buffer_empty_input() {
+            let mut output = Vec::new();
+            let data = b"";
+            tac_buffer(&mut output, data, false, "\n").unwrap();
+            assert_eq!(output, b"");
+        }
+
+        #[test]
+        fn test_tac_buffer_single_line() {
+            let mut output = Vec::new();
+            let data = b"single line";
+            tac_buffer(&mut output, data, false, "\n").unwrap();
+            assert_eq!(output, b"single line");
+        }
+
+        #[test]
+        fn test_tac_buffer_with_trailing_separator() {
+            let mut output = Vec::new();
+            let data = b"line1\nline2\nline3\n";
+            tac_buffer(&mut output, data, false, "\n").unwrap();
+            assert_eq!(output, b"line3\nline2\nline1\n");
+        }
+
+        #[test]
+        fn test_tac_buffer_with_multiple_separators() {
+            let mut output = Vec::new();
+            let data = b"line1\n\nline2\n\nline3";
+            tac_buffer(&mut output, data, false, "\n").unwrap();
+            assert_eq!(output, b"line3\nline2\n\nline1\n");
+        }
+
+        #[test]
+        fn test_tac_buffer_with_empty_lines() {
+            let mut output = Vec::new();
+            let data = b"\n\n\n";
+            tac_buffer(&mut output, data, false, "\n").unwrap();
+            assert_eq!(output, b"\n\n\n");
+        }
+
+        #[test]
+        fn test_tac_buffer_with_custom_multi_byte_separator() {
+            let mut output = Vec::new();
+            let data = b"line1<sep>line2<sep>line3";
+            tac_buffer(&mut output, data, false, "<sep>").unwrap();
+            assert_eq!(output, b"line3line2<sep>line1<sep>");
+        }
+
+        #[test]
+        fn test_tac_buffer_with_no_separator() {
+            let mut output = Vec::new();
+            let data = b"content";
+            tac_buffer(&mut output, data, false, "|").unwrap();
+            assert_eq!(output, b"content");
+        }
+    }
 }

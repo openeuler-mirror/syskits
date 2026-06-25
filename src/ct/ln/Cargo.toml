@@ -1,0 +1,24 @@
+[package]
+name = "ct_ln"
+version = "0.0.2"
+authors = ["CTyunOS linux developers"]
+license = "Mulan PSL v2.0"
+description = "ln ~ (ctutils) create a (file system) link to TARGET"
+
+homepage = "https://www.ctyun.cn/developer"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/ln"
+keywords = ["syskits", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+[lib]
+path = "src/ln.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["backup-control", "fs"] }
+tempfile = { workspace = true}
+
+[[bin]]
+name = "ln"
+path = "src/main.rs"

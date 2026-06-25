@@ -205,3 +205,157 @@ pub fn ct_app() -> Command {
         .disable_version_flag(true)
         .args(&args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::BufWriter;
+
+    /// 测试 FactorFlags 的默认值
+    #[test]
+    fn test_factor_flags_default() {
+        let flags = FactorFlags::default();
+        assert!(!flags.print_exponents);
+        assert!(flags.numbers.is_empty());
+    }
+
+    /// 测试从 ArgMatches 创建 FactorFlags
+    #[test]
+    fn test_factor_flags_new() {
+        // 创建一个带有指数标志的 ArgMatches
+        let matches = ct_app().try_get_matches_from(vec!["factor", "-h"]).unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert!(flags.numbers.is_empty());
+
+        // 创建一个带有数字参数的 ArgMatches
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "12", "24"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(!flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["12", "24"]);
+
+        // 创建一个同时带有指数标志和数字参数的 ArgMatches
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "-h", "12", "24"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["12", "24"]);
+    }
+
+    /// 测试 factors_print_str 函数 - 普通格式
+    #[test]
+    fn test_factors_print_str_normal_format() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试数字 12 的因式分解（普通格式）
+        factors_print_str("12", &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "12: 2 2 3\n");
+    }
+
+    /// 测试 factors_print_str 函数 - 指数格式
+    #[test]
+    fn test_factors_print_str_exponent_format() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试数字 12 的因式分解（指数格式）
+        factors_print_str("12", &mut writer, true).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "12: 2^2 3\n");
+    }
+
+    /// 测试 process_numbers 函数
+    #[test]
+    fn test_process_numbers() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试处理多个数字
+        let numbers = vec!["12".to_string(), "24".to_string()];
+        process_numbers(&numbers, &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "12: 2 2 3\n24: 2 2 2 3\n");
+    }
+
+    /// 测试无效输入的处理
+    #[test]
+    fn test_invalid_input() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试无效输入（非数字）
+        // 注意：这个测试会产生警告消息，但不会失败
+        factors_print_str("abc", &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, ""); // 无效输入不会产生输出
+    }
+
+    /// 测试边界情况
+    #[test]
+    fn test_edge_cases() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试 0
+        factors_print_str("0", &mut writer, false).unwrap();
+
+        // 测试 1
+        factors_print_str("1", &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "0: 0\n1:\n"); // 0 的因子是 0，1 没有素因子
+    }
+
+    /// 测试大数
+    #[test]
+    fn test_large_numbers() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试较大的数字
+        factors_print_str("1234567", &mut writer, true).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        // 1234567 = 127 * 9721
+        assert_eq!(output, "1234567: 127 9721\n");
+    }
+
+    /// 测试命令行应用程序配置
+    #[test]
+    fn test_ct_app_configuration() {
+        let app = ct_app();
+
+        // 验证应用程序名称和版本
+        assert_eq!(app.get_name(), ctcore::ct_util_name());
+
+        // 验证参数配置
+        let args: Vec<_> = app.get_arguments().collect();
+        assert!(args.iter().any(|arg| arg.get_id() == factor_flags::NUMBER));
+        assert!(
+            args.iter()
+                .any(|arg| arg.get_id() == factor_flags::EXPONENTS)
+        );
+        assert!(args.iter().any(|arg| arg.get_id() == factor_flags::HELP));
+    }
+}

@@ -59,7 +59,11 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
             if is_minus_zero_int(s, &n) {
                 Ok(PreciseNumber::new(ExtendedBigDecimal::MinusZero, 2, 0))
             } else {
-                Ok(PreciseNumber::new(ExtendedBigDecimal::BigDecimal(n), s.len(), 0))
+                Ok(PreciseNumber::new(
+                    ExtendedBigDecimal::BigDecimal(n),
+                    s.len(),
+                    0,
+                ))
             }
         }
         Err(_) => match s.to_ascii_lowercase().as_str() {
@@ -67,7 +71,7 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
             "-inf" | "-infinity" => Ok(PreciseNumber::new(ExtendedBigDecimal::MinusInfinity, 0, 0)),
             "nan" | "-nan" => Err(ParseNumberError::Nan),
             _ => Err(ParseNumberError::Float),
-        }
+        },
     }
 }
 
@@ -87,19 +91,27 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
 fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNumberError> {
     let exponent: i64 = s[j + 1..].parse().map_err(|_| ParseNumberError::Float)?;
     let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
-    
+
     let num_integral_digits = if is_minus_zero_int(s, &x) {
-        if exponent > 0 { 2 + exponent as usize } else { 2 }
+        if exponent > 0 {
+            2 + exponent as usize
+        } else {
+            2
+        }
     } else if s.starts_with('-') && exponent < 0 {
-        2  // 对于负数且负指数的情况，始终返回2位
+        2 // 对于负数且负指数的情况，始终返回2位
     } else if exponent >= 0 {
         (j as i64 + exponent) as usize
     } else {
         1
     };
-    
+
     Ok(PreciseNumber::new(
-        if is_minus_zero_int(s, &x) { ExtendedBigDecimal::MinusZero } else { ExtendedBigDecimal::BigDecimal(x) },
+        if is_minus_zero_int(s, &x) {
+            ExtendedBigDecimal::MinusZero
+        } else {
+            ExtendedBigDecimal::BigDecimal(x)
+        },
         num_integral_digits,
         if exponent < 0 { -exponent as usize } else { 0 },
     ))
@@ -122,9 +134,13 @@ fn parse_decimal_no_exponent(s: &str, i: usize) -> Result<PreciseNumber, ParseNu
     let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
     let num_integral_digits = if s.starts_with("-.") { i + 1 } else { i };
     let num_fractional_digits = s.len() - (i + 1);
-    
+
     Ok(PreciseNumber::new(
-        if is_minus_zero_float(s, &x) { ExtendedBigDecimal::MinusZero } else { ExtendedBigDecimal::BigDecimal(x) },
+        if is_minus_zero_float(s, &x) {
+            ExtendedBigDecimal::MinusZero
+        } else {
+            ExtendedBigDecimal::BigDecimal(x)
+        },
         num_integral_digits,
         num_fractional_digits,
     ))
@@ -133,7 +149,11 @@ fn parse_decimal_no_exponent(s: &str, i: usize) -> Result<PreciseNumber, ParseNu
 /// 计算最小整数位数
 fn calculate_minimum_digits(s: &str, j: usize) -> Result<usize, ParseNumberError> {
     let integral_part: f64 = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
-    Ok(if integral_part.is_sign_negative() { 2 } else { 1 })
+    Ok(if integral_part.is_sign_negative() {
+        2
+    } else {
+        1
+    })
 }
 
 /// 计算总整数位数
@@ -186,7 +206,9 @@ fn parse_decimal_and_exponent(
     let num_fractional_digits = if num_digits_between_decimal_point_and_e < exponent {
         0
     } else {
-        (num_digits_between_decimal_point_and_e - exponent).try_into().unwrap()
+        (num_digits_between_decimal_point_and_e - exponent)
+            .try_into()
+            .unwrap()
     };
 
     if num_digits_between_decimal_point_and_e <= exponent {
@@ -197,7 +219,9 @@ fn parse_decimal_and_exponent(
                 num_fractional_digits,
             ))
         } else {
-            let zeros_count = (exponent - num_digits_between_decimal_point_and_e).try_into().unwrap();
+            let zeros_count = (exponent - num_digits_between_decimal_point_and_e)
+                .try_into()
+                .unwrap();
             let expanded = build_expanded_number(s, i, j, zeros_count);
             let n = expanded.parse().map_err(|_| ParseNumberError::Float)?;
             Ok(PreciseNumber::new(
@@ -272,7 +296,7 @@ impl FromStr for PreciseNumber {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim_start();
-        let s = if s.starts_with('+') { &s[1..] } else { s };
+        let s = s.strip_prefix('+').unwrap_or(s);
 
         // 处理十六进制数字
         if let Some(i) = s.to_lowercase().find("0x") {
@@ -466,12 +490,9 @@ mod tests {
             let result = num_integral_digits(input);
             println!("Testing '{}': expected {}, got {}", input, expected, result);
             assert_eq!(
-                result, 
-                expected, 
-                "Failed for input: '{}', expected: {}, got: {}", 
-                input, 
-                expected, 
-                result
+                result, expected,
+                "Failed for input: '{}', expected: {}, got: {}",
+                input, expected, result
             );
         }
     }
@@ -533,7 +554,10 @@ mod tests {
 
         for (input, expected) in test_cases {
             let result = num_integral_digits(input);
-            println!("Testing edge case '{}': expected {}, got {}", input, expected, result);
+            println!(
+                "Testing edge case '{}': expected {}, got {}",
+                input, expected, result
+            );
             assert_eq!(result, expected, "Failed for edge case: '{}'", input);
         }
     }

@@ -882,4 +882,38 @@ mod tests {
             assert_eq!(settings.random_source.as_deref(), Some("rand.txt"));
         }
     }
+
+    mod parse_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_range_valid() {
+            assert_eq!(shuf_parse_range("1-5").unwrap(), 1..=5);
+            assert_eq!(shuf_parse_range("0-0").unwrap(), 0..=0);
+            assert_eq!(shuf_parse_range("10-10").unwrap(), 10..=10);
+        }
+
+        #[test]
+        fn test_parse_range_invalid() {
+            assert!(shuf_parse_range("invalid").is_err());
+            assert!(shuf_parse_range("5-1").is_err());
+            assert!(shuf_parse_range("a-b").is_err());
+            assert!(shuf_parse_range("-5").is_err());
+        }
+
+        #[test]
+        fn test_parse_head_count_valid() {
+            assert_eq!(shuf_parse_head_count(vec!["5".to_string()]).unwrap(), 5);
+            assert_eq!(
+                shuf_parse_head_count(vec!["10".to_string(), "5".to_string()]).unwrap(),
+                5
+            );
+        }
+
+        #[test]
+        fn test_parse_head_count_invalid() {
+            assert!(shuf_parse_head_count(vec!["invalid".to_string()]).is_err());
+            assert!(shuf_parse_head_count(vec!["-5".to_string()]).is_err());
+        }
+    }
 }

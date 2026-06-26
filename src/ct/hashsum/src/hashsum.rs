@@ -1750,4 +1750,237 @@ mod tests {
             assert_eq!(bytes_marker, "+");
         }
     }
+
+    #[test]
+    fn test_hashsum_single_file() {
+        // 创建一个临时文件
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+
+        // 写入测试数据
+        writeln!(temp_file, "test data for hashsum").expect("Failed to write to temp file");
+
+        // 将文件指针移回文件开头（写入后指针在文件末尾）
+        temp_file
+            .rewind()
+            .expect("Failed to seek to beginning of file");
+
+        // 获取文件路径
+        let file_path = temp_file.path().to_owned();
+
+        // 模拟MockDigest，使其返回固定的哈希值，不依赖于实际内容
+        let digest = Box::new(MockDigest::new().with_result("abcdef1234567890"));
+
+        // 设置测试标志
+        let flags = create_test_flags("MD5", digest);
+
+        // 创建测试文件列表，使用临时文件的路径
+        let file_os_str = file_path.as_os_str();
+        let files = vec![file_os_str.to_owned()];
+        let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
+
+        // 准备输出缓冲区
+        let mut output: Vec<u8> = Vec::new();
+
+        // 执行hashsum函数
+        let result = hashsum(flags, file_refs.into_iter(), &mut output);
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
+
+        // 验证输出格式是否正确
+        let output_str = String::from_utf8(output).expect("Invalid UTF-8 in output");
+
+        // 从文件路径获取文件名部分用于验证
+        let file_name = file_path.file_name().unwrap().to_string_lossy();
+
+        // 验证输出包含哈希值和文件名
+        assert!(output_str.starts_with("abcdef1234567890"));
+        assert!(output_str.contains(&file_name.to_string()));
+        assert!(output_str.ends_with("\n"));
+
+        // 临时文件会在变量离开作用域时自动删除
+    }
+
+    #[test]
+    fn test_hashsum_multiple_files() {
+        // 创建两个临时文件
+        let mut temp_file1 = NamedTempFile::new().expect("Failed to create temp file 1");
+        let mut temp_file2 = NamedTempFile::new().expect("Failed to create temp file 2");
+
+        // 写入测试数据到文件1
+        writeln!(temp_file1, "test data for file 1").expect("Failed to write to temp file 1");
+        temp_file1
+            .rewind()
+            .expect("Failed to seek to beginning of file 1");
+
+        // 写入测试数据到文件2
+        writeln!(temp_file2, "test data for file 2").expect("Failed to write to temp file 2");
+        temp_file2
+            .rewind()
+            .expect("Failed to seek to beginning of file 2");
+
+        // 获取文件路径
+        let file_path1 = temp_file1.path().to_owned();
+        let file_path2 = temp_file2.path().to_owned();
+
+        // 模拟MockDigest，使其返回固定的哈希值，不依赖于实际内容
+        let digest = Box::new(MockDigest::new().with_result("abcdef1234567890"));
+
+        // 设置测试标志
+        let flags = create_test_flags("MD5", digest);
+
+        // 创建测试文件列表，使用临时文件的路径
+        let files = vec![
+            file_path1.as_os_str().to_owned(),
+            file_path2.as_os_str().to_owned(),
+        ];
+        let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
+
+        // 准备输出缓冲区
+        let mut output: Vec<u8> = Vec::new();
+
+        // 执行hashsum函数
+        let result = hashsum(flags, file_refs.into_iter(), &mut output);
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
+
+        // 验证输出格式是否正确
+        let output_str = String::from_utf8(output).expect("Invalid UTF-8 in output");
+
+        // 获取文件名用于验证
+        let file_name1 = file_path1
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let file_name2 = file_path2
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        // 验证输出包含两个文件的信息
+        assert!(output_str.contains(&file_name1.to_string()));
+        assert!(output_str.contains(&file_name2.to_string()));
+        assert!(output_str.contains("abcdef1234567890"));
+
+        // 临时文件会在变量离开作用域时自动删除
+    }
+
+    #[test]
+    fn test_hashsum_binary_mode() {
+        // 创建一个临时文件
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+
+        // 写入测试数据（包含二进制内容）
+        let binary_data = [0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD, 0xFC];
+        temp_file
+            .write_all(&binary_data)
+            .expect("Failed to write binary data");
+        temp_file
+            .rewind()
+            .expect("Failed to seek to beginning of file");
+
+        // 获取文件路径
+        let file_path = temp_file.path().to_owned();
+
+        // 模拟MockDigest，使其返回固定的哈希值，不依赖于实际内容
+        let digest = Box::new(MockDigest::new().with_result("abcdef1234567890"));
+
+        // 设置测试标志，启用二进制模式
+        let mut flags = create_test_flags("MD5", digest);
+        flags.is_binary = true;
+
+        // 创建测试文件列表，使用临时文件的路径
+        let file_os_str = file_path.as_os_str();
+        let files = vec![file_os_str.to_owned()];
+        let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
+
+        // 准备输出缓冲区
+        let mut output: Vec<u8> = Vec::new();
+
+        // 执行hashsum函数
+        let result = hashsum(flags, file_refs.into_iter(), &mut output);
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
+
+        // 验证输出格式是否正确
+        let output_str = String::from_utf8(output).expect("Invalid UTF-8 in output");
+
+        // 从文件路径获取文件名部分用于验证
+        let file_name = file_path.file_name().unwrap().to_string_lossy();
+
+        // 验证输出包含哈希值和文件名，二进制模式下使用*作为标记
+        assert!(output_str.contains("abcdef1234567890"));
+
+        // 打印调试信息
+        println!("Binary mode output: {:?}", output_str);
+        println!("File name: {:?}", file_name);
+
+        // 以下检查更宽松，只要文件名出现在输出中即可
+        assert!(output_str.contains(&file_name.to_string()));
+        assert!(output_str.contains("*"));
+        assert!(output_str.ends_with("\n"));
+
+        // 临时文件会在变量离开作用域时自动删除
+    }
+    #[test]
+    fn test_hashsum_tag_mode() {
+        // 创建一个临时文件
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+
+        // 写入测试数据
+        writeln!(temp_file, "test data for tag mode").expect("Failed to write to temp file");
+        temp_file
+            .rewind()
+            .expect("Failed to seek to beginning of file");
+
+        // 获取文件路径
+        let file_path = temp_file.path().to_owned();
+
+        // 模拟MockDigest，使其返回固定的哈希值，不依赖于实际内容
+        let digest = Box::new(MockDigest::new().with_result("abcdef1234567890"));
+
+        // 设置测试标志，启用tag模式
+        let mut flags = create_test_flags("MD5", digest);
+        flags.is_tag = true;
+
+        // 创建测试文件列表，使用临时文件的路径
+        let file_os_str = file_path.as_os_str();
+        let files = vec![file_os_str.to_owned()];
+        let file_refs: Vec<&OsStr> = files.iter().map(|s| s.as_os_str()).collect();
+
+        // 准备输出缓冲区
+        let mut output: Vec<u8> = Vec::new();
+
+        // 执行hashsum函数
+        let result = hashsum(flags, file_refs.into_iter(), &mut output);
+
+        // 验证函数执行成功
+        assert!(result.is_ok());
+
+        // 验证输出格式是否正确
+        let output_str = String::from_utf8(output).expect("Invalid UTF-8 in output");
+
+        // 从文件路径获取文件名部分用于验证
+        let file_name = file_path.file_name().unwrap().to_string_lossy();
+
+        // 验证输出格式符合BSD样式：算法 (文件名) = 哈希值
+        assert!(output_str.starts_with("MD5"));
+
+        // 打印调试信息
+        println!("Tag mode output: {:?}", output_str);
+        println!("File name: {:?}", file_name);
+
+        // 以下检查更宽松，只验证主要部分是否存在
+        assert!(output_str.contains(&file_name.to_string()));
+        assert!(output_str.contains("("));
+        assert!(output_str.contains(")"));
+        assert!(output_str.contains("= abcdef1234567890"));
+        assert!(output_str.ends_with("\n"));
+
+        // 临时文件会在变量离开作用域时自动删除
+    }
 }

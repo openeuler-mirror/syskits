@@ -86,6 +86,93 @@
         "cleanup_commands": [
           "rm -rf test3.txt"
         ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat合并多个空行功能",
+        "setup_commands": [ 
+          "echo -e 'A\n\n\nB\n\nC' > test4.txt",
+          "cat -s test4.txt"
+        ],
+        "args": ["-s", "test4.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nA\n\nB\n\nC\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test4.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat末尾显示‘$’符号",
+        "setup_commands": [ 
+          "echo -e 'Hello\nWorld\nThis is a test' > test5.txt",
+          "cat -E test5.txt"
+        ],
+        "args": ["-E", "test5.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nHello$\nWorld$\nThis is a test$\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test5.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cat",
+        "description": "测试cat显示制表符功能",
+        "setup_commands": [ 
+          "echo -e 'Name\tAge\tCity' > test6.txt",
+          "cat -T test6.txt"
+        ],
+        "args": ["-T", "test6.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nName^IAge^ICity\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test6.txt"
+        ]
       }
     ]
   }

@@ -82,6 +82,63 @@
         "cleanup_commands": [
           "rm -rf test1.txt"
         ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut选中指定字节功能",
+        "setup_commands": [
+          "echo -e '中文测试\n🍎🍌🍒\nHello\tWorld' > test3.txt"
+        ],
+        "args": ["-b", "1-3", "test3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n中\n🍎\nHel\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test3.txt"
+        ]
+      },
+
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut选中指定字符功能",
+        "setup_commands": [
+          "echo -e '中文测试\n🍎🍌🍒\nHello\tWorld' > test3.txt",
+          "cut -c 1-3 test3.txt"
+        ],
+        "args": ["-c", "1-3", "test3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n中文测\n🍎🍌🍒\nHel\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test3.txt"
+        ]
       }
     ]
 }

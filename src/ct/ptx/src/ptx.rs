@@ -1187,6 +1187,94 @@ mod tests {
         }
     }
 
+    mod execution_tests {
+        use super::*;
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_ptx_exec() {
+            // 创建测试配置
+            let settings = PtxSettings {
+                config: PtxConfig {
+                    format: OutFormat::Roff,
+                    is_gnu_ext: false,
+                    ..Default::default()
+                },
+                file_map: {
+                    let mut map = FileMap::new();
+                    map.insert(
+                        "test.txt".to_string(),
+                        FileContent {
+                            lines: vec!["hello test world".to_string()],
+                            chars_lines: vec!["hello test world".chars().collect()],
+                            offset: 0,
+                        },
+                    );
+                    map
+                },
+                words: {
+                    let mut set = BTreeSet::new();
+                    set.insert(WordRef {
+                        word: "test".to_string(),
+                        global_line_nr: 1,
+                        local_line_nr: 0,
+                        position: 6,
+                        position_end: 10,
+                        filename: "test.txt".to_string(),
+                    });
+                    set
+                },
+                output_filename: NamedTempFile::new()
+                    .unwrap()
+                    .path()
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+            };
+
+            let result = ptx_exec(&settings);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ptx_exec_dumb_format() {
+            let settings = PtxSettings {
+                config: PtxConfig {
+                    format: OutFormat::Dumb,
+                    ..Default::default()
+                },
+                file_map: {
+                    let mut map = FileMap::new();
+                    map.insert(
+                        "test.txt".to_string(),
+                        FileContent {
+                            lines: vec!["test".to_string()],
+                            chars_lines: vec!["test".chars().collect()],
+                            offset: 0,
+                        },
+                    );
+                    map
+                },
+                words: {
+                    let mut set = BTreeSet::new();
+                    set.insert(WordRef {
+                        word: "test".to_string(),
+                        global_line_nr: 1,
+                        local_line_nr: 0,
+                        position: 0,
+                        position_end: 4,
+                        filename: "test.txt".to_string(),
+                    });
+                    set
+                },
+                output_filename: "-".to_string(),
+            };
+
+            let result = ptx_exec(&settings);
+            assert!(matches!(result, Err(_)));
+        }
+    }
+
     mod output_chunk_tests {
         use super::*;
 

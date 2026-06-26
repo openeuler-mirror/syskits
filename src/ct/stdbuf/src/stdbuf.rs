@@ -344,3 +344,125 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args(&args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::{builder::Command as ClapCommand, ArgAction};
+    use std::path::Path;
+    use tempfile::TempDir;
+
+    // Helper function to create ArgMatches with specific values for testing
+    fn create_arg_matches(input: Option<&str>, output: Option<&str>, error: Option<&str>, command: Option<Vec<&str>>) -> ArgMatches {
+        let mut cmd = ClapCommand::new("test");
+        
+        // Add all the arguments we need with the correct API that matches the actual implementation
+        cmd = cmd.arg(
+                Arg::new(stdbuf_flags::INPUT)
+                    .long(stdbuf_flags::INPUT)
+                    .short(stdbuf_flags::INPUT_SHORT)
+                    .value_name("MODE")
+            )
+            .arg(
+                Arg::new(stdbuf_flags::OUTPUT)
+                    .long(stdbuf_flags::OUTPUT)
+                    .short(stdbuf_flags::OUTPUT_SHORT)
+                    .value_name("MODE")
+            )
+            .arg(
+                Arg::new(stdbuf_flags::ERROR)
+                    .long(stdbuf_flags::ERROR)
+                    .short(stdbuf_flags::ERROR_SHORT)
+                    .value_name("MODE")
+            )
+            .arg(
+                Arg::new(stdbuf_flags::COMMAND)
+                    .action(ArgAction::Append)
+            );
+        
+        // Build argument vector using owned strings
+        let mut arg_strings = Vec::new();
+        arg_strings.push("test".to_string());
+        
+        if let Some(i) = input {
+            arg_strings.push(format!("--{}", stdbuf_flags::INPUT));
+            arg_strings.push(i.to_string());
+        }
+        
+        if let Some(o) = output {
+            arg_strings.push(format!("--{}", stdbuf_flags::OUTPUT));
+            arg_strings.push(o.to_string());
+        }
+        
+        if let Some(e) = error {
+            arg_strings.push(format!("--{}", stdbuf_flags::ERROR));
+            arg_strings.push(e.to_string());
+        }
+        
+        if let Some(c) = command {
+            for arg in c {
+                arg_strings.push(arg.to_string());
+            }
+        }
+        
+        // Create a vector of string slices from our owned strings
+        let args: Vec<&str> = arg_strings.iter().map(|s| s.as_str()).collect();
+        
+        cmd.get_matches_from(args)
+    }
+
+    // 测试 parse_buffer_option 函数
+    #[test]
+    fn test_parse_buffer_option_line_buffering() {
+        // 创建一个包含行缓冲选项的参数匹配
+        let matches = create_arg_matches(None, Some("L"), None, None);
+        
+        // 测试有效的行缓冲
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            BufferType::Line => {},
+            _ => panic!("Expected Line buffer type"),
+        }
+        
+        // 测试输入流的行缓冲（应该失败）
+        let matches = create_arg_matches(Some("L"), None, None, None);
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::INPUT);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "line buffering stdin is meaningless");
+    }
+    
+    #[test]
+    fn test_parse_buffer_option_size_buffering() {
+        // 创建一个包含大小缓冲选项的参数匹配
+        let matches = create_arg_matches(None, Some("1024"), None, None);
+        
+        // 测试有效的大小缓冲
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            BufferType::Size(size) => assert_eq!(size, 1024),
+            _ => panic!("Expected Size buffer type"),
+        }
+        
+        // 测试无效的大小值
+        let matches = create_arg_matches(None, Some("invalid"), None, None);
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid mode"));
+    }
+    
+    #[test]
+    fn test_parse_buffer_option_none() {
+        // 创建一个没有选项的参数匹配
+        let matches = create_arg_matches(None, None, None, None);
+        
+        // 测试默认缓冲
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            BufferType::Default => {},
+            _ => panic!("Expected Default buffer type"),
+        }
+    }
+}

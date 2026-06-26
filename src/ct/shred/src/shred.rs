@@ -890,4 +890,48 @@ mod tests {
             assert!(file_path.exists(), "文件应该还存在");
         }
     }
+
+    mod do_pass_tests {
+        use super::*;
+
+        #[test]
+        fn test_do_pass_random() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let mut file = File::create(&file_path).unwrap();
+            let result = shred_do_pass(&mut file, &PassType::Random, true, 10);
+
+            assert!(result.is_ok(), "随机写入应该成功");
+            assert_eq!(
+                fs::metadata(&file_path).unwrap().len(),
+                10,
+                "文件大小应该是指定的长度"
+            );
+        }
+
+        #[test]
+        fn test_do_pass_pattern() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let mut file = File::create(&file_path).unwrap();
+            let result = shred_do_pass(
+                &mut file,
+                &PassType::Pattern(Pattern::Single(0xFF)),
+                true,
+                5,
+            );
+
+            assert!(result.is_ok(), "模式写入应该成功");
+            let content = fs::read(&file_path).unwrap();
+            assert_eq!(content.len(), 5, "文件大小应该是指定的长度");
+            assert!(
+                content.iter().all(|&b| b == 0xFF),
+                "所有字节应该是指定的模式"
+            );
+        }
+    }
 }

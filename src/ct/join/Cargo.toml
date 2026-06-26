@@ -1,0 +1,26 @@
+[package]
+name = "ct_join"
+
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/join"
+description = "join ~ (ctutils) merge lines from inputs with matching join fields"
+
+[lib]
+path = "src/join.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true }
+memchr = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "join"
+path = "src/main.rs"

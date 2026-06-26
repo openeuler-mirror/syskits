@@ -1363,6 +1363,9 @@ fn parse_field_number_option(value: Option<&str>) -> CTResult<Option<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
 
     #[test]
     fn test_parse_settings_basic() {
@@ -1594,10 +1597,6 @@ mod tests {
 
     mod join_exec_tests {
         use super::*;
-        use std::fs::File;
-        use std::io::Write;
-        use tempfile::tempdir;
-
         fn create_test_file(path: &std::path::Path, content: &str) -> std::io::Result<()> {
             let mut file = File::create(path)?;
             file.write_all(content.as_bytes())?;
@@ -1731,6 +1730,44 @@ mod tests {
             create_test_file(&file2_path, "").unwrap();
 
             let settings = JoinSettings::default();
+
+            let result = join_exec(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_invalid_files() {
+            let settings = JoinSettings::default();
+
+            // 测试不存在的文件
+            let result = join_exec("nonexistent1.txt", "nonexistent2.txt", settings);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_join_exec_custom_format() {
+            let temp = tempdir().unwrap();
+
+            // 创建测试文件
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "1 a\n2 b\n").unwrap();
+            create_test_file(&file2_path, "1 x\n2 y\n").unwrap();
+
+            // 测试自定义输出格式
+            let settings = JoinSettings {
+                key1: 0,
+                key2: 0,
+                is_print_joined: true,
+                format: vec![JoinSpec::Key, JoinSpec::Field(FileNum::File2, 1)],
+                separator: Sep::Whitespaces,
+                ..Default::default()
+            };
 
             let result = join_exec(
                 file1_path.to_str().unwrap(),

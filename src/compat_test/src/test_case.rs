@@ -175,6 +175,8 @@ pub struct TestSuite {
 /// 单个测试用例
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TestCase {
+    ///标准输入
+    pub tstdin: String,
     /// 命令名称
     pub command: String,
     /// 测试描述

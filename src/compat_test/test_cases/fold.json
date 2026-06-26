@@ -1,6 +1,7 @@
 {
     "tests": [
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试默认宽度处理",
             "args": [
@@ -25,6 +26,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试指定宽度20列",
             "args": [
@@ -51,6 +53,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试空格处换行",
             "args": [
@@ -82,6 +85,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试按字节换行",
             "args": [
@@ -109,6 +113,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试标准输入处理",
             "args": [
@@ -135,6 +140,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试混合选项(-b -s)",
             "args": [
@@ -163,6 +169,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试多个文件输入",
             "args": [
@@ -195,6 +202,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试无效选项处理",
             "args": [
@@ -214,6 +222,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试文件不存在",
             "args": [
@@ -229,6 +238,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试帮助信息",
             "args": [
@@ -241,6 +251,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试版本信息",
             "args": [
@@ -253,6 +264,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试指定宽度20的折叠功能 - 存在的文件",
             "setup_commands": [
@@ -288,6 +300,7 @@
             ]
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试指定宽度20的折叠功能 - 不存在的文件",
             "args": [
@@ -308,6 +321,7 @@
             ]
         },
         {
+            "tstdin": "",
             "command": "fold",
             "description": "测试同时处理存在和不存在的文件",
             "setup_commands": [

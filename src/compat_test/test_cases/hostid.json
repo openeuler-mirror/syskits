@@ -1,6 +1,7 @@
 {
     "tests": [
         {
+            "tstdin": "",
             "command": "hostid",
             "description": "测试基本的hostid命令",
             "args": [],
@@ -13,6 +14,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "hostid",
             "description": "测试基本的hostid命令长度",
             "args": [],
@@ -31,6 +33,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "hostid",
             "description": "测试hostid命令的输出格式",
             "args": [],
@@ -49,6 +52,7 @@
             }
         },
         {
+            "tstdin": "",
             "command": "hostid",
             "description": "测试hostid命令的错误处理 - 未知参数",
             "args": [

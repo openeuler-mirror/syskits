@@ -136,8 +136,13 @@ impl CommandExecutor {
         if self.config.debug {
             eprintln!("DEBUG: 执行主命令");
         }
-        let actual = self.execute_syskits(&test_case.command, &test_case.args, &mut sandbox)?;
 
+        let actual = self.execute_syskits(
+            &test_case.tstdin,
+            &test_case.command,
+            &test_case.args,
+            &mut sandbox,
+        )?;
         // 执行验证命令
         if self.config.debug {
             eprintln!("DEBUG: 执行验证命令");
@@ -183,8 +188,12 @@ impl CommandExecutor {
         if self.config.debug {
             eprintln!("DEBUG: 执行coreutils主命令");
         }
-        let expected =
-            self.execute_coreutils(&test_case.command, &test_case.args, &mut coreutils_sandbox)?;
+        let expected = self.execute_coreutils(
+            &test_case.tstdin,
+            &test_case.command,
+            &test_case.args,
+            &mut coreutils_sandbox,
+        )?;
 
         // 执行验证命令
         if self.config.debug {
@@ -214,6 +223,7 @@ impl CommandExecutor {
     /// 在沙箱中执行 syskits 命令
     fn execute_syskits(
         &self,
+        tstdin: &str,
         command: &str,
         args: &[String],
         sandbox: &mut IsolatedSandbox,
@@ -243,12 +253,20 @@ impl CommandExecutor {
             SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
         };
 
+        let cmd = if !tstdin.is_empty() {
+            // 构建带有管道的命令
+            format!("echo '{}' | {}", tstdin, cmd)
+        } else {
+            cmd.clone()
+        };
+
         sandbox.execute_command(&cmd, &args, true)
     }
 
     /// 在沙箱中执行 GNU coreutils 命令
     fn execute_coreutils(
         &self,
+        tstdin: &str,
         command: &str,
         args: &[String],
         sandbox: &mut IsolatedSandbox,
@@ -262,8 +280,15 @@ impl CommandExecutor {
             sandbox.add_env("PATH", &new_path);
         }
 
+        let cmd = command.to_string();
+        let cmd = if !tstdin.is_empty() {
+            // 构建带有管道的命令
+            format!("echo '{}' | {}", tstdin, command)
+        } else {
+            cmd.clone()
+        };
         // 沙箱中执行命令
-        sandbox.execute_command(command, args, true)
+        sandbox.execute_command(&cmd, args, true)
     }
 }
 
@@ -375,6 +400,7 @@ mod tests {
         ignore_exit_code: bool,
     ) -> TestCase {
         TestCase {
+            tstdin: "".to_string(),
             command: "test_command".to_string(),
             description: "Test case description".to_string(),
             args: vec!["arg1".to_string(), "arg2".to_string()],

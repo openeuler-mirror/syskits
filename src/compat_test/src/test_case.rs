@@ -306,6 +306,7 @@ mod tests {
     #[test]
     fn test_deserialize_test_case() {
         let json = r#"{
+            "tstdin": "",
             "command": "echo",
             "description": "测试基本的 echo 命令",
             "args": ["Hello, World!"],
@@ -356,6 +357,7 @@ mod tests {
         let json = r#"{
             "tests": [
                 {
+                    "tstdin": "",
                     "command": "ls",
                     "description": "测试文件列表功能",
                     "args": ["-l", "test_dir"],
@@ -415,6 +417,7 @@ mod tests {
     #[test]
     fn test_deserialize_null_fields() {
         let json = r#"{
+            "tstdin": "",
             "command": "echo",
             "description": "测试带null字段的命令",
             "args": ["Hello, World!"],
@@ -461,6 +464,7 @@ mod tests {
     #[test]
     fn test_deserialize_mixed_null_fields() {
         let json = r#"{
+            "tstdin": "",
             "command": "echo",
             "description": "测试部分null字段的命令",
             "args": ["Hello, World!"],

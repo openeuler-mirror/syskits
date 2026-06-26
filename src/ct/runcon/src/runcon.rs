@@ -751,4 +751,89 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    mod context_operation_tests {
+        use super::*;
+        use std::fs::File;
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_print_current_context() {
+            let result = print_current_context();
+            if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+                // 在不支持 SELinux 的系统上应该返回错误
+                assert!(result.is_err());
+            } else {
+                // 在支持 SELinux 的系统上应该成功
+                assert!(result.is_ok());
+            }
+        }
+
+        #[test]
+        fn test_set_next_exec_context() {
+            // 只在支持 SELinux 的系统上运行此测试
+            if selinux::kernel_support() != selinux::KernelSupport::Unsupported {
+                let context =
+                    get_plain_context(OsStr::new("system_u:system_r:unconfined_t:s0")).unwrap();
+                let result = set_next_exec_context(&context);
+
+                // 根据权限情况，可能成功也可能失败
+                match result {
+                    Ok(_) => println!("Successfully set context"),
+                    Err(e) => println!("Expected error: {}", e),
+                }
+            }
+        }
+
+        #[test]
+        fn test_get_transition_context() {
+            let dir = tempdir().unwrap();
+            let test_file = dir.path().join("test.txt");
+            File::create(&test_file).unwrap();
+
+            let result = get_transition_context(test_file.as_os_str());
+
+            if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+                assert!(matches!(result, Err(DefaultError::SELinuxNotEnabled)));
+            } else {
+                match result {
+                    Ok(_) => println!("Successfully got transition context"),
+                    Err(e) => println!("Expected error: {}", e),
+                }
+            }
+        }
+
+        #[test]
+        fn test_get_initial_custom_opaque_context() {
+            let dir = tempdir().unwrap();
+            let test_file = dir.path().join("test.txt");
+            File::create(&test_file).unwrap();
+
+            // 测试不计算转换上下文的情况
+            let result1 = get_initial_custom_opaque_context(false, test_file.as_os_str());
+
+            // 测试计算转换上下文的情况
+            let result2 = get_initial_custom_opaque_context(true, test_file.as_os_str());
+
+            if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+                assert!(matches!(result1, Err(DefaultError::SELinuxNotEnabled)));
+                assert!(matches!(result2, Err(DefaultError::SELinuxNotEnabled)));
+            } else {
+                // 检查是否至少有一个成功
+                assert!(result1.is_ok() || result2.is_ok());
+            }
+        }
+
+        #[test]
+        fn test_get_transition_context_nonexistent_file() {
+            let result = get_transition_context(OsStr::new("nonexistent_file"));
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_get_initial_custom_opaque_context_invalid_command() {
+            let result = get_initial_custom_opaque_context(true, OsStr::new("nonexistent_command"));
+            assert!(result.is_err());
+        }
+    }
 }

@@ -1412,4 +1412,69 @@ mod tests {
             assert_eq!(result.len(), 2);
         }
     }
+
+    mod word_set_tests {
+        use super::*;
+
+        #[test]
+        fn test_ptx_create_word_set() {
+            let config = PtxConfig {
+                is_ignore_case: false,
+                is_input_ref: false,
+                ..Default::default()
+            };
+
+            let filter = WordFilter {
+                is_only_specified: false,
+                is_ignore_specified: false,
+                only_set: HashSet::new(),
+                ignore_set: HashSet::new(),
+                word_regex: r"\w+".to_string(),
+            };
+
+            let mut file_map = FileMap::new();
+            file_map.insert(
+                "test.txt".to_string(),
+                FileContent {
+                    lines: vec!["hello world".to_string()],
+                    chars_lines: vec!["hello world".chars().collect()],
+                    offset: 0,
+                },
+            );
+
+            let word_set = ptx_create_word_set(&config, &filter, &file_map);
+
+            assert_eq!(word_set.len(), 2); // "hello" 和 "world"
+            assert!(word_set.iter().any(|w| w.word == "hello"));
+            assert!(word_set.iter().any(|w| w.word == "world"));
+        }
+
+        #[test]
+        fn test_ptx_create_word_set_with_ignore_case() {
+            let config = PtxConfig {
+                is_ignore_case: true,
+                ..Default::default()
+            };
+
+            let filter = WordFilter {
+                word_regex: r"\w+".to_string(),
+                ..Default::default()
+            };
+
+            let mut file_map = FileMap::new();
+            file_map.insert(
+                "test.txt".to_string(),
+                FileContent {
+                    lines: vec!["Hello WORLD".to_string()],
+                    chars_lines: vec!["Hello WORLD".chars().collect()],
+                    offset: 0,
+                },
+            );
+
+            let word_set = ptx_create_word_set(&config, &filter, &file_map);
+
+            assert!(word_set.iter().any(|w| w.word == "hello"));
+            assert!(word_set.iter().any(|w| w.word == "world"));
+        }
+    }
 }

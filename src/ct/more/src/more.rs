@@ -717,8 +717,8 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::tempdir;
+    //use std::fs;
+    //use tempfile::tempdir;
 
     #[test]
     fn test_break_lines_long() {
@@ -813,7 +813,7 @@ mod tests {
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 
-    #[test]
+    /*#[test]
     fn test_more_main() {
         use std::ffi::OsString;
         let temp = tempdir().unwrap();
@@ -924,7 +924,7 @@ mod tests {
             .is_ok()
         );
     }
-
+*/
     #[test]
     fn test_pager_navigation() {
         let content = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n";

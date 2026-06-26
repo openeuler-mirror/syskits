@@ -177,6 +177,7 @@ feat_os_unix = [
   "timeout",
   "install",
   "ln",
+  "more",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -390,6 +391,7 @@ tee = { optional = true, package = "ct_tee", path = "src/ct/tee" }
 seq = { optional = true, package = "ct_seq", path = "src/ct/seq" }
 install = { optional = true, package = "ct_install", path = "src/ct/install" }
 ln = { optional = true, package = "ct_ln", path = "src/ct/ln" }
+more = { optional = true, package = "ct_more", path = "src/ct/more" }
 
 [dev-dependencies]
 conv = "0.3"

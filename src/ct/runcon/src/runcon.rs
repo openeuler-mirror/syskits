@@ -576,3 +576,89 @@ fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
         .map_err(|_r| DefaultError::from_io("CString::new()", io::ErrorKind::InvalidInput.into()))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    mod command_line_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_command_line_print() {
+            let config = ct_app();
+            let args = vec![OsString::from("runcon")].into_iter();
+            let result = RunconSettings::new(config, args).unwrap();
+
+            assert!(matches!(result.mode, RunconCommandLineMode::Print));
+            assert!(result.arguments.is_empty());
+        }
+
+        #[test]
+        fn test_parse_command_line_plain_context() {
+            let config = ct_app();
+            let args = vec![
+                OsString::from("runcon"),
+                OsString::from("system_u:system_r:httpd_t"),
+                OsString::from("ls"),
+                OsString::from("-l"),
+            ]
+            .into_iter();
+
+            let result = RunconSettings::new(config, args).unwrap();
+
+            match result.mode {
+                RunconCommandLineMode::PlainContext { context, command } => {
+                    assert_eq!(context, "system_u:system_r:httpd_t");
+                    assert_eq!(command, "ls");
+                }
+                _ => panic!("Wrong mode"),
+            }
+            assert_eq!(result.arguments, vec!["-l"]);
+        }
+
+        #[test]
+        fn test_parse_command_line_custom_context() {
+            let config = ct_app();
+            let args = vec![
+                OsString::from("runcon"),
+                OsString::from("-u"),
+                OsString::from("user_u"),
+                OsString::from("-r"),
+                OsString::from("role_r"),
+                OsString::from("ls"),
+            ]
+            .into_iter();
+
+            let result = RunconSettings::new(config, args).unwrap();
+
+            match result.mode {
+                RunconCommandLineMode::CustomContext {
+                    user,
+                    role,
+                    command,
+                    ..
+                } => {
+                    assert_eq!(user.unwrap(), "user_u");
+                    assert_eq!(role.unwrap(), "role_r");
+                    assert_eq!(command.unwrap(), "ls");
+                }
+                _ => panic!("Wrong mode"),
+            }
+            assert!(result.arguments.is_empty());
+        }
+
+        #[test]
+        fn test_parse_command_line_missing_command() {
+            let config = ct_app();
+            let args = vec![
+                OsString::from("runcon"),
+                OsString::from("system_u:system_r:httpd_t"),
+            ]
+            .into_iter();
+
+            let result = RunconSettings::new(config, args);
+            assert!(matches!(result, Err(DefaultError::MissingCommand)));
+        }
+    }
+}

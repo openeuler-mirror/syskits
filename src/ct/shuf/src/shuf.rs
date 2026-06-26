@@ -755,3 +755,87 @@ impl ShufSettings {
     }
 }
 
+#[cfg(test)]
+// Since the computed value is a bool, it is more readable to write the expected value out:
+#[allow(clippy::bool_assert_comparison)]
+mod test_number_set_decision {
+    use super::number_set_should_list_remaining;
+
+    #[test]
+    fn test_stay_positive_large_remaining_first() {
+        assert_eq!(false, number_set_should_list_remaining(0, std::usize::MAX));
+    }
+
+    #[test]
+    fn test_stay_positive_large_remaining_second() {
+        assert_eq!(false, number_set_should_list_remaining(1, std::usize::MAX));
+    }
+
+    #[test]
+    fn test_stay_positive_large_remaining_tenth() {
+        assert_eq!(false, number_set_should_list_remaining(9, std::usize::MAX));
+    }
+
+    #[test]
+    fn test_stay_positive_smallish_range_first() {
+        assert_eq!(false, number_set_should_list_remaining(0, 12345));
+    }
+
+    #[test]
+    fn test_stay_positive_smallish_range_second() {
+        assert_eq!(false, number_set_should_list_remaining(1, 12345));
+    }
+
+    #[test]
+    fn test_stay_positive_smallish_range_tenth() {
+        assert_eq!(false, number_set_should_list_remaining(9, 12345));
+    }
+
+    #[test]
+    fn test_stay_positive_small_range_not_too_early() {
+        assert_eq!(false, number_set_should_list_remaining(1, 10));
+    }
+
+    // Don't want to test close to the border, in case we decide to change the threshold.
+    // However, at 50% coverage, we absolutely should switch:
+    #[test]
+    fn test_switch_half() {
+        assert_eq!(true, number_set_should_list_remaining(1234, 2468));
+    }
+
+    // Ensure that the decision is monotonous:
+    #[test]
+    fn test_switch_late1() {
+        assert_eq!(true, number_set_should_list_remaining(12340, 12345));
+    }
+
+    #[test]
+    fn test_switch_late2() {
+        assert_eq!(true, number_set_should_list_remaining(12344, 12345));
+    }
+
+    // Ensure that we are overflow-free:
+    #[test]
+    fn test_no_crash_exceed_max_size1() {
+        assert_eq!(
+            false,
+            number_set_should_list_remaining(12345, std::usize::MAX)
+        );
+    }
+
+    #[test]
+    fn test_no_crash_exceed_max_size2() {
+        assert_eq!(
+            true,
+            number_set_should_list_remaining(std::usize::MAX - 1, std::usize::MAX)
+        );
+    }
+
+    #[test]
+    fn test_no_crash_exceed_max_size3() {
+        assert_eq!(
+            true,
+            number_set_should_list_remaining(std::usize::MAX, std::usize::MAX)
+        );
+    }
+}

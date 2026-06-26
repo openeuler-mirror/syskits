@@ -185,6 +185,7 @@ feat_os_unix = [
   "ptx",
   "pinky",
   "od",
+  "hashsum",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -406,6 +407,7 @@ runcon = { optional = true, package = "ct_runcon", path = "src/ct/runcon" }
 ptx = { optional = true, package = "ct_ptx", path = "src/ct/ptx" }
 pinky = { optional = true, package = "ct_pinky", path = "src/ct/pinky" }
 od = { optional = true, package = "ct_od", path = "src/ct/od" }
+hashsum = { optional = true, package = "ct_hashsum", path = "src/ct/hashsum" }
 
 [dev-dependencies]
 conv = "0.3"

@@ -1006,7 +1006,6 @@ mod tests {
     }
     mod test_ct_head {
         use super::*;
-        use std::fs::File;
         use std::io::Write;
         use tempfile::NamedTempFile;
 

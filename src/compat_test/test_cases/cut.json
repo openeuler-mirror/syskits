@@ -223,6 +223,60 @@
         "cleanup_commands": [
           "rm -rf test2.txt"
         ]
+      },
+      {
+        "tstdin": "Hello:World",
+        "command": "cut",
+        "description": "测试cut从标准输入读取",
+        "setup_commands": [
+          
+        ],
+        "args": ["-d ':' -f 2"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nWorld\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test1.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "cut",
+        "description": "测试cut处理制表符功能",
+        "setup_commands": [
+          "echo -e '中文测试\n🍎🍌🍒\nHello\tWorld' > test3.txt"
+        ],
+        "args": ["-d", "\t", "-f", "2", "test3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\nWorld\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test3.txt"
+        ]
       }
     ]
 }

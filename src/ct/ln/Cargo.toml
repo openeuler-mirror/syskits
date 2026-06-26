@@ -1,15 +1,16 @@
 [package]
 name = "ct_ln"
-version = "0.0.2"
-authors = ["CTyunOS linux developers"]
-license = "Mulan PSL v2.0"
-description = "ln ~ (ctutils) create a (file system) link to TARGET"
 
-homepage = "https://www.ctyun.cn/developer"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
 repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/ln"
-keywords = ["syskits", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
+description = "ln ~ (ctutils) create a (file system) link to TARGET"
 
 [lib]
 path = "src/ln.rs"

@@ -803,4 +803,31 @@ mod tests {
             assert!(odexec(&mut input_offset, &mut input_decoder, &output_info).is_ok());
         }
     }
+
+    mod od_main_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use std::fs::File;
+        use std::io::Write;
+
+        fn setup_test_file(filename: &str, content: &[u8]) -> String {
+            File::create(filename)
+                .and_then(|mut file| file.write_all(content))
+                .expect("Failed to create test file");
+            filename.to_string()
+        }
+
+        fn cleanup_test_file(test_file: &str) {
+            std::fs::remove_file(test_file).expect("Failed to remove test file");
+        }
+
+        #[test]
+        fn test_od_main_default() {
+            let test_file = setup_test_file("test_default.txt", b"Hello, World!");
+            let result =
+                od_main(vec![OsString::from("od"), OsString::from(&test_file)].into_iter());
+            cleanup_test_file(&test_file);
+            assert!(result.is_ok());
+        }
+    }
 }

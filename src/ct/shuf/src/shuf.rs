@@ -1020,4 +1020,144 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    mod iterator_tests {
+        use super::*;
+
+        /// 创建测试用的迭代器实例
+        fn create_test_iterator(
+            range: RangeInclusive<usize>,
+            amount: usize,
+            rng: &mut WrappedRng,
+        ) -> NonrepeatingIterator<'_> {
+            NonrepeatingIterator::new(range, rng, amount)
+        }
+
+        #[test]
+        fn test_iterator_basic() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(1..=5, 5, &mut rng);
+            let numbers: HashSet<_> = iter.collect();
+
+            println!("Collected numbers: {:?}", numbers);
+            assert_eq!(numbers.len(), 5, "Should generate 5 unique numbers");
+            assert!(
+                numbers.iter().all(|&n| n >= 1 && n <= 5),
+                "All numbers should be in range 1..=5"
+            );
+        }
+
+        #[test]
+        fn test_iterator_partial() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(1..=10, 5, &mut rng);
+            let numbers: HashSet<_> = iter.collect();
+
+            println!("Collected numbers: {:?}", numbers);
+            assert_eq!(numbers.len(), 5, "Should generate exactly 5 numbers");
+            assert!(
+                numbers.iter().all(|&n| n >= 1 && n <= 10),
+                "All numbers should be in range 1..=10"
+            );
+        }
+
+        #[test]
+        fn test_iterator_exact_amount() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(1..=3, 3, &mut rng);
+            let numbers: Vec<_> = iter.collect();
+
+            println!("Generated sequence: {:?}", numbers);
+            assert_eq!(numbers.len(), 3, "Should generate exactly 3 numbers");
+            let unique: HashSet<_> = numbers.into_iter().collect();
+            assert_eq!(unique.len(), 3, "All numbers should be unique");
+        }
+
+        #[test]
+        fn test_iterator_empty_range() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(5..=1, 5, &mut rng);
+            let numbers: Vec<_> = iter.collect();
+
+            println!("Empty range result: {:?}", numbers);
+            assert!(
+                numbers.is_empty(),
+                "Should generate no numbers for invalid range"
+            );
+        }
+
+        #[test]
+        fn test_iterator_zero_amount() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(1..=10, 0, &mut rng);
+            let numbers: Vec<_> = iter.collect();
+
+            println!("Zero amount result: {:?}", numbers);
+            assert!(
+                numbers.is_empty(),
+                "Should generate no numbers when amount is 0"
+            );
+        }
+
+        #[test]
+        fn test_iterator_single_element() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(42..=42, 1, &mut rng);
+            let numbers: Vec<_> = iter.collect();
+
+            println!("Single element result: {:?}", numbers);
+            assert_eq!(numbers, vec![42], "Should generate exactly one number (42)");
+        }
+
+        #[test]
+        fn test_iterator_mode_switch() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let iter = create_test_iterator(1..=4, 4, &mut rng);
+            let numbers: Vec<_> = iter.collect();
+
+            println!("Mode switch result: {:?}", numbers);
+            assert_eq!(numbers.len(), 4, "Should generate all 4 numbers");
+            let unique: HashSet<_> = numbers.into_iter().collect();
+            assert_eq!(unique.len(), 4, "All numbers should be unique");
+        }
+
+        #[test]
+        fn test_iterator_next() {
+            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
+            let mut iter = create_test_iterator(1..=3, 3, &mut rng);
+
+            // 测试连续调用 next()
+            let first = iter.next();
+            println!("First next(): {:?}", first);
+            assert!(first.is_some(), "First call should return Some");
+            assert!(
+                (1..=3).contains(&first.unwrap()),
+                "First number should be in range 1..=3"
+            );
+
+            let second = iter.next();
+            println!("Second next(): {:?}", second);
+            assert!(second.is_some(), "Second call should return Some");
+            assert!(
+                (1..=3).contains(&second.unwrap()),
+                "Second number should be in range 1..=3"
+            );
+            assert_ne!(first, second, "Numbers should be unique");
+
+            let third = iter.next();
+            println!("Third next(): {:?}", third);
+            assert!(third.is_some(), "Third call should return Some");
+            assert!(
+                (1..=3).contains(&third.unwrap()),
+                "Third number should be in range 1..=3"
+            );
+            assert_ne!(third, first, "Numbers should be unique");
+            assert_ne!(third, second, "Numbers should be unique");
+
+            // 测试迭代结束
+            let fourth = iter.next();
+            println!("Fourth next(): {:?}", fourth);
+            assert!(fourth.is_none(), "Fourth call should return None");
+        }
+    }
 }

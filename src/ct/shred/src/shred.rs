@@ -793,4 +793,101 @@ mod tests {
             assert!(!file_path.exists(), "文件应该被删除");
         }
     }
+
+    mod wipe_file_tests {
+        use super::*;
+
+        /// 创建测试用的配置
+        fn create_test_settings(path: &str) -> ShredSettings {
+            ShredSettings {
+                path_str: path,
+                n_passes: 3,
+                remove_method: RemoveMethod::None,
+                size: None,
+                exact: false,
+                zero: false,
+                verbose: false,
+                force: false,
+            }
+        }
+
+        #[test]
+        fn test_wipe_file_basic() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            let test_data = "test data";
+            fs::write(&file_path, test_data).unwrap();
+            let original_size = test_data.len();
+
+            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            settings.size = Some(original_size as u64);
+            settings.exact = true;
+
+            let result = shred_exec(&settings);
+
+            assert!(result.is_ok(), "擦除应该成功");
+            assert!(file_path.exists(), "文件应该还存在");
+
+            let content = fs::read(&file_path).unwrap();
+            assert_eq!(content.len(), original_size, "文件大小应该保持不变");
+            assert_ne!(content, test_data.as_bytes(), "文件内容应该被修改");
+        }
+
+        #[test]
+        fn test_wipe_file_nonexistent() {
+            let settings = create_test_settings("nonexistent.txt");
+            let result = shred_exec(&settings);
+            assert!(result.is_err(), "不存在的文件应该返回错误");
+        }
+
+        #[test]
+        fn test_wipe_file_with_removal() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            settings.n_passes = 1;
+            settings.remove_method = RemoveMethod::Unlink;
+
+            let result = shred_exec(&settings);
+
+            assert!(result.is_ok(), "擦除应该成功");
+            assert!(!file_path.exists(), "文件应该被删除");
+        }
+
+        #[test]
+        fn test_wipe_file_zero() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            settings.zero = true;
+
+            let result = shred_exec(&settings);
+
+            assert!(result.is_ok(), "擦除应该成功");
+            assert!(file_path.exists(), "文件应该还存在");
+        }
+
+        #[test]
+        fn test_wipe_file_force() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let mut perms = fs::metadata(&file_path).unwrap().permissions();
+            perms.set_readonly(true);
+            fs::set_permissions(&file_path, perms).unwrap();
+
+            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            settings.force = true;
+
+            let result = shred_exec(&settings);
+
+            assert!(result.is_ok(), "擦除应该成功");
+            assert!(file_path.exists(), "文件应该还存在");
+        }
+    }
 }

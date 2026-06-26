@@ -1519,4 +1519,180 @@ mod tests {
             assert_eq!(prefix, "");
         }
     }
+
+    #[cfg(test)]
+    mod digest_reader_tests {
+        use super::*;
+        use std::io::Cursor;
+
+        // 创建一个简单的模拟摘要器用于测试
+        struct MockDigestForReader {
+            output_bits: usize,
+            result: String,
+            reset_called: bool,
+            finalize_called: bool,
+        }
+
+        impl CtDigest for MockDigestForReader {
+            fn new() -> Self {
+                Self {
+                    output_bits: 128,
+                    result: "test_digest_result".to_string(),
+                    reset_called: false,
+                    finalize_called: false,
+                }
+            }
+
+            fn output_bits(&self) -> usize {
+                self.output_bits
+            }
+
+            fn result_str(&mut self) -> String {
+                self.result.clone()
+            }
+
+            fn reset(&mut self) {
+                self.reset_called = true;
+            }
+
+            fn hash_update(&mut self, _data: &[u8]) {
+                // 实际应用中会更新摘要状态
+            }
+
+            fn hash_finalize(&mut self, out: &mut [u8]) {
+                self.finalize_called = true;
+                // 在测试中，只需填充一些数据即可
+                let bytes = b"test_hash_result";
+                let len = std::cmp::min(out.len(), bytes.len());
+                out[..len].copy_from_slice(&bytes[..len]);
+            }
+        }
+
+        #[test]
+        fn test_digest_reader_basic_functionality() {
+            // 创建一个带数据的缓冲区
+            let data = b"test data for digest";
+            let mut reader = BufReader::new(Cursor::new(data.to_vec()));
+
+            // 创建摘要器
+            let mut digest_impl = MockDigestForReader::new();
+            digest_impl.output_bits = 128; // 设置为固定输出长度
+            let mut digest: Box<dyn CtDigest> = Box::new(digest_impl);
+
+            // 调用函数
+            let result = digest_reader(&mut digest, &mut reader, true, 128).unwrap();
+
+            // 验证结果
+            assert_eq!(result, "test_digest_result");
+
+            // 使用unsafe块包裹不安全代码
+            unsafe {
+                assert!(
+                    (&*(digest.as_ref() as *const _ as *const MockDigestForReader)).reset_called,
+                    "reset should be called"
+                );
+            }
+        }
+
+        #[test]
+        fn test_digest_reader_empty_input() {
+            // 创建一个空的缓冲区
+            let data = b"";
+            let mut reader = BufReader::new(Cursor::new(data.to_vec()));
+
+            // 创建摘要器
+            let mut digest_impl = MockDigestForReader::new();
+            digest_impl.output_bits = 128;
+            let mut digest: Box<dyn CtDigest> = Box::new(digest_impl);
+
+            // 调用函数
+            let result = digest_reader(&mut digest, &mut reader, true, 128).unwrap();
+
+            // 验证结果
+            assert_eq!(result, "test_digest_result");
+
+            // a使用unsafe块包裹不安全代码
+            unsafe {
+                assert!(
+                    (&*(digest.as_ref() as *const _ as *const MockDigestForReader)).reset_called,
+                    "reset should be called"
+                );
+            }
+        }
+
+        #[test]
+        fn test_digest_reader_with_variable_output_length() {
+            // 创建一个带数据的缓冲区
+            let data = b"test data for variable length digest";
+            let mut reader = BufReader::new(Cursor::new(data.to_vec()));
+
+            // 创建摘要器并设置为可变长度输出
+            let mut digest_impl = MockDigestForReader::new();
+            digest_impl.output_bits = 0; // 设置为可变长度输出
+            let mut digest: Box<dyn CtDigest> = Box::new(digest_impl);
+
+            // 调用函数，指定输出位数
+            let result = digest_reader(&mut digest, &mut reader, true, 256).unwrap();
+
+            // 验证结果是否是十六进制编码的字符串
+            assert!(
+                !result.is_empty() && result.chars().all(|c| c.is_ascii_hexdigit()),
+                "Result should be a non-empty hex string"
+            );
+        }
+
+        #[test]
+        fn test_digest_reader_binary_vs_text_mode() {
+            // 创建一个带有Windows行尾的缓冲区
+            let data = b"line1\r\nline2\r\nline3";
+            let mut reader = BufReader::new(Cursor::new(data.to_vec()));
+
+            // 创建摘要器
+            let mut digest_impl = MockDigestForReader::new();
+            let mut digest: Box<dyn CtDigest> = Box::new(digest_impl);
+
+            // 使用二进制模式
+            let binary_result = digest_reader(&mut digest, &mut reader, true, 128).unwrap();
+
+            // 重置读取器和摘要器
+            reader = BufReader::new(Cursor::new(data.to_vec()));
+            digest_impl = MockDigestForReader::new();
+            let mut digest: Box<dyn CtDigest> = Box::new(digest_impl);
+
+            // 使用文本模式
+            let text_result = digest_reader(&mut digest, &mut reader, false, 128).unwrap();
+
+            // 验证结果 - 在实际应用中，这两种模式的结果应该不同
+            // 但在我们的模拟中，它们是相同的，因为我们没有实际实现换行符处理
+            assert_eq!(binary_result, text_result);
+        }
+
+        #[test]
+        fn test_digest_reader_large_input() {
+            // 创建一个较大的数据缓冲区
+            let mut data = Vec::with_capacity(100000);
+            for i in 0..10000 {
+                data.extend_from_slice(format!("line {}\n", i).as_bytes());
+            }
+            let mut reader = BufReader::new(Cursor::new(data));
+
+            // 创建摘要器
+            let digest_impl = MockDigestForReader::new();
+            let mut digest: Box<dyn CtDigest> = Box::new(digest_impl);
+
+            // 调用函数
+            let result = digest_reader(&mut digest, &mut reader, true, 128).unwrap();
+
+            // 验证结果
+            assert_eq!(result, "test_digest_result");
+
+            // 使用unsafe块包裹不安全代码
+            unsafe {
+                assert!(
+                    (&*(digest.as_ref() as *const _ as *const MockDigestForReader)).reset_called,
+                    "reset should be called"
+                );
+            }
+        }
+    }
 }

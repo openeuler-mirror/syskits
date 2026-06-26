@@ -184,6 +184,7 @@ feat_os_unix = [
   "runcon",
   "ptx",
   "pinky",
+  "od",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -404,6 +405,8 @@ shred = { optional = true, package = "ct_shred", path = "src/ct/shred" }
 runcon = { optional = true, package = "ct_runcon", path = "src/ct/runcon" }
 ptx = { optional = true, package = "ct_ptx", path = "src/ct/ptx" }
 pinky = { optional = true, package = "ct_pinky", path = "src/ct/pinky" }
+od = { optional = true, package = "ct_od", path = "src/ct/od" }
+
 [dev-dependencies]
 conv = "0.3"
 filetime = { workspace = true }

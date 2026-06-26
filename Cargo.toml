@@ -182,6 +182,7 @@ feat_os_unix = [
   "shuf",
   "shred",
   "runcon",
+  "ptx",
 ]
 
 # "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
@@ -400,6 +401,7 @@ join = { optional = true, package = "ct_join", path = "src/ct/join" }
 shuf = { optional = true, package = "ct_shuf", path = "src/ct/shuf" }
 shred = { optional = true, package = "ct_shred", path = "src/ct/shred" }
 runcon = { optional = true, package = "ct_runcon", path = "src/ct/runcon" }
+ptx = { optional = true, package = "ct_ptx", path = "src/ct/ptx" }
 
 [dev-dependencies]
 conv = "0.3"

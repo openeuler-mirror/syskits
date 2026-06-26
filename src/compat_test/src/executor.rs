@@ -253,14 +253,7 @@ impl CommandExecutor {
             SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
         };
 
-        let cmd = if !tstdin.is_empty() {
-            // 构建带有管道的命令
-            format!("echo '{}' | {}", tstdin, cmd)
-        } else {
-            cmd.clone()
-        };
-
-        sandbox.execute_command(&cmd, &args, true)
+        sandbox.execute_command(&cmd, &args, Some(tstdin), true)
     }
 
     /// 在沙箱中执行 GNU coreutils 命令
@@ -280,15 +273,7 @@ impl CommandExecutor {
             sandbox.add_env("PATH", &new_path);
         }
 
-        let cmd = command.to_string();
-        let cmd = if !tstdin.is_empty() {
-            // 构建带有管道的命令
-            format!("echo '{}' | {}", tstdin, command)
-        } else {
-            cmd.clone()
-        };
-        // 沙箱中执行命令
-        sandbox.execute_command(&cmd, args, true)
+        sandbox.execute_command(command, args, Some(tstdin), true)
     }
 }
 

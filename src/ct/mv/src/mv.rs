@@ -22,6 +22,7 @@ use crate::opt_flags::OPT_PROGRESS;
 use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
+use crate::opt_flags::OPT_CONTEXT;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
@@ -46,6 +47,7 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
+
 
 // 这些枚举（enums）被暴露出来是为了让其他项目（例如 nushell）能够创建一个 Options 值，这需要这些枚举。
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
@@ -104,6 +106,10 @@ pub struct MvOpts {
     /// 在移动操作期间显示进度条，适用于长时间运行的移动操作。
     /// '-g, --progress'
     pub progress_bar: bool,
+
+    /// 是否设置目标文件的 SELinux 安全上下文为默认类型
+    /// '-Z, --context'
+    pub set_context: bool,
 }
 
 /// 表示遇到目标位置已存在文件时的可能行为。
@@ -131,6 +137,7 @@ mod opt_flags {
     pub const OPT_VERBOSE: &str = "verbose";
     pub const OPT_PROGRESS: &str = "progress";
     pub const ARG_FILES: &str = "files";
+    pub const OPT_CONTEXT: &str = "context";
 }
 
 #[ctcore::main]
@@ -189,6 +196,7 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
         verbose: args_match.get_flag(OPT_VERBOSE),
         strip_slashes: args_match.get_flag(OPT_STRIP_TRAILING_SLASHES),
         progress_bar: args_match.get_flag(OPT_PROGRESS),
+        set_context: args_match.get_flag(OPT_CONTEXT),
     };
 
     mv(&arg_files[..], &opts)
@@ -278,6 +286,11 @@ fn mv_args_init() -> Vec<Arg> {
                 "Display a progress bar. \n\
                 Note: this feature is not supported by GNU coreutils.",
             )
+            .action(ArgAction::SetTrue),
+        Arg::new(OPT_CONTEXT)
+            .short('Z')
+            .long(OPT_CONTEXT)
+            .help("set SELinux security context of destination file to default type")
             .action(ArgAction::SetTrue),
         Arg::new(ARG_FILES)
             .action(ArgAction::Append)
@@ -719,7 +732,44 @@ fn mv_rename(
             None => println!("{message}"),
         };
     }
+
+    // 如果启用了 context 选项，设置目标文件的 SELinux 上下文
+    #[cfg(target_os = "linux")]
+    if options.set_context {
+        if let Err(e) = set_default_context(to_path) {
+            eprintln!("warning: failed to set security context for {}: {}", 
+                to_path.quote(), e);
+        }
+    }
+
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_default_context(path: &Path) -> io::Result<()> {
+    #[cfg(feature = "selinux")]
+    {
+        // 获取文件的默认安全上下文
+        let default_context = match selinux::Context::from_path(path) {
+            Ok(ctx) => ctx,
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+        };
+
+        // 设置文件的安全上下文
+        if let Err(e) = selinux::set_context(path, &default_context) {
+            return Err(io::Error::new(io::ErrorKind::Other, e));
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "selinux"))]
+    {
+        // 当未启用 selinux feature 时，提供警告信息
+        eprintln!("warning: failed to set security context for {}: SELinux support not enabled", 
+            path.quote());
+        Ok(())
+    }
 }
 /// 尝试使用 `fs::rename` 更改文件或目录名称，如果失败，则尝试通过复制和删除来备份。
 ///
@@ -1623,6 +1673,7 @@ mod tests {
                 verbose: false,
                 strip_slashes,
                 progress_bar: false,
+                set_context: false,
             }
         }
 

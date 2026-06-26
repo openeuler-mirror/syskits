@@ -19,6 +19,7 @@ clap = { workspace = true }
 ctcore = { workspace = true, features = ["ranges"] }
 memchr = { workspace = true }
 bstr = { workspace = true }
+unicode-segmentation = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

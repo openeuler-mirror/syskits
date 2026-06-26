@@ -1,0 +1,28 @@
+[package]
+name = "ct_runcon"
+
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+description = "runcon ~ (ctutils) run command with specified security context"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/runcon"
+
+[lib]
+path = "src/runcon.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "fs", "perms"] }
+selinux = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "runcon"
+path = "src/main.rs"

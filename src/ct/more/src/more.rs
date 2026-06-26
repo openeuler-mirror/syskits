@@ -717,6 +717,8 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn test_break_lines_long() {
@@ -809,5 +811,117 @@ mod tests {
         ];
         let pattern = Some(String::from("pattern"));
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_more_main() {
+        use std::ffi::OsString;
+        let temp = tempdir().unwrap();
+
+        // 创建测试文件
+        let test_file = temp.path().join("test.txt");
+        fs::write(&test_file, "Line 1\nLine 2\nLine 3\n").unwrap();
+
+        // 测试基本功能 - 添加 no-pause 选项
+        assert!(
+            more_main(
+                std::iter::once(OsString::from("more")).chain(
+                    ["-p", test_file.to_str().unwrap()] // -p 表示 no-pause
+                        .iter()
+                        .map(|s| OsString::from(*s))
+                )
+            )
+            .is_ok()
+        );
+
+        // 测试目录 - 目录是允许的，但会显示错误消息
+        let dir = temp.path().join("testdir");
+        fs::create_dir(&dir).unwrap();
+        assert!(
+            more_main(
+                std::iter::once(OsString::from("more")).chain(
+                    ["-p", dir.to_str().unwrap()]
+                        .iter()
+                        .map(|s| OsString::from(*s))
+                )
+            )
+            .is_ok()
+        ); // 改为 is_ok() 因为命令会继续执行
+
+        // 清理文件
+        let _ = fs::remove_file(&test_file);
+    }
+
+    #[test]
+    fn test_more_exec() {
+        // 创建一个模拟的 stdout
+        let mut mock_stdout = setup_term();
+
+        // 创建测试内容
+        let content = "Line 1\nLine 2\nLine 3\n";
+
+        // 创建选项
+        let mut options = MoreOptions {
+            is_clean_print: true,
+            from_line: 0,
+            lines: Some(10),
+            pattern: None,
+            is_print_over: true, // 设置为 true 避免交互
+            is_silent: true,
+            is_squeeze: false,
+        };
+
+        // 测试单文件显示
+        assert!(
+            more_exec(
+                content,
+                &mut mock_stdout,
+                false,
+                Some("test.txt"),
+                None,
+                &mut options
+            )
+            .is_ok()
+        );
+
+        // 测试多文件显示
+        assert!(
+            more_exec(
+                content,
+                &mut mock_stdout,
+                true,
+                Some("test1.txt"),
+                Some("test2.txt"),
+                &mut options
+            )
+            .is_ok()
+        );
+
+        // 测试带模式匹配
+        options.pattern = Some("Line 2".to_string());
+        assert!(
+            more_exec(
+                content,
+                &mut mock_stdout,
+                false,
+                Some("test.txt"),
+                None,
+                &mut options
+            )
+            .is_ok()
+        );
+
+        // 测试空内容
+        assert!(
+            more_exec(
+                "",
+                &mut mock_stdout,
+                false,
+                Some("empty.txt"),
+                None,
+                &mut options
+            )
+            .is_ok()
+        );
     }
 }

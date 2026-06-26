@@ -1983,4 +1983,139 @@ mod tests {
 
         // 临时文件会在变量离开作用域时自动删除
     }
+
+    #[cfg(test)]
+    mod create_sha3_tests {
+        use super::*;
+        use clap::{Arg, Command};
+
+        #[test]
+        fn test_create_sha3_224() {
+            // Test with 224 bits parameter
+            let command = Command::new("test_cmd")
+                .arg(Arg::new("bits")
+                    .long("bits")
+                    .value_name("BITS")
+                    .value_parser(parse_bit_num));
+            
+            let matches = command.try_get_matches_from(["test_cmd", "--bits", "224"]).unwrap();
+            
+            let result = create_sha3(&matches);
+            assert!(result.is_ok());
+            
+            let (name, digest, bits) = result.unwrap();
+            assert_eq!(name, "SHA3-224");
+            assert_eq!(bits, 224);
+            assert_eq!(digest.output_bits(), 224);
+        }
+
+        #[test]
+        fn test_create_sha3_256() {
+            // Test with 256 bits parameter
+            let command = Command::new("test_cmd")
+                .arg(Arg::new("bits")
+                    .long("bits")
+                    .value_name("BITS")
+                    .value_parser(parse_bit_num));
+            
+            let matches = command.try_get_matches_from(["test_cmd", "--bits", "256"]).unwrap();
+            
+            let result = create_sha3(&matches);
+            assert!(result.is_ok());
+            
+            let (name, digest, bits) = result.unwrap();
+            assert_eq!(name, "SHA3-256");
+            assert_eq!(bits, 256);
+            assert_eq!(digest.output_bits(), 256);
+        }
+
+        #[test]
+        fn test_create_sha3_384() {
+            // Test with 384 bits parameter
+            let command = Command::new("test_cmd")
+                .arg(Arg::new("bits")
+                    .long("bits")
+                    .value_name("BITS")
+                    .value_parser(parse_bit_num));
+            
+            let matches = command.try_get_matches_from(["test_cmd", "--bits", "384"]).unwrap();
+            
+            let result = create_sha3(&matches);
+            assert!(result.is_ok());
+            
+            let (name, digest, bits) = result.unwrap();
+            assert_eq!(name, "SHA3-384");
+            assert_eq!(bits, 384);
+            assert_eq!(digest.output_bits(), 384);
+        }
+
+        #[test]
+        fn test_create_sha3_512() {
+            // Test with 512 bits parameter
+            let command = Command::new("test_cmd")
+                .arg(Arg::new("bits")
+                    .long("bits")
+                    .value_name("BITS")
+                    .value_parser(parse_bit_num));
+            
+            let matches = command.try_get_matches_from(["test_cmd", "--bits", "512"]).unwrap();
+            
+            let result = create_sha3(&matches);
+            assert!(result.is_ok());
+            
+            let (name, digest, bits) = result.unwrap();
+            assert_eq!(name, "SHA3-512");
+            assert_eq!(bits, 512);
+            assert_eq!(digest.output_bits(), 512);
+        }
+
+        #[test]
+        fn test_create_sha3_invalid_bits() {
+            // Test with invalid bits parameter (not 224, 256, 384, or 512)
+            let command = Command::new("test_cmd")
+                .arg(Arg::new("bits")
+                    .long("bits")
+                    .value_name("BITS")
+                    .value_parser(parse_bit_num));
+            
+            let matches = command.try_get_matches_from(["test_cmd", "--bits", "123"]).unwrap();
+            
+            let result = create_sha3(&matches);
+            assert!(result.is_err());
+            
+            // Should mention the expected valid bit values
+            match result {
+                Err(err) => {
+                    let err_str = err.to_string();
+                    assert!(err_str.contains("Invalid output size for SHA3"));
+                    assert!(err_str.contains("224"));
+                    assert!(err_str.contains("256"));
+                    assert!(err_str.contains("384"));
+                    assert!(err_str.contains("512"));
+                },
+                _ => panic!("Expected error"),
+            }
+        }
+
+        #[test]
+        fn test_create_sha3_missing_bits() {
+            // Test with missing bits parameter
+            let command = Command::new("test_cmd")
+                .arg(Arg::new("bits")
+                    .long("bits")
+                    .value_name("BITS")
+                    .value_parser(parse_bit_num));
+            
+            let matches = command.try_get_matches_from(["test_cmd"]).unwrap();
+            
+            let result = create_sha3(&matches);
+            assert!(result.is_err());
+            
+            // Should mention --bits is required
+            match result {
+                Err(err) => assert!(err.to_string().contains("--bits required for SHA3")),
+                _ => panic!("Expected error"),
+            }
+        }
+    }
 }

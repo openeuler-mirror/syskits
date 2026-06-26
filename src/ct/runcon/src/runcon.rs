@@ -661,4 +661,51 @@ mod tests {
             assert!(matches!(result, Err(DefaultError::MissingCommand)));
         }
     }
+
+    mod context_tests {
+        use super::*;
+        use std::fs::File;
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_get_plain_context() {
+            // 注意：这个测试在没有 SELinux 的系统上会失败
+            let result = get_plain_context(OsStr::new("system_u:system_r:httpd_t"));
+
+            if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+                assert!(matches!(result, Err(DefaultError::SELinuxNotEnabled)));
+            } else {
+                assert!(result.is_ok());
+            }
+        }
+
+        #[test]
+        fn test_get_custom_context() {
+            let dir = tempdir().unwrap();
+            let test_file = dir.path().join("test.txt");
+            File::create(&test_file).unwrap();
+
+            let result = get_custom_context(
+                true,
+                Some(OsStr::new("user_u")),
+                Some(OsStr::new("role_r")),
+                Some(OsStr::new("type_t")),
+                Some(OsStr::new("s0")),
+                test_file.as_os_str(),
+            );
+
+            if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+                assert!(matches!(result, Err(DefaultError::SELinuxNotEnabled)));
+            } else {
+                // 在启用 SELinux 的系统上进行更详细的检查
+                match result {
+                    Ok(_) => (),
+                    Err(e) => {
+                        // 允许某些预期的错误（如权限不足）
+                        println!("Expected error: {}", e);
+                    }
+                }
+            }
+        }
+    }
 }

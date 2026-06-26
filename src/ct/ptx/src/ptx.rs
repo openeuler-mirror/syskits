@@ -1366,4 +1366,50 @@ mod tests {
             assert_eq!(head, "");
         }
     }
+
+    mod input_processing_tests {
+        use super::*;
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_ptx_read_input() {
+            // 创建测试文件
+            let mut file = NamedTempFile::new().unwrap();
+            writeln!(file, "line one\nline two").unwrap();
+
+            let config = PtxConfig {
+                is_gnu_ext: false,
+                ..Default::default()
+            };
+
+            let input_files = vec![file.path().to_str().unwrap().to_string()];
+            let result = ptx_read_input(&input_files, &config).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let content = result.get(file.path().to_str().unwrap()).unwrap();
+            assert_eq!(content.lines, vec!["line one", "line two"]);
+            assert_eq!(content.offset, 0);
+        }
+
+        #[test]
+        fn test_ptx_read_input_multiple_files() {
+            let mut file1 = NamedTempFile::new().unwrap();
+            let mut file2 = NamedTempFile::new().unwrap();
+            writeln!(file1, "file1").unwrap();
+            writeln!(file2, "file2").unwrap();
+
+            let config = PtxConfig {
+                is_gnu_ext: true, // 允许多文件
+                ..Default::default()
+            };
+
+            let input_files = vec![
+                file1.path().to_str().unwrap().to_string(),
+                file2.path().to_str().unwrap().to_string(),
+            ];
+            let result = ptx_read_input(&input_files, &config).unwrap();
+
+            assert_eq!(result.len(), 2);
+        }
+    }
 }

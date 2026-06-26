@@ -934,4 +934,92 @@ mod tests {
             );
         }
     }
+
+    mod wipe_name_tests {
+        use super::*;
+
+        #[test]
+        fn test_wipe_name_basic() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let result = shred_wipe_name(&file_path, false, RemoveMethod::Wipe);
+
+            assert!(result.is_some(), "应该返回新路径");
+            let new_path = result.unwrap();
+            assert!(new_path.exists(), "新文件应该存在");
+            assert_ne!(new_path, file_path, "文件名应该被修改");
+            assert!(!file_path.exists(), "原文件不应该存在");
+
+            // 验证新文件名只包含允许的字符
+            let new_name = new_path.file_name().unwrap().to_str().unwrap();
+            assert!(
+                new_name
+                    .chars()
+                    .all(|c| SHRED_NAME_CHARSET.contains(&(c as u8))),
+                "新文件名应该只包含允许的字符"
+            );
+        }
+
+        #[test]
+        fn test_wipe_name_with_sync() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let result = shred_wipe_name(&file_path, false, RemoveMethod::WipeSync);
+
+            assert!(result.is_some(), "应该返回新路径");
+            let new_path = result.unwrap();
+            assert!(new_path.exists(), "新文件应该存在");
+        }
+
+        #[test]
+        fn test_wipe_name_verbose() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let result = shred_wipe_name(&file_path, true, RemoveMethod::Wipe);
+
+            assert!(result.is_some(), "应该返回新路径");
+            let new_path = result.unwrap();
+            assert!(new_path.exists(), "新文件应该存在");
+        }
+
+        #[test]
+        fn test_wipe_name_decreasing_length() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("longname.txt");
+            fs::write(&file_path, "test data").unwrap();
+
+            let result = shred_wipe_name(&file_path, false, RemoveMethod::Wipe);
+
+            assert!(result.is_some(), "应该返回新路径");
+            let new_path = result.unwrap();
+            let new_name = new_path.file_name().unwrap().to_str().unwrap();
+            assert!(
+                new_name.len() <= "longname.txt".len(),
+                "新文件名应该不长于原文件名"
+            );
+        }
+
+        #[test]
+        fn test_wipe_name_collision_handling() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            let collision_path = dir.path().join("0"); // 可能的目标名字
+
+            fs::write(&file_path, "test data").unwrap();
+            fs::write(&collision_path, "existing file").unwrap();
+
+            let result = shred_wipe_name(&file_path, false, RemoveMethod::Wipe);
+
+            assert!(result.is_some(), "应该返回新路径");
+            let new_path = result.unwrap();
+            assert_ne!(new_path, collision_path, "应该避免文件名冲突");
+            assert!(collision_path.exists(), "不应该覆盖已存在的文件");
+        }
+    }
 }

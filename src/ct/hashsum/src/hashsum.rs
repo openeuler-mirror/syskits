@@ -1695,4 +1695,59 @@ mod tests {
             }
         }
     }
+
+    #[cfg(test)]
+    mod create_check_regexes_tests {
+        use super::*;
+
+        // 创建测试用的HashsumFlags
+        fn create_test_flags(algoname: &'static str, output_bits: usize) -> HashsumFlags {
+            HashsumFlags {
+                algoname,
+                digest: Box::new(MockDigest::new().with_output_bits(output_bits)),
+                output_bits,
+                is_binary: false,
+                is_check: false,
+                is_tag: false,
+                is_nonames: false,
+                is_status: false,
+                is_quiet: false,
+                is_strict: false,
+                is_warn: false,
+                is_zero: false,
+            }
+        }
+
+        #[test]
+        fn test_create_check_regexes_fixed_output_bits() {
+            // 创建具有固定输出位数的标志
+            let flags = create_test_flags("MD5", 128);
+
+            // 调用函数
+            let result = create_check_regexes(&flags);
+
+            // 验证结果
+            assert!(result.is_ok());
+            let (_gnu_re, _bsd_re, bytes_marker) = result.unwrap();
+
+            // 确认bytes_marker是正确格式的
+            assert_eq!(bytes_marker, "{32}"); // 128位 = 32个十六进制字符
+        }
+
+        #[test]
+        fn test_create_check_regexes_variable_output_bits() {
+            // 创建具有可变输出位数的标志
+            let flags = create_test_flags("SHAKE128", 0);
+
+            // 调用函数
+            let result = create_check_regexes(&flags);
+
+            // 验证结果
+            assert!(result.is_ok());
+            let (_, _, bytes_marker) = result.unwrap();
+
+            // 确认bytes_marker是"+"
+            assert_eq!(bytes_marker, "+");
+        }
+    }
 }

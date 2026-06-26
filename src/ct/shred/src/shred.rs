@@ -54,20 +54,34 @@ const SHRED_ABOUT: &str = ct_help_about!("shred.md");
 const SHRED_USAGE: &str = ct_help_usage!("shred.md");
 const SHRED_AFTER_HELP: &str = ct_help_section!("after help", "shred.md");
 
+/// shred 命令的选项常量
 pub mod shred_options {
+    /// 强制写入选项
     pub const SHRED_FORCE: &str = "force";
+    /// 输入文件
     pub const SHRED_FILE: &str = "file";
+    /// 覆写次数
     pub const SHRED_ITERATIONS: &str = "iterations";
+    /// 文件大小
     pub const SHRED_SIZE: &str = "size";
+    /// 同步删除选项
     pub const SHRED_WIPESYNC: &str = "u";
+    /// 删除方式选项
     pub const SHRED_REMOVE: &str = "remove";
+    /// 显示详细信息
     pub const SHRED_VERBOSE: &str = "verbose";
+    /// 精确匹配文件大小
     pub const SHRED_EXACT: &str = "exact";
+    /// 最后用零填充
     pub const SHRED_ZERO: &str = "zero";
 
+    /// 删除方式的具体选项
     pub mod shred_remove {
+        /// 直接删除
         pub const SHRED_UNLINK: &str = "unlink";
+        /// 擦除后删除
         pub const SHRED_WIPE: &str = "wipe";
+        /// 同步擦除后删除
         pub const SHRED_WIPESYNC: &str = "wipesync";
     }
 }

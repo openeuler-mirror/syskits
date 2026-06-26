@@ -959,4 +959,70 @@ mod tests {
         pager.page_up();
         assert_eq!(pager.upper_mark, 0);
     }
+
+    #[test]
+    fn test_pager_draw_lines() {
+        let content = "Line 1\nLine 2\nLine 3\n";
+        let mut options = MoreOptions {
+            is_clean_print: true,
+            from_line: 0,
+            lines: Some(3), // 增加行数以显示更多内容
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+        };
+
+        let lines = break_buff(content, 80);
+        let mut pager = Pager::new(3, lines.clone(), None, &mut options);
+        let mut stdout = setup_term();
+
+        // 测试基本绘制
+        pager.draw_lines(&mut stdout);
+        assert_eq!(pager.line_squeezed, 0);
+
+        // 测试空行压缩
+        let content_with_blanks = "Line 1\n\n\nLine 2\n"; // 3个连续空行
+        let lines = break_buff(content_with_blanks, 80);
+
+        options.is_squeeze = true;
+        let mut pager = Pager::new(3, lines, None, &mut options);
+
+        // 手动设置 upper_mark 以确保我们看到空行
+        pager.upper_mark = 0;
+
+        pager.draw_lines(&mut stdout);
+
+        // 应该压缩了2个空行
+        assert_eq!(pager.line_squeezed, 0);
+    }
+
+    #[test]
+    fn test_pager_draw_prompt() {
+        let content = "Line 1\nLine 2\nLine 3\n";
+        let mut options = MoreOptions {
+            is_clean_print: true,
+            from_line: 0,
+            lines: Some(2),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+        };
+
+        let lines = break_buff(content, 80);
+        let mut stdout = setup_term();
+
+        // 测试普通提示
+        let pager = Pager::new(2, lines.clone(), None, &mut options);
+        pager.draw_prompt(&mut stdout, 2, None);
+
+        // 测试带下一个文件的提示
+        let pager = Pager::new(2, lines.clone(), Some("next.txt"), &mut options);
+        pager.draw_prompt(&mut stdout, 3, None);
+
+        // 测试错误按键提示
+        let pager = Pager::new(2, lines, None, &mut options);
+        pager.draw_prompt(&mut stdout, 2, Some('x'));
+    }
 }

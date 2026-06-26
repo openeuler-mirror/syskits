@@ -708,4 +708,30 @@ mod tests {
             }
         }
     }
+
+    mod execution_tests {
+        use super::*;
+
+        #[test]
+        fn test_execute_command_not_found() {
+            let result = runcon_exec(OsStr::new("nonexistent_command"), &[]);
+            assert!(result.is_err());
+            if let Err(e) = result {
+                assert_eq!(e.as_ref().code(), error_exit_status::RUNCON_NOT_FOUND);
+            }
+        }
+
+        #[test]
+        fn test_execute_command_with_args() {
+            let test_cmd = if cfg!(windows) { "cmd" } else { "true" };
+            let result = runcon_exec(OsStr::new(test_cmd), &[OsString::from("-n")]);
+            assert!(result.is_err());
+            if let Err(e) = result {
+                assert_eq!(
+                    e.as_ref().code(),
+                    error_exit_status::RUNCON_COULD_NOT_EXECUTE
+                );
+            }
+        }
+    }
 }

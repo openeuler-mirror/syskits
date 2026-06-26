@@ -1090,7 +1090,7 @@ impl Write for SplitLineBytesChunkWriter<'_> {
                     // 为了处理倒数第二个分块，我们假装它存在。参见line-bytes.sh。
                     if end_size == buffer.len()
                         && self.num_bytes_remaining_in_current_chunk
-                            < self.chunk_size.try_into().unwrap()
+                            < self.chunk_size.try_into().unwrap_or(usize::MAX)
                         && buffer[buffer.len() - 1] != separator
                     {
                         self.num_bytes_remaining_in_current_chunk = 0;
@@ -1120,7 +1120,7 @@ impl Write for SplitLineBytesChunkWriter<'_> {
                 // （参考上述示例注释中的第0个分块）
                 Some(_)
                     if self.num_bytes_remaining_in_current_chunk
-                        == self.chunk_size.try_into().unwrap() =>
+                        == self.chunk_size.try_into().unwrap_or(usize::MAX) =>
                 {
                     let end = self.num_bytes_remaining_in_current_chunk;
                     let num_bytes_written =

@@ -972,4 +972,31 @@ mod tests {
             assert!(shuf_exec(&mut input, settings).is_err());
         }
     }
+
+    mod find_seps_tests {
+        use super::*;
+
+        #[test]
+        fn test_find_seps_basic() {
+            let mut data = vec![&b"1\n2\n3"[..]];
+            shuf_find_seps(&mut data, b'\n');
+            assert_eq!(data.len(), 3);
+            assert_eq!(data, vec![b"1", b"2", b"3"]);
+        }
+
+        #[test]
+        fn test_find_seps_empty() {
+            let mut data = vec![b"".as_ref()];
+            shuf_find_seps(&mut data, b'\n');
+            assert!(data.is_empty());
+        }
+
+        #[test]
+        fn test_find_seps_no_separator() {
+            let mut data = vec![b"123".as_ref()];
+            shuf_find_seps(&mut data, b'\n');
+            assert_eq!(data.len(), 1);
+            assert_eq!(data, vec![b"123"]);
+        }
+    }
 }

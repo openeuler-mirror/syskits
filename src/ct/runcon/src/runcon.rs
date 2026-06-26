@@ -734,4 +734,21 @@ mod tests {
             }
         }
     }
+
+    mod conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_os_str_to_c_string_valid() {
+            let result = os_str_to_c_string(OsStr::new("test"));
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().to_bytes(), b"test");
+        }
+
+        #[test]
+        fn test_os_str_to_c_string_with_null() {
+            let result = os_str_to_c_string(OsStr::new("test\0string"));
+            assert!(result.is_err());
+        }
+    }
 }

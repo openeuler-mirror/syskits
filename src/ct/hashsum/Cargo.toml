@@ -1,0 +1,27 @@
+[package]
+name = "ct_hashsum"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "hashsum ~ (ctutils) display or check input digests"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct/hashsum"
+
+[lib]
+path = "src/hashsum.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["sum"] }
+memchr = { workspace = true }
+regex = { workspace = true }
+hex = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "hashsum"
+path = "src/main.rs"

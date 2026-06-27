@@ -1,0 +1,138 @@
+{
+"tests": [
+    {
+      "tstdin": "",
+      "command": "sum",
+      "description": "显示或检查 BSD(16位)校验和。",
+      "setup_commands": [
+        "echo -n '' > empty_file.txt"
+      ],
+      "args": ["empty_file.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\n00000     0 empty_file.txt\n\n",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf empty_file.txt"
+      ]
+    },
+    {
+        "tstdin": "",
+        "command": "sum",
+        "description": "测试system v校验和算法",
+        "setup_commands": [
+          "echo -n 'A' > test.txt"
+        ],
+        "args": ["--sysv","test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n65 1 test.txt\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test.txt"
+        ]
+    },
+    {
+        "tstdin": "",
+        "command": "sum",
+        "description": "测试多个文件",
+        "setup_commands": [
+          "echo -n 'hello' > test.txt",
+          "echo -n 'world' > test2.txt",
+          "echo -n 'test' > test3.txt"
+        ],
+        "args": ["test.txt","test2.txt","test3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n08403     1 test.txt\n53451     1 test2.txt\n16597     1 test3.txt\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test.txt test2.txt test3.txt"
+        ]
+    },
+    {
+        "tstdin": "",
+        "command": "sum",
+        "description": "测试--sysv参数多个文件",
+        "setup_commands": [
+          "echo -n 'hello' > test.txt",
+          "echo -n 'world' > test2.txt",
+          "echo -n 'test' > test3.txt"
+        ],
+        "args": ["--sysv","test.txt","test2.txt","test3.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n532 1 test.txt\n552 1 test2.txt\n448 1 test3.txt\n\n",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": [
+          "rm -rf test.txt test2.txt test3.txt"
+        ]
+    }
+    ,
+    {
+        "tstdin": "",
+        "command": "sum",
+        "description": "测试不存在的文件",
+        "setup_commands": [
+        ],
+        "args": ["test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "\nsum: test.txt: No such file or directory\n\n"
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ]
+        },
+        "cleanup_commands": [
+          
+        ]
+    }
+  ]
+}

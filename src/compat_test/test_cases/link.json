@@ -1,0 +1,76 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "link",
+            "description": "基本功能测试",
+            "setup_commands": [
+                "echo 'test' > source_file"
+            ],
+            "args": ["source_file", "target_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file target_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "link",
+            "description": "源文件不存在测试",
+            "args": ["nonexistent_file", "target_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "link: failed to create hard link 'target_file' => 'nonexistent_file': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "link",
+            "description": "目标文件已存在测试",
+            "setup_commands": [
+                "echo 'test' > source_file",
+                "echo 'existing' > target_file"
+            ],
+            "args": ["source_file", "target_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "link: failed to create hard link 'target_file' => 'source_file': File exists\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f source_file target_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "link",
+            "description": "源文件是目录测试",
+            "setup_commands": [
+                "mkdir test_dir"
+            ],
+            "args": ["test_dir", "target_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "link: failed to create hard link 'target_file' => 'test_dir': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir"
+            ]
+        }
+    ]
+} 

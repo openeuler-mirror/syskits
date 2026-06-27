@@ -1477,9 +1477,133 @@ fn digest_reader<T: Read>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::io::Cursor;
     use std::io::Seek;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_tool_implementation() {
+        let hashsum = Hashsum;
+
+        // Test name method
+        assert_eq!(hashsum.name(), "hashsum");
+
+        // Test command method
+        let command = hashsum.command();
+        assert!(command.get_name().contains("hashsum"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("hashsum"), OsString::from("--help")];
+        let result = hashsum.execute(&args);
+        assert!(result.is_err());
+
+        // Also test other implementations
+        let md5sum = Md5sum;
+        assert_eq!(md5sum.name(), "md5sum");
+        assert!(!md5sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("md5sum"), OsString::from("--help")];
+        let result = md5sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha1sum = Sha1sum;
+        assert_eq!(sha1sum.name(), "sha1sum");
+        assert!(!sha1sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha1sum"), OsString::from("--help")];
+        let result = sha1sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha224sum = Sha224sum;
+        assert_eq!(sha224sum.name(), "sha224sum");
+        assert!(!sha224sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha224sum"), OsString::from("--help")];
+        let result = sha224sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha256sum = Sha256sum;
+        assert_eq!(sha256sum.name(), "sha256sum");
+        assert!(!sha256sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha256sum"), OsString::from("--help")];
+        let result = sha256sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha384sum = Sha384sum;
+        assert_eq!(sha384sum.name(), "sha384sum");
+        assert!(!sha384sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha384sum"), OsString::from("--help")];
+        let result = sha384sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha512sum = Sha512sum;
+        assert_eq!(sha512sum.name(), "sha512sum");
+        assert!(!sha512sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha512sum"), OsString::from("--help")];
+        let result = sha512sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha3_224sum = Sha3_224sum;
+        assert_eq!(sha3_224sum.name(), "sha3-224sum");
+        assert!(!sha3_224sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha3-224sum"), OsString::from("--help")];
+        let result = sha3_224sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha3_256sum = Sha3_256sum;
+        assert_eq!(sha3_256sum.name(), "sha3-256sum");
+        assert!(!sha3_256sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha3-256sum"), OsString::from("--help")];
+        let result = sha3_256sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha3_384sum = Sha3_384sum;
+        assert_eq!(sha3_384sum.name(), "sha3-384sum");
+        assert!(!sha3_384sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha3-384sum"), OsString::from("--help")];
+        let result = sha3_384sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha3_512sum = Sha3_512sum;
+        assert_eq!(sha3_512sum.name(), "sha3-512sum");
+        assert!(!sha3_512sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha3-512sum"), OsString::from("--help")];
+        let result = sha3_512sum.execute(&args);
+        assert!(result.is_err());
+
+        let b2sum = B2sum;
+        assert_eq!(b2sum.name(), "b2sum");
+        assert!(!b2sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("b2sum"), OsString::from("--help")];
+        let result = b2sum.execute(&args);
+        assert!(result.is_err());
+
+        let sha3sum = Sha3sum;
+        assert_eq!(sha3sum.name(), "sha3sum");
+        assert!(!sha3sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("sha3sum"), OsString::from("--help")];
+        let result = sha3sum.execute(&args);
+        assert!(result.is_err());
+
+        let shake128sum = Shake128sum;
+        assert_eq!(shake128sum.name(), "shake128sum");
+        assert!(!shake128sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("shake128sum"), OsString::from("--help")];
+        let result = shake128sum.execute(&args);
+        assert!(result.is_err());
+
+        let shake256sum = Shake256sum;
+        assert_eq!(shake256sum.name(), "shake256sum");
+        assert!(!shake256sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("shake256sum"), OsString::from("--help")];
+        let result = shake256sum.execute(&args);
+        assert!(result.is_err());
+
+        let b3sum = B3sum;
+        assert_eq!(b3sum.name(), "b3sum");
+        assert!(!b3sum.command().get_name().is_empty());
+        let args: Vec<OsString> = vec![OsString::from("b3sum"), OsString::from("--help")];
+        let result = b3sum.execute(&args);
+        assert!(result.is_err());
+    }
 
     // 模拟CtDigest trait用于测试
     #[derive(Clone)]

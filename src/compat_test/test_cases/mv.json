@@ -127,6 +127,137 @@
         "cleanup_commands": [
             "rm -rf file2.txt existing.txt"
         ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv详细输出功能",
+        "setup_commands": [
+            "mkdir test_dir",
+            "echo 'new content' > file2.txt"
+        ],
+        "args": ["-v", "file2.txt", "test_dir"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": true,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf file2.txt test_dir"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv更新模式-1",
+        "setup_commands": [
+            "echo 'old content' > old_file.txt",
+            "sleep 1",
+            "echo 'new content' > new_file.txt"
+        ],
+        "args": ["-u", "new_file.txt", "old_file.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat old_file.txt",
+              "expected_exit": 0,
+              "expected_stdout": "new content"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf old_file.txt new_file.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv更新模式-2",
+        "setup_commands": [
+            "echo 'old content' > old_file.txt",
+            "sleep 1",
+            "echo 'new content' > new_file.txt"
+        ],
+        "args": ["-u" , "old_file.txt", "new_file.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "cat new_file.txt",
+              "expected_exit": 0,
+              "expected_stdout": "new content"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf old_file.txt new_file.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv指定目标目录",
+        "setup_commands": [
+            "mkdir dest_dir",
+            "touch file1.txt file2.txt"
+        ],
+        "args": ["-t", "dest_dir", "file1.txt", "file2.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "ls -l dest_dir/",
+              "expected_exit": 0,
+              "expected_stdout": "file1.txt file2.txt"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf dest_dir",
+            "rm -rf file1.txt file2.txt"
+        ]
       }
     ]
 }

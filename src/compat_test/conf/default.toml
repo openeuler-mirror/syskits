@@ -55,7 +55,13 @@ default_commands = [
     "rmdir",
     "rm",
     "readlink",
-    "printf"
+    "printf",
+    "stat",
+    "printenv",
+    "paste",
+    "nproc",
+    "nohup",
+    "pinky"
 ]
 
 # 测试环境配置

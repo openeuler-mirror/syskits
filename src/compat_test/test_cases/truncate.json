@@ -1,0 +1,107 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "基本功能测试 - 创建新文件并设置大小",
+            "setup_commands": [
+                "rm -f test.txt"
+            ],
+            "args": ["-s", "1024", "test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s test.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "--no-create 参数测试 - 不存在的文件",
+            "setup_commands": [
+                "rm -f nonexist.txt"
+            ],
+            "args": ["-c", "-s", "1024", "nonexist.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: nonexist.txt: No such file or directory"
+                },
+                "verifications": [
+                    {
+                        "command": "test -f nonexist.txt",
+                        "expected_exit": 1,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "--io-blocks 参数测试",
+            "setup_commands": [
+                "dd if=/dev/zero of=block.txt bs=512 count=1"
+            ],
+            "args": ["-o", "-s", "2", "block.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s block.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f block.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "--reference 参数测试",
+            "setup_commands": [
+                "dd if=/dev/zero of=ref.txt bs=1024 count=2",
+                "touch target.txt"
+            ],
+            "args": ["-r", "ref.txt", "target.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s target.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "2048"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f ref.txt target.txt"
+            ]
+        }
+    ]
+}

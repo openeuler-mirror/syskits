@@ -16,6 +16,8 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 path = "src/date.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true }
@@ -29,8 +31,8 @@ libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
-  "Win32_Foundation",
-  "Win32_System_SystemInformation",
+    "Win32_Foundation",
+    "Win32_System_SystemInformation",
 ] }
 
 [[bin]]

@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 /// join 命令的实现 - 合并两个有序文件的相关行
 ///
 /// # 功能描述
@@ -33,12 +34,15 @@
 /// - 默认使用第一个字段作为连接键
 /// - 文件必须使用相同的字段分隔符
 use clap::builder::ValueParser;
+
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
+use ctcore::ct_crash_if_err;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::{ct_crash_if_err, ct_format_usage, ct_help_about, ct_help_usage};
 use memchr::{memchr_iter, memchr3_iter};
 use std::cmp::Ordering;
 use std::error::Error;
@@ -49,10 +53,7 @@ use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout}
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-
-const JOIN_ABOUT: &str = ct_help_about!("join.md");
-const JOIN_USAGE: &str = ct_help_usage!("join.md");
-
+use sys_locale::get_locale;
 #[derive(Debug)]
 enum JoinError {
     IOError(std::io::Error),
@@ -876,6 +877,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn join_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let settings = JoinSettings::new(&matches)?;
@@ -924,24 +927,24 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .num_args(1)
             .value_parser(["1", "2"])
             .value_name("FILENUM")
-            .help("like -a FILENUM, but suppress joined output lines"),
+            .help(t!("join.clap.v")),
         Arg::new("e")
             .short('e')
             .value_name("EMPTY")
-            .help("replace missing input fields with EMPTY"),
+            .help(t!("join.clap.e")),
         Arg::new("i")
             .short('i')
             .long("ignore-case")
-            .help("ignore differences in case when comparing fields")
+            .help(t!("join.clap.i"))
             .action(ArgAction::SetTrue),
         Arg::new("j")
             .short('j')
             .value_name("FIELD")
-            .help("equivalent to '-1 FIELD -2 FIELD'"),
+            .help(t!("join.clap.j")),
         Arg::new("o")
             .short('o')
             .value_name("FORMAT")
-            .help("obey FORMAT while constructing output line"),
+            .help(t!("join.clap.o")),
         Arg::new("t")
             .short('t')
             .value_name("CHAR")
@@ -950,11 +953,11 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         Arg::new("1")
             .short('1')
             .value_name("FIELD")
-            .help("join on this FIELD of file 1"),
+            .help(t!("join.clap.1")),
         Arg::new("2")
             .short('2')
             .value_name("FIELD")
-            .help("join on this FIELD of file 2"),
+            .help(t!("join.clap.2")),
         Arg::new("check-order")
             .long("check-order")
             .help(
@@ -964,7 +967,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .action(ArgAction::SetTrue),
         Arg::new("nocheck-order")
             .long("nocheck-order")
-            .help("do not check that the input is correctly sorted")
+            .help(t!("join.clap.nocheck - order"))
             .action(ArgAction::SetTrue),
         Arg::new("header")
             .long("header")
@@ -976,7 +979,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         Arg::new("z")
             .short('z')
             .long("zero-terminated")
-            .help("line delimiter is NUL, not newline")
+            .help(t!("join.clap.z"))
             .action(ArgAction::SetTrue),
         Arg::new("file1")
             .required(true)
@@ -992,8 +995,8 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(JOIN_ABOUT)
-        .override_usage(ct_format_usage(JOIN_USAGE))
+        .about(t!("join.about"))
+        .override_usage(t!("join.usage"))
         .infer_long_args(true)
         .args(args)
 }

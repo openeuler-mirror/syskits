@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use chrono::{DateTime, Local};
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -25,8 +26,6 @@ use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
-
-extern crate rust_i18n;
 
 // 声明 i18n 宏和初始化函数
 rust_i18n::i18n!("locales", fallback = "zh-CN");

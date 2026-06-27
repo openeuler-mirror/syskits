@@ -9,23 +9,25 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
-
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
+use rust_i18n::t;
+use sys_locale::get_locale;
+
+// 声明 i18n 宏和初始化函数
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 #[cfg(target_os = "linux")]
 mod splice;
-
-const YES_ABOUT: &str = ct_help_about!("yes.md");
-const YES_USAGE: &str = ct_help_usage!("yes.md");
 
 // 在某些系统上，使用更小或更大的缓冲区可能会提供更好的性能，当前设置满足需求
 const YES_BUF_SIZE: usize = 16 * 1024;
@@ -48,6 +50,10 @@ impl Tool for Yes {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
     yes_main(args)
 }
 
@@ -62,7 +68,10 @@ pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
         if matches!(err.kind(), io::ErrorKind::BrokenPipe) {
             Ok(())
         } else {
-            Err(CtSimpleError::new(1, format!("standard output: {err}")))
+            Err(CtSimpleError::new(
+                1,
+                t!("ct_yes.errors.stdout", error = err.to_string()),
+            ))
         }
     } else {
         Ok(())
@@ -72,8 +81,8 @@ pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = YES_ABOUT;
-    let usage_description = ct_format_usage(YES_USAGE);
+    let application_info = t!("ct_yes.about");
+    let usage_description = t!("ct_yes.usage");
     let arg = Arg::new("STRING")
         .value_parser(ValueParser::os_string())
         .action(ArgAction::Append);
@@ -83,6 +92,22 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .help(t!("ct_yes.clap.help"))
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .help(t!("ct_yes.clap.version"))
+                .action(ArgAction::Version),
+        )
         .arg(arg)
 }
 
@@ -116,7 +141,7 @@ fn yes_args_into_buff<'a>(
         for part_option in itertools::intersperse(iter.map(|os_str| os_str.to_str()), Some(" ")) {
             let b = match part_option {
                 Some(p) => p.as_bytes(),
-                None => return Err("arguments contain invalid UTF-8".into()),
+                None => return Err(t!("ct_yes.errors.invalid_utf8").into()),
             };
             buffer.extend_from_slice(b);
         }
@@ -177,6 +202,7 @@ pub fn yes_exec(bytes_data: &[u8]) -> io::Result<()> {
 mod tests {
     use super::*;
     use clap::error::ErrorKind;
+    use rust_i18n::t;
     use std::ffi::OsString;
 
     #[test]
@@ -513,5 +539,17 @@ mod tests {
             .unwrap();
             assert_eq!(String::from_utf8(v).unwrap(), "fooa barb    bazz quxw\n");
         }
+    }
+    #[test]
+    fn test_i18n_errors() {
+        // Test English errors
+        rust_i18n::set_locale("en-US");
+        let err = t!("ct_yes.errors.invalid_utf8");
+        assert_eq!(err, "Arguments contain invalid UTF-8");
+
+        // Test Chinese errors
+        rust_i18n::set_locale("zh-CN");
+        let err = t!("ct_yes.errors.invalid_utf8");
+        assert_eq!(err, "参数包含无效的UTF-8字符");
     }
 }

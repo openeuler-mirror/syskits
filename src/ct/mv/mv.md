@@ -19,6 +19,9 @@ to update timestamps; this avoids duplicate work if several `mv -u` commands are
 and destination. This option is ignored if the `-n` or `--no-clobber` option is also specified. which gives more control
 over which existing files in the destination are replaced, and its value can be one of the following:
 
-* `all`    This is the default operation when an `--update` option is not specified, and results in all existing files in the destination being replaced.
-* `none`   This is similar to the `--no-clobber` option, in that no files in the destination are replaced, but also skipping a file does not induce a failure.
-* `older`  This is the default operation when `--update` is specified, and results in files being replaced if they’re older than the corresponding source file.
+* `all`    This is the default operation when an `--update` option is not specified, and results in all existing files
+  in the destination being replaced.
+* `none`   This is similar to the `--no-clobber` option, in that no files in the destination are replaced, but also
+  skipping a file does not induce a failure.
+* `older`  This is the default operation when `--update` is specified, and results in files being replaced if they’re
+  older than the corresponding source file.

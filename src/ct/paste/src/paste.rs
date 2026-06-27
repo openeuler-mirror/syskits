@@ -15,18 +15,18 @@
 //! 如果指定了 -d 选项，则使用指定的字符代替制表符分隔各个行。
 //! 如果指定了 -z 选项，则使用 NUL 字符代替换行符作为行分隔符。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write, stdin, stdout};
 use std::path::Path;
-
-const PASTE_ABOUT: &str = ct_help_about!("paste.md");
-const PASTE_USAGE: &str = ct_help_usage!("paste.md");
+use sys_locale::get_locale;
 
 mod paste_flags {
     pub const PASTE_DELIMITER: &str = "delimiters";
@@ -246,6 +246,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = PasteFlags::new(&matches)?;
     flags.validate_delimiters()?;
@@ -265,18 +268,18 @@ fn paste_exec<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = PASTE_ABOUT;
-    let usage_description = ct_format_usage(PASTE_USAGE);
+    let application_info = t!("paste.about");
+    let usage_description = t!("paste.usage");
     let args = vec![
         Arg::new(paste_flags::PASTE_SERIAL)
             .long(paste_flags::PASTE_SERIAL)
             .short('s')
-            .help("paste one file at a time instead of in parallel")
+            .help(t!("paste.clap.paste_serial"))
             .action(ArgAction::SetTrue),
         Arg::new(paste_flags::PASTE_DELIMITER)
             .long(paste_flags::PASTE_DELIMITER)
             .short('d')
-            .help("reuse characters from LIST instead of TABs")
+            .help(t!("paste.clap.paste_delimiter"))
             .value_name("LIST")
             .default_value("\t")
             .hide_default_value(true),
@@ -288,7 +291,7 @@ pub fn ct_app() -> Command {
         Arg::new(paste_flags::PASTE_ZERO_TERMINATED)
             .long(paste_flags::PASTE_ZERO_TERMINATED)
             .short('z')
-            .help("line delimiter is NUL, not newline")
+            .help(t!("paste.clap.paste_zero_terminated"))
             .action(ArgAction::SetTrue),
     ];
 

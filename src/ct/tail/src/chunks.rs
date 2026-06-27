@@ -145,7 +145,7 @@ impl TailBytesChunk {
     ///
     /// * `chunk`: The chunk to create a new `BytesChunk` chunk from
     /// * `offset`: Start to copy the old chunk's buffer from this position. May not be larger
-    ///             than `chunk.bytes`.
+    ///   than `chunk.bytes`.
     ///
     /// # Examples
     ///
@@ -481,7 +481,7 @@ impl TailLinesChunk {
     /// # Arguments
     ///
     /// * `offset`: the offset in number of lines. If offset is 0 then 0 is returned, if larger than
-    ///             the contained lines then self.bytes is returned.
+    ///   the contained lines then self.bytes is returned.
     ///
     /// # Examples
     ///

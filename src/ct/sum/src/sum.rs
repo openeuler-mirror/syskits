@@ -16,18 +16,19 @@
 //! 2. 计算文件的块数：
 //!    计算文件的大小，并以块的形式报告。块的大小可以是 512 字节（System V 算法）或 1024 字节（BSD 算法）。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::ct_show;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, stdin};
 use std::path::Path;
-
-const SUM_USAGE: &str = ct_help_usage!("sum.md");
-const SUM_ABOUT: &str = ct_help_about!("sum.md");
+use sys_locale::get_locale;
 
 // 这个可以被 usize::div_ceil 替代，一旦它稳定下来。
 // 这种实现方式针对 b 是一个常量的情况进行了优化，
@@ -131,6 +132,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let files: Vec<String> = if let Some(v) = matches.get_many::<String>(sum_flags::SUM_FILE) {
         v.cloned().collect()
@@ -173,8 +176,8 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = SUM_ABOUT;
-    let usage_description = ct_format_usage(SUM_USAGE);
+    let application_info = t!("sum.about");
+    let usage_description = t!("sum.usage");
     let args = vec![
         Arg::new(sum_flags::SUM_FILE)
             .action(ArgAction::Append)
@@ -182,12 +185,12 @@ pub fn ct_app() -> Command {
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(sum_flags::SUM_BSD_COMPATIBLE)
             .short('r')
-            .help("use the BSD sum algorithm, use 1K blocks (default)")
+            .help(t!("sum.clap.sum_bsd_compatible"))
             .action(ArgAction::SetTrue),
         Arg::new(sum_flags::SUM_SYSTEM_V_COMPATIBLE)
             .short('s')
             .long(sum_flags::SUM_SYSTEM_V_COMPATIBLE)
-            .help("use System V sum algorithm, use 512 bytes blocks")
+            .help(t!("sum.clap.sum_system_v_compatible"))
             .action(ArgAction::SetTrue),
     ];
 

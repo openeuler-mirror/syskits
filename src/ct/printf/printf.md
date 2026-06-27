@@ -52,7 +52,7 @@ will print the corresponding character literal:
 * `\\v`     vertical tab
 
 * `\\NNN`   byte with value expressed in octal value NNN (1 to 3 digits)
-          values greater than 256 will be treated
+  values greater than 256 will be treated
 
 * `\\xHH`   byte with value expressed in hexadecimal value NN (1 to 2 digits)
 
@@ -77,18 +77,18 @@ Fields
 * `%u`:       64 bit unsigned integer
 * `%x` or `%X`: 64-bit unsigned integer as hex
 * `%o`:       64-bit unsigned integer as octal
-            second parameter is min-width, integer
-            output below that width is padded with leading zeroes
+  second parameter is min-width, integer
+  output below that width is padded with leading zeroes
 
 * `%q`:       ARGUMENT is printed in a format that can be reused as shell input, escaping non-printable
-            characters with the proposed POSIX $'' syntax.
+  characters with the proposed POSIX $'' syntax.
 
 * `%f` or `%F`: decimal floating point value
 * `%e` or `%E`: scientific notation floating point value
 * `%g` or `%G`: shorter of specially interpreted decimal or SciNote floating point value.
-            second parameter is
-              `-max` places after decimal point for floating point output
-              `-max` number of significant digits for scientific notation output
+  second parameter is
+  `-max` places after decimal point for floating point output
+  `-max` number of significant digits for scientific notation output
 
 parameterizing fields
 
@@ -178,18 +178,18 @@ All string fields have a 'max width' parameter
 * `%s`: string
 
 * `%b`: escaped string - the string will be checked for any escaped literals from
-      the escaped literal list above, and translate them to literal characters.
-      e.g. `\\n` will be transformed into a newline character.
-      One special rule about `%b` mode is that octal literals are interpreted differently
-      In arguments passed by `%b`, pass octal-interpreted literals must be in the form of `\\0NNN`
-      instead of `\\NNN`. (Although, for legacy reasons, octal literals in the form of `\\NNN` will
-      still be interpreted and not throw a warning, you will have problems if you use this for a
-      literal whose code begins with zero, as it will be viewed as in `\\0NNN` form.)
+  the escaped literal list above, and translate them to literal characters.
+  e.g. `\\n` will be transformed into a newline character.
+  One special rule about `%b` mode is that octal literals are interpreted differently
+  In arguments passed by `%b`, pass octal-interpreted literals must be in the form of `\\0NNN`
+  instead of `\\NNN`. (Although, for legacy reasons, octal literals in the form of `\\NNN` will
+  still be interpreted and not throw a warning, you will have problems if you use this for a
+  literal whose code begins with zero, as it will be viewed as in `\\0NNN` form.)
 
 * `%q`:  escaped string - the string in a format that can be reused as input by most shells.
-      Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
-      and shell meta-characters are quoted appropriately.
-      This is an equivalent format to ls --quoting=shell-escape output.
+  Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
+  and shell meta-characters are quoted appropriately.
+  This is an equivalent format to ls --quoting=shell-escape output.
 
 #### CHAR SUBSTITUTIONS
 
@@ -208,7 +208,7 @@ is padded with leading zeros until it is 4 digits in length.
 * `%u`: 64-bit unsigned integer
 
 * `%x` or `%X`: 64-bit unsigned integer printed in Hexadecimal (base 16)
-            `%X` instead of `%x` means to use uppercase letters for 'a' through 'f'
+  `%X` instead of `%x` means to use uppercase letters for 'a' through 'f'
 
 * `%o`: 64-bit unsigned integer printed in octal (base 8)
 
@@ -227,19 +227,19 @@ higher, you can expect variation in output between GNU coreutils printf and this
 18th decimal place of +/- 1
 
 * `%f`: floating point value presented in decimal, truncated and displayed to 6 decimal places by
-      default. There is not past-double behavior parity with Coreutils printf, values are not
-      estimated or adjusted beyond input values.
+  default. There is not past-double behavior parity with Coreutils printf, values are not
+  estimated or adjusted beyond input values.
 
 * `%e` or `%E`: floating point value presented in scientific notation
-            7 significant digits by default
-            `%E` means use to use uppercase E for the mantissa.
+  7 significant digits by default
+  `%E` means use to use uppercase E for the mantissa.
 
 * `%g` or `%G`: floating point value presented in the shortest of decimal and scientific notation
-            behaves differently from `%f` and `%E`, please see posix printf spec for full details,
-            some examples of different behavior:
-            Sci Note has 6 significant digits by default
-            Trailing zeroes are removed
-            Instead of being truncated, digit after last is rounded
+  behaves differently from `%f` and `%E`, please see posix printf spec for full details,
+  some examples of different behavior:
+  Sci Note has 6 significant digits by default
+  Trailing zeroes are removed
+  Instead of being truncated, digit after last is rounded
 
 Like other behavior in this utility, the design choices of floating point
 behavior in this utility is selected to reproduce in exact

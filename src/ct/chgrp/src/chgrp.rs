@@ -9,21 +9,21 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use ctcore::Tool;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
 use std::ffi::OsString;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
-
-const CHGRP_ABOUT: &str = ct_help_about!("chgrp.md");
-const CHGRP_USAGE: &str = ct_help_usage!("chgrp.md");
 
 /**
  * 根据命令行参数解析目标GID和UID。
@@ -89,16 +89,16 @@ impl Tool for Chgrp {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        chown_main(args.iter().cloned())
+        chgrp_main(args.iter().cloned())
     }
 }
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    chown_main(args)
+    chgrp_main(args)
 }
 
-pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
+pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
     chown_base(
         ct_app(),
         args,
@@ -111,8 +111,8 @@ pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CHGRP_ABOUT;
-    let usage_description = ct_format_usage(CHGRP_USAGE);
+    let application_info = t!("chgrp.about");
+    let usage_description = t!("chgrp.usage");
 
     let args = vec![
         Arg::new(opt_flags::HELP)
@@ -128,69 +128,56 @@ pub fn ct_app() -> Command {
             .short('f')
             .long(opt_flags::verbosity::SILENT)
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::verbosity::QUIET)
             .long(opt_flags::verbosity::QUIET)
             .help("suppress most error messages")
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::verbosity::VERBOSE)
             .short('v')
             .long(opt_flags::verbosity::VERBOSE)
             .help("output a diagnostic for every file processed")
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::dereference::DEREFERENCE)
             .long(opt_flags::dereference::DEREFERENCE)
             .action(ArgAction::SetTrue),
-
-       Arg::new(opt_flags::dereference::NO_DEREFERENCE)
-           .short('h')
-           .long(opt_flags::dereference::NO_DEREFERENCE)
-           .help(
-               "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
-           )
-           .action(ArgAction::SetTrue),
-
+        Arg::new(opt_flags::dereference::NO_DEREFERENCE)
+            .short('h')
+            .long(opt_flags::dereference::NO_DEREFERENCE)
+            .help(
+                "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
+            )
+            .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
             .help("fail to operate recursively on '/'")
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::preserve_root::NO_PRESERVE)
             .long(opt_flags::preserve_root::NO_PRESERVE)
             .help("do not treat '/' specially (the default)")
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::REFERENCE)
             .long(opt_flags::REFERENCE)
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
             .help("use RFILE's group rather than specifying GROUP values"),
-
         Arg::new(opt_flags::RECURSIVE)
             .short('R')
             .long(opt_flags::RECURSIVE)
             .help("operate on files and directories recursively")
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::traverse::TRAVERSE)
             .short(opt_flags::traverse::TRAVERSE.chars().next().unwrap())
             .help("if a command line argument is a symbolic link to a directory, traverse it")
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::traverse::NO_TRAVERSE)
             .short(opt_flags::traverse::NO_TRAVERSE.chars().next().unwrap())
             .help("do not traverse any symbolic links (default)")
             .overrides_with_all([opt_flags::traverse::TRAVERSE, opt_flags::traverse::EVERY])
             .action(ArgAction::SetTrue),
-
         Arg::new(opt_flags::traverse::EVERY)
             .short(opt_flags::traverse::EVERY.chars().next().unwrap())
             .help("traverse every symbolic link to a directory encountered")
             .action(ArgAction::SetTrue),
-
-
     ];
 
     Command::new(utility_name)

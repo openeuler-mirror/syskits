@@ -18,6 +18,8 @@ path = "src/cat.rs"
 clap = { workspace = true }
 thiserror = { workspace = true }
 ctcore = { workspace = true, features = ["fs", "pipes"] }
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

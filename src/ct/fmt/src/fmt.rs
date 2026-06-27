@@ -11,23 +11,24 @@
 
 // ! fmt命令可以从指定的文件里面读取内容，并且将其按照指定格式重新编排后，输出到标准输出设备。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_warning};
+use ctcore::ct_show_warning;
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::OsString;
+use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use sys_locale::get_locale;
 
 mod line_break;
 mod para_split;
 
-const FMT_ABOUT: &str = ct_help_about!("fmt.md");
-const FMT_USAGE: &str = ct_help_usage!("fmt.md");
 const FMT_MAX_WIDTH: usize = 2500;
 const FMT_DEFAULT_GOAL: usize = 70;
 const FMT_DEFAULT_WIDTH: usize = 75;
@@ -254,6 +255,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
@@ -275,8 +278,8 @@ pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = FMT_ABOUT;
-    let usage_description = ct_format_usage(FMT_USAGE);
+    let application_info = t!("fmt.about");
+    let usage_description = t!("fmt.usage");
     let args = vec![
         Arg::new(fmt_flags::FMT_CROWN_MARGIN)
             .short('c')
@@ -307,7 +310,7 @@ pub fn ct_app() -> Command {
         Arg::new(fmt_flags::FMT_SPLIT_ONLY)
             .short('s')
             .long("split-only")
-            .help("Split lines only, do not reflow.")
+            .help(t!("fmt.clap.fmt_split_only"))
             .action(ArgAction::SetTrue),
         Arg::new(fmt_flags::FMT_UNIFORM_SPACING)
             .short('u')
@@ -358,13 +361,13 @@ pub fn ct_app() -> Command {
         Arg::new(fmt_flags::FMT_WIDTH)
             .short('w')
             .long("width")
-            .help("Fill output lines up to a maximum of WIDTH columns, default 75.")
+            .help(t!("fmt.clap.fmt_width"))
             .value_name("WIDTH")
             .value_parser(clap::value_parser!(usize)),
         Arg::new(fmt_flags::FMT_GOAL)
             .short('g')
             .long("goal")
-            .help("Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.")
+            .help(t!("fmt.clap.fmt_goal"))
             .value_name("GOAL")
             .value_parser(clap::value_parser!(usize)),
         Arg::new(fmt_flags::FMT_QUICK)

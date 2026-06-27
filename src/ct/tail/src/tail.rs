@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 pub mod args;
 pub mod chunks;
 mod follow;
@@ -19,6 +20,7 @@ pub mod text;
 
 pub use args::ct_app;
 use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use chunks::TailReverseChunks;
 use clap::Command;
 use ctcore::Tool;
@@ -33,6 +35,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 #[derive(Default)]
 pub struct Tail;
@@ -56,6 +59,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn tail_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let options = tail_parse_args(args)?;
 
     options.check_warnings();
@@ -650,7 +655,6 @@ fn tail_unbounded<T: Read>(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::follow::Observer;
     use crate::paths::{TailHeaderPrinter, TailInput};

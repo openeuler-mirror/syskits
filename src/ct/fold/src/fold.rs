@@ -11,18 +11,18 @@
 
 //! 对每个指定的文件设置自动换行（折行），并将重新排版后的结果输出到标准输出。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write, stdin};
 use std::path::Path;
-
+use sys_locale::get_locale;
 const FOLD_TAB_WIDTH: usize = 8;
-const FOLD_USAGE: &str = ct_help_usage!("fold.md");
-const FOLD_ABOUT: &str = ct_help_about!("fold.md");
 
 mod fold_flags {
     pub const FOLD_BYTES: &str = "bytes";
@@ -57,6 +57,9 @@ struct FoldFlags {
 ///
 /// 返回一个Result，表示操作成功或失败
 pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 将OsString参数转换为String
     let string_args: Vec<String> = args.collect_lossy();
 
@@ -84,8 +87,8 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = FOLD_ABOUT;
-    let usage_description = ct_format_usage(FOLD_USAGE);
+    let application_info = t!("fold.about");
+    let usage_description = t!("fold.usage");
     let args = vec![
         Arg::new(fold_flags::FOLD_BYTES)
             .long(fold_flags::FOLD_BYTES)
@@ -98,12 +101,12 @@ pub fn ct_app() -> Command {
         Arg::new(fold_flags::FOLD_SPACES)
             .long(fold_flags::FOLD_SPACES)
             .short('s')
-            .help("break lines at word boundaries rather than a hard cut-off")
+            .help(t!("fold.clap.fold_spaces"))
             .action(ArgAction::SetTrue),
         Arg::new(fold_flags::FOLD_WIDTH)
             .long(fold_flags::FOLD_WIDTH)
             .short('w')
-            .help("set WIDTH as the maximum line width rather than 80")
+            .help(t!("fold.clap.fold_width"))
             .value_name("WIDTH")
             .allow_hyphen_values(true),
         Arg::new(fold_flags::FOLD_FILE)

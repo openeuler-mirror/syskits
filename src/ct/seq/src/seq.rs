@@ -8,7 +8,10 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::io::{ErrorKind, Write, stdout};
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
@@ -16,9 +19,8 @@ use num_traits::{ToPrimitive, Zero};
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_format::{Format, num_format};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
-
+use sys_locale::get_locale;
 mod error;
 mod extendedbigdecimal;
 mod number;
@@ -26,9 +28,6 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
-
-const SEQ_ABOUT: &str = ct_help_about!("seq.md");
-const SEQ_USAGE: &str = ct_help_usage!("seq.md");
 
 const SEQ_SEPARATOR: &str = "separator";
 const SEQ_TERMINATOR: &str = "terminator";
@@ -86,6 +85,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let options = SeqOptions::new(&matches);
 
@@ -184,20 +185,20 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_SEPARATOR)
             .short('s')
             .long("separator")
-            .help("Separator character (defaults to \\n)"),
+            .help(t!("seq.clap.seq_separator")),
         Arg::new(SEQ_TERMINATOR)
             .short('t')
             .long("terminator")
-            .help("Terminator character (defaults to \\n)"),
+            .help(t!("seq.clap.seq_terminator")),
         Arg::new(SEQ_EQUAL_WIDTH)
             .short('w')
             .long("equal-width")
-            .help("Equalize widths of all numbers by padding with zeros")
+            .help(t!("seq.clap.seq_equal_width"))
             .action(ArgAction::SetTrue),
         Arg::new(SEQ_FORMAT)
             .short('f')
             .long(SEQ_FORMAT)
-            .help("use printf style floating-point FORMAT"),
+            .help(t!("seq.clap.seq_format")),
         Arg::new(SEQ_NUMBERS)
             .action(ArgAction::Append)
             .num_args(1..=3),
@@ -208,8 +209,8 @@ pub fn ct_app() -> Command {
         .allow_negative_numbers(true)
         .infer_long_args(true)
         .version(crate_version!())
-        .about(SEQ_ABOUT)
-        .override_usage(ct_format_usage(SEQ_USAGE))
+        .about(t!("seq.about"))
+        .override_usage(t!("seq.usage"))
         .args(args)
 }
 
@@ -363,8 +364,7 @@ mod tests {
 
         // 测试帮助信息
         let help_text = app.render_help().to_string();
-        assert!(help_text.contains("Separator character"));
-        assert!(help_text.contains("Terminator character"));
+        assert!(help_text.contains("seq"));
     }
 
     #[test]

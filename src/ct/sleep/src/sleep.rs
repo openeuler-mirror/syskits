@@ -11,7 +11,10 @@
 
 //! sleep 命令用于使当前进程暂停执行一段时间。这个时间可以是以秒为单位的整数或浮点数。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::thread;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::time::Duration;
 
 use clap::{Arg, ArgAction, Command, crate_version};
@@ -19,16 +22,9 @@ use fundu::{DurationParser, ParseError, SaturatingInto};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_section;
-use ctcore::ct_help_usage;
 use ctcore::ct_show_error;
 use std::ffi::OsString;
-
-const SLEEP_ABOUT: &str = ct_help_about!("sleep.md");
-const SLEEP_USAGE: &str = ct_help_usage!("sleep.md");
-const SLEEP_AFTER_HELP: &str = ct_help_section!("after help", "sleep.md");
+use sys_locale::get_locale;
 
 mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
@@ -55,6 +51,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     sleep_main(args)
 }
 pub fn sleep_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let numbers = sleep_parse_numbers(&matches)?;
@@ -137,11 +135,11 @@ fn sleep(sleep_dur: Duration) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = SLEEP_ABOUT;
-    let usage_description = ct_format_usage(SLEEP_USAGE);
+    let application_info = t!("sleep.about");
+    let usage_description = t!("sleep.usage");
     let args = vec![
         Arg::new(sleep_flags::SLEEP_NUMBER)
-            .help("pause for NUMBER seconds")
+            .help(t!("sleep.clap.sleep_number"))
             .value_name(sleep_flags::SLEEP_NUMBER)
             .action(ArgAction::Append),
     ];
@@ -150,7 +148,7 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
-        .after_help(SLEEP_AFTER_HELP)
+        .after_help(t!("sleep.after_help"))
         .infer_long_args(true)
         .args(args)
 }

@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::fs::{File, metadata};
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -19,16 +22,13 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use quick_error::quick_error;
 use regex::Regex;
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
-const PR_ABOUT: &str = ct_help_about!("pr.md");
-const PR_USAGE: &str = ct_help_usage!("pr.md");
-const PR_AFTER_HELP: &str = ct_help_section!("after help", "pr.md");
 const PR_TAB: char = '\t';
 const PR_LINES_PER_PAGE: usize = 66;
 const PR_LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
@@ -197,173 +197,173 @@ quick_error! {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = PR_ABOUT;
-    let usage_description = ct_format_usage(PR_USAGE);
+    let application_info = t!("pr.about");
+    let usage_description = t!("pr.usage");
     let args = vec![
-         Arg::new(pr_flags::PR_PAGES)
-             .long(pr_flags::PR_PAGES)
-             .help("Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]")
-             .value_name("FIRST_PAGE[:LAST_PAGE]"),
-         Arg::new(pr_flags::PR_HEADER)
-             .short('h')
-             .long(pr_flags::PR_HEADER)
-             .help(
-                 "Use the string header to replace the file name \
+        Arg::new(pr_flags::PR_PAGES)
+            .long(pr_flags::PR_PAGES)
+            .help(t!("pr.clap.pr_pages"))
+            .value_name("FIRST_PAGE[:LAST_PAGE]"),
+        Arg::new(pr_flags::PR_HEADER)
+            .short('h')
+            .long(pr_flags::PR_HEADER)
+            .help(
+                "Use the string header to replace the file name \
                      in the header line.",
-             )
-             .value_name("STRING"),
-         Arg::new(pr_flags::PR_DOUBLE_SPACE)
-             .short('d')
-             .long(pr_flags::PR_DOUBLE_SPACE)
-             .help(
-                 "Produce output that is double spaced. An extra <newline> \
+            )
+            .value_name("STRING"),
+        Arg::new(pr_flags::PR_DOUBLE_SPACE)
+            .short('d')
+            .long(pr_flags::PR_DOUBLE_SPACE)
+            .help(
+                "Produce output that is double spaced. An extra <newline> \
                  character is output following every <newline> found in the input.",
-             )
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_NUMBER_LINES)
-             .short('n')
-             .long(pr_flags::PR_NUMBER_LINES)
-             .help(
-                 "Provide width digit line numbering.  The default for width, \
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_NUMBER_LINES)
+            .short('n')
+            .long(pr_flags::PR_NUMBER_LINES)
+            .help(
+                "Provide width digit line numbering.  The default for width, \
                  if not specified, is 5.  The number occupies the first width column \
                  positions of each text column or each line of -m output.  If char \
                  (any non-digit character) is given, it is appended to the line number \
                  to separate it from whatever follows.  The default for char is a <tab>. \
                  Line numbers longer than width columns are truncated.",
-             )
-             .allow_hyphen_values(true)
-             .value_name("[char][width]"),
-         Arg::new(pr_flags::PR_FIRST_LINE_NUMBER)
-             .short('N')
-             .long(pr_flags::PR_FIRST_LINE_NUMBER)
-             .help("start counting with NUMBER at 1st line of first page printed")
-             .value_name("NUMBER"),
-         Arg::new(pr_flags::PR_OMIT_HEADER)
-             .short('t')
-             .long(pr_flags::PR_OMIT_HEADER)
-             .help(
-                 "Write neither the five-line identifying header nor the five-line \
+            )
+            .allow_hyphen_values(true)
+            .value_name("[char][width]"),
+        Arg::new(pr_flags::PR_FIRST_LINE_NUMBER)
+            .short('N')
+            .long(pr_flags::PR_FIRST_LINE_NUMBER)
+            .help(t!("pr.clap.pr_first_line_number"))
+            .value_name("NUMBER"),
+        Arg::new(pr_flags::PR_OMIT_HEADER)
+            .short('t')
+            .long(pr_flags::PR_OMIT_HEADER)
+            .help(
+                "Write neither the five-line identifying header nor the five-line \
                  trailer usually supplied for each page. Quit writing after the last line \
                   of each file without spacing to the end of the page.",
-             )
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_PAGE_LENGTH)
-             .short('l')
-             .long(pr_flags::PR_PAGE_LENGTH)
-             .help(
-                 "Override the 66-line default (default number of lines of text 56, \
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_PAGE_LENGTH)
+            .short('l')
+            .long(pr_flags::PR_PAGE_LENGTH)
+            .help(
+                "Override the 66-line default (default number of lines of text 56, \
                      and with -F 63) and reset the page length to lines.  If lines is not \
                      greater than the sum  of  both the  header  and trailer depths (in lines), \
                      the pr utility shall suppress both the header and trailer, as if the -t \
                      option were in effect. ",
-             )
-             .value_name("PAGE_LENGTH"),
-         Arg::new(pr_flags::PR_NO_FILE_WARNINGS)
-             .short('r')
-             .long(pr_flags::PR_NO_FILE_WARNINGS)
-             .help("omit warning when a file cannot be opened")
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_FORM_FEED)
-             .short('F')
-             .short_alias('f')
-             .long(pr_flags::PR_FORM_FEED)
-             .help(
-                 "Use a <form-feed> for new pages, instead of the default behavior that \
+            )
+            .value_name("PAGE_LENGTH"),
+        Arg::new(pr_flags::PR_NO_FILE_WARNINGS)
+            .short('r')
+            .long(pr_flags::PR_NO_FILE_WARNINGS)
+            .help(t!("pr.clap.pr_no_file_warnings"))
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_FORM_FEED)
+            .short('F')
+            .short_alias('f')
+            .long(pr_flags::PR_FORM_FEED)
+            .help(
+                "Use a <form-feed> for new pages, instead of the default behavior that \
                  uses a sequence of <newline>s.",
-             )
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_COLUMN_WIDTH)
-             .short('w')
-             .long(pr_flags::PR_COLUMN_WIDTH)
-             .help(
-                 "Set the width of the line to width column positions for multiple \
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_COLUMN_WIDTH)
+            .short('w')
+            .long(pr_flags::PR_COLUMN_WIDTH)
+            .help(
+                "Set the width of the line to width column positions for multiple \
                  text-column output only. If the -w option is not specified and the -s option \
                  is not specified, the default width shall be 72. If the -w option is not specified \
                  and the -s option is specified, the default width shall be 512.",
-             )
-             .value_name("width"),
-         Arg::new(pr_flags::PR_PAGE_WIDTH)
-             .short('W')
-             .long(pr_flags::PR_PAGE_WIDTH)
-             .help(
-                 "set page width to PAGE_WIDTH (72) characters always, \
+            )
+            .value_name("width"),
+        Arg::new(pr_flags::PR_PAGE_WIDTH)
+            .short('W')
+            .long(pr_flags::PR_PAGE_WIDTH)
+            .help(
+                "set page width to PAGE_WIDTH (72) characters always, \
                  truncate lines, except -J option is set, no interference \
                  with -S or -s",
-             )
-             .value_name("width"),
-         Arg::new(pr_flags::PR_ACROSS)
-             .short('a')
-             .long(pr_flags::PR_ACROSS)
-             .help(
-                 "Modify the effect of the - column option so that the columns are filled \
+            )
+            .value_name("width"),
+        Arg::new(pr_flags::PR_ACROSS)
+            .short('a')
+            .long(pr_flags::PR_ACROSS)
+            .help(
+                "Modify the effect of the - column option so that the columns are filled \
                  across the page in a  round-robin  order (for example, when column is 2, the \
                  first input line heads column 1, the second heads column 2, the third is the \
                  second line in column 1, and so on).",
-             )
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_COLUMN)
-             .long(pr_flags::PR_COLUMN)
-             .help(
-                 "Produce multi-column output that is arranged in column columns \
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_COLUMN)
+            .long(pr_flags::PR_COLUMN)
+            .help(
+                "Produce multi-column output that is arranged in column columns \
                  (the default shall be 1) and is written down each column  in  the order in which \
                  the text is received from the input file. This option should not be used with -m. \
                  The options -e and -i shall be assumed for multiple text-column output.  Whether \
                  or not text columns are produced with identical vertical lengths is unspecified, \
                  but a text column shall never exceed the length of the page (see the -l option). \
                  When used with -t, use the minimum number of lines to write the output.",
-             )
-             .value_name("column"),
-         Arg::new(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
-             .short('s')
-             .long(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
-             .help(
-                 "Separate text columns by the single character char instead of by the \
+            )
+            .value_name("column"),
+        Arg::new(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            .short('s')
+            .long(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            .help(
+                "Separate text columns by the single character char instead of by the \
                  appropriate number of <space>s (default for char is the <tab> character).",
-             )
-             .value_name("char"),
-         Arg::new(pr_flags::PR_COLUMN_STRING_SEPARATOR)
-             .short('S')
-             .long(pr_flags::PR_COLUMN_STRING_SEPARATOR)
-             .help(
-                 "separate columns by STRING, \
+            )
+            .value_name("char"),
+        Arg::new(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            .short('S')
+            .long(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            .help(
+                "separate columns by STRING, \
                  without -S: Default separator <TAB> with -J and <space> \
                  otherwise (same as -S\" \"), no effect on column options",
-             )
-             .value_name("string"),
-         Arg::new(pr_flags::PR_MERGE)
-             .short('m')
-             .long(pr_flags::PR_MERGE)
-             .help(
-                 "Merge files. Standard output shall be formatted so the pr utility \
+            )
+            .value_name("string"),
+        Arg::new(pr_flags::PR_MERGE)
+            .short('m')
+            .long(pr_flags::PR_MERGE)
+            .help(
+                "Merge files. Standard output shall be formatted so the pr utility \
                  writes one line from each file specified by a file operand, side by side \
                  into text columns of equal fixed widths, in terms of the number of column \
                  positions. Implementations shall support merging of at least nine file operands.",
-             )
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_INDENT)
-             .short('o')
-             .long(pr_flags::PR_INDENT)
-             .help(
-                 "Each line of output shall be preceded by offset <space>s. If the -o \
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_INDENT)
+            .short('o')
+            .long(pr_flags::PR_INDENT)
+            .help(
+                "Each line of output shall be preceded by offset <space>s. If the -o \
                  option is not specified, the default offset shall be zero. The space taken is \
                  in addition to the output line width (see the -w option below).",
-             )
-             .value_name("margin"),
-         Arg::new(pr_flags::PR_JOIN_LINES)
-             .short('J')
-             .help(
-                 "merge full lines, turns off -W line truncation, no column \
+            )
+            .value_name("margin"),
+        Arg::new(pr_flags::PR_JOIN_LINES)
+            .short('J')
+            .help(
+                "merge full lines, turns off -W line truncation, no column \
                  alignment, --sep-string[=STRING] sets separators",
-             )
-             .action(ArgAction::SetTrue),
-         Arg::new(pr_flags::PR_HELP)
-             .long(pr_flags::PR_HELP)
-             .help("Print help information")
-             .action(ArgAction::Help),
-         Arg::new(pr_flags::PR_FILES)
-             .action(ArgAction::Append)
-             .value_hint(clap::ValueHint::FilePath),
-     ];
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(pr_flags::PR_HELP)
+            .long(pr_flags::PR_HELP)
+            .help(t!("pr.clap.pr_help"))
+            .action(ArgAction::Help),
+        Arg::new(pr_flags::PR_FILES)
+            .action(ArgAction::Append)
+            .value_hint(clap::ValueHint::FilePath),
+    ];
 
     Command::new(utility_name)
         .version(command_version)
@@ -371,7 +371,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
-        .after_help(PR_AFTER_HELP)
+        .after_help(t!("pr.after_help"))
         .args_override_self(true)
         .disable_help_flag(true)
 }
@@ -398,6 +398,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
 
     let opt_args = pr_recreate_arguments(&args);
@@ -2240,7 +2242,7 @@ mod tests {
             assert!(matches.is_err());
             assert!(
                 format!("{}", matches.unwrap_err()).contains(
-                "error: a value is required for '--number-lines <[char][width]>' but none was supplied\n"
+                    "error: a value is required for '--number-lines <[char][width]>' but none was supplied\n"
                 )
             );
         }
@@ -2650,7 +2652,7 @@ mod tests {
             let command = ct_app();
             let matches = command.try_get_matches_from(args.clone());
             assert!(matches.is_err());
-            assert!(format!("{}", matches.unwrap_err()).contains( "error: a value is required for '--first-line-number <NUMBER>' but none was supplied\n"));
+            assert!(format!("{}", matches.unwrap_err()).contains("error: a value is required for '--first-line-number <NUMBER>' but none was supplied\n"));
         }
 
         #[test]
@@ -5889,30 +5891,30 @@ mod tests {
             options.last_modified_time = "".to_string(); // 比较的时候不考虑last modify time
 
             let expected_options = PrOutputOptions {
-                 number: None,
-                 header: "".to_string(),
-                 is_double_space: false,
-                 line_separator: "\n".to_string(),
-                 content_line_separator: "\n".to_string(),
-                 last_modified_time: "".to_string(),
-                 start_page: 1,
-                 end_page: None,
-                 is_display_header_and_trailer: true,
-                 content_lines_per_page: 56,
-                 page_separator_char: "\n".to_string(),
-                 column_mode_options: Some(PrColumnModeOptions {
-                     width: 72,
-                     columns: 683,
-                     column_separator: "\t".to_string(),
-                     is_across_mode: false,
-                 }),
-                 merge_files_print: None,
-                 offset_spaces: "                                                                                                    ".to_string(),
-                 is_form_feed_used: false,
-                 is_join_lines: false,
-                 col_sep_for_printing: "\t".to_string(),
-                 line_width: Some(72),
-             };
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: true,
+                content_lines_per_page: 56,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: Some(PrColumnModeOptions {
+                    width: 72,
+                    columns: 683,
+                    column_separator: "\t".to_string(),
+                    is_across_mode: false,
+                }),
+                merge_files_print: None,
+                offset_spaces: "                                                                                                    ".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "\t".to_string(),
+                line_width: Some(72),
+            };
 
             assert_eq!(options, expected_options);
         }
@@ -5949,30 +5951,30 @@ mod tests {
             options.last_modified_time = "".to_string(); // 比较的时候不考虑last modify time
 
             let expected_options = PrOutputOptions {
-                 number: None,
-                 header: "".to_string(),
-                 is_double_space: false,
-                 line_separator: "\n".to_string(),
-                 content_line_separator: "\n".to_string(),
-                 last_modified_time: "".to_string(),
-                 start_page: 1,
-                 end_page: None,
-                 is_display_header_and_trailer: true,
-                 content_lines_per_page: 56,
-                 page_separator_char: "\n".to_string(),
-                 column_mode_options: Some(PrColumnModeOptions {
-                     width: 72,
-                     columns: 683,
-                     column_separator: "\t".to_string(),
-                     is_across_mode: false,
-                 }),
-                 merge_files_print: None,
-                 offset_spaces: "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ".to_string(),
-                 is_form_feed_used: false,
-                 is_join_lines: false,
-                 col_sep_for_printing: "\t".to_string(),
-                 line_width: Some(72),
-             };
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: true,
+                content_lines_per_page: 56,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: Some(PrColumnModeOptions {
+                    width: 72,
+                    columns: 683,
+                    column_separator: "\t".to_string(),
+                    is_across_mode: false,
+                }),
+                merge_files_print: None,
+                offset_spaces: "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ".to_string(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: "\t".to_string(),
+                line_width: Some(72),
+            };
 
             assert_eq!(options, expected_options);
         }

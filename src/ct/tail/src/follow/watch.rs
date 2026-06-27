@@ -321,120 +321,119 @@ impl Observer {
         match event.kind {
             EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime))
 
-                // | EventKind::Access(AccessKind::Close(AccessMode::Write))
-                | EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any)
-                | EventKind::Modify(ModifyKind::Data(DataChange::Any))
-                | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                    if let Ok(new_md) = event_path.metadata() {
-
-                        let is_tailable = new_md.is_tailable();
-                        let pd = self.files.get(event_path);
-                        if let Some(old_md) = &pd.metadata {
-                            if is_tailable {
-                                // We resume tracking from the start of the file,
-                                // assuming it has been truncated to 0. This mimics GNU's `tail`
-                                // behavior and is the usual truncation operation for log self.files.
-                                if !old_md.is_tailable() {
-                                    ct_show_error!( "{} has become accessible", display_name.quote());
-                                    self.files.update_reader(event_path)?;
-                                } else if pd.reader.is_none() {
-                                    ct_show_error!( "{} has appeared;  following new file", display_name.quote());
-                                    self.files.update_reader(event_path)?;
-                                } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+            // | EventKind::Access(AccessKind::Close(AccessMode::Write))
+            | EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any)
+            | EventKind::Modify(ModifyKind::Data(DataChange::Any))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                if let Ok(new_md) = event_path.metadata() {
+                    let is_tailable = new_md.is_tailable();
+                    let pd = self.files.get(event_path);
+                    if let Some(old_md) = &pd.metadata {
+                        if is_tailable {
+                            // We resume tracking from the start of the file,
+                            // assuming it has been truncated to 0. This mimics GNU's `tail`
+                            // behavior and is the usual truncation operation for log self.files.
+                            if !old_md.is_tailable() {
+                                ct_show_error!( "{} has become accessible", display_name.quote());
+                                self.files.update_reader(event_path)?;
+                            } else if pd.reader.is_none() {
+                                ct_show_error!( "{} has appeared;  following new file", display_name.quote());
+                                self.files.update_reader(event_path)?;
+                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
                                 || (self.use_polling
                                 && !old_md.file_id_eq(&new_md)) {
-                                    ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
-                                    self.files.update_reader(event_path)?;
-                                } else if old_md.got_truncated(&new_md)? {
-                                    ct_show_error!("{}: file truncated", display_name);
-                                    self.files.update_reader(event_path)?;
-                                }
-                                paths.push(event_path.clone());
-                            } else if !is_tailable && old_md.is_tailable() {
-                                if pd.reader.is_some() {
-                                    self.files.reset_reader(event_path);
-                                } else {
-                                    ct_show_error!(
+                                ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
+                                self.files.update_reader(event_path)?;
+                            } else if old_md.got_truncated(&new_md)? {
+                                ct_show_error!("{}: file truncated", display_name);
+                                self.files.update_reader(event_path)?;
+                            }
+                            paths.push(event_path.clone());
+                        } else if !is_tailable && old_md.is_tailable() {
+                            if pd.reader.is_some() {
+                                self.files.reset_reader(event_path);
+                            } else {
+                                ct_show_error!(
                                         "{} has been replaced with an untailable file",
                                         display_name.quote()
                                     );
-                                }
                             }
-                        } else if is_tailable {
-                                ct_show_error!( "{} has appeared;  following new file", display_name.quote());
-                                self.files.update_reader(event_path)?;
-                                paths.push(event_path.clone());
-                            } else if options.retry {
-                                if self.follow_descriptor() {
-                                    ct_show_error!(
+                        }
+                    } else if is_tailable {
+                        ct_show_error!( "{} has appeared;  following new file", display_name.quote());
+                        self.files.update_reader(event_path)?;
+                        paths.push(event_path.clone());
+                    } else if options.retry {
+                        if self.follow_descriptor() {
+                            ct_show_error!(
                                         "{} has been replaced with an untailable file; giving up on this name",
                                         display_name.quote()
                                     );
-                                    let _ = self.watcher_rx.as_mut().unwrap().watcher.unwatch(event_path);
-                                    self.files.remove(event_path);
-                                    if self.files.no_files_remaining(options) {
-                                        return Err(CtSimpleError::new(1, text::TAIL_NO_FILES_REMAINING));
-                                    }
-                                } else {
-                                    ct_show_error!(
+                            let _ = self.watcher_rx.as_mut().unwrap().watcher.unwatch(event_path);
+                            self.files.remove(event_path);
+                            if self.files.no_files_remaining(options) {
+                                return Err(CtSimpleError::new(1, text::TAIL_NO_FILES_REMAINING));
+                            }
+                        } else {
+                            ct_show_error!(
                                         "{} has been replaced with an untailable file",
                                         display_name.quote()
                                     );
-                                }
-                            }
-                        self.files.update_metadata(event_path, Some(new_md));
+                        }
                     }
+                    self.files.update_metadata(event_path, Some(new_md));
                 }
+            }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
 
-                // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
-                | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    if self.follow_name() {
-                        if options.retry {
-                            if let Some(old_md) = self.files.get_mut_metadata(event_path) {
-                                if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
-                                    ct_show_error!(
+            // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                if self.follow_name() {
+                    if options.retry {
+                        if let Some(old_md) = self.files.get_mut_metadata(event_path) {
+                            if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
+                                ct_show_error!(
                                         "{} {}: {}",
                                         display_name.quote(),
                                         text::TAIL_BECOME_INACCESSIBLE,
                                         text::TAIL_NO_SUCH_FILE
                                     );
-                                }
                             }
-                            if event_path.is_orphan() && !self.orphans.contains(event_path) {
-                                ct_show_error!("directory containing watched file was removed");
-                                ct_show_error!(
+                        }
+                        if event_path.is_orphan() && !self.orphans.contains(event_path) {
+                            ct_show_error!("directory containing watched file was removed");
+                            ct_show_error!(
                                     "{} cannot be used, reverting to polling",
                                     text::TAIL_BACKEND
                                 );
-                                self.orphans.push(event_path.clone());
-                                let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
-                            }
-                        } else {
-                            ct_show_error!("{}: {}", display_name, text::TAIL_NO_SUCH_FILE);
-                            if !self.files.files_remaining() && self.use_polling {
-                                // NOTE: GNU's tail exits here for `---disable-inotify`
-                                return Err(CtSimpleError::new(1, text::TAIL_NO_FILES_REMAINING));
-                            }
+                            self.orphans.push(event_path.clone());
+                            let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                         }
-                        self.files.reset_reader(event_path);
-                    } else if self.follow_descriptor_retry() {
-                        // --retry only effective for the initial open
-                        let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
-                        self.files.remove(event_path);
-                    } else if self.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
-                        /*
-                        BUG: The watched file was removed. Since we're using Polling, this
-                        could be a rename. We can't tell because `notify::PollWatcher` doesn't
-                        recognize renames properly.
-                        Ideally we want to call seek to offset 0 on the file handle.
-                        But because we only have access to `PathData::reader` as `BufRead`,
-                        we cannot seek to 0 with `BufReader::seek_relative`.
-                        Also because we don't have the new name, we cannot work around this
-                        by simply reopening the file.
-                        */
+                    } else {
+                        ct_show_error!("{}: {}", display_name, text::TAIL_NO_SUCH_FILE);
+                        if !self.files.files_remaining() && self.use_polling {
+                            // NOTE: GNU's tail exits here for `---disable-inotify`
+                            return Err(CtSimpleError::new(1, text::TAIL_NO_FILES_REMAINING));
+                        }
                     }
+                    self.files.reset_reader(event_path);
+                } else if self.follow_descriptor_retry() {
+                    // --retry only effective for the initial open
+                    let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
+                    self.files.remove(event_path);
+                } else if self.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
+                    /*
+                    BUG: The watched file was removed. Since we're using Polling, this
+                    could be a rename. We can't tell because `notify::PollWatcher` doesn't
+                    recognize renames properly.
+                    Ideally we want to call seek to offset 0 on the file handle.
+                    But because we only have access to `PathData::reader` as `BufRead`,
+                    we cannot seek to 0 with `BufReader::seek_relative`.
+                    Also because we don't have the new name, we cannot work around this
+                    by simply reopening the file.
+                    */
                 }
+            }
             EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
                 /*
                 NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
@@ -461,7 +460,7 @@ impl Observer {
                     self.files.insert(
                         new_path,
                         new_data,
-                        self.files.get_last().unwrap() == event_path
+                        self.files.get_last().unwrap() == event_path,
                     );
 
                     // Unwatch old path and watch new path

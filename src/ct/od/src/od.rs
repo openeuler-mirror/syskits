@@ -43,6 +43,7 @@
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
+extern crate rust_i18n;
 mod byteorder_io;
 mod formatteriteminfo;
 mod inputdecoder;
@@ -58,7 +59,9 @@ mod partialreader;
 mod peekreader;
 mod prn_format;
 
+use rust_i18n::t;
 use std::cmp;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::fmt::Write;
 
 use crate::byteorder_io::ByteOrder;
@@ -79,16 +82,11 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error, ct_show_warning,
-};
+use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 const OD_PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
-
-const OD_ABOUT: &str = ct_help_about!("od.md");
-const OD_USAGE: &str = ct_help_usage!("od.md");
-const OD_AFTER_HELP: &str = ct_help_section!("after help", "od.md");
 
 pub(crate) mod od_options {
     pub const OD_HELP: &str = "help";
@@ -256,6 +254,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     od_main(args)
 }
 pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
 
     let clap_matches = ct_app().try_get_matches_from(&args)?;
@@ -290,26 +290,26 @@ pub fn ct_app() -> Command {
     let args = vec![
         Arg::new(od_options::OD_HELP)
             .long(od_options::OD_HELP)
-            .help("Print help information.")
+            .help(t!("od.clap.od_help"))
             .action(ArgAction::Help),
         Arg::new(od_options::OD_ADDRESS_RADIX)
             .short('A')
             .long(od_options::OD_ADDRESS_RADIX)
-            .help("Select the base in which file offsets are printed.")
+            .help(t!("od.clap.od_address_radix"))
             .value_name("RADIX"),
         Arg::new(od_options::OD_SKIP_BYTES)
             .short('j')
             .long(od_options::OD_SKIP_BYTES)
-            .help("Skip bytes input bytes before formatting and writing.")
+            .help(t!("od.clap.od_skip_bytes"))
             .value_name("BYTES"),
         Arg::new(od_options::OD_READ_BYTES)
             .short('N')
             .long(od_options::OD_READ_BYTES)
-            .help("limit dump to BYTES input bytes")
+            .help(t!("od.clap.od_read_bytes"))
             .value_name("BYTES"),
         Arg::new(od_options::OD_ENDIAN)
             .long(od_options::OD_ENDIAN)
-            .help("byte order to use for multi-byte formats")
+            .help(t!("od.clap.od_endian"))
             .value_parser(["big", "little"])
             .value_name("big|little"),
         Arg::new(od_options::OD_STRINGS)
@@ -323,91 +323,91 @@ pub fn ct_app() -> Command {
             .value_name("BYTES"),
         Arg::new("a")
             .short('a')
-            .help("named characters, ignoring high-order bit")
+            .help(t!("od.clap.a"))
             .action(ArgAction::SetTrue),
         Arg::new("b")
             .short('b')
-            .help("octal bytes")
+            .help(t!("od.clap.b"))
             .action(ArgAction::SetTrue),
         Arg::new("c")
             .short('c')
-            .help("ASCII characters or backslash escapes")
+            .help(t!("od.clap.c"))
             .action(ArgAction::SetTrue),
         Arg::new("d")
             .short('d')
-            .help("unsigned decimal 2-byte units")
+            .help(t!("od.clap.d"))
             .action(ArgAction::SetTrue),
         Arg::new("D")
             .short('D')
-            .help("unsigned decimal 4-byte units")
+            .help(t!("od.clap.d"))
             .action(ArgAction::SetTrue),
         Arg::new("o")
             .short('o')
-            .help("octal 2-byte units")
+            .help(t!("od.clap.o"))
             .action(ArgAction::SetTrue),
         Arg::new("I")
             .short('I')
-            .help("decimal 8-byte units")
+            .help(t!("od.clap.i"))
             .action(ArgAction::SetTrue),
         Arg::new("L")
             .short('L')
-            .help("decimal 8-byte units")
+            .help(t!("od.clap.l"))
             .action(ArgAction::SetTrue),
         Arg::new("i")
             .short('i')
-            .help("decimal 4-byte units")
+            .help(t!("od.clap.i"))
             .action(ArgAction::SetTrue),
         Arg::new("l")
             .short('l')
-            .help("decimal 8-byte units")
+            .help(t!("od.clap.l"))
             .action(ArgAction::SetTrue),
         Arg::new("x")
             .short('x')
-            .help("hexadecimal 2-byte units")
+            .help(t!("od.clap.x"))
             .action(ArgAction::SetTrue),
         Arg::new("h")
             .short('h')
-            .help("hexadecimal 2-byte units")
+            .help(t!("od.clap.h"))
             .action(ArgAction::SetTrue),
         Arg::new("O")
             .short('O')
-            .help("octal 4-byte units")
+            .help(t!("od.clap.o"))
             .action(ArgAction::SetTrue),
         Arg::new("s")
             .short('s')
-            .help("decimal 2-byte units")
+            .help(t!("od.clap.s"))
             .action(ArgAction::SetTrue),
         Arg::new("X")
             .short('X')
-            .help("hexadecimal 4-byte units")
+            .help(t!("od.clap.x"))
             .action(ArgAction::SetTrue),
         Arg::new("H")
             .short('H')
-            .help("hexadecimal 4-byte units")
+            .help(t!("od.clap.h"))
             .action(ArgAction::SetTrue),
         Arg::new("e")
             .short('e')
-            .help("floating point double precision (64-bit) units")
+            .help(t!("od.clap.e"))
             .action(ArgAction::SetTrue),
         Arg::new("f")
             .short('f')
-            .help("floating point double precision (32-bit) units")
+            .help(t!("od.clap.f"))
             .action(ArgAction::SetTrue),
         Arg::new("F")
             .short('F')
-            .help("floating point double precision (64-bit) units")
+            .help(t!("od.clap.f"))
             .action(ArgAction::SetTrue),
         Arg::new(od_options::OD_FORMAT)
             .short('t')
-            .long("ct_format")
-            .help("select output ct_format or formats")
+            .long("format")
+            .help(t!("od.clap.od_format"))
             .action(ArgAction::Append)
             .num_args(1)
             .value_name("TYPE"),
         Arg::new(od_options::OD_OUTPUT_DUPLICATES)
             .short('v')
             .long(od_options::OD_OUTPUT_DUPLICATES)
-            .help("do not use * to mark line suppression")
+            .help(t!("od.clap.od_output_duplicates"))
             .action(ArgAction::SetTrue),
         Arg::new(od_options::OD_WIDTH)
             .short('w')
@@ -421,7 +421,7 @@ pub fn ct_app() -> Command {
             .num_args(..=1),
         Arg::new(od_options::OD_TRADITIONAL)
             .long(od_options::OD_TRADITIONAL)
-            .help("compatibility mode with one input, offset and label.")
+            .help(t!("od.clap.od_traditional"))
             .action(ArgAction::SetTrue),
         Arg::new(od_options::OD_FILENAME)
             .hide(true)
@@ -431,9 +431,9 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(OD_ABOUT)
-        .override_usage(ct_format_usage(OD_USAGE))
-        .after_help(OD_AFTER_HELP)
+        .about(t!("od.about"))
+        .override_usage(t!("od.usage"))
+        .after_help(t!("od.after_help"))
         .trailing_var_arg(true)
         .dont_delimit_trailing_values(true)
         .infer_long_args(true)

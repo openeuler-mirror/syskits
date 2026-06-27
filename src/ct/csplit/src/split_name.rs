@@ -78,7 +78,6 @@ impl SplitName {
 
 #[cfg(test)]
 mod tests {
-
     use crate::csplit_error::CsplitError;
     use crate::split_name::SplitName;
 

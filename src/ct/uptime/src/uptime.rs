@@ -11,20 +11,21 @@
 
 //! uptime 命令来查看系统的运行时间和平均负载情况
 
+extern crate rust_i18n;
 use chrono::{Local, TimeZone, Utc};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 use crate::platform::{get_uptime, print_loadavg, process_utmpx};
 
 mod platform;
 
-const UPTIME_ABOUT: &str = ct_help_about!("uptime.md");
-const UPTIME_USAGE: &str = ct_help_usage!("uptime.md");
 const UPTIME_SECS_PER_DAY: i64 = 86400;
 const UPTIME_SECS_PER_HOUR: i64 = 3600;
 const UPTIME_SECS_PER_MIN: i64 = 60;
@@ -67,6 +68,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let (boot_time, user_count) = process_utmpx();
@@ -100,12 +103,12 @@ pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = UPTIME_ABOUT;
-    let usage_description = ct_format_usage(UPTIME_USAGE);
+    let application_info = t!("uptime.about");
+    let usage_description = t!("uptime.usage");
     let arg = Arg::new(uptime_flags::SINCE)
         .short('s')
         .long(uptime_flags::SINCE)
-        .help("system up since")
+        .help(t!("uptime.clap.since"))
         .action(ArgAction::SetTrue);
 
     Command::new(utility_name)

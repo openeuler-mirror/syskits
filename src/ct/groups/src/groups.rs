@@ -11,24 +11,25 @@
 
 // 用于显示用户所属的所有组。它对于理解用户权限和访问控制非常重要，因为用户所属的组决定了他们对系统资源的访问权限
 
+extern crate rust_i18n;
 use ctcore::{
     ct_display::Quotable,
     ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp},
     ct_error::{CTError, CTResult},
-    ct_format_usage, ct_help_about, ct_help_usage, ct_show,
+    ct_show,
 };
+use rust_i18n::t;
 use std::error::Error;
 use std::fmt::Display;
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 mod opt_flags {
     pub const USERS: &str = "USERNAME";
 }
-const GROUPS_ABOUT: &str = ct_help_about!("groups.md");
-const GROUPS_USAGE: &str = ct_help_usage!("groups.md");
 
 #[derive(Debug)]
 
@@ -75,8 +76,8 @@ fn groups_infallible_gid2grp(gid: &u32) -> String {
 pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(GROUPS_ABOUT)
-        .override_usage(ct_format_usage(GROUPS_USAGE))
+        .about(t!("groups.about"))
+        .override_usage(t!("groups.usage"))
         .infer_long_args(true)
         .arg(
             Arg::new(opt_flags::USERS)
@@ -159,6 +160,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回值
 /// 返回一个 `CTResult<()>`，成功时为 `Ok(())`，失败时为 `Err` 包含错误信息。
 fn groups_main(args: impl ctcore::Args) -> CTResult<Vec<GroupInfo>> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从命令行参数中解析匹配项
     let matches = ct_app().try_get_matches_from(args)?;
     let mut g = Vec::new();

@@ -9,12 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 mod filenames;
 mod number;
 mod platform;
 mod strategy;
 
 use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
 use ctcore::Tool;
@@ -22,7 +25,6 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::uio_error;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -30,6 +32,7 @@ use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
+use sys_locale::get_locale;
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -49,10 +52,6 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
-
-const SPLIT_ABOUT: &str = ct_help_about!("split.md");
-const SPLIT_USAGE: &str = ct_help_usage!("split.md");
-const AFTER_HELP: &str = ct_help_section!("after help", "split.md");
 
 #[derive(Default)]
 pub struct Split;
@@ -76,6 +75,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let (args, obs_lines) = split_handle_obsolete(args);
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -289,15 +290,15 @@ fn splice_handle_preceding_options(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = SPLIT_ABOUT;
-    let usage_description = ct_format_usage(SPLIT_USAGE);
+    let application_info = t!("split.about");
+    let usage_description = t!("split.usage");
 
     let args = splice_args_init();
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
-        .after_help(AFTER_HELP)
+        .after_help(t!("split.after_help"))
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
@@ -310,32 +311,32 @@ fn splice_args_init() -> Vec<Arg> {
             .long(OPT_BYTES)
             .allow_hyphen_values(true)
             .value_name("SIZE")
-            .help("put SIZE bytes per output file"),
+            .help(t!("split.clap.opt_bytes")),
         Arg::new(OPT_LINE_BYTES)
             .short('C')
             .long(OPT_LINE_BYTES)
             .allow_hyphen_values(true)
             .value_name("SIZE")
-            .help("put at most SIZE bytes of lines per output file"),
+            .help(t!("split.clap.opt_line_bytes")),
         Arg::new(OPT_LINES)
             .short('l')
             .long(OPT_LINES)
             .allow_hyphen_values(true)
             .value_name("NUMBER")
             .default_value("1000")
-            .help("put NUMBER lines/records per output file"),
+            .help(t!("split.clap.opt_lines")),
         Arg::new(OPT_NUMBER)
             .short('n')
             .long(OPT_NUMBER)
             .allow_hyphen_values(true)
             .value_name("CHUNKS")
-            .help("generate CHUNKS output files; see explanation below"),
+            .help(t!("split.clap.opt_number")),
         Arg::new(OPT_ADDITIONAL_SUFFIX)
             .long(OPT_ADDITIONAL_SUFFIX)
             .allow_hyphen_values(true)
             .value_name("SUFFIX")
             .default_value("")
-            .help("additional SUFFIX to append to output file names"),
+            .help(t!("split.clap.opt_additional_suffix")),
         Arg::new(OPT_FILTER)
             .long(OPT_FILTER)
             .allow_hyphen_values(true)
@@ -347,7 +348,7 @@ fn splice_args_init() -> Vec<Arg> {
         Arg::new(OPT_ELIDE_EMPTY_FILES)
             .long(OPT_ELIDE_EMPTY_FILES)
             .short('e')
-            .help("do not generate empty output files with '-n'")
+            .help(t!("split.clap.opt_elide_empty_files"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
             .short('d')
@@ -358,7 +359,7 @@ fn splice_args_init() -> Vec<Arg> {
                 OPT_HEX_SUFFIXES,
                 OPT_HEX_SUFFIXES_SHORT
             ])
-            .help("use numeric suffixes starting at 0, not alphabetic"),
+            .help(t!("split.clap.opt_numeric_suffixes_short")),
         Arg::new(OPT_NUMERIC_SUFFIXES)
             .long(OPT_NUMERIC_SUFFIXES)
             .require_equals(true)
@@ -370,7 +371,7 @@ fn splice_args_init() -> Vec<Arg> {
                 OPT_HEX_SUFFIXES_SHORT
             ])
             .value_name("FROM")
-            .help("same as -d, but allow setting the start value"),
+            .help(t!("split.clap.opt_numeric_suffixes")),
         Arg::new(OPT_HEX_SUFFIXES_SHORT)
             .short('x')
             .action(ArgAction::SetTrue)
@@ -380,7 +381,7 @@ fn splice_args_init() -> Vec<Arg> {
                 OPT_HEX_SUFFIXES,
                 OPT_HEX_SUFFIXES_SHORT
             ])
-            .help("use hex suffixes starting at 0, not alphabetic"),
+            .help(t!("split.clap.opt_hex_suffixes_short")),
         Arg::new(OPT_HEX_SUFFIXES)
             .long(OPT_HEX_SUFFIXES)
             .require_equals(true)
@@ -392,16 +393,16 @@ fn splice_args_init() -> Vec<Arg> {
                 OPT_HEX_SUFFIXES_SHORT
             ])
             .value_name("FROM")
-            .help("same as -x, but allow setting the start value"),
+            .help(t!("split.clap.opt_hex_suffixes")),
         Arg::new(OPT_SUFFIX_LENGTH)
             .short('a')
             .long(OPT_SUFFIX_LENGTH)
             .allow_hyphen_values(true)
             .value_name("N")
-            .help("generate suffixes of length N (default 2)"),
+            .help(t!("split.clap.opt_suffix_length")),
         Arg::new(OPT_VERBOSE)
             .long(OPT_VERBOSE)
-            .help("print a diagnostic just before each output file is opened")
+            .help(t!("split.clap.opt_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_SEPARATOR)
             .short('t')
@@ -409,7 +410,7 @@ fn splice_args_init() -> Vec<Arg> {
             .allow_hyphen_values(true)
             .value_name("SEP")
             .action(ArgAction::Append)
-            .help("use SEP instead of newline as the record separator; '\\0' (zero) specifies the NUL character"),
+            .help(t!("split.clap.opt_separator")),
         Arg::new(OPT_IO_BLKSIZE)
             .long("io-blksize")
             .alias(OPT_IO_BLKSIZE)
@@ -7971,7 +7972,6 @@ mod tests {
     }
 
     mod tests_settings {
-
         use crate::SpliceSettings;
         use crate::ct_app;
         use std::fs;
@@ -10155,7 +10155,6 @@ mod tests {
         }
     }
     mod tests_setting_error {
-
         use crate::FilenameSuffixError;
         use crate::SpliceSettingsError;
         use crate::StrategyError;
@@ -10457,7 +10456,6 @@ mod tests {
     }
 
     mod test_split {
-
         use crate::SpliceSettings;
 
         use crate::ct_app;

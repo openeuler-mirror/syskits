@@ -11,17 +11,20 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
+use sys_locale::get_locale;
 use tempfile::TempDir;
 use tempfile::tempdir;
 
@@ -35,11 +38,6 @@ use tempfile::tempdir;
 // - 设置标准输出的缓冲模式
 // - 设置标准错误的缓冲模式
 // - 执行指定的命令
-
-// 定义about和usage
-const STDBUF_ABOUT: &str = ct_help_about!("stdbuf.md");
-const STDBUF_USAGE: &str = ct_help_usage!("stdbuf.md");
-const STDBUF_LONG_HELP: &str = ct_help_section!("after help", "stdbuf.md");
 
 // 定义配置标志常量
 pub mod stdbuf_flags {
@@ -292,6 +290,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回值
 /// * `CTResult<()>` - 执行结果
 pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 解析命令行参数
     let matches = ct_app().try_get_matches_from(args)?;
 
@@ -309,25 +309,25 @@ pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = STDBUF_ABOUT;
-    let usage_description = ct_format_usage(STDBUF_USAGE);
+    let application_info = t!("stdbuf.about");
+    let usage_description = t!("stdbuf.usage");
     let args = vec![
         Arg::new(stdbuf_flags::INPUT)
             .long(stdbuf_flags::INPUT)
             .short(stdbuf_flags::INPUT_SHORT)
-            .help("adjust standard input stream buffering")
+            .help(t!("stdbuf.clap.input"))
             .value_name("MODE")
             .required_unless_present_any([stdbuf_flags::OUTPUT, stdbuf_flags::ERROR]),
         Arg::new(stdbuf_flags::OUTPUT)
             .long(stdbuf_flags::OUTPUT)
             .short(stdbuf_flags::OUTPUT_SHORT)
-            .help("adjust standard output stream buffering")
+            .help(t!("stdbuf.clap.output"))
             .value_name("MODE")
             .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::ERROR]),
         Arg::new(stdbuf_flags::ERROR)
             .long(stdbuf_flags::ERROR)
             .short(stdbuf_flags::ERROR_SHORT)
-            .help("adjust standard error stream buffering")
+            .help(t!("stdbuf.clap.error"))
             .value_name("MODE")
             .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::OUTPUT]),
         Arg::new(stdbuf_flags::COMMAND)
@@ -340,7 +340,7 @@ pub fn ct_app() -> Command {
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
-        .after_help(STDBUF_LONG_HELP)
+        .after_help(t!("stdbuf.after_help"))
         .override_usage(usage_description)
         .trailing_var_arg(true)
         .infer_long_args(true)

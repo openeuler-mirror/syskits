@@ -9,16 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use ctcore::ct_crash;
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CtSimpleError;
 #[allow(unused_imports)]
 use ctcore::ct_error::{CTError, CTResult};
-use ctcore::ct_wide::{CtFromWide, CtToWide};
-use std::fs::OpenOptions;
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
-use std::path::Path;
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{

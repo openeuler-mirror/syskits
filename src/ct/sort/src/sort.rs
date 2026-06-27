@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::cmp::Ordering;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::env;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -37,7 +40,8 @@ use ctcore::ct_error::{
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_version_cmp::ct_version_cmp;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use sys_locale::get_locale;
+
 use custom_str_cmp::custom_cmp_str;
 use ext_sort::ext_sort;
 use numeric_str_cmp::{
@@ -54,10 +58,6 @@ mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
-
-const SORT_ABOUT: &str = ct_help_about!("sort.md");
-const SORT_USAGE: &str = ct_help_usage!("sort.md");
-const SORT_AFTER_HELP: &str = ct_help_section!("after help", "sort.md");
 
 mod sort_flags {
     pub mod modes {
@@ -1077,6 +1077,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 
 // 中间测试
 pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(t) => t,
         Err(e) => {
@@ -1373,201 +1375,200 @@ fn sort_get_settings_mode(matches: &ArgMatches) -> (SortMode, bool) {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = SORT_ABOUT;
-    let usage_description = ct_format_usage(SORT_USAGE);
+    let application_info = t!("sort.about");
+    let usage_description = t!("sort.usage");
 
-    let args = vec![Arg::new(sort_flags::SORT_HELP)
-                         .long(sort_flags::SORT_HELP)
-                         .help("Print help information.")
-                         .action(ArgAction::Help),
-                     Arg::new(sort_flags::SORT_VERSION)
-                         .long(sort_flags::SORT_VERSION)
-                         .help("Print version information.")
-                         .action(ArgAction::Version),
-                     Arg::new(sort_flags::modes::SORT)
-                         .long(sort_flags::modes::SORT)
-                         .value_parser([
-                             "general-numeric",
-                             "human-numeric",
-                             "month",
-                             "numeric",
-                             "version",
-                             "random",
-                         ])
-                         .conflicts_with_all(sort_flags::modes::SORT_ALL_MODES),
-                     make_sort_mode_arg(
-                         sort_flags::modes::SORT_HUMAN_NUMERIC,
-                         'h',
-                         "compare according to human readable sizes, eg 1M > 100k",
-                     ),
-                     make_sort_mode_arg(
-                         sort_flags::modes::SORT_MONTH,
-                         'M',
-                         "compare according to month name abbreviation",
-                     ),
-                     make_sort_mode_arg(
-                         sort_flags::modes::SORT_NUMERIC,
-                         'n',
-                         "compare according to string numerical value",
-                     ),
-                     make_sort_mode_arg(
-                         sort_flags::modes::SORT_GENERAL_NUMERIC,
-                         'g',
-                         "compare according to string general numerical value",
-                     ),
-                     make_sort_mode_arg(
-                         sort_flags::modes::SORT_VERSION,
-                         'V',
-                         "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
-                     ),
-                     make_sort_mode_arg(
-                         sort_flags::modes::SORT_RANDOM,
-                         'R',
-                         "shuffle in random order",
-                     ),
-                     Arg::new(sort_flags::SORT_DICTIONARY_ORDER)
-                         .short('d')
-                         .long(sort_flags::SORT_DICTIONARY_ORDER)
-                         .help("consider only blanks and alphanumeric characters")
-                         .conflicts_with_all([
-                             sort_flags::modes::SORT_NUMERIC,
-                             sort_flags::modes::SORT_GENERAL_NUMERIC,
-                             sort_flags::modes::SORT_HUMAN_NUMERIC,
-                             sort_flags::modes::SORT_MONTH,
-                         ])
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_MERGE)
-                         .short('m')
-                         .long(sort_flags::SORT_MERGE)
-                         .help("merge already sorted files; do not sort")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::check::SORT_CHECK)
-                         .short('c')
-                         .long(sort_flags::check::SORT_CHECK)
-                         .require_equals(true)
-                         .num_args(0..)
-                         .value_parser([
-                             sort_flags::check::SORT_SILENT,
-                             sort_flags::check::SORT_QUIET,
-                             sort_flags::check::SORT_DIAGNOSE_FIRST,
-                         ])
-                         .conflicts_with(sort_flags::SORT_OUTPUT)
-                         .help("check for sorted input; do not sort"),
-                     Arg::new(sort_flags::check::SORT_CHECK_SILENT)
-                         .short('C')
-                         .long(sort_flags::check::SORT_CHECK_SILENT)
-                         .conflicts_with(sort_flags::SORT_OUTPUT)
-                         .help(
-                             "exit successfully if the given file is already sorted, \
+    let args = vec![
+        Arg::new(sort_flags::SORT_HELP)
+            .long(sort_flags::SORT_HELP)
+            .help(t!("sort.clap.sort_help"))
+            .action(ArgAction::Help),
+        Arg::new(sort_flags::SORT_VERSION)
+            .long(sort_flags::SORT_VERSION)
+            .help(t!("sort.clap.sort_version"))
+            .action(ArgAction::Version),
+        Arg::new(sort_flags::modes::SORT)
+            .long(sort_flags::modes::SORT)
+            .value_parser([
+                "general-numeric",
+                "human-numeric",
+                "month",
+                "numeric",
+                "version",
+                "random",
+            ])
+            .conflicts_with_all(sort_flags::modes::SORT_ALL_MODES),
+        make_sort_mode_arg(
+            sort_flags::modes::SORT_HUMAN_NUMERIC,
+            'h',
+            "compare according to human readable sizes, eg 1M > 100k",
+        ),
+        make_sort_mode_arg(
+            sort_flags::modes::SORT_MONTH,
+            'M',
+            "compare according to month name abbreviation",
+        ),
+        make_sort_mode_arg(
+            sort_flags::modes::SORT_NUMERIC,
+            'n',
+            "compare according to string numerical value",
+        ),
+        make_sort_mode_arg(
+            sort_flags::modes::SORT_GENERAL_NUMERIC,
+            'g',
+            "compare according to string general numerical value",
+        ),
+        make_sort_mode_arg(
+            sort_flags::modes::SORT_VERSION,
+            'V',
+            "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+        ),
+        make_sort_mode_arg(
+            sort_flags::modes::SORT_RANDOM,
+            'R',
+            "shuffle in random order",
+        ),
+        Arg::new(sort_flags::SORT_DICTIONARY_ORDER)
+            .short('d')
+            .long(sort_flags::SORT_DICTIONARY_ORDER)
+            .help(t!("sort.clap.sort_dictionary_order"))
+            .conflicts_with_all([
+                sort_flags::modes::SORT_NUMERIC,
+                sort_flags::modes::SORT_GENERAL_NUMERIC,
+                sort_flags::modes::SORT_HUMAN_NUMERIC,
+                sort_flags::modes::SORT_MONTH,
+            ])
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_MERGE)
+            .short('m')
+            .long(sort_flags::SORT_MERGE)
+            .help(t!("sort.clap.sort_merge"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::check::SORT_CHECK)
+            .short('c')
+            .long(sort_flags::check::SORT_CHECK)
+            .require_equals(true)
+            .num_args(0..)
+            .value_parser([
+                sort_flags::check::SORT_SILENT,
+                sort_flags::check::SORT_QUIET,
+                sort_flags::check::SORT_DIAGNOSE_FIRST,
+            ])
+            .conflicts_with(sort_flags::SORT_OUTPUT)
+            .help(t!("sort.clap.sort_check")),
+        Arg::new(sort_flags::check::SORT_CHECK_SILENT)
+            .short('C')
+            .long(sort_flags::check::SORT_CHECK_SILENT)
+            .conflicts_with(sort_flags::SORT_OUTPUT)
+            .help(
+                "exit successfully if the given file is already sorted, \
                      and exit with status 1 otherwise.",
-                         )
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_IGNORE_CASE)
-                         .short('f')
-                         .long(sort_flags::SORT_IGNORE_CASE)
-                         .help("fold lower case to upper case characters")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_IGNORE_NONPRINTING)
-                         .short('i')
-                         .long(sort_flags::SORT_IGNORE_NONPRINTING)
-                         .help("ignore nonprinting characters")
-                         .conflicts_with_all([
-                             sort_flags::modes::SORT_NUMERIC,
-                             sort_flags::modes::SORT_GENERAL_NUMERIC,
-                             sort_flags::modes::SORT_HUMAN_NUMERIC,
-                             sort_flags::modes::SORT_MONTH,
-                         ])
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_IGNORE_LEADING_BLANKS)
-                         .short('b')
-                         .long(sort_flags::SORT_IGNORE_LEADING_BLANKS)
-                         .help("ignore leading blanks when finding sort keys in each line")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_OUTPUT)
-                         .short('o')
-                         .long(sort_flags::SORT_OUTPUT)
-                         .help("write output to FILENAME instead of stdout")
-                         .value_name("FILENAME")
-                         .value_hint(clap::ValueHint::FilePath),
-                     Arg::new(sort_flags::SORT_REVERSE)
-                         .short('r')
-                         .long(sort_flags::SORT_REVERSE)
-                         .help("reverse the output")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_STABLE)
-                         .short('s')
-                         .long(sort_flags::SORT_STABLE)
-                         .help("stabilize sort by disabling last-resort comparison")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_UNIQUE)
-                         .short('u')
-                         .long(sort_flags::SORT_UNIQUE)
-                         .help("output only the first of an equal run")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_KEY)
-                         .short('k')
-                         .long(sort_flags::SORT_KEY)
-                         .help("sort by a key")
-                         .action(ArgAction::Append)
-                         .num_args(1),
-                     Arg::new(sort_flags::SORT_SEPARATOR)
-                         .short('t')
-                         .long(sort_flags::SORT_SEPARATOR)
-                         .help("custom separator for -k")
-                         .value_parser(ValueParser::os_string()),
-                     Arg::new(sort_flags::SORT_ZERO_TERMINATED)
-                         .short('z')
-                         .long(sort_flags::SORT_ZERO_TERMINATED)
-                         .help("line delimiter is NUL, not newline")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_PARALLEL)
-                         .long(sort_flags::SORT_PARALLEL)
-                         .help("change the number of threads running concurrently to NUM_THREADS")
-                         .value_name("NUM_THREADS"),
-                     Arg::new(sort_flags::SORT_BUF_SIZE)
-                         .short('S')
-                         .long(sort_flags::SORT_BUF_SIZE)
-                         .help("sets the maximum SIZE of each segment in number of sorted items")
-                         .value_name("SIZE"),
-                     Arg::new(sort_flags::SORT_TMP_DIR)
-                         .short('T')
-                         .long(sort_flags::SORT_TMP_DIR)
-                         .help("use DIR for temporaries, not $TMPDIR or /tmp")
-                         .value_name("DIR")
-                         .value_hint(clap::ValueHint::DirPath),
-                     Arg::new(sort_flags::SORT_COMPRESS_PROG)
-                         .long(sort_flags::SORT_COMPRESS_PROG)
-                         .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
-                         .value_name("PROG")
-                         .value_hint(clap::ValueHint::CommandName),
-                     Arg::new(sort_flags::SORT_BATCH_SIZE)
-                         .long(sort_flags::SORT_BATCH_SIZE)
-                         .help("Merge at most N_MERGE inputs at once.")
-                         .value_name("N_MERGE"),
-                     Arg::new(sort_flags::SORT_FILES0_FROM)
-                         .long(sort_flags::SORT_FILES0_FROM)
-                         .help("read input from the files specified by NUL-terminated NUL_FILES")
-                         .value_name("NUL_FILES")
-                         .action(ArgAction::Append)
-                         .value_parser(ValueParser::os_string())
-                         .value_hint(clap::ValueHint::FilePath),
-                     Arg::new(sort_flags::SORT_DEBUG)
-                         .long(sort_flags::SORT_DEBUG)
-                         .help("underline the parts of the line that are actually used for sorting")
-                         .action(ArgAction::SetTrue),
-                     Arg::new(sort_flags::SORT_FILES)
-                         .action(ArgAction::Append)
-                         .value_parser(ValueParser::os_string())
-                         .value_hint(clap::ValueHint::FilePath),
-     ];
+            )
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_IGNORE_CASE)
+            .short('f')
+            .long(sort_flags::SORT_IGNORE_CASE)
+            .help(t!("sort.clap.sort_ignore_case"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_IGNORE_NONPRINTING)
+            .short('i')
+            .long(sort_flags::SORT_IGNORE_NONPRINTING)
+            .help(t!("sort.clap.sort_ignore_nonprinting"))
+            .conflicts_with_all([
+                sort_flags::modes::SORT_NUMERIC,
+                sort_flags::modes::SORT_GENERAL_NUMERIC,
+                sort_flags::modes::SORT_HUMAN_NUMERIC,
+                sort_flags::modes::SORT_MONTH,
+            ])
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_IGNORE_LEADING_BLANKS)
+            .short('b')
+            .long(sort_flags::SORT_IGNORE_LEADING_BLANKS)
+            .help(t!("sort.clap.sort_ignore_leading_blanks"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_OUTPUT)
+            .short('o')
+            .long(sort_flags::SORT_OUTPUT)
+            .help(t!("sort.clap.sort_output"))
+            .value_name("FILENAME")
+            .value_hint(clap::ValueHint::FilePath),
+        Arg::new(sort_flags::SORT_REVERSE)
+            .short('r')
+            .long(sort_flags::SORT_REVERSE)
+            .help(t!("sort.clap.sort_reverse"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_STABLE)
+            .short('s')
+            .long(sort_flags::SORT_STABLE)
+            .help(t!("sort.clap.sort_stable"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_UNIQUE)
+            .short('u')
+            .long(sort_flags::SORT_UNIQUE)
+            .help(t!("sort.clap.sort_unique"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_KEY)
+            .short('k')
+            .long(sort_flags::SORT_KEY)
+            .help(t!("sort.clap.sort_key"))
+            .action(ArgAction::Append)
+            .num_args(1),
+        Arg::new(sort_flags::SORT_SEPARATOR)
+            .short('t')
+            .long(sort_flags::SORT_SEPARATOR)
+            .help(t!("sort.clap.sort_separator"))
+            .value_parser(ValueParser::os_string()),
+        Arg::new(sort_flags::SORT_ZERO_TERMINATED)
+            .short('z')
+            .long(sort_flags::SORT_ZERO_TERMINATED)
+            .help(t!("sort.clap.sort_zero_terminated"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_PARALLEL)
+            .long(sort_flags::SORT_PARALLEL)
+            .help(t!("sort.clap.sort_parallel"))
+            .value_name("NUM_THREADS"),
+        Arg::new(sort_flags::SORT_BUF_SIZE)
+            .short('S')
+            .long(sort_flags::SORT_BUF_SIZE)
+            .help(t!("sort.clap.sort_buf_size"))
+            .value_name("SIZE"),
+        Arg::new(sort_flags::SORT_TMP_DIR)
+            .short('T')
+            .long(sort_flags::SORT_TMP_DIR)
+            .help(t!("sort.clap.sort_tmp_dir"))
+            .value_name("DIR")
+            .value_hint(clap::ValueHint::DirPath),
+        Arg::new(sort_flags::SORT_COMPRESS_PROG)
+            .long(sort_flags::SORT_COMPRESS_PROG)
+            .help(t!("sort.clap.sort_compress_prog"))
+            .value_name("PROG")
+            .value_hint(clap::ValueHint::CommandName),
+        Arg::new(sort_flags::SORT_BATCH_SIZE)
+            .long(sort_flags::SORT_BATCH_SIZE)
+            .help(t!("sort.clap.sort_batch_size"))
+            .value_name("N_MERGE"),
+        Arg::new(sort_flags::SORT_FILES0_FROM)
+            .long(sort_flags::SORT_FILES0_FROM)
+            .help(t!("sort.clap.sort_files0_from"))
+            .value_name("NUL_FILES")
+            .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+        Arg::new(sort_flags::SORT_DEBUG)
+            .long(sort_flags::SORT_DEBUG)
+            .help(t!("sort.clap.sort_debug"))
+            .action(ArgAction::SetTrue),
+        Arg::new(sort_flags::SORT_FILES)
+            .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
+            .value_hint(clap::ValueHint::FilePath),
+    ];
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
-        .after_help(SORT_AFTER_HELP)
-        .override_usage(ct_format_usage(SORT_USAGE))
+        .after_help(t!("sort.after_help"))
         .override_usage(usage_description)
-        .infer_long_args(true)
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)

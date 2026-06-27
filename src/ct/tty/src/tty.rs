@@ -11,16 +11,16 @@
 
 //! tty 命令行工具，用于打印当前终端设备的文件名
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
-use ctcore::{Tool, ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::io::Write;
-
-const TTY_ABOUT: &str = ct_help_about!("tty.md");
-const TTY_USAGE: &str = ct_help_usage!("tty.md");
-
+use sys_locale::get_locale;
 mod tty_flags {
     pub const TTY_SILENT: &str = "silent";
 }
@@ -31,6 +31,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     if let Some(value) = tty_handle_silent(matches) {
@@ -74,14 +76,14 @@ fn tty_handle_silent(matches: ArgMatches) -> Option<CTResult<()>> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TTY_ABOUT;
-    let usage_description = ct_format_usage(TTY_USAGE);
+    let application_info = t!("tty.about");
+    let usage_description = t!("tty.usage");
 
     let arg = Arg::new(tty_flags::TTY_SILENT)
         .long(tty_flags::TTY_SILENT)
         .visible_alias("quiet")
         .short('s')
-        .help("print nothing, only return an exit status")
+        .help(t!("tty.clap.tty_silent"))
         .action(ArgAction::SetTrue);
     Command::new(utility_name)
         .version(command_version)

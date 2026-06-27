@@ -9,6 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
@@ -20,13 +22,13 @@ use same_file::Handle;
 
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_warning};
+use ctcore::ct_show_warning;
 
 use crate::paths::TailInput;
 use crate::{Quotable, parse, platform};
 
-const TAIL_ABOUT: &str = ct_help_about!("tail.md");
-const TAIL_USAGE: &str = ct_help_usage!("tail.md");
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 /// tail_flags 模块定义了 tail 命令的所有命令行参数标志和常量。
 /// 这些常量用于构建命令行参数解析器和处理用户输入。
@@ -562,8 +564,8 @@ pub fn ct_app() -> Command {
 
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TAIL_ABOUT;
-    let usage_description = ct_format_usage(TAIL_USAGE);
+    let application_info = t!("tail.about");
+    let usage_description = t!("tail.usage");
     let args = vec![Arg::new(tail_flags::TAIL_BYTES)
                         .short('c')
                         .long(tail_flags::TAIL_BYTES)
@@ -844,24 +846,40 @@ mod tests {
     #[case::multiple_retry(vec ! ["--retry", "--retry"], None, true)]
     #[case::follow_long(vec ! ["--follow"], Some(TailFollowMode::Descriptor), false)]
     #[case::follow_short(vec ! ["-f"], Some(TailFollowMode::Descriptor), false)]
-    #[case::follow_long_with_retry(vec ! ["--follow", "--retry"], Some(TailFollowMode::Descriptor), true)]
-    #[case::follow_short_with_retry(vec ! ["-f", "--retry"], Some(TailFollowMode::Descriptor), true)]
-    #[case::follow_overwrites_previous_selection_1(vec ! ["--follow=name", "--follow=descriptor"], Some(TailFollowMode::Descriptor), false)]
-    #[case::follow_overwrites_previous_selection_2(vec ! ["--follow=descriptor", "--follow=name"], Some(TailFollowMode::Name), false)]
+    #[case::follow_long_with_retry(vec ! ["--follow", "--retry"], Some(TailFollowMode::Descriptor), true
+    )]
+    #[case::follow_short_with_retry(vec ! ["-f", "--retry"], Some(TailFollowMode::Descriptor), true
+    )]
+    #[case::follow_overwrites_previous_selection_1(vec ! ["--follow=name", "--follow=descriptor"], Some(TailFollowMode::Descriptor), false
+    )]
+    #[case::follow_overwrites_previous_selection_2(vec ! ["--follow=descriptor", "--follow=name"], Some(TailFollowMode::Name), false
+    )]
     #[case::big_f(vec ! ["-F"], Some(TailFollowMode::Name), true)]
     #[case::multiple_big_f(vec ! ["-F", "-F"], Some(TailFollowMode::Name), true)]
-    #[case::big_f_with_retry_then_does_not_change(vec ! ["-F", "--retry"], Some(TailFollowMode::Name), true)]
-    #[case::big_f_with_follow_descriptor_then_change(vec ! ["-F", "--follow=descriptor"], Some(TailFollowMode::Descriptor), true)]
-    #[case::multiple_big_f_with_follow_descriptor_then_no_change(vec ! ["-F", "--follow=descriptor", "-F"], Some(TailFollowMode::Name), true)]
-    #[case::big_f_with_follow_short_then_change(vec ! ["-F", "-f"], Some(TailFollowMode::Descriptor), true)]
-    #[case::follow_descriptor_with_big_f_then_change(vec ! ["--follow=descriptor", "-F"], Some(TailFollowMode::Name), true)]
-    #[case::follow_short_with_big_f_then_change(vec ! ["-f", "-F"], Some(TailFollowMode::Name), true)]
-    #[case::big_f_with_follow_name_then_not_change(vec ! ["-F", "--follow=name"], Some(TailFollowMode::Name), true)]
-    #[case::follow_name_with_big_f_then_not_change(vec ! ["--follow=name", "-F"], Some(TailFollowMode::Name), true)]
-    #[case::big_f_with_multiple_long_follow(vec ! ["--follow=name", "-F", "--follow=descriptor"], Some(TailFollowMode::Descriptor), true)]
-    #[case::big_f_with_multiple_long_follow_name(vec ! ["--follow=name", "-F", "--follow=name"], Some(TailFollowMode::Name), true)]
-    #[case::big_f_with_multiple_short_follow(vec ! ["-f", "-F", "-f"], Some(TailFollowMode::Descriptor), true)]
-    #[case::multiple_big_f_with_multiple_short_follow(vec ! ["-f", "-F", "-f", "-F"], Some(TailFollowMode::Name), true)]
+    #[case::big_f_with_retry_then_does_not_change(vec ! ["-F", "--retry"], Some(TailFollowMode::Name), true
+    )]
+    #[case::big_f_with_follow_descriptor_then_change(vec ! ["-F", "--follow=descriptor"], Some(TailFollowMode::Descriptor), true
+    )]
+    #[case::multiple_big_f_with_follow_descriptor_then_no_change(vec ! ["-F", "--follow=descriptor", "-F"], Some(TailFollowMode::Name), true
+    )]
+    #[case::big_f_with_follow_short_then_change(vec ! ["-F", "-f"], Some(TailFollowMode::Descriptor), true
+    )]
+    #[case::follow_descriptor_with_big_f_then_change(vec ! ["--follow=descriptor", "-F"], Some(TailFollowMode::Name), true
+    )]
+    #[case::follow_short_with_big_f_then_change(vec ! ["-f", "-F"], Some(TailFollowMode::Name), true
+    )]
+    #[case::big_f_with_follow_name_then_not_change(vec ! ["-F", "--follow=name"], Some(TailFollowMode::Name), true
+    )]
+    #[case::follow_name_with_big_f_then_not_change(vec ! ["--follow=name", "-F"], Some(TailFollowMode::Name), true
+    )]
+    #[case::big_f_with_multiple_long_follow(vec ! ["--follow=name", "-F", "--follow=descriptor"], Some(TailFollowMode::Descriptor), true
+    )]
+    #[case::big_f_with_multiple_long_follow_name(vec ! ["--follow=name", "-F", "--follow=name"], Some(TailFollowMode::Name), true
+    )]
+    #[case::big_f_with_multiple_short_follow(vec ! ["-f", "-F", "-f"], Some(TailFollowMode::Descriptor), true
+    )]
+    #[case::multiple_big_f_with_multiple_short_follow(vec ! ["-f", "-F", "-f", "-F"], Some(TailFollowMode::Name), true
+    )]
     fn test_parse_settings_follow_mode_and_retry(
         #[case] args: Vec<&str>,
         #[case] expected_follow_mode: Option<TailFollowMode>,

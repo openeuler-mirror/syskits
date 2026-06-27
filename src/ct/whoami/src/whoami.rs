@@ -9,18 +9,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::{Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
+use sys_locale::get_locale;
+
 mod platform;
 
-const WHOAMI_ABOUT: &str = ct_help_about!("whoami.md");
-const WHOAMI_USAGE: &str = ct_help_usage!("whoami.md");
-
 pub fn ctmain(args: impl ctcore::Args) -> i32 {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
     pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
         whoami_main(args).map(|_| ())
     }
@@ -53,7 +58,8 @@ pub fn ctmain(args: impl ctcore::Args) -> i32 {
 pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
     ct_app().try_get_matches_from(args)?;
     let username = whoami_exec()?;
-    ct_println_verbatim(username.clone()).map_err_context(|| "failed to print username".into())?;
+    ct_println_verbatim(username.clone())
+        .map_err_context(|| t!("whoami.errors.failed_print_username"))?;
 
     let result = username.into_string().unwrap();
     Ok(result)
@@ -63,20 +69,36 @@ pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
 pub fn whoami_exec() -> CTResult<OsString> {
     let username_result = platform::get_username();
 
-    username_result.map_err_context(|| "failed to get username".into())
+    username_result.map_err_context(|| t!("whoami.errors.failed_get_username"))
 }
 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = WHOAMI_ABOUT;
-    let usage_description = ct_format_usage(WHOAMI_USAGE);
+    let application_info = t!("whoami.about");
+    let usage_description = t!("whoami.usage");
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            clap::Arg::new("help")
+                .short('h')
+                .long("help")
+                .help(t!("whoami.clap.help"))
+                .action(clap::ArgAction::Help),
+        )
+        .arg(
+            clap::Arg::new("version")
+                .short('V')
+                .long("version")
+                .help(t!("whoami.clap.version"))
+                .action(clap::ArgAction::Version),
+        )
 }
 
 #[derive(Default)]
@@ -100,6 +122,7 @@ mod tests {
     use clap::error::ErrorKind;
 
     use super::*;
+    rust_i18n::i18n!("locales", fallback = "zh-CN");
 
     #[test]
     fn test_tool_implementation() {

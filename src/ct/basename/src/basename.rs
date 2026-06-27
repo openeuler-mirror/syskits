@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
@@ -16,17 +17,14 @@ use clap::crate_version;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
-use ctcore::ct_format_usage;
-use ctcore::ct_help_about;
-use ctcore::ct_help_usage;
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::path::is_separator;
+use sys_locale::get_locale;
 
-static BASENAME_ABOUT: &str = ct_help_about!("basename.md");
-
-const BASENAME_USAGE: &str = ct_help_usage!("basename.md");
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 pub mod flags {
     pub static MULTIPLE: &str = "multiple";
@@ -57,6 +55,10 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
+    // Set locale based on system settings
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
     let args = args.collect_lossy();
 
     let args_match = ct_app().try_get_matches_from(args)?;
@@ -68,7 +70,7 @@ pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
         .unwrap_or_default()
         .collect::<Vec<_>>();
     if names.is_empty() {
-        return Err(CTsageError::new(1, "missing operand".to_string()));
+        return Err(CTsageError::new(1, t!("basename.errors.missing_operand")));
     }
     let paths = args_match.get_one::<String>(flags::SUFFIX).is_some()
         || args_match.get_flag(flags::MULTIPLE);
@@ -89,7 +91,11 @@ pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
         } else {
             return Err(CTsageError::new(
                 1,
-                format!("extra operand {}", names[2].quote(),),
+                format!(
+                    "{} {}",
+                    t!("basename.errors.extra_operand"),
+                    names[2].quote()
+                ),
             ));
         }
     };
@@ -104,8 +110,8 @@ pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = BASENAME_ABOUT;
-    let usage_description = ct_format_usage(BASENAME_USAGE);
+    let application_info = t!("basename.about");
+    let usage_description = t!("basename.usage");
 
     let args = basename_args_init();
     Command::new(utility_name)
@@ -113,6 +119,8 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
@@ -121,7 +129,7 @@ fn basename_args_init() -> Vec<Arg> {
         Arg::new(flags::MULTIPLE)
             .short('a')
             .long(flags::MULTIPLE)
-            .help("support multiple arguments and treat each as a NAME")
+            .help(t!("basename.clap.multiple"))
             .action(ArgAction::SetTrue)
             .overrides_with(flags::MULTIPLE),
         Arg::new(flags::NAME)
@@ -133,14 +141,24 @@ fn basename_args_init() -> Vec<Arg> {
             .short('s')
             .long(flags::SUFFIX)
             .value_name("SUFFIX")
-            .help("remove a trailing SUFFIX; implies -a")
+            .help(t!("basename.clap.suffix"))
             .overrides_with(flags::SUFFIX),
         Arg::new(flags::ZERO)
             .short('z')
             .long(flags::ZERO)
-            .help("end each output line with NUL, not newline")
+            .help(t!("basename.clap.zero"))
             .action(ArgAction::SetTrue)
             .overrides_with(flags::ZERO),
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("basename.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("basename.clap.version"))
+            .action(ArgAction::Version),
     ];
     args
 }
@@ -161,7 +179,7 @@ fn basename(fullname: &str, suffix: &str) -> String {
     let path_buffer = PathBuf::from(adjusted_path);
 
     // 步骤4：获取路径的最后一部分
-    let last_component_option = path_buffer.components().last();
+    let last_component_option = path_buffer.components().next_back();
 
     // 步骤5：处理最后一部分缺失的情况
     let result = match last_component_option {
@@ -205,6 +223,57 @@ mod tests {
     use super::*;
     use clap::error::ErrorKind;
     use std::ffi::OsString;
+
+    #[test]
+    fn test_i18n_help_messages() {
+        // 设置英文环境
+        rust_i18n::set_locale("en-US");
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let result = command.try_get_matches_from(args);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+
+        // 设置中文环境
+        rust_i18n::set_locale("zh-CN");
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--help"];
+        let result = command.try_get_matches_from(args);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_i18n_error_messages() {
+        // 测试英文错误消息
+        rust_i18n::set_locale("en-US");
+        let args = vec![ctcore::ct_util_name()];
+        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), 1);
+
+        // 测试中文错误消息
+        rust_i18n::set_locale("zh-CN");
+        let args = vec![ctcore::ct_util_name()];
+        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), 1);
+    }
+
+    #[test]
+    fn test_i18n_fallback() {
+        // 测试不存在的语言环境，应该回退到中文
+        rust_i18n::set_locale("fr-FR");
+        let args = vec![ctcore::ct_util_name()];
+        let result = basename_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), 1);
+    }
 
     #[test]
     fn test_tool_implementation() {

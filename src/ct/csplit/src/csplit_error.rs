@@ -56,7 +56,6 @@ impl CTError for CsplitError {
 }
 
 mod tests_csplit {
-
     #[test]
     fn test_csplit_error_io_error() {
         use crate::csplit_error::CsplitError;

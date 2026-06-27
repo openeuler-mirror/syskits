@@ -34,11 +34,14 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
 use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
@@ -47,6 +50,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
+use sys_locale::get_locale;
 
 mod rand_read_adapter;
 
@@ -55,9 +59,6 @@ enum ShufMode {
     Echo(Vec<String>),
     InputRange(RangeInclusive<usize>),
 }
-
-static SHUF_USAGE: &str = ct_help_usage!("shuf.md");
-static SHUF_ABOUT: &str = ct_help_about!("shuf.md");
 
 struct ShufSettings {
     head_count: usize,
@@ -100,6 +101,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let mode = if matches.get_flag(shuf_options::SHUF_ECHO) {
@@ -168,7 +171,7 @@ pub fn ct_app() -> Command {
         Arg::new(shuf_options::SHUF_ECHO)
             .short('e')
             .long(shuf_options::SHUF_ECHO)
-            .help("treat each ARG as an input line")
+            .help(t!("shuf.clap.shuf_echo"))
             .action(clap::ArgAction::SetTrue)
             .overrides_with(shuf_options::SHUF_ECHO)
             .conflicts_with(shuf_options::SHUF_INPUT_RANGE),
@@ -176,35 +179,35 @@ pub fn ct_app() -> Command {
             .short('i')
             .long(shuf_options::SHUF_INPUT_RANGE)
             .value_name("LO-HI")
-            .help("treat each number LO through HI as an input line")
+            .help(t!("shuf.clap.shuf_input_range"))
             .conflicts_with(shuf_options::SHUF_FILE_OR_ARGS),
         Arg::new(shuf_options::SHUF_HEAD_COUNT)
             .short('n')
             .long(shuf_options::SHUF_HEAD_COUNT)
             .value_name("COUNT")
             .action(clap::ArgAction::Append)
-            .help("output at most COUNT lines"),
+            .help(t!("shuf.clap.shuf_head_count")),
         Arg::new(shuf_options::SHUF_OUTPUT)
             .short('o')
             .long(shuf_options::SHUF_OUTPUT)
             .value_name("FILE")
-            .help("write result to FILE instead of standard output")
+            .help(t!("shuf.clap.shuf_output"))
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(shuf_options::SHUF_RANDOM_SOURCE)
             .long(shuf_options::SHUF_RANDOM_SOURCE)
             .value_name("FILE")
-            .help("get random bytes from FILE")
+            .help(t!("shuf.clap.shuf_random_source"))
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(shuf_options::SHUF_REPEAT)
             .short('r')
             .long(shuf_options::SHUF_REPEAT)
-            .help("output lines can be repeated")
+            .help(t!("shuf.clap.shuf_repeat"))
             .action(ArgAction::SetTrue)
             .overrides_with(shuf_options::SHUF_REPEAT),
         Arg::new(shuf_options::SHUF_ZERO_TERMINATED)
             .short('z')
             .long(shuf_options::SHUF_ZERO_TERMINATED)
-            .help("line delimiter is NUL, not newline")
+            .help(t!("shuf.clap.shuf_zero_terminated"))
             .action(ArgAction::SetTrue)
             .overrides_with(shuf_options::SHUF_ZERO_TERMINATED),
         Arg::new(shuf_options::SHUF_FILE_OR_ARGS)
@@ -212,9 +215,9 @@ pub fn ct_app() -> Command {
             .value_hint(clap::ValueHint::FilePath),
     ];
     Command::new(ctcore::ct_util_name())
-        .about(SHUF_ABOUT)
+        .about(t!("shuf.about"))
         .version(crate_version!())
-        .override_usage(ct_format_usage(SHUF_USAGE))
+        .override_usage(t!("shuf.usage"))
         .infer_long_args(true)
         .args(args)
 }

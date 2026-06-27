@@ -9,9 +9,11 @@ Run command with specified security context under SELinux enabled systems.
 
 ## After Help
 
-Run COMMAND with completely-specified CONTEXT, or with current or transitioned security context modified by one or more of LEVEL, ROLE, TYPE, and USER.
+Run COMMAND with completely-specified CONTEXT, or with current or transitioned security context modified by one or more
+of LEVEL, ROLE, TYPE, and USER.
 
-If none of --compute, --type, --user, --role or --range is specified, then the first argument is used as the complete context.
+If none of --compute, --type, --user, --role or --range is specified, then the first argument is used as the complete
+context.
 
 Note that only carefully-chosen contexts are likely to successfully run.
 

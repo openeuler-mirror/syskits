@@ -9,12 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use ctcore::ct_display::Quotable;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use ctcore::Tool;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
-use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
-use ctcore::{Tool, ct_format_usage, ct_help_about, ct_help_usage};
-
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
+use sys_locale::get_locale;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
@@ -22,14 +25,13 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-static CHOWN_ABOUT: &str = ct_help_about!("chown.md");
-
-const CHOWN_USAGE: &str = ct_help_usage!("chown.md");
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     chown_main(args)
 }
 pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     chown_base(
         ct_app(),
         args,
@@ -42,18 +44,23 @@ pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CHOWN_ABOUT;
-    let usage_description = ct_format_usage(CHOWN_USAGE);
+    let application_info = t!("chown.about");
+    let usage_description = t!("chown.usage");
 
     let args = vec![
         Arg::new(opt_flags::HELP)
             .long(opt_flags::HELP)
-            .help("Print help information.")
+            .help(t!("chown.clap.help"))
             .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("chown.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::verbosity::CHANGES)
             .short('c')
             .long(opt_flags::verbosity::CHANGES)
-            .help("like verbose but report only when a change is made")
+            .help(t!("chown.clap.changes"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::DEREFERENCE)
             .long(opt_flags::dereference::DEREFERENCE)
@@ -81,24 +88,24 @@ pub fn ct_app() -> Command {
             .value_name("CURRENT_OWNER:CURRENT_GROUP"),
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
-            .help("fail to operate recursively on '/'")
+            .help(t!("chown.clap.preserve"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::NO_PRESERVE)
             .long(opt_flags::preserve_root::NO_PRESERVE)
-            .help("do not treat '/' specially (the default)")
+            .help(t!("chown.clap.no_preserve"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::verbosity::QUIET)
             .long(opt_flags::verbosity::QUIET)
-            .help("suppress most error messages")
+            .help(t!("chown.clap.quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::RECURSIVE)
             .short('R')
             .long(opt_flags::RECURSIVE)
-            .help("operate on files and directories recursively")
+            .help(t!("chown.clap.recursive"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::REFERENCE)
             .long(opt_flags::REFERENCE)
-            .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
+            .help(t!("chown.clap.reference"))
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
             .num_args(1..),
@@ -127,7 +134,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::verbosity::VERBOSE)
             .long(opt_flags::verbosity::VERBOSE)
             .short('v')
-            .help("output a diagnostic for every file processed")
+            .help(t!("chown.clap.verbose"))
             .action(ArgAction::SetTrue),
     ];
 
@@ -137,6 +144,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 

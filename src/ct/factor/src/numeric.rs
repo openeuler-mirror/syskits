@@ -14,8 +14,8 @@
 //! 本模块包含了因式分解所需的数值计算功能，主要包括：
 //! 1. 整数类型的trait定义
 //! 2. 蒙哥马利乘法算法实现
-//!     蒙哥马利乘法（Montgomery Multiplication）算法，这是一种高效执行模乘运算的方法，
-//!     特别适用于大数模乘运算, 本实现使用 num-modular 库，该库提供了高效的蒙哥马利乘法实现。
+//!    蒙哥马利乘法（Montgomery Multiplication）算法，这是一种高效执行模乘运算的方法，
+//!    特别适用于大数模乘运算, 本实现使用 num-modular 库，该库提供了高效的蒙哥马利乘法实现。
 
 pub(crate) use num_traits::ops::overflowing::OverflowingAdd;
 use num_traits::{

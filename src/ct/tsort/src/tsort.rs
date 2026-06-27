@@ -11,20 +11,19 @@
 
 //! tsort 命令行工具，用于对有依赖关系的项目进行拓扑排序
 
+extern crate rust_i18n;
 use clap::{Arg, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, Read, stdin};
 use std::path::Path;
-
-const TSORT_ABOUT: &str = ct_help_about!("tsort.md");
-const TSORT_USAGE: &str = ct_help_usage!("tsort.md");
-
+use sys_locale::get_locale;
 mod tsort_flags {
     pub const TSORT_FILE: &str = "file";
 }
@@ -35,6 +34,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let input_file = matches
@@ -105,8 +106,8 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TSORT_ABOUT;
-    let usage_description = ct_format_usage(TSORT_USAGE);
+    let application_info = t!("tsort.about");
+    let usage_description = t!("tsort.usage");
     let arg = Arg::new(tsort_flags::TSORT_FILE)
         .default_value("-")
         .hide(true)

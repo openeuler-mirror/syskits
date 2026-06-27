@@ -15,10 +15,10 @@
 //! 1.创建新文件：当仅需创建一个空文件时，无需编辑内容，直接使用touch命令即可。
 //! 2.更新时间戳：可以用来更新文件的访问时间和修改时间（atime和mtime），使之看起来像是最近被访问或修改过。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::ffi::OsString;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
     TimeZone, Timelike,
@@ -26,13 +26,13 @@ use chrono::{
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::{Tool, ct_format_usage, ct_help_about, ct_help_usage, ct_show};
-
-const TOUCH_ABOUT: &str = ct_help_about!("touch.md");
-const TOUCH_USAGE: &str = ct_help_usage!("touch.md");
+use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
     // 需要SOURCES和sources，因为我们需要能够引用ArgGroup。
@@ -88,6 +88,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
 
     let files = arg_matches
@@ -157,36 +159,36 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = TOUCH_ABOUT;
-    let usage_description = ct_format_usage(TOUCH_USAGE);
+    let application_info = t!("touch.about");
+    let usage_description = t!("touch.usage");
     let args = vec![
         Arg::new(touch_flags::TOUCH_HELP)
             .long(touch_flags::TOUCH_HELP)
-            .help("Print help information.")
+            .help(t!("touch.clap.touch_help"))
             .action(ArgAction::Help),
         Arg::new(touch_flags::TOUCH_ACCESS)
             .short('a')
-            .help("change only the access time")
+            .help(t!("touch.clap.touch_access"))
             .action(ArgAction::SetTrue),
         Arg::new(touch_flags::sources::TOUCH_TIMESTAMP)
             .short('t')
-            .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
+            .help(t!("touch.clap.touch_timestamp"))
             .value_name("STAMP"),
         Arg::new(touch_flags::sources::TOUCH_DATE)
             .short('d')
             .long(touch_flags::sources::TOUCH_DATE)
             .allow_hyphen_values(true)
-            .help("parse argument and use it instead of current time")
+            .help(t!("touch.clap.touch_date"))
             .value_name("STRING")
             .conflicts_with(touch_flags::sources::TOUCH_TIMESTAMP),
         Arg::new(touch_flags::TOUCH_MODIFICATION)
             .short('m')
-            .help("change only the modification time")
+            .help(t!("touch.clap.touch_modification"))
             .action(ArgAction::SetTrue),
         Arg::new(touch_flags::TOUCH_NO_CREATE)
             .short('c')
             .long(touch_flags::TOUCH_NO_CREATE)
-            .help("do not create any files")
+            .help(t!("touch.clap.touch_no_create"))
             .action(ArgAction::SetTrue),
         Arg::new(touch_flags::TOUCH_NO_DEREF)
             .short('h')
@@ -199,7 +201,7 @@ pub fn ct_app() -> Command {
         Arg::new(touch_flags::sources::TOUCH_REFERENCE)
             .short('r')
             .long(touch_flags::sources::TOUCH_REFERENCE)
-            .help("use this file's times instead of the current time")
+            .help(t!("touch.clap.touch_reference"))
             .value_name("FILE")
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath)

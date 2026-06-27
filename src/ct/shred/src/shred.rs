@@ -34,14 +34,15 @@
 
 // spell-checker:ignore (words) wipesync prefill
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error, ct_show_if_err,
-};
+use ctcore::{ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
@@ -51,10 +52,7 @@ use std::io::{self, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
-
-const SHRED_ABOUT: &str = ct_help_about!("shred.md");
-const SHRED_USAGE: &str = ct_help_usage!("shred.md");
-const SHRED_AFTER_HELP: &str = ct_help_section!("after help", "shred.md");
+use sys_locale::get_locale;
 
 /// shred 命令的选项常量
 pub mod shred_options {
@@ -361,6 +359,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     shred_main(args)
 }
 pub fn shred_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     if !matches.contains_id(shred_options::SHRED_FILE) {
@@ -389,22 +389,22 @@ pub fn ct_app() -> Command {
         Arg::new(shred_options::SHRED_FORCE)
             .long(shred_options::SHRED_FORCE)
             .short('f')
-            .help("change permissions to allow writing if necessary")
+            .help(t!("shred.clap.shred_force"))
             .action(ArgAction::SetTrue),
         Arg::new(shred_options::SHRED_ITERATIONS)
             .long(shred_options::SHRED_ITERATIONS)
             .short('n')
-            .help("overwrite N times instead of the default (3)")
+            .help(t!("shred.clap.shred_iterations"))
             .value_name("NUMBER")
             .default_value("3"),
         Arg::new(shred_options::SHRED_SIZE)
             .long(shred_options::SHRED_SIZE)
             .short('s')
             .value_name("N")
-            .help("shred this many bytes (suffixes like K, M, G accepted)"),
+            .help(t!("shred.clap.shred_size")),
         Arg::new(shred_options::SHRED_WIPESYNC)
             .short('u')
-            .help("deallocate and remove file after overwriting")
+            .help(t!("shred.clap.shred_wipesync"))
             .action(ArgAction::SetTrue),
         Arg::new(shred_options::SHRED_REMOVE)
             .long(shred_options::SHRED_REMOVE)
@@ -417,12 +417,12 @@ pub fn ct_app() -> Command {
             .num_args(0..=1)
             .require_equals(true)
             .default_missing_value(shred_options::shred_remove::SHRED_WIPESYNC)
-            .help("like -u but give control on HOW to delete;  See below")
+            .help(t!("shred.clap.shred_remove"))
             .action(ArgAction::Set),
         Arg::new(shred_options::SHRED_VERBOSE)
             .long(shred_options::SHRED_VERBOSE)
             .short('v')
-            .help("show progress")
+            .help(t!("shred.clap.shred_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(shred_options::SHRED_EXACT)
             .long(shred_options::SHRED_EXACT)
@@ -435,7 +435,7 @@ pub fn ct_app() -> Command {
         Arg::new(shred_options::SHRED_ZERO)
             .long(shred_options::SHRED_ZERO)
             .short('z')
-            .help("add a final overwrite with zeros to hide shredding")
+            .help(t!("shred.clap.shred_zero"))
             .action(ArgAction::SetTrue),
         // Positional arguments
         Arg::new(shred_options::SHRED_FILE)
@@ -445,9 +445,9 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(SHRED_ABOUT)
-        .after_help(SHRED_AFTER_HELP)
-        .override_usage(ct_format_usage(SHRED_USAGE))
+        .about(t!("shred.about"))
+        .after_help(t!("shred.after_help"))
+        .override_usage(t!("shred.usage"))
         .infer_long_args(true)
         .args(&args)
 }

@@ -9,13 +9,18 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
 #[ctcore::main]
 use platform::ctmain;
 use std::ffi::OsString;
+use sys_locale::get_locale;
+
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 mod platform;
 
@@ -34,97 +39,89 @@ mod who_flags {
     pub const WHO_TIME: &str = "time";
     pub const WHO_USERS: &str = "users";
     pub const WHO_MESG: &str = "mesg";
-    // aliases: --message, --writable
     pub const WHO_FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
-
-const WHO_ABOUT: &str = ct_help_about!("who.md");
-const WHO_USAGE: &str = ct_help_usage!("who.md");
-
-#[cfg(target_os = "linux")]
-static WHO_RUNLEVEL_HELP: &str = "print current runlevel";
-#[cfg(not(target_os = "linux"))]
-static WHO_RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = WHO_ABOUT;
-    let usage_description = ct_format_usage(WHO_USAGE);
+    let application_info = t!("who.about");
+    let usage_description = t!("who.usage");
     let args = vec![
         Arg::new(who_flags::WHO_ALL)
             .long(who_flags::WHO_ALL)
             .short('a')
-            .help("same as -b -d --login -p -r -t -T -u")
+            .help(t!("who.clap.options.all"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_BOOT)
             .long(who_flags::WHO_BOOT)
             .short('b')
-            .help("time of last system boot")
+            .help(t!("who.clap.options.boot"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_DEAD)
             .long(who_flags::WHO_DEAD)
             .short('d')
-            .help("print dead processes")
+            .help(t!("who.clap.options.dead"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_HEADING)
             .long(who_flags::WHO_HEADING)
             .short('H')
-            .help("print line of column headings")
+            .help(t!("who.clap.options.heading"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_LOGIN)
             .long(who_flags::WHO_LOGIN)
             .short('l')
-            .help("print system login processes")
+            .help(t!("who.clap.options.login"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_LOOKUP)
             .long(who_flags::WHO_LOOKUP)
-            .help("attempt to canonicalize hostnames via DNS")
+            .help(t!("who.clap.options.lookup"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_ONLY_HOSTNAME_USER)
             .short('m')
-            .help("only hostname and user associated with stdin")
+            .help(t!("who.clap.options.only_hostname_user"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_PROCESS)
             .long(who_flags::WHO_PROCESS)
             .short('p')
-            .help("print active processes spawned by init")
+            .help(t!("who.clap.options.process"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_COUNT)
             .long(who_flags::WHO_COUNT)
             .short('q')
-            .help("all login names and number of users logged on")
+            .help(t!("who.clap.options.count"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_RUNLEVEL)
             .long(who_flags::WHO_RUNLEVEL)
             .short('r')
-            .help(WHO_RUNLEVEL_HELP)
+            .help(t!("who.clap.options.runlevel"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_SHORT)
             .long(who_flags::WHO_SHORT)
             .short('s')
-            .help("print only name, line, and time (default)")
+            .help(t!("who.clap.options.short"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_TIME)
             .long(who_flags::WHO_TIME)
             .short('t')
-            .help("print last system clock change")
+            .help(t!("who.clap.options.time"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_USERS)
             .long(who_flags::WHO_USERS)
             .short('u')
-            .help("list users logged in")
+            .help(t!("who.clap.options.users"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_MESG)
             .long(who_flags::WHO_MESG)
             .short('T')
             .visible_short_alias('w')
             .visible_aliases(["message", "writable"])
-            .help("add user's message status as +, - or ?")
+            .help(t!("who.clap.options.mesg"))
             .action(ArgAction::SetTrue),
         Arg::new(who_flags::WHO_FILE)
             .num_args(1..=2)
-            .value_hint(clap::ValueHint::FilePath),
+            .value_hint(clap::ValueHint::FilePath)
+            .help(t!("who.clap.options.file")),
     ];
 
     Command::new(utility_name)
@@ -132,6 +129,22 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .help(t!("who.clap.help"))
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .help(t!("who.clap.version"))
+                .action(ArgAction::Version),
+        )
         .args(&args)
 }
 
@@ -147,6 +160,10 @@ impl Tool for Who {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // Set locale based on system settings
+        let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+        rust_i18n::set_locale(&lang_code);
+
         platform::who_main(args.iter().cloned())
     }
 }

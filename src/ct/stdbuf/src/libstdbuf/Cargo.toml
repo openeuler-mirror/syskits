@@ -16,8 +16,8 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 name = "libstdbuf"
 path = "src/libstdbuf.rs"
 crate-type = [
-  "cdylib",
-  "rlib",
+    "cdylib",
+    "rlib",
 ]
 
 [dependencies]

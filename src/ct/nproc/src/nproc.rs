@@ -11,17 +11,19 @@
 
 // 用于显示与当前进程相关的可用 CPU 数目
 
+extern crate rust_i18n;
 use crate::opt_flags::OPT_ALL;
-
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use crate::opt_flags::OPT_IGNORE;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::{env, thread};
+use sys_locale::get_locale;
 
 // 根据操作系统的不同，定义 _SC_NPROCESSORS_CONF 常量以获取系统上配置的处理器数量
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -39,10 +41,6 @@ mod opt_flags {
     pub const OPT_ALL: &str = "all";
     pub const OPT_IGNORE: &str = "ignore";
 }
-
-// 从文档 "nproc.md" 中提取的关于信息和用法信息
-const NPROC_ABOUT: &str = ct_help_about!("nproc.md");
-const NPROC_USAGE: &str = ct_help_usage!("nproc.md");
 
 #[derive(Debug)]
 struct NprocInfo {
@@ -82,6 +80,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn nproc_main(args: impl ctcore::Args) -> CTResult<NprocInfo> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args)?;
 
     // 解析 --ignore 参数，决定忽略多少核心
@@ -192,18 +192,18 @@ fn nproc_parse_ignore_num(args_match: &ArgMatches) -> Result<usize, CTResult<()>
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = NPROC_ABOUT;
-    let usage_description = ct_format_usage(NPROC_USAGE);
+    let application_info = t!("nproc.about");
+    let usage_description = t!("nproc.usage");
 
     let args = vec![
         Arg::new(OPT_ALL)
             .long(OPT_ALL)
-            .help("print the number of cores available to the system")
+            .help(t!("nproc.clap.opt_all"))
             .action(ArgAction::SetTrue),
         Arg::new(OPT_IGNORE)
             .long(OPT_IGNORE)
             .value_name("N")
-            .help("ignore up to N cores"),
+            .help(t!("nproc.clap.opt_ignore")),
     ];
 
     Command::new(utility_name)
@@ -391,7 +391,6 @@ mod tests {
     }
 
     mod tests_false_app {
-
         use crate::ct_app;
 
         use clap::error::ErrorKind;

@@ -12,14 +12,17 @@
 //! 输出或变更终端特性。
 //! <设置> 字符串可以添加 "-" 前缀，表示禁用该项设置。下文中的 * 表示这项设置不属于 POSIX 标准。各项设置是否可用取决于底层的系统。
 
+extern crate rust_i18n;
 mod device;
 mod settings;
 mod termios;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
 use device::Device;
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
@@ -34,10 +37,8 @@ use std::ops::ControlFlow;
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
+use sys_locale::get_locale;
 use termios::TermiosFlag;
-
-const STTY_USAGE: &str = ct_help_usage!("stty.md");
-const STTY_ABOUT: &str = ct_help_about!("stty.md");
 
 mod stty_flags {
     pub const STTY_ALL: &str = "all";
@@ -178,6 +179,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let stty_opts = SttyFlags::new(&matches)?;
     stty(&stty_opts)
@@ -625,29 +628,29 @@ fn stty_apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = STTY_USAGE;
-    let usage_description = ct_format_usage(STTY_ABOUT);
+    let application_info = t!("stty.usage");
+    let usage_description = t!("stty.about");
     let args = vec![
         Arg::new(stty_flags::STTY_ALL)
             .short('a')
             .long(stty_flags::STTY_ALL)
-            .help("print all current settings in human-readable form")
+            .help(t!("stty.clap.stty_all"))
             .action(ArgAction::SetTrue),
         Arg::new(stty_flags::STTY_SAVE)
             .short('g')
             .long(stty_flags::STTY_SAVE)
-            .help("print all current settings in a stty-readable form")
+            .help(t!("stty.clap.stty_save"))
             .action(ArgAction::SetTrue),
         Arg::new(stty_flags::STTY_FILE)
             .short('F')
             .long(stty_flags::STTY_FILE)
             .value_hint(clap::ValueHint::FilePath)
             .value_name("DEVICE")
-            .help("open and use the specified DEVICE instead of stdin"),
+            .help(t!("stty.clap.stty_file")),
         Arg::new(stty_flags::STTY_SETTINGS)
             .action(ArgAction::Append)
             .allow_hyphen_values(true)
-            .help("settings to change"),
+            .help(t!("stty.clap.stty_settings")),
     ];
 
     Command::new(utility_name)

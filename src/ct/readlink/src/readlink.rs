@@ -11,19 +11,22 @@
 
 //! readlink命令是Linux中用于读取符号链接（symlink）并显示其指向的文件或目录的命令。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_error};
+use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-const READLINK_ABOUT: &str = ct_help_about!("readlink.md");
-const READLINK_USAGE: &str = ct_help_usage!("readlink.md");
+use sys_locale::get_locale;
+
 mod readlink_flags {
     pub const READLINK_CANONICALIZE: &str = "canonicalize";
     pub const READLINK_CANONICALIZE_MISSING: &str = "canonicalize-missing";
@@ -58,6 +61,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     readlink_main(args)
 }
 pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
 
     let mut is_no_trailing_delimiter = arg_matches.get_flag(readlink_flags::READLINK_NO_NEWLINE);
@@ -131,8 +136,8 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = READLINK_ABOUT;
-    let usage_description = ct_format_usage(READLINK_USAGE);
+    let application_info = t!("readlink.about");
+    let usage_description = t!("readlink.usage");
     let args = vec![
         Arg::new(readlink_flags::READLINK_CANONICALIZE)
             .short('f')
@@ -161,27 +166,27 @@ pub fn ct_app() -> Command {
         Arg::new(readlink_flags::READLINK_NO_NEWLINE)
             .short('n')
             .long(readlink_flags::READLINK_NO_NEWLINE)
-            .help("do not output the trailing delimiter")
+            .help(t!("readlink.clap.readlink_no_newline"))
             .action(ArgAction::SetTrue),
         Arg::new(readlink_flags::READLINK_QUIET)
             .short('q')
             .long(readlink_flags::READLINK_QUIET)
-            .help("suppress most error messages")
+            .help(t!("readlink.clap.readlink_quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(readlink_flags::READLINK_SILENT)
             .short('s')
             .long(readlink_flags::READLINK_SILENT)
-            .help("suppress most error messages")
+            .help(t!("readlink.clap.readlink_silent"))
             .action(ArgAction::SetTrue),
         Arg::new(readlink_flags::READLINK_VERBOSE)
             .short('v')
             .long(readlink_flags::READLINK_VERBOSE)
-            .help("report error message")
+            .help(t!("readlink.clap.readlink_verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(readlink_flags::READLINK_ZERO)
             .short('z')
             .long(readlink_flags::READLINK_ZERO)
-            .help("separate output with NUL rather than newline")
+            .help(t!("readlink.clap.readlink_zero"))
             .action(ArgAction::SetTrue),
         Arg::new(readlink_flags::READLINK_ARG_FILES)
             .action(ArgAction::Append)

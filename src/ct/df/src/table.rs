@@ -536,7 +536,6 @@ impl fmt::Display for Table {
 
 #[cfg(test)]
 mod tests {
-
     use std::vec;
 
     use crate::blocks::BlocksHumanReadable;

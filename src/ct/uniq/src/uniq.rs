@@ -11,7 +11,10 @@
 
 //! uniq 命令用于对排序后的文本文件进行去重操作
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -23,11 +26,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
-
-const UNIQ_ABOUT: &str = ct_help_about!("uniq.md");
-const UNIQ_USAGE: &str = ct_help_usage!("uniq.md");
-const UNIQ_AFTER_HELP: &str = ct_help_section!("after help", "uniq.md");
+use sys_locale::get_locale;
 
 pub mod uniq_flags {
     pub const ALL_REPEATED: &str = "all-repeated";
@@ -569,6 +568,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
 
     let matches = ct_app()
@@ -614,14 +615,14 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = UNIQ_ABOUT;
-    let usage_description = ct_format_usage(UNIQ_USAGE);
+    let application_info = t!("uniq.about");
+    let usage_description = t!("uniq.usage");
     let args = vec![
         Arg::new(uniq_flags::ALL_REPEATED)
             .short('D')
             .long(uniq_flags::ALL_REPEATED)
             .value_parser(["none", "prepend", "separate"])
-            .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
+            .help(t!("uniq.clap.all_repeated"))
             .value_name("delimit-method")
             .num_args(0..=1)
             .default_missing_value("none")
@@ -629,7 +630,7 @@ pub fn ct_app() -> Command {
         Arg::new(uniq_flags::GROUP)
             .long(uniq_flags::GROUP)
             .value_parser(["separate", "prepend", "append", "both"])
-            .help("show all items, separating groups with an empty line. [default: separate]")
+            .help(t!("uniq.clap.group"))
             .value_name("group-method")
             .num_args(0..=1)
             .default_missing_value("separate")
@@ -643,42 +644,42 @@ pub fn ct_app() -> Command {
         Arg::new(uniq_flags::CHECK_CHARS)
             .short('w')
             .long(uniq_flags::CHECK_CHARS)
-            .help("compare no more than N characters in lines")
+            .help(t!("uniq.clap.check_chars"))
             .value_name("N"),
         Arg::new(uniq_flags::COUNT)
             .short('c')
             .long(uniq_flags::COUNT)
-            .help("prefix lines by the number of occurrences")
+            .help(t!("uniq.clap.count"))
             .action(ArgAction::SetTrue),
         Arg::new(uniq_flags::IGNORE_CASE)
             .short('i')
             .long(uniq_flags::IGNORE_CASE)
-            .help("ignore differences in case when comparing")
+            .help(t!("uniq.clap.ignore_case"))
             .action(ArgAction::SetTrue),
         Arg::new(uniq_flags::REPEATED)
             .short('d')
             .long(uniq_flags::REPEATED)
-            .help("only print duplicate lines")
+            .help(t!("uniq.clap.repeated"))
             .action(ArgAction::SetTrue),
         Arg::new(uniq_flags::SKIP_CHARS)
             .short('s')
             .long(uniq_flags::SKIP_CHARS)
-            .help("avoid comparing the first N characters")
+            .help(t!("uniq.clap.skip_chars"))
             .value_name("N"),
         Arg::new(uniq_flags::SKIP_FIELDS)
             .short('f')
             .long(uniq_flags::SKIP_FIELDS)
-            .help("avoid comparing the first N fields")
+            .help(t!("uniq.clap.skip_fields"))
             .value_name("N"),
         Arg::new(uniq_flags::UNIQUE)
             .short('u')
             .long(uniq_flags::UNIQUE)
-            .help("only print unique lines")
+            .help(t!("uniq.clap.unique"))
             .action(ArgAction::SetTrue),
         Arg::new(uniq_flags::ZERO_TERMINATED)
             .short('z')
             .long(uniq_flags::ZERO_TERMINATED)
-            .help("end lines with 0 byte, not newline")
+            .help(t!("uniq.clap.zero_terminated"))
             .action(ArgAction::SetTrue),
         Arg::new(UNIQ_ARG_FILES)
             .action(ArgAction::Append)
@@ -693,7 +694,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
-        .after_help(UNIQ_AFTER_HELP)
+        .after_help(t!("uniq.after_help"))
         .args(args)
 }
 
@@ -2195,7 +2196,8 @@ mod tests {
     mod map_clap_errors_tests {
         use super::*;
         use clap::Error as ClapError;
-        use clap::error::ErrorKind as ClapErrorKind; // Assuming you use ContextKind elsewhere
+        use clap::error::ErrorKind as ClapErrorKind;
+        // Assuming you use ContextKind elsewhere
 
         fn generate_clap_error(
             error_kind: ClapErrorKind,

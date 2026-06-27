@@ -517,7 +517,6 @@ pub(crate) fn gen_prog_updater(
 
 #[cfg(test)]
 mod tests {
-
     use std::io::Cursor;
     use std::time::Duration;
 

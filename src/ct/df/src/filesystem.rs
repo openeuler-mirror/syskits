@@ -173,9 +173,7 @@ impl Filesystem {
 
 #[cfg(test)]
 mod tests {
-
     mod mount_info_from_path {
-
         use ctcore::ct_fsext::CtMountInfo;
 
         use crate::filesystem::filesystem_mount_info_from_path;

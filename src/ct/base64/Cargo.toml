@@ -15,6 +15,8 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 path = "src/base64.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 ctcore = { workspace = true, features = ["encoding"] }
 ct_base32 = { workspace = true }
 clap = "4.5.4"

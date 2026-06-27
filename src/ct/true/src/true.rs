@@ -8,14 +8,14 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
-use ctcore::ct_help_about;
 use std::{ffi::OsString, io::Write};
-
-const TRUE_ABOUT: &str = ct_help_about!("true.md");
-
+use sys_locale::get_locale;
 #[derive(Default)]
 pub struct True;
 impl Tool for True {
@@ -46,6 +46,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 ///
 /// 返回一个 `CTResult<()>`，成功时为 `Ok(())`，错误时为 `Err(_)`。
 pub fn true_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let mut command = ct_app(); // 创建命令行解析器
 
     let input_args: Vec<OsString> = args.collect(); // 从 `ctcore::Args` 收集命令行参数
@@ -89,7 +91,7 @@ fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
 pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .version(clap::crate_version!()) // 设置程序版本
-        .about(TRUE_ABOUT) // 设置程序简介
+        .about(t!("true.about")) // 设置程序简介
         // 禁用默认的帮助和版本标志，以确保与 GNU 最大程度的兼容
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -97,13 +99,13 @@ pub fn ct_app() -> Command {
         .arg(
             Arg::new("help")
                 .long("help")
-                .help("Print help information")
+                .help(t!("true.clap.help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information")
+                .help(t!("true.clap.version"))
                 .action(ArgAction::Version),
         )
 }

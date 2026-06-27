@@ -12,17 +12,18 @@
 //! 打印经过解析的绝对路径文件名；
 //!除最后一部分外，文件名的所有组成部分必须存在
 
+extern crate rust_i18n;
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser, crate_version,
 };
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_fs::make_path_relative_to;
 use ctcore::{
     Tool,
     ct_display::Quotable,
     ct_error::{CTResult, FromIo, UClapError},
-    ct_format_usage,
     ct_fs::{MissingHandling, ResolveMode, canonicalize},
-    ct_help_about, ct_help_usage,
     ct_line_ending::CtLineEnding,
     ct_show_if_err,
 };
@@ -31,9 +32,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-
-const REALPATH_ABOUT: &str = ct_help_about!("realpath.md");
-const REALPATH_USAGE: &str = ct_help_usage!("realpath.md");
+use sys_locale::get_locale;
 
 mod realpath_flags {
     // 在输出的路径后面添加一个空字符（null 字符），而不是换行符。
@@ -228,6 +227,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// 该函数是实时路径解析功能的入口点它接受命令行参数，解析这些参数，并根据参数执行相应的路径解析操作
 /// 函数首先尝试从提供的参数中获取匹配信息，然后根据这些匹配信息创建 RealpathFlags 对象，最后调用 realpath_exec 函数执行实际的路径解析操作
 pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 尝试从提供的参数中获取匹配信息，如果失败，则以退出码 1 终止程序
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
 
@@ -266,29 +268,29 @@ fn realpath_exec<W: Write>(writer: &mut W, flags: &RealpathFlags) -> CTResult<()
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = REALPATH_ABOUT;
-    let usage_description = ct_format_usage(REALPATH_USAGE);
+    let application_info = t!("realpath.about");
+    let usage_description = t!("realpath.usage");
     let args = vec![
         Arg::new(realpath_flags::REALPATH_QUIET)
             .short('q')
             .long(realpath_flags::REALPATH_QUIET)
-            .help("Do not print warnings for invalid paths")
+            .help(t!("realpath.clap.realpath_quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(realpath_flags::REALPATH_STRIP)
             .short('s')
             .long(realpath_flags::REALPATH_STRIP)
             .visible_alias("no-symlinks")
-            .help("Only strip '.' and '..' components, but don't resolve symbolic links")
+            .help(t!("realpath.clap.realpath_strip"))
             .action(ArgAction::SetTrue),
         Arg::new(realpath_flags::REALPATH_ZERO)
             .short('z')
             .long(realpath_flags::REALPATH_ZERO)
-            .help("Separate output filenames with \\0 rather than newline")
+            .help(t!("realpath.clap.realpath_zero"))
             .action(ArgAction::SetTrue),
         Arg::new(realpath_flags::REALPATH_LOGICAL)
             .short('L')
             .long(realpath_flags::REALPATH_LOGICAL)
-            .help("resolve '..' components before symlinks")
+            .help(t!("realpath.clap.realpath_logical"))
             .action(ArgAction::SetTrue),
         Arg::new(realpath_flags::REALPATH_PHYSICAL)
             .short('P')
@@ -297,7 +299,7 @@ pub fn ct_app() -> Command {
                 realpath_flags::REALPATH_STRIP,
                 realpath_flags::REALPATH_LOGICAL,
             ])
-            .help("resolve symlinks as encountered (default)")
+            .help(t!("realpath.clap.realpath_physical"))
             .action(ArgAction::SetTrue),
         Arg::new(realpath_flags::REALPATH_CANONICALIZE_EXISTING)
             .short('e')

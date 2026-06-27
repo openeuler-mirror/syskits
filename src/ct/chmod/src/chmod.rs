@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -17,17 +18,14 @@ use ctcore::ct_fs::display_permissions_unix;
 #[cfg(not(windows))]
 use ctcore::ct_mode;
 use ctcore::libc::mode_t;
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show, ct_show_error,
-};
+use ctcore::{ct_show, ct_show_error};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
-
-const CHMOD_ABOUT: &str = ct_help_about!("chmod.md");
-const CHMOD_USAGE: &str = ct_help_usage!("chmod.md");
-const CHMOD_LONG_USAGE: &str = ct_help_section!("after help", "chmod.md");
+use sys_locale::get_locale;
 
 mod chmod_flags {
     pub const CHANGES: &str = "changes";
@@ -120,10 +118,14 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let lang_code = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // 跳过二进制名称
 
     let args_match = ct_app()
-        .after_help(CHMOD_LONG_USAGE)
+        .after_help(t!("chmod.after_help"))
         .try_get_matches_from(args)?;
 
     let chmod_flag_changes = args_match.get_flag(chmod_flags::CHANGES);
@@ -185,8 +187,8 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CHMOD_ABOUT;
-    let usage_description = ct_format_usage(CHMOD_USAGE);
+    let application_info = t!("chmod.about");
+    let usage_description = t!("chmod.usage");
 
     let args = chmod_args_init();
 
@@ -197,6 +199,9 @@ pub fn ct_app() -> Command {
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .no_binary_name(true)
         .args(&args)
 }
 
@@ -205,36 +210,36 @@ fn chmod_args_init() -> Vec<Arg> {
         Arg::new(chmod_flags::CHANGES)
             .long(chmod_flags::CHANGES)
             .short('c')
-            .help("like verbose but report only when a change is made")
+            .help(t!("chmod.clap.changes"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::QUIET)
             .long(chmod_flags::QUIET)
             .visible_alias("silent")
             .short('f')
-            .help("suppress most error messages")
+            .help(t!("chmod.clap.quiet"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::VERBOSE)
             .long(chmod_flags::VERBOSE)
             .short('v')
-            .help("output a diagnostic for every file processed")
+            .help(t!("chmod.clap.verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::NO_PRESERVE_ROOT)
             .long(chmod_flags::NO_PRESERVE_ROOT)
-            .help("do not treat '/' specially (the default)")
+            .help(t!("chmod.clap.no_preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::PRESERVE_ROOT)
             .long(chmod_flags::PRESERVE_ROOT)
-            .help("fail to operate recursively on '/'")
+            .help(t!("chmod.clap.preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::RECURSIVE)
             .long(chmod_flags::RECURSIVE)
             .short('R')
-            .help("change files and directories recursively")
+            .help(t!("chmod.clap.recursive"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::REFERENCE)
             .long("reference")
             .value_hint(clap::ValueHint::FilePath)
-            .help("use RFILE's mode instead of MODE values"),
+            .help(t!("chmod.clap.reference")),
         Arg::new(chmod_flags::MODE).required_unless_present(chmod_flags::REFERENCE),
         Arg::new(chmod_flags::FILE)
             .required_unless_present(chmod_flags::MODE)
@@ -1105,7 +1110,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
     }
     #[test]
     fn test_ct_app_arg_version() {
@@ -1116,7 +1121,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
     }
 
     ////////////////////////////////////////////////////////////////////////

@@ -9,20 +9,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
+use rust_i18n::t;
 //dircolors 命令在Linux系统中主要用于控制 ls 命令显示目录和文件时使用的颜色
 use std::borrow::Borrow;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::env;
 use std::fs::File;
-
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use sys_locale::get_locale;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_colors::{CT_FILE_ATTRIBUTE_CODES, CT_FILE_COLORS, CT_FILE_TYPES, CT_TERMS};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::{ct_help_about, ct_help_section, ct_help_usage};
+
 use std::ffi::OsString;
 
 mod opt_flags {
@@ -32,10 +35,6 @@ mod opt_flags {
     pub const PRINT_LS_COLORS: &str = "print-ls-colors";
     pub const FILE: &str = "FILE";
 }
-
-const DIRCOLORS_USAGE: &str = ct_help_usage!("dircolors.md");
-const DIRCOLORS_ABOUT: &str = ct_help_about!("dircolors.md");
-const DIRCOLORS_AFTER_HELP: &str = ct_help_section!("after help", "dircolors.md");
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum DircolorsOutputFmt {
@@ -162,6 +161,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
  * 一个 `CTResult<()>`，其中 `Ok(())` 表示成功，`Err(_)` 表示错误，并带有描述性消息。
  */
 pub fn dircolors_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 使用clap库解析命令行参数。
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -322,15 +323,15 @@ fn dircolors_parm_conflict_check(args_match: &ArgMatches) -> Option<CTResult<()>
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = DIRCOLORS_ABOUT;
-    let usage_description = ct_format_usage(DIRCOLORS_USAGE);
+    let application_info = t!("dircolors.about");
+    let usage_description = t!("dircolors.usage");
 
     let args = dircolors_args_init();
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
-        .after_help(DIRCOLORS_AFTER_HELP)
+        .after_help(t!("dircolors.after_help"))
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
@@ -343,23 +344,23 @@ fn dircolors_args_init() -> Vec<Arg> {
             .short('b')
             .visible_alias("bourne-shell")
             .overrides_with(opt_flags::C_SHELL)
-            .help("output Bourne shell code to set LS_COLORS")
+            .help(t!("dircolors.clap.bourne_shell"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::C_SHELL)
             .long("csh")
             .short('c')
             .visible_alias("c-shell")
             .overrides_with(opt_flags::BOURNE_SHELL)
-            .help("output C shell code to set LS_COLORS")
+            .help(t!("dircolors.clap.c_shell"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::PRINT_DATABASE)
             .long("print-database")
             .short('p')
-            .help("print the byte counts")
+            .help(t!("dircolors.clap.print_database"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::PRINT_LS_COLORS)
             .long("print-ls-colors")
-            .help("output fully escaped colors for display")
+            .help(t!("dircolors.clap.print_ls_colors"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILE)
             .hide(true)
@@ -453,7 +454,7 @@ enum DircolorsParseState {
     Pass,
 }
 
-use ctcore::{ct_format_usage, ct_parse_glob};
+use ctcore::ct_parse_glob;
 
 #[allow(clippy::cognitive_complexity)]
 /// 解析dircolors格式的输入，生成相应的配置字符串。

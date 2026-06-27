@@ -16,6 +16,8 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/src/ct
 path = "src/tty.rs"
 
 [dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
 clap = { workspace = true }
 nix = { workspace = true, features = ["term"] }
 ctcore = { workspace = true, features = ["fs"] }

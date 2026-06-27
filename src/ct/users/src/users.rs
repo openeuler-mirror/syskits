@@ -12,19 +12,18 @@
 //! users命令用于显示当前登录系统的所有用户的用户列表
 //! 每个显示的用户名对应一个登录会话。如果一个用户有不止一个登录会话，那他的用户名将显示相同的次数。
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version};
+use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_utmpx::{self, CtUtmpx};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
-
-const USERS_ABOUT: &str = ct_help_about!("users.md");
-const USERS_USAGE: &str = ct_help_usage!("users.md");
 
 static USERS_ARG_FILES: &str = "files";
 
@@ -73,6 +72,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn users_main(args: impl ctcore::Args) -> CTResult<String> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
         .after_help(users_get_long_usage())
         .try_get_matches_from(args)?;
@@ -111,8 +112,8 @@ fn parse_users_files(matches: ArgMatches) -> PathBuf {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = USERS_ABOUT;
-    let usage_description = ct_format_usage(USERS_USAGE);
+    let application_info = t!("users.about");
+    let usage_description = t!("users.usage");
     let arg = Arg::new(USERS_ARG_FILES)
         .num_args(1)
         .value_hint(clap::ValueHint::FilePath)

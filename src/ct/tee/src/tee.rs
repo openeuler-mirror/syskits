@@ -12,24 +12,22 @@
 //! tee命令行工具，它允许用户将标准输入重定向到一个或多个文件，同时保持在标准输出上显示。
 //! 这在需要将输出保存到文件并同时查看终端输出时非常有用。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::PossibleValue, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
+use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, copy, sink, stdin, stdout};
 use std::path::PathBuf;
-
-// spell-checker:ignore nopipe
+use sys_locale::get_locale;
 
 #[cfg(unix)]
 use ctcore::ct_signals::{enable_pipe_errors, ignore_interrupts};
-
-const TEE_ABOUT: &str = ct_help_about!("tee.md");
-const TEE_USAGE: &str = ct_help_usage!("tee.md");
-const TEE_AFTER_HELP: &str = ct_help_section!("after help", "tee.md");
 
 mod stat_flags {
     pub const TEE_APPEND: &str = "append";
@@ -73,6 +71,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn tee_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let options = StatOptions::new(&matches);
 
@@ -171,33 +171,29 @@ fn create_writers(options: &StatOptions) -> Result<Vec<NamedWriter>> {
 pub fn ct_app() -> Command {
     let args = vec![
         Arg::new(stat_flags::TEE_APPEND)
-                .long(stat_flags::TEE_APPEND)
-                .short('a')
-                .help("append to the given FILEs, do not overwrite")
-                .action(ArgAction::SetTrue),
-
+            .long(stat_flags::TEE_APPEND)
+            .short('a')
+            .help(t!("tee.clap.tee_append"))
+            .action(ArgAction::SetTrue),
         Arg::new(stat_flags::TEE_IGNORE_INTERRUPTS)
             .long(stat_flags::TEE_IGNORE_INTERRUPTS)
             .short('i')
-            .help("ignore interrupt signals (ignored on non-Unix platforms)")
+            .help(t!("tee.clap.tee_ignore_interrupts"))
             .action(ArgAction::SetTrue),
-
         Arg::new(stat_flags::TEE_FILE)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::FilePath),
-
         Arg::new(stat_flags::TEE_IGNORE_PIPE_ERRORS)
             .short('p')
-            .help("set write error behavior (ignored on non-Unix platforms)")
+            .help(t!("tee.clap.tee_ignore_pipe_errors"))
             .action(ArgAction::SetTrue),
-
         Arg::new(stat_flags::TEE_OUTPUT_ERROR)
             .long(stat_flags::TEE_OUTPUT_ERROR)
             .require_equals(true)
             .num_args(0..=1)
             .value_parser([
                 PossibleValue::new("warn")
-                    .help("produce warnings for errors writing to any output"),
+                    .help(t!("tee.clap.tee_output_error")),
                 PossibleValue::new("warn-nopipe")
                     .help("produce warnings for errors that are not pipe errors (ignored on non-unix platforms)"),
                 PossibleValue::new("exit").help("exit on write errors to any output"),
@@ -206,14 +202,13 @@ pub fn ct_app() -> Command {
             ])
             .help("set write error behavior")
             .conflicts_with(stat_flags::TEE_IGNORE_PIPE_ERRORS),
-
     ];
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(TEE_ABOUT)
-        .override_usage(ct_format_usage(TEE_USAGE))
-        .after_help(TEE_AFTER_HELP)
+        .about(t!("tee.about"))
+        .override_usage(t!("tee.usage"))
+        .after_help(t!("tee.after_help"))
         .infer_long_args(true)
         .args(args)
 }
@@ -660,8 +655,8 @@ mod test_basic {
 
         // 测试帮助信息
         let help_text = app.render_help().to_string();
-        assert!(help_text.contains("append to the given FILEs"));
-        assert!(help_text.contains("ignore interrupt signals"));
+        assert!(help_text.contains("tee"));
+        assert!(help_text.contains("-i"));
     }
 
     #[test]

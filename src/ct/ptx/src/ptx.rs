@@ -22,11 +22,13 @@
 //! - 生成格式化的输出(支持 Roff 和 TeX 格式)
 //! - 提供引用和上下文显示
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -36,9 +38,7 @@ use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
-
-const PTX_USAGE: &str = ct_help_usage!("ptx.md");
-const PTX_ABOUT: &str = ct_help_about!("ptx.md");
+use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 
@@ -827,6 +827,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     ptx_main(args)
 }
 pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let settings = PtxSettings::new(args)?;
     ptx_exec(&settings)
 }
@@ -934,93 +936,93 @@ pub fn ct_app() -> Command {
         Arg::new(ptx_options::PTX_AUTO_REFERENCE)
             .short('A')
             .long(ptx_options::PTX_AUTO_REFERENCE)
-            .help("output automatically generated references")
+            .help(t!("ptx.clap.ptx_auto_reference"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_TRADITIONAL)
             .short('G')
             .long(ptx_options::PTX_TRADITIONAL)
-            .help("behave more like System V 'ptx'")
+            .help(t!("ptx.clap.ptx_traditional"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_FLAG_TRUNCATION)
             .short('F')
             .long(ptx_options::PTX_FLAG_TRUNCATION)
-            .help("use STRING for flagging line truncations")
+            .help(t!("ptx.clap.ptx_flag_truncation"))
             .value_name("STRING"),
         Arg::new(ptx_options::PTX_MACRO_NAME)
             .short('M')
             .long(ptx_options::PTX_MACRO_NAME)
-            .help("macro name to use instead of 'xx'")
+            .help(t!("ptx.clap.ptx_macro_name"))
             .value_name("STRING"),
         Arg::new(ptx_options::PTX_FORMAT_ROFF)
             .short('O')
             .long(ptx_options::PTX_FORMAT_ROFF)
-            .help("generate output as roff directives")
+            .help(t!("ptx.clap.ptx_format_roff"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_RIGHT_SIDE_REFS)
             .short('R')
             .long(ptx_options::PTX_RIGHT_SIDE_REFS)
-            .help("put references at right, not counted in -w")
+            .help(t!("ptx.clap.ptx_right_side_refs"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_SENTENCE_REGEXP)
             .short('S')
             .long(ptx_options::PTX_SENTENCE_REGEXP)
-            .help("for end of lines or end of sentences")
+            .help(t!("ptx.clap.ptx_sentence_regexp"))
             .value_name("REGEXP"),
         Arg::new(ptx_options::PTX_FORMAT_TEX)
             .short('T')
             .long(ptx_options::PTX_FORMAT_TEX)
-            .help("generate output as TeX directives")
+            .help(t!("ptx.clap.ptx_format_tex"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_WORD_REGEXP)
             .short('W')
             .long(ptx_options::PTX_WORD_REGEXP)
-            .help("use REGEXP to match each keyword")
+            .help(t!("ptx.clap.ptx_word_regexp"))
             .value_name("REGEXP"),
         Arg::new(ptx_options::PTX_BREAK_FILE)
             .short('b')
             .long(ptx_options::PTX_BREAK_FILE)
-            .help("word break characters in this FILE")
+            .help(t!("ptx.clap.ptx_break_file"))
             .value_name("FILE")
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_IGNORE_CASE)
             .short('f')
             .long(ptx_options::PTX_IGNORE_CASE)
-            .help("fold lower case to upper case for sorting")
+            .help(t!("ptx.clap.ptx_ignore_case"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_GAP_SIZE)
             .short('g')
             .long(ptx_options::PTX_GAP_SIZE)
-            .help("gap size in columns between output fields")
+            .help(t!("ptx.clap.ptx_gap_size"))
             .value_name("NUMBER"),
         Arg::new(ptx_options::PTX_IGNORE_FILE)
             .short('i')
             .long(ptx_options::PTX_IGNORE_FILE)
-            .help("read ignore word list from FILE")
+            .help(t!("ptx.clap.ptx_ignore_file"))
             .value_name("FILE")
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_ONLY_FILE)
             .short('o')
             .long(ptx_options::PTX_ONLY_FILE)
-            .help("read only word list from this FILE")
+            .help(t!("ptx.clap.ptx_only_file"))
             .value_name("FILE")
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_REFERENCES)
             .short('r')
             .long(ptx_options::PTX_REFERENCES)
-            .help("first field of each line is a reference")
+            .help(t!("ptx.clap.ptx_references"))
             .value_name("FILE")
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_WIDTH)
             .short('w')
             .long(ptx_options::PTX_WIDTH)
-            .help("output width in columns, reference excluded")
+            .help(t!("ptx.clap.ptx_width"))
             .value_name("NUMBER"),
     ];
 
     Command::new(ctcore::ct_util_name())
-        .about(PTX_ABOUT)
+        .about(t!("ptx.about"))
         .version(crate_version!())
-        .override_usage(ct_format_usage(PTX_USAGE))
+        .override_usage(t!("ptx.usage"))
         .infer_long_args(true)
         .args(args)
 }

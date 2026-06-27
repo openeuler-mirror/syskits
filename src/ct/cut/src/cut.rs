@@ -9,33 +9,30 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use bstr::io::BufReadExt;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use self::searcher::Searcher;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::ct_ranges::CtRange;
+use ctcore::{ct_show_error, ct_show_if_err};
+use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-
-use self::searcher::Searcher;
-use ctcore::Tool;
-use ctcore::ct_ranges::CtRange;
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error, ct_show_if_err,
-};
-use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use sys_locale::get_locale;
 use unicode_segmentation::UnicodeSegmentation;
 
 mod matcher;
 mod searcher;
-
-const CUT_USAGE: &str = ct_help_usage!("cut.md");
-const CUT_ABOUT: &str = ct_help_about!("cut.md");
-const CUT_AFTER_HELP: &str = ct_help_section!("after help", "cut.md");
 
 #[derive(PartialEq, Debug)]
 struct CutOptions<'a> {
@@ -595,8 +592,8 @@ fn cut_get_delimiters(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CUT_ABOUT;
-    let usage_description = ct_format_usage(CUT_USAGE);
+    let application_info = t!("cut.about");
+    let usage_description = t!("cut.usage");
 
     let args = cut_args_init();
 
@@ -605,27 +602,39 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .override_usage(usage_description)
         .about(application_info)
-        .after_help(CUT_AFTER_HELP)
+        .after_help(t!("cut.after_help"))
         .infer_long_args(true)
         // 允许某些参数（如`-d`和`--output-delimiter`）互相覆盖，但对剪切模式相关的参数
         // 使用`ArgAction::Append`来计数和处理，确保只能指定其中之一。
         .args_override_self(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
 fn cut_args_init() -> Vec<Arg> {
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("cut.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("cut.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::BYTES)
             .short('b')
             .long(opt_flags::BYTES)
-            .help("filter byte columns from the input source")
+            .help(t!("cut.clap.bytes"))
             .allow_hyphen_values(true)
             .value_name("LIST")
             .action(ArgAction::Append),
         Arg::new(opt_flags::CHARACTERS)
             .short('c')
             .long(opt_flags::CHARACTERS)
-            .help("alias for character mode")
+            .help(t!("cut.clap.characters"))
             .allow_hyphen_values(true)
             .value_name("LIST")
             .action(ArgAction::Append),
@@ -637,13 +646,13 @@ fn cut_args_init() -> Vec<Arg> {
             .value_name("DELIM"),
         Arg::new(opt_flags::WHITESPACE_DELIMITED)
             .short('w')
-            .help("Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).")
+            .help(t!("cut.clap.whitespace_delimited"))
             .value_name("WHITESPACE")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FIELDS)
             .short('f')
             .long(opt_flags::FIELDS)
-            .help("filter field columns from the input source")
+            .help(t!("cut.clap.fields"))
             .allow_hyphen_values(true)
             .value_name("LIST")
             .action(ArgAction::Append),
@@ -652,12 +661,12 @@ fn cut_args_init() -> Vec<Arg> {
 
         Arg::new(opt_flags::COMPLEMENT)
             .long(opt_flags::COMPLEMENT)
-            .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
+            .help(t!("cut.clap.complement"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::ONLY_DELIMITED)
             .short('s')
             .long(opt_flags::ONLY_DELIMITED)
-            .help("in field mode, only print lines which contain the delimiter")
+            .help(t!("cut.clap.only_delimited"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::OUTPUT_DELIMITER)
             .long(opt_flags::OUTPUT_DELIMITER)
@@ -671,7 +680,7 @@ fn cut_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::ZERO_TERMINATED)
             .short('z')
             .long(opt_flags::ZERO_TERMINATED)
-            .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
+            .help(t!("cut.clap.zero_terminated"))
             .action(ArgAction::SetTrue),
 
 
@@ -714,6 +723,8 @@ impl Tool for Cut {
  * @return `CTResult<()>`，成功执行返回 `Ok(())`，错误时返回包含错误信息的 `Err`。
  */
 pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 将传入的参数转换为 OsString 的 Vec。
     let args = args.collect::<Vec<OsString>>();
 
@@ -848,7 +859,7 @@ fn cut_mode_parse<'a>(
                     field_opts: Some(CutFieldOptions {
                         only_delimited: is_only_delimited,
                         delimiter,
-                    })
+                    }),
                 },
             )
         }),
@@ -1796,7 +1807,6 @@ mod tests {
     }
 
     mod tests_cut_functions {
-
         use crate::{
             CutDelimiter, ct_app, cut_get_delimiters, cut_mode_param_parse, cut_mode_parse,
             opt_flags,

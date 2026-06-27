@@ -11,19 +11,19 @@
 
 //! pwd命令, 在Linux和其他类Unix系统中用于显示当前工作目录的绝对路径。
 
+extern crate rust_i18n;
 use clap::ArgAction;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::env;
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
-
-const PWD_ABOUT: &str = ct_help_about!("pwd.md");
-const PWD_USAGE: &str = ct_help_usage!("pwd.md");
+use sys_locale::get_locale;
 
 pub mod pwd_flags {
     pub const PWD_LOGICAL: &str = "logical";
@@ -115,6 +115,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     // 如果设置了 POSIXLY_CORRECT，我们希望进行逻辑解析。
     // 这在执行 mkdir -p a/b && ln -s a/b c && cd c && pwd 时会产生不同的输出
@@ -145,19 +147,19 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = PWD_ABOUT;
-    let usage_description = ct_format_usage(PWD_USAGE);
+    let application_info = t!("pwd.about");
+    let usage_description = t!("pwd.usage");
     let args = vec![
         Arg::new(pwd_flags::PWD_LOGICAL)
             .short('L')
             .long(pwd_flags::PWD_LOGICAL)
-            .help("use PWD from environment, even if it contains symlinks")
+            .help(t!("pwd.clap.pwd_logical"))
             .action(ArgAction::SetTrue),
         Arg::new(pwd_flags::PWD_PHYSICAL)
             .short('P')
             .long(pwd_flags::PWD_PHYSICAL)
             .overrides_with(pwd_flags::PWD_LOGICAL)
-            .help("avoid all symlinks")
+            .help(t!("pwd.clap.pwd_physical"))
             .action(ArgAction::SetTrue),
         Arg::new(pwd_flags::PWD_ARG_OTHERS)
             .action(ArgAction::Append)
@@ -205,7 +207,7 @@ mod tests {
         assert!(command.get_name().contains("pwd"));
 
         // 测试 execute 方法
-        let args = vec![OsString::from("pwd")];
+        let args = vec![OsString::from("pwd"), OsString::from("./")];
         assert!(tool.execute(&args).is_ok());
     }
 

@@ -15,20 +15,19 @@
 // 支持的平台：非Windows的Unix平台。
 // 使用的库：clap用于命令行参数解析，libc提供Unix系统调用的接口。
 
+extern crate rust_i18n;
 use clap::{Arg, ArgMatches, Command, crate_version, value_parser};
-use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
-use libc::{dev_t, mode_t};
-use std::ffi::CString;
-
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
+use clap::ArgAction;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use libc::{dev_t, mode_t};
+use std::ffi::CString;
 use std::ffi::OsString;
-
-const MKNOD_ABOUT: &str = ct_help_about!("mknod.md");
-const MKNOD_USAGE: &str = ct_help_usage!("mknod.md");
-const MKNOD_AFTER_HELP: &str = ct_help_section!("after help", "mknod.md");
+use sys_locale::get_locale;
 
 // 常量：用于设置文件模式的权限位。
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
@@ -91,6 +90,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从命令行参数中解析选项和参数
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -152,33 +153,43 @@ fn mknod_processing(
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = MKNOD_ABOUT;
-    let usage_description = ct_format_usage(MKNOD_USAGE);
-    let after_info = MKNOD_AFTER_HELP;
+    let application_info = t!("mknod.about");
+    let usage_description = t!("mknod.usage");
+    let after_info = t!("mknod.after_help");
 
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("mknod.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("mknod.clap.version"))
+            .action(ArgAction::Version),
         Arg::new("mode")
             .short('m')
             .long("mode")
             .value_name("MODE")
-            .help("set file permission bits to MODE, not a=rw - umask"),
+            .help(t!("mknod.clap.mode")),
         Arg::new("name")
             .value_name("NAME")
-            .help("name of the new file")
+            .help(t!("mknod.clap.name"))
             .required(true)
             .value_hint(clap::ValueHint::AnyPath),
         Arg::new("type")
             .value_name("TYPE")
-            .help("type of the new file (b, c, u or p)")
+            .help(t!("mknod.clap.type"))
             .required(true)
             .value_parser(parse_type),
         Arg::new("major")
             .value_name("MAJOR")
-            .help("major file type")
+            .help(t!("mknod.clap.major"))
             .value_parser(value_parser!(u64)),
         Arg::new("minor")
             .value_name("MINOR")
-            .help("minor file type")
+            .help(t!("mknod.clap.minor"))
             .value_parser(value_parser!(u64)),
     ];
 
@@ -188,6 +199,8 @@ pub fn ct_app() -> Command {
         .after_help(after_info)
         .about(application_info)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 

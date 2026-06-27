@@ -138,7 +138,7 @@ impl Sequence {
             Self::Char(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
-            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
+            Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
             Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
             Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
             Self::Blank => Box::new(unicodes::BLANK.iter().cloned()),
@@ -237,8 +237,7 @@ impl Sequence {
                 .flat_map(Self::flatten)
                 .count();
             let repeat_len = set1_solved.len().saturating_sub(non_star_len);
-            result.extend(std::iter::repeat(char_star).take(repeat_len));
-
+            result.extend(std::iter::repeat_n(char_star, repeat_len));
             // Add right part if exists
             if let Some(right) = parts.next() {
                 result.extend(Self::process_char_set(right));

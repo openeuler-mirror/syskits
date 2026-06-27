@@ -8,13 +8,14 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
-use ctcore::ct_help_about;
 use std::{ffi::OsString, io::Write};
-
-const FALSE_ABOUT: &str = ct_help_about!("false.md");
+use sys_locale::get_locale;
 
 #[derive(Default)]
 pub struct False;
@@ -39,6 +40,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn false_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let mut command = ct_app(); // 创建命令行解析器实例
 
     // 设置退出码为1，遵循GNU规范，即使在成功的情况下也返回1。
@@ -85,20 +88,20 @@ fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
 pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .version(clap::crate_version!())
-        .about(FALSE_ABOUT)
+        .about(t!("false.about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             Arg::new("help")
                 .long("help")
-                .help("Print help information")
+                .help(t!("false.clap.help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information")
+                .help(t!("false.clap.version"))
                 .action(ArgAction::Version),
         )
 }

@@ -309,7 +309,6 @@ impl fmt::Display for BlockSize {
 
 #[cfg(test)]
 mod tests {
-
     use std::env;
 
     use crate::blocks::BLOCKS_IEC_BASES;

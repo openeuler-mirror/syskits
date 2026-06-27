@@ -11,15 +11,19 @@
 
 //！ pathchk判断无效或未移植的文件名。
 
+extern crate rust_i18n;
 use clap::ArgMatches;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
+use sys_locale::get_locale;
+
 // operating mode
 enum PathchkMode {
     Default, // use filesystem to determine information and limits
@@ -27,9 +31,6 @@ enum PathchkMode {
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
 }
-
-const PATHCHK_ABOUT: &str = ct_help_about!("pathchk.md");
-const PATHCHK_USAGE: &str = ct_help_usage!("pathchk.md");
 
 pub mod pathchk_flags {
     pub const PATHCHK_POSIX: &str = "posix";
@@ -109,6 +110,9 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// # 返回
 /// * `CTResult<()>` - 执行结果
 pub fn pathchk_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    // 设置语言
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 尝试解析命令行参数
     let matches = ct_app().try_get_matches_from(args)?;
     // 解析参数到 PathchkFlags 结构体
@@ -145,12 +149,12 @@ fn pathchk_exec<W: Write>(writer: &mut W, flags: &PathchkFlags) -> CTResult<()> 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = PATHCHK_ABOUT;
-    let usage_description = ct_format_usage(PATHCHK_USAGE);
+    let application_info = t!("pathchk.about");
+    let usage_description = t!("pathchk.usage");
     let args = vec![
         Arg::new(pathchk_flags::PATHCHK_POSIX)
             .short('p')
-            .help("check for most POSIX systems")
+            .help(t!("pathchk.clap.pathchk_posix"))
             .action(ArgAction::SetTrue),
         Arg::new(pathchk_flags::PATHCHK_POSIX_SPECIAL)
             .short('P')
@@ -158,7 +162,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pathchk_flags::PATHCHK_PORTABILITY)
             .long(pathchk_flags::PATHCHK_PORTABILITY)
-            .help("check for all POSIX systems (equivalent to -p -P)")
+            .help(t!("pathchk.clap.pathchk_portability"))
             .action(ArgAction::SetTrue),
         Arg::new(pathchk_flags::PATHCHK_PATH)
             .hide(true)

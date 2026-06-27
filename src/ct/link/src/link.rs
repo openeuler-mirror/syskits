@@ -13,18 +13,18 @@
 //!
 //! 调用 link 函数，创建一个名为 <文件2> 的硬链接，指向现有的文件 <文件1>。
 
+extern crate rust_i18n;
 use clap::builder::ValueParser;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, Command, crate_version};
 use ctcore::{
     Tool,
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, FromIo},
-    ct_format_usage, ct_help_about, ct_help_usage,
 };
 use std::{ffi::OsString, fs::hard_link, path::Path};
-
-const LINK_ABOUT: &str = ct_help_about!("link.md");
-const LINK_USAGE: &str = ct_help_usage!("link.md");
+use sys_locale::get_locale;
 
 mod link_flags {
     pub const FILES: &str = "FILES";
@@ -68,6 +68,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 
 /// 主函数：解析参数并执行链接操作
 pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = LinkFlags::new(&matches)?;
     link_exec(&flags)
@@ -95,8 +97,8 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(LINK_ABOUT)
-        .override_usage(ct_format_usage(LINK_USAGE))
+        .about(t!("link.about"))
+        .override_usage(t!("link.usage"))
         .infer_long_args(true)
         .arg(arg)
 }

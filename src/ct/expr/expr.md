@@ -9,7 +9,7 @@ Print the value of `EXPRESSION` to standard output
 
 ## After help
 
-Print the value of `EXPRESSION` to standard output.  A blank line below
+Print the value of `EXPRESSION` to standard output. A blank line below
 separates increasing precedence groups.
 
 `EXPRESSION` may be:

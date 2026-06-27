@@ -9,13 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// spell-checker:ignore (ToDO) fname, algo
+extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
 use clap::{Arg, ArgAction, Command, crate_version, value_parser};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
     ct_error::{CTError, CTResult, CtSimpleError, FromIo},
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show,
+    ct_show,
     ct_sum::{
         BSD, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1, Sha224, Sha256,
         Sha384, Sha512, div_ceil,
@@ -31,10 +33,7 @@ use std::fs::File;
 use std::io::{self, BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
-
-const CKSUM_USAGE: &str = ct_help_usage!("cksum.md");
-const CKSUM_ABOUT: &str = ct_help_about!("cksum.md");
-const CKSUM_AFTER_HELP: &str = ct_help_section!("after help", "cksum.md");
+use sys_locale::get_locale;
 
 const CKSUM_ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 const CKSUM_ALGORITHM_OPTIONS_BSD: &str = "bsd";
@@ -323,7 +322,7 @@ fn cksum_digest_read<T: Read>(
         Ok((cksum_digest.result_str(), output_size))
     } else {
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
-        let mut bytes = vec![0; (output_bits + 7) / 8];
+        let mut bytes = vec![0; output_bits.div_ceil(8)];
         cksum_digest.hash_finalize(&mut bytes);
         Ok((encode(bytes), output_size))
     }
@@ -361,6 +360,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let algo_name: &str = match matches.get_one::<String>(opt_flags::ALGORITHM) {
@@ -439,8 +440,8 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = CKSUM_ABOUT;
-    let usage_description = ct_format_usage(CKSUM_USAGE);
+    let application_info = t!("cksum.about");
+    let usage_description = t!("cksum.usage");
 
     let args = args_init();
 
@@ -450,8 +451,10 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args_override_self(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
-        .after_help(CKSUM_AFTER_HELP)
+        .after_help(t!("cksum.after_help"))
 }
 
 fn args_init() -> Vec<Arg> {
@@ -463,7 +466,7 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::ALGORITHM)
             .long(opt_flags::ALGORITHM)
             .short('a')
-            .help("select the digest type to use. See DIGEST below")
+            .help(t!("cksum.clap.algorithm"))
             .value_name("ALGORITHM")
             .value_parser([
                 CKSUM_ALGORITHM_OPTIONS_SYSV,
@@ -480,12 +483,12 @@ fn args_init() -> Vec<Arg> {
             ]),
         Arg::new(opt_flags::UNTAGGED)
             .long(opt_flags::UNTAGGED)
-            .help("create a reversed style checksum, without digest type")
+            .help(t!("cksum.clap.untagged"))
             .action(ArgAction::SetTrue)
             .overrides_with(opt_flags::TAG),
         Arg::new(opt_flags::TAG)
             .long(opt_flags::TAG)
-            .help("create a BSD style checksum, undo --untagged (default)")
+            .help(t!("cksum.clap.tag"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::LENGTH)
             .long(opt_flags::LENGTH)
@@ -495,15 +498,25 @@ fn args_init() -> Vec<Arg> {
             .action(ArgAction::Set),
         Arg::new(opt_flags::RAW)
             .long(opt_flags::RAW)
-            .help("emit a raw binary digest, not hexadecimal")
+            .help(t!("cksum.clap.raw"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::BASE64)
             .long(opt_flags::BASE64)
-            .help("emit a base64 digest, not hexadecimal")
+            .help(t!("cksum.clap.base64"))
             .action(ArgAction::SetTrue)
             // Even though this could easily just override an earlier '--raw',
             // GNU cksum does not permit these flags to be combined:
             .conflicts_with(opt_flags::RAW),
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("cksum.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("cksum.clap.version"))
+            .action(ArgAction::Version),
     ];
     args
 }
@@ -2109,7 +2122,6 @@ mod tests {
 
     #[cfg(test)]
     mod tests_detect_algo {
-
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;

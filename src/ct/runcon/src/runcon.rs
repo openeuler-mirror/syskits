@@ -29,12 +29,15 @@
 //! 该模块依赖于 SELinux 提供的安全机制，在非 SELinux 系统上
 //! 部分功能可能无法使用。
 
+extern crate rust_i18n;
 use clap::builder::ValueParser;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_error::{CTResult, CTsageError};
 
 use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
+use sys_locale::get_locale;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -45,10 +48,6 @@ mod errors;
 use ctcore::Tool;
 use errors::error_exit_status;
 use errors::{DefaultError, Result, RunconError};
-
-const RUNCON_ABOUT: &str = ct_help_about!("runcon.md");
-const RUNCON_USAGE: &str = ct_help_usage!("runcon.md");
-const RUNCON_DESCRIPTION: &str = ct_help_section!("after help", "runcon.md");
 
 pub mod runcon_options {
     pub const RUNCON_COMPUTE: &str = "compute";
@@ -77,6 +76,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 /// 2. 使用指定的上下文运行命令
 /// 3. 使用自定义上下文运行命令
 pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 创建命令行配置
     let config = ct_app();
 
@@ -144,31 +145,31 @@ pub fn ct_app() -> Command {
         Arg::new(runcon_options::RUNCON_COMPUTE)
             .short('c')
             .long(runcon_options::RUNCON_COMPUTE)
-            .help("Compute process transition context before modifying.")
+            .help(t!("runcon.clap.runcon_compute"))
             .action(ArgAction::SetTrue),
         Arg::new(runcon_options::RUNCON_USER)
             .short('u')
             .long(runcon_options::RUNCON_USER)
             .value_name("USER")
-            .help("Set user USER in the target security context.")
+            .help(t!("runcon.clap.runcon_user"))
             .value_parser(ValueParser::os_string()),
         Arg::new(runcon_options::RUNCON_ROLE)
             .short('r')
             .long(runcon_options::RUNCON_ROLE)
             .value_name("ROLE")
-            .help("Set role ROLE in the target security context.")
+            .help(t!("runcon.clap.runcon_role"))
             .value_parser(ValueParser::os_string()),
         Arg::new(runcon_options::RUNCON_TYPE)
             .short('t')
             .long(runcon_options::RUNCON_TYPE)
             .value_name("TYPE")
-            .help("Set type TYPE in the target security context.")
+            .help(t!("runcon.clap.runcon_type"))
             .value_parser(ValueParser::os_string()),
         Arg::new(runcon_options::RUNCON_RANGE)
             .short('l')
             .long(runcon_options::RUNCON_RANGE)
             .value_name("RANGE")
-            .help("Set range RANGE in the target security context.")
+            .help(t!("runcon.clap.runcon_range"))
             .value_parser(ValueParser::os_string()),
         Arg::new("ARG")
             .action(ArgAction::Append)
@@ -178,9 +179,9 @@ pub fn ct_app() -> Command {
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(RUNCON_ABOUT)
-        .after_help(RUNCON_DESCRIPTION)
-        .override_usage(ct_format_usage(RUNCON_USAGE))
+        .about(t!("runcon.about"))
+        .after_help(t!("runcon.after_help"))
+        .override_usage(t!("runcon.usage"))
         .infer_long_args(true)
         .args(args)
         // Once "ARG" is parsed, everything after that belongs to it.

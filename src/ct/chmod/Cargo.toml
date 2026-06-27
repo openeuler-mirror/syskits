@@ -16,9 +16,9 @@ path = "src/chmod.rs"
 
 [dependencies]
 clap = { workspace = true }
-libc = { workspace = true }
 ctcore = { workspace = true, features = ["fs", "mode"] }
-
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 

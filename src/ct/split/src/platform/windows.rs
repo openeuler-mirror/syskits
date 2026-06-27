@@ -10,7 +10,7 @@
  */
 use ctcore::ct_fs;
 use std::io::Write;
-use std::io::{BufWriter, Error, ErrorKind, Result};
+use std::io::{BufWriter, Error, ErrorKind};
 use std::path::Path;
 
 /// Get a file writer

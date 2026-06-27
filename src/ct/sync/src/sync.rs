@@ -12,17 +12,18 @@
 //! sync 命令在 Linux 中用于确保系统内存中的数据被立即写入到硬盘中，防止数据丢失。
 /* synced with: sync (GNU coreutils) 8.13 */
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 mod platform;
-
-const SYNC_ABOUT: &str = ct_help_about!("sync.md");
-const SYNC_USAGE: &str = ct_help_usage!("sync.md");
 
 pub mod sync_flags {
     pub const SYNC_FILE_SYSTEM: &str = "file-system";
@@ -37,6 +38,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
     let is_has_data = arg_matches.get_flag(sync_flags::SYNC_DATA);
     let is_file_system = arg_matches.get_flag(sync_flags::SYNC_FILE_SYSTEM);
@@ -68,20 +71,20 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = SYNC_ABOUT;
-    let usage_description = ct_format_usage(SYNC_USAGE);
+    let application_info = t!("sync.about");
+    let usage_description = t!("sync.usage");
     let args = vec![
         Arg::new(sync_flags::SYNC_FILE_SYSTEM)
             .short('f')
             .long(sync_flags::SYNC_FILE_SYSTEM)
             .conflicts_with(sync_flags::SYNC_DATA)
-            .help("sync the file systems that contain the files")
+            .help(t!("sync.clap.sync_file_system"))
             .action(ArgAction::SetTrue),
         Arg::new(sync_flags::SYNC_DATA)
             .short('d')
             .long(sync_flags::SYNC_DATA)
             .conflicts_with(sync_flags::SYNC_FILE_SYSTEM)
-            .help("sync only file data, no unneeded metadata (Linux only)")
+            .help(t!("sync.clap.sync_data"))
             .action(ArgAction::SetTrue),
         Arg::new(SYNC_ARG_FILES)
             .action(ArgAction::Append)

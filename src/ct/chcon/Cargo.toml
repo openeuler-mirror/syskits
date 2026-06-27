@@ -21,7 +21,8 @@ selinux = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 fts-sys = { workspace = true }
-
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
 [[bin]]
 name = "chcon"
 path = "src/main.rs"

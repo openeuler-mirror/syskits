@@ -8,24 +8,22 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+extern crate rust_i18n;
 use ct_base32::base_common;
-use std::io::Read;
-use std::io::stdin;
-
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use crate::base_common::opt_flags;
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
+use std::io::Read;
+use std::io::stdin;
+use sys_locale::get_locale;
 
-use ctcore::{
-    Tool, ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,
-};
+use ctcore::{Tool, ct_encoding::Format, ct_error::CTResult};
 
 use std::ffi::OsString;
-
-const BASE64_ABOUT: &str = ct_help_about!("base64.md");
-const BASE64_USAGE: &str = ct_help_usage!("base64.md");
 
 #[derive(Default)]
 pub struct Base64;
@@ -49,10 +47,13 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn base64_main(args: impl ctcore::Args) -> CTResult<String> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let format_mod = Format::Base64;
-
+    let base64_about = t!("base64.about");
+    let base64_usage = t!("base64.usage");
     let config_mod: base_common::BaseConfig =
-        base_common::base_parsing_command_args(args, BASE64_ABOUT, BASE64_USAGE)?;
+        base_common::base_parsing_command_args(args, base64_about, base64_usage)?;
 
     let stdin_info = stdin();
     let mut input_info: Box<dyn Read> = base_common::get_base_input(&config_mod, &stdin_info)?;
@@ -69,8 +70,8 @@ pub fn base64_main(args: impl ctcore::Args) -> CTResult<String> {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = BASE64_ABOUT;
-    let usage_description = ct_format_usage(BASE64_USAGE);
+    let application_info = t!("base64.about");
+    let usage_description = t!("base64.usage");
 
     let args = base64_args_init();
 
@@ -79,28 +80,40 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
 fn base64_args_init() -> Vec<Arg> {
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("base64.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("base64.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::BASE_DECODE)
             .short('d')
             .long(opt_flags::BASE_DECODE)
-            .help("decode data")
+            .help(t!("base64.clap.base_decode"))
             .action(ArgAction::SetTrue)
             .overrides_with(opt_flags::BASE_DECODE),
         Arg::new(opt_flags::BASE_IGNORE_GARBAGE)
             .short('i')
             .long(opt_flags::BASE_IGNORE_GARBAGE)
-            .help("when decoding, ignore non-alphabetic characters")
+            .help(t!("base64.clap.base_ignore_garbage"))
             .action(ArgAction::SetTrue)
             .overrides_with(opt_flags::BASE_IGNORE_GARBAGE),
         Arg::new(opt_flags::BASE_WRAP)
             .short('w')
             .long(opt_flags::BASE_WRAP)
             .value_name("COLS")
-            .help("wrap encoded lines after COLS character (default 76, 0 to disable wrapping)")
+            .help(t!("base64.clap.base_wrap"))
             .overrides_with(opt_flags::BASE_WRAP),
         Arg::new(opt_flags::BASE_FILE)
             .index(1)

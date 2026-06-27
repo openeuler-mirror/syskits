@@ -87,7 +87,6 @@ impl Matcher for WhitespaceMatcher {
 
 #[cfg(test)]
 mod tests_matcher {
-
     use super::*;
 
     use ExactMatcher;

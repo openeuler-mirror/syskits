@@ -11,15 +11,17 @@
 
 // expr 是一个经典的 Linux 或 Unix 命令行工具，用于执行基本的算术和逻辑表达式计算
 
+extern crate rust_i18n;
+use rust_i18n::t;
 use std::fmt::Display;
-
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
     ct_display::Quotable,
     ct_error::{CTError, CTResult},
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage,
 };
 use syntax_tree::SyntaxTreeAstNode;
+use sys_locale::get_locale;
 
 use crate::syntax_tree::is_syntax_tree_truthy;
 use ctcore::Tool;
@@ -88,17 +90,17 @@ impl CTError for ExprError {
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = ct_help_about!("expr.md");
-    let usage_description = ct_format_usage(ct_help_usage!("expr.md"));
-    let about_help_info = ct_help_section!("after help", "expr.md");
+    let application_info = t!("expr.about");
+    let usage_description = t!("expr.usage");
+    let about_help_info = t!("expr.after_help");
     let args = vec![
         Arg::new(opt_flags::VERSION)
             .long(opt_flags::VERSION)
-            .help("output version information and exit")
+            .help(t!("expr.clap.version"))
             .action(ArgAction::Version),
         Arg::new(opt_flags::HELP)
             .long(opt_flags::HELP)
-            .help("display this help and exit")
+            .help(t!("expr.clap.help"))
             .action(ArgAction::Help),
         Arg::new(opt_flags::EXPRESSION)
             .action(ArgAction::Append)
@@ -124,6 +126,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn expr_main(args: impl ctcore::Args) -> CTResult<String> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
 

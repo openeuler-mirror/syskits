@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use chrono::format::StrftimeItems;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
@@ -17,7 +20,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::ct_show;
+use sys_locale::get_locale;
+
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
@@ -36,9 +41,6 @@ const HOURS: &str = "hours";
 const MINUTES: &str = "minutes";
 const SECONDS: &str = "seconds";
 const NS: &str = "ns";
-
-const DATE_ABOUT: &str = ct_help_about!("date.md");
-const DATE_USAGE: &str = ct_help_usage!("date.md");
 
 const DATE_OPT_DATE: &str = "date";
 const DATE_OPT_FORMAT: &str = "format";
@@ -172,6 +174,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
  * @return `CTResult<()>`，成功时返回 `Ok(())`，错误时返回包含错误信息的 `Err`。
  */
 pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 从命令行参数中解析匹配项
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -365,8 +369,8 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = DATE_ABOUT;
-    let usage_description = ct_format_usage(DATE_USAGE);
+    let application_info = t!("date.about");
+    let usage_description = t!("date.usage");
 
     let args = date_args_init();
 
@@ -375,22 +379,34 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
 fn date_args_init() -> Vec<Arg> {
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("date.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("date.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(DATE_OPT_DATE)
             .short('d')
             .long(DATE_OPT_DATE)
             .value_name("STRING")
-            .help("display time described by STRING, not 'now'"),
+            .help(t!("date.clap.date_opt_date")),
         Arg::new(DATE_OPT_FILE)
             .short('f')
             .long(DATE_OPT_FILE)
             .value_name("DATEFILE")
             .value_hint(clap::ValueHint::FilePath)
-            .help("like --date; once for each line of DATEFILE"),
+            .help(t!("date.clap.date_opt_file")),
         Arg::new(DATE_OPT_ISO_8601)
             .short('I')
             .long(DATE_OPT_ISO_8601)
@@ -413,14 +429,14 @@ fn date_args_init() -> Vec<Arg> {
             .help(DATE_RFC_3339_HELP_STRING),
         Arg::new(DATE_OPT_DEBUG)
             .long(DATE_OPT_DEBUG)
-            .help("annotate the parsed date, and warn about questionable usage to stderr")
+            .help(t!("date.clap.date_opt_debug"))
             .action(ArgAction::SetTrue),
         Arg::new(DATE_OPT_REFERENCE)
             .short('r')
             .long(DATE_OPT_REFERENCE)
             .value_name("FILE")
             .value_hint(clap::ValueHint::AnyPath)
-            .help("display the last modification time of FILE"),
+            .help(t!("date.clap.date_opt_reference")),
         Arg::new(DATE_OPT_SET)
             .short('s')
             .long(DATE_OPT_SET)
@@ -430,7 +446,7 @@ fn date_args_init() -> Vec<Arg> {
             .short('u')
             .long(DATE_OPT_UNIVERSAL)
             .alias(DATE_OPT_UNIVERSAL_2)
-            .help("print or set Coordinated Universal Time (UTC)")
+            .help(t!("date.clap.date_opt_universal"))
             .action(ArgAction::SetTrue),
         Arg::new(DATE_OPT_FORMAT),
     ];
@@ -3037,7 +3053,6 @@ mod tests {
     }
 
     mod tests_date_format {
-
         use crate::date_main;
         use std::ffi::OsString;
 

@@ -11,10 +11,13 @@
 
 // nohup命令的作用是在Unix/Linux系统中允许一个命令在用户退出终端后继续在后台运行
 
+extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, UClapError, set_ct_exit_code};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
+use ctcore::ct_show_error;
 
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
@@ -28,11 +31,9 @@ use std::fs::{File, OpenOptions};
 use std::io::{Error, IsTerminal};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
+use sys_locale::get_locale;
 
 // 定义常量和模块，用于处理nohup命令的逻辑。
-const NOHUP_ABOUT: &str = ct_help_about!("nohup.md"); // 帮助文档的about信息
-const NOHUP_AFTER_HELP: &str = ct_help_section!("after help", "nohup.md"); // 帮助文档的after help部分
-const NOHUP_USAGE: &str = ct_help_usage!("nohup.md"); // 帮助文档的usage部分
 static NOHUP_OUT: &str = "nohup.out"; // 默认的nohup输出文件名
 
 use crate::exit_codes::EXIT_CANCELED;
@@ -97,6 +98,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     nohup_main(args).map(|_| ())
 }
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
     nohup_replace_fds()?;
@@ -128,9 +131,9 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
-        .about(NOHUP_ABOUT)
-        .after_help(NOHUP_AFTER_HELP)
-        .override_usage(ct_format_usage(NOHUP_USAGE))
+        .about(t!("nohup.about"))
+        .after_help(t!("nohup.after_help"))
+        .override_usage(t!("nohup.usage"))
         .arg(
             Arg::new(options::CMD)
                 .hide(true)

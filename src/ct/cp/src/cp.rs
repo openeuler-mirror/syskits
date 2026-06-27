@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate rust_i18n;
 use quick_error::quick_error;
+use rust_i18n::t;
+rust_i18n::i18n!("locales", fallback = "zh-CN");
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -23,13 +26,10 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
 
+// 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
+use crate::copydir::copy_directory;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
-use filetime::FileTime;
-use indicatif::{ProgressBar, ProgressStyle};
-#[cfg(unix)]
-use libc::mkfifo;
-use quick_error::ResultExt;
-
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, UClapError, set_ct_exit_code};
 use ctcore::ct_fs::{
@@ -37,16 +37,16 @@ use ctcore::ct_fs::{
     is_symlink_loop, path_ends_with_terminator, paths_refer_to_same_file,
 };
 use ctcore::{ct_backup_control, ct_update_control};
-use platform::copy_on_write;
-// 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
-use crate::copydir::copy_directory;
-use ctcore::Tool;
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
-use ctcore::{
-    ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_prompt_yes, ct_show_error,
-    ct_show_warning, ct_util_name,
-};
+use ctcore::{ct_prompt_yes, ct_show_error, ct_show_warning, ct_util_name};
+use filetime::FileTime;
+use indicatif::{ProgressBar, ProgressStyle};
+#[cfg(unix)]
+use libc::mkfifo;
+use platform::copy_on_write;
+use quick_error::ResultExt;
 use std::ffi::OsString;
+use sys_locale::get_locale;
 
 mod copydir;
 mod platform;
@@ -356,10 +356,6 @@ fn cp_show_debug(copy_debug: &CopyDebug) {
     );
 }
 
-const CP_ABOUT: &str = ct_help_about!("cp.md");
-const CP_USAGE: &str = ct_help_usage!("cp.md");
-const AFTER_HELP: &str = ct_help_section!("after help", "cp.md");
-
 static EXIT_ERR: i32 = 1;
 
 // 参数常量
@@ -421,8 +417,8 @@ static CP_PRESERVABLE_ATTRIBUTES: &[&str] = &[
 
 pub fn ct_app() -> Command {
     let command_version = crate_version!();
-    let application_info = CP_ABOUT;
-    let usage_description = ct_format_usage(CP_USAGE);
+    let application_info = t!("cp.about");
+    let usage_description = t!("cp.usage");
 
     let args = cp_args_init();
 
@@ -430,8 +426,11 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .after_help(format!(
-            "{AFTER_HELP}\n\n{}",
+            "{}\n\n{}",
+            t!("cp.after_help"),
             ct_backup_control::CT_BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
@@ -449,6 +448,16 @@ fn cp_args_init() -> Vec<Arg> {
     ];
 
     let args = vec![
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("cp.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .short('V')
+            .long("version")
+            .help(t!("cp.clap.version"))
+            .action(ArgAction::Version),
         Arg::new(opt_flags::TARGET_DIRECTORY)
             .short('t')
             .conflicts_with(opt_flags::NO_TARGET_DIRECTORY)
@@ -461,25 +470,25 @@ fn cp_args_init() -> Vec<Arg> {
             .short('T')
             .long(opt_flags::NO_TARGET_DIRECTORY)
             .conflicts_with(opt_flags::TARGET_DIRECTORY)
-            .help("Treat DEST as a regular file and not a directory")
+            .help(t!("cp.clap.no_target_directory"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::INTERACTIVE)
             .short('i')
             .long(opt_flags::INTERACTIVE)
             .overrides_with(opt_flags::NO_CLOBBER)
-            .help("ask before overwriting files")
+            .help(t!("cp.clap.interactive"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::LINK)
             .short('l')
             .long(opt_flags::LINK)
             .overrides_with_all(MODE_ARGS)
-            .help("hard-link files instead of copying")
+            .help(t!("cp.clap.link"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_CLOBBER)
             .short('n')
             .long(opt_flags::NO_CLOBBER)
             .overrides_with(opt_flags::INTERACTIVE)
-            .help("don't overwrite a file that already exists")
+            .help(t!("cp.clap.no_clobber"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::RECURSIVE)
             .short('r')
@@ -490,22 +499,22 @@ fn cp_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::STRIP_TRAILING_SLASHES)
             .long(opt_flags::STRIP_TRAILING_SLASHES)
-            .help("remove any trailing slashes from each SOURCE argument")
+            .help(t!("cp.clap.strip_trailing_slashes"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DEBUG)
             .long(opt_flags::DEBUG)
-            .help("explain how a file is copied. Implies -v")
+            .help(t!("cp.clap.debug"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::VERBOSE)
             .short('v')
             .long(opt_flags::VERBOSE)
-            .help("explicitly state what is being done")
+            .help(t!("cp.clap.verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::SYMBOLIC_LINK)
             .short('s')
             .long(opt_flags::SYMBOLIC_LINK)
             .overrides_with_all(MODE_ARGS)
-            .help("make symbolic links instead of copying")
+            .help(t!("cp.clap.symbolic_link"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FORCE)
             .short('f')
@@ -538,11 +547,11 @@ fn cp_args_init() -> Vec<Arg> {
             .default_missing_value("always")
             .value_parser(["auto", "always", "never"])
             .num_args(0..=1)
-            .help("control clone/CoW copies. See below"),
+            .help(t!("cp.clap.reflink")),
         Arg::new(opt_flags::ATTRIBUTES_ONLY)
             .long(opt_flags::ATTRIBUTES_ONLY)
             .overrides_with_all(MODE_ARGS)
-            .help("Don't copy the file data, just the attributes")
+            .help(t!("cp.clap.attributes_only"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::PRESERVE)
             .long(opt_flags::PRESERVE)
@@ -573,7 +582,7 @@ fn cp_args_init() -> Vec<Arg> {
                 opt_flags::NO_PRESERVE,
                 opt_flags::ARCHIVE,
             ])
-            .help("same as --preserve=mode,ownership(unix only),timestamps")
+            .help(t!("cp.clap.preserve_default_attributes"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_PRESERVE)
             .long(opt_flags::NO_PRESERVE)
@@ -583,11 +592,11 @@ fn cp_args_init() -> Vec<Arg> {
                 opt_flags::PRESERVE,
                 opt_flags::ARCHIVE,
             ])
-            .help("don't preserve the specified attributes"),
+            .help(t!("cp.clap.no_preserve")),
         Arg::new(opt_flags::PARENTS)
             .long(opt_flags::PARENTS)
             .alias(opt_flags::PARENT)
-            .help("use full source file name under DIRECTORY")
+            .help(t!("cp.clap.parents"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_DEREFERENCE)
             .short('P')
@@ -600,11 +609,11 @@ fn cp_args_init() -> Vec<Arg> {
             .short('L')
             .long(opt_flags::DEREFERENCE)
             .overrides_with(opt_flags::NO_DEREFERENCE)
-            .help("always follow symbolic links in SOURCE")
+            .help(t!("cp.clap.dereference"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CLI_SYMBOLIC_LINKS)
             .short('H')
-            .help("follow command-line symbolic links in SOURCE")
+            .help(t!("cp.clap.cli_symbolic_links"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::ARCHIVE)
             .short('a')
@@ -614,27 +623,27 @@ fn cp_args_init() -> Vec<Arg> {
                 opt_flags::PRESERVE,
                 opt_flags::NO_PRESERVE,
             ])
-            .help("Same as -dR --preserve=all")
+            .help(t!("cp.clap.archive"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
             .short('d')
-            .help("same as --no-dereference --preserve=links")
+            .help(t!("cp.clap.no_dereference_preserve_links"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::ONE_FILE_SYSTEM)
             .short('x')
             .long(opt_flags::ONE_FILE_SYSTEM)
-            .help("stay on this file system")
+            .help(t!("cp.clap.one_file_system"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::SPARSE)
             .long(opt_flags::SPARSE)
             .value_name("WHEN")
             .value_parser(["never", "auto", "always"])
-            .help("control creation of sparse files. See below"),
+            .help(t!("cp.clap.sparse")),
         // TODO: implement the following args
         Arg::new(opt_flags::COPY_CONTENTS)
             .long(opt_flags::COPY_CONTENTS)
             .overrides_with(opt_flags::ATTRIBUTES_ONLY)
-            .help("NotImplemented: copy contents of special files when recursive")
+            .help(t!("cp.clap.copy_contents"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::CONTEXT)
             .long(opt_flags::CONTEXT)
@@ -682,6 +691,8 @@ pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args);
 
     // 在此处解析错误，因为我们不希望版本信息或帮助信息被打印到标准错误输出（stderr）。
@@ -2302,7 +2313,6 @@ mod tests {
     }
 
     mod tests_cp_fn {
-
         use std::fs;
 
         use crate::cp_aligned_ancestors;

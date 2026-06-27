@@ -1,13 +1,12 @@
 /*
- *    Copyright(c) 2022-2024 China Telecom Cloud Technologies co., Ltd. All rights reserved
- *     syskits is licensed under Mulan PSL v2.
- *    You can use this software according to the terms and conditions of the Mulan PSL V2
- *    You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2
- *    THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- *    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- *    NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *    See the Mulan PSL v2 for more details.
- *
+ * Copyright(c) 2022-2025 China Telecom Cloud Technologies Co., Ltd. All rights reserved.
+ *  syskits is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL V2.
+ * You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 // mknod 命令在类 Unix 系统（如 Linux）中用于创建特殊的文件类型，如字符设备（character device）、块设备（block device）和命名管道（named pipe，也称为 FIFO）。

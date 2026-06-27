@@ -240,6 +240,24 @@ impl Tool for Mknod {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Mknod::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "mknod");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("mknod"));
+
+        // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
+        let args = vec![OsString::from("mknod"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     mod tests_mknod_main {
         use crate::{ct_app, mknod_main};

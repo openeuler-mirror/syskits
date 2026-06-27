@@ -467,6 +467,22 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use tempfile::{Builder, NamedTempFile};
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Chmod;
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "chmod");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("chmod"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("chmod"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     #[cfg(test)]
     mod tests_ctmain {
         use super::*;
@@ -2066,7 +2082,7 @@ mod tests {
         // Verify file and root directory permissions are unchanged
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         let root_dir_final_mode = fs::metadata(root_dir_path).unwrap().permissions().mode();
-        assert_eq!(file_final_mode & 0o777, 0o644);
+        assert_eq!(file_final_mode & 0o777, 420);
         assert_eq!(root_dir_final_mode & 0o777, 0o644);
     }
 

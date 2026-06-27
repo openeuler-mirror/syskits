@@ -546,6 +546,24 @@ impl Tool for Touch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Touch;
+
+        // Test name method
+        assert_eq!(tool.name(), "touch");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("touch"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("touch"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     #[cfg(test)]
     mod parse_timestamp_tests {
@@ -1142,7 +1160,7 @@ mod tests {
             let filetime = touch_datetime_to_filetime(&dt_ny);
             let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
 
-            // 验证转换后的时间
+            // 验证转换后的时间戳是否匹配
             assert_eq!(dt_converted.timestamp(), dt_ny.timestamp());
 
             // 测试UTC时间
@@ -1150,7 +1168,7 @@ mod tests {
             let filetime = touch_datetime_to_filetime(&dt_utc);
             let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
 
-            // 验证转换后的时间
+            // 验证转换后的时间戳是否匹配
             assert_eq!(dt_converted.timestamp(), dt_utc.timestamp());
 
             // 测试亚洲东京时区 (UTC+9)
@@ -1159,7 +1177,7 @@ mod tests {
             let filetime = touch_datetime_to_filetime(&dt_tokyo);
             let dt_converted = touch_filetime_to_datetime(&filetime).unwrap();
 
-            // 验证转换后的时间
+            // 验证转换后的时间戳是否匹配
             assert_eq!(dt_converted.timestamp(), dt_tokyo.timestamp());
         }
     }

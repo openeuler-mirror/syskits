@@ -264,6 +264,29 @@ fn mkdir_create_dir(
 }
 
 #[cfg(test)]
+mod tests_tool_implementation {
+    use crate::Mkdir;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Mkdir::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "mkdir");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("mkdir"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("mkdir"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

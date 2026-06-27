@@ -2280,6 +2280,27 @@ fn cp_disk_usage_directory(path: &Path) -> io::Result<u64> {
 
 #[cfg(test)]
 mod tests {
+    mod tests_tool_implementation {
+        use crate::Cp;
+        use ctcore::Tool;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_tool_implementation() {
+            let tool = Cp::default();
+
+            // 测试 name 方法
+            assert_eq!(tool.name(), "cp");
+
+            // 测试 command 方法
+            let command = tool.command();
+            assert!(command.get_name().contains("cp"));
+
+            // 测试 execute 方法
+            let args = vec![OsString::from("cp"), OsString::from("--help")];
+            assert!(tool.execute(&args).is_ok());
+        }
+    }
 
     mod tests_cp_fn {
 

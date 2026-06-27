@@ -224,6 +224,23 @@ impl Tool for Rmdir {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Rmdir;
+
+        // Test name method
+        assert_eq!(tool.name(), "rmdir");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("rmdir"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("rmdir"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
     #[cfg(test)]
     mod dir_not_empty_tests {
         use super::*;

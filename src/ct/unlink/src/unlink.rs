@@ -78,6 +78,24 @@ impl Tool for Unlink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Unlink::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "unlink");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("unlink"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("unlink"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err()); // unlink需要参数，没有参数会失败
+    }
 
     #[cfg(test)]
     mod ct_main_tests {

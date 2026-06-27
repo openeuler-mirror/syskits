@@ -180,7 +180,6 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
 
     #[test]

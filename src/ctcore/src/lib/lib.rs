@@ -76,13 +76,13 @@ pub use crate::ct_features::ct_update_control;
 #[cfg(feature = "version-cmp")]
 pub use crate::ct_features::ct_version_cmp;
 
+// ** unix-only
+#[cfg(all(unix, feature = "entries"))]
+pub use crate::ct_features::ct_entries;
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
 #[cfg(all(not(windows), feature = "mode"))]
 pub use crate::ct_features::ct_mode;
-// ** unix-only
-#[cfg(all(unix, feature = "entries"))]
-pub use crate::ct_features::ct_entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::ct_features::ct_perms;
 #[cfg(all(unix, feature = "pipes"))]

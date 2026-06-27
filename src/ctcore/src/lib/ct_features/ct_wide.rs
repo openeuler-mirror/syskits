@@ -45,8 +45,6 @@ impl CtFromWide for String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_to_wide() {
         // 测试非空字符串转宽字符

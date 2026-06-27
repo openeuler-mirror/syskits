@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+extern crate tool_derive;
 use clap::{Arg, Command};
 use clap_complete::Shell;
 use ctcore::Tool;
@@ -18,8 +19,6 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-
-extern crate tool_derive;
 
 const CT_VERSION: &str = env!("CARGO_PKG_VERSION");
 

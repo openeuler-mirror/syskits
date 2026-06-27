@@ -736,7 +736,6 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 }
 
 pub mod sane_blksize {
-
     #[cfg(not(target_os = "windows"))]
     use std::os::unix::fs::MetadataExt;
     use std::{fs::metadata, path::Path};

@@ -18,6 +18,10 @@ path = "src/hostname.rs"
 clap = { workspace = true }
 hostname = { workspace = true, features = ["set"] }
 ctcore = { workspace = true, features = ["wide"] }
+dns-lookup = { workspace = true }
+if-addrs = { workspace = true }
+nix = { workspace = true, features = ["socket", "net"] }
+tempfile = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

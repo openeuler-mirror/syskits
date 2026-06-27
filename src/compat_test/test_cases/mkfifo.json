@@ -87,6 +87,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "使用默认SELinux安全上下文",
+            "args": ["-Z", "selinux_fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls -Z selinux_fifo",
+                        "expected_exit": 0,
+                        "expected_stdout": ".*selinux_fifo$"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f selinux_fifo"
+            ]
         }
     ]
-} 
+}

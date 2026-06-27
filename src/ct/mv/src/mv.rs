@@ -14,6 +14,7 @@
 mod error;
 
 use crate::opt_flags::ARG_FILES;
+use crate::opt_flags::OPT_CONTEXT;
 use crate::opt_flags::OPT_FORCE;
 use crate::opt_flags::OPT_INTERACTIVE;
 use crate::opt_flags::OPT_NO_CLOBBER;
@@ -22,10 +23,10 @@ use crate::opt_flags::OPT_PROGRESS;
 use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
-use crate::opt_flags::OPT_CONTEXT;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
+use ctcore::Tool;
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
@@ -47,7 +48,6 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
-
 
 // 这些枚举（enums）被暴露出来是为了让其他项目（例如 nushell）能够创建一个 Options 值，这需要这些枚举。
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
@@ -737,8 +737,11 @@ fn mv_rename(
     #[cfg(target_os = "linux")]
     if options.set_context {
         if let Err(e) = set_default_context(to_path) {
-            eprintln!("warning: failed to set security context for {}: {}", 
-                to_path.quote(), e);
+            eprintln!(
+                "warning: failed to set security context for {}: {}",
+                to_path.quote(),
+                e
+            );
         }
     }
 
@@ -766,8 +769,10 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
     #[cfg(not(feature = "selinux"))]
     {
         // 当未启用 selinux feature 时，提供警告信息
-        eprintln!("warning: failed to set security context for {}: SELinux support not enabled", 
-            path.quote());
+        eprintln!(
+            "warning: failed to set security context for {}: SELinux support not enabled",
+            path.quote()
+        );
         Ok(())
     }
 }
@@ -927,6 +932,22 @@ fn is_empty_dir(path: &Path) -> bool {
         Ok(contents) => contents.peekable().peek().is_none(),
         // 如果读取失败，认为目录不为空
         Err(_e) => false,
+    }
+}
+
+#[derive(Default)]
+pub struct Mv;
+impl Tool for Mv {
+    fn name(&self) -> &'static str {
+        "mv"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        mv_main(args.iter().cloned())
     }
 }
 

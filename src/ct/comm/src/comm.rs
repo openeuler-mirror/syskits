@@ -21,6 +21,8 @@ use std::io::{self, BufRead, BufReader, Stdin, stdin};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
+use std::ffi::OsString;
 
 const COMM_ABOUT: &str = ct_help_about!("comm.md");
 const COMM_USAGE: &str = ct_help_usage!("comm.md");
@@ -245,6 +247,22 @@ fn args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
     ];
     args
+}
+
+#[derive(Default)]
+pub struct Comm;
+impl Tool for Comm {
+    fn name(&self) -> &'static str {
+        "comm"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        comm_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[cfg(test)]

@@ -40,13 +40,14 @@ use ctcore::ct_fs::{
 use ctcore::{ct_backup_control, ct_update_control};
 use platform::copy_on_write;
 // 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
+use crate::copydir::copy_directory;
+use ctcore::Tool;
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
 use ctcore::{
     ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_prompt_yes, ct_show_error,
     ct_show_warning, ct_util_name,
 };
-
-use crate::copydir::copy_directory;
+use std::ffi::OsString;
 
 mod copydir;
 mod platform;
@@ -658,6 +659,22 @@ fn cp_args_init() -> Vec<Arg> {
             .value_parser(ValueParser::path_buf()),
     ];
     args
+}
+
+#[derive(Default)]
+pub struct Cp;
+impl Tool for Cp {
+    fn name(&self) -> &'static str {
+        "cp"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        cp_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[ctcore::main]
@@ -2152,7 +2169,7 @@ fn copy_helper(
     Ok(())
 }
 
-// 通过创建新的FIFO来“复制”FIFO。这是由于Rust内置的fs::copy尚不支持处理FIFO（参见rust-lang/rust/issues/79390）。
+// 通过创建新的FIFO来"复制"FIFO。这是由于Rust内置的fs::copy尚不支持处理FIFO（参见rust-lang/rust/issues/79390）。
 #[cfg(unix)]
 fn copy_fifo(dest_path: &Path, overwrite: CpOverwriteMode) -> CopyResult<()> {
     if dest_path.exists() {

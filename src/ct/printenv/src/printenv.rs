@@ -11,8 +11,9 @@
  */
 
 use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage};
+use ctcore::{Tool, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage};
 use std::env;
+use std::ffi::OsString;
 
 const PRINTENV_ABOUT: &str = ct_help_about!("printenv.md");
 const PRINTENV_SAGE: &str = ct_help_usage!("printenv.md");
@@ -106,6 +107,23 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Printenv;
+impl Tool for Printenv {
+    fn name(&self) -> &'static str {
+        "printenv"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        printenv_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

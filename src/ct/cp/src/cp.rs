@@ -988,15 +988,11 @@ impl CpOptions {
                         }
                     }
                 } else {
-                    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+                    #[cfg(target_os = "linux")]
                     {
                         CpReflinkMode::Auto
                     }
-                    #[cfg(not(any(
-                        target_os = "linux",
-                        target_os = "android",
-                        target_os = "macos"
-                    )))]
+                    #[cfg(target_os = "windows")]
                     {
                         CpReflinkMode::Never
                     }
@@ -1489,7 +1485,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     cp_handle_preserve(&attr.xattr, || -> CopyResult<()> {
-        #[cfg(all(unix, not(target_os = "android")))]
+        #[cfg(target_os = "linux")]
         {
             let xattrs = xattr::list(source_path)?;
             for attr in xattrs {
@@ -1498,7 +1494,7 @@ pub(crate) fn copy_attributes(
                 }
             }
         }
-        #[cfg(not(all(unix, not(target_os = "android"))))]
+        #[cfg(target_os = "windows")]
         {
             // The documentation for GNU cp states:
             //
@@ -2166,7 +2162,7 @@ fn copy_helper(
             cp_opts.reflink_mode,
             cp_opts.sparse_mode,
             cp_str,
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             is_sour_fifo,
         )?;
 

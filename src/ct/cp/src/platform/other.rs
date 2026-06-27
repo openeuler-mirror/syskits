@@ -26,7 +26,7 @@ pub(crate) fn copy_on_write(
     context: &str,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != CpReflinkMode::Never {
-        return Err("--reflink is only supported on linux and macOS"
+        return Err("--reflink is only supported on linux"
             .to_string()
             .into());
     }

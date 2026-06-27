@@ -111,6 +111,38 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "负数测试",
+            "setup_commands": [],
+            "args": ["-12"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "factor: invalid option -- '1'\nTry 'factor --help' for more information."
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "非数字输入测试",
+            "setup_commands": [],
+            "args": ["abc"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "factor: 'abc' is not a valid positive integer"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
-}
+} 

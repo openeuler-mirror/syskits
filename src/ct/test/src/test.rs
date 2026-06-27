@@ -396,3 +396,278 @@ fn path(path: &OsStr, condition: &TestPathCondition) -> bool {
         TestPathCondition::Executable => false, // TODO
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_integer_op() {
+        let a = OsStr::new("18446744073709551616");
+        let b = OsStr::new("0");
+        assert!(!test_integers(a, b, OsStr::new("-lt")).unwrap());
+        let a = OsStr::new("18446744073709551616");
+        let b = OsStr::new("0");
+        assert!(test_integers(a, b, OsStr::new("-gt")).unwrap());
+        let a = OsStr::new("-1");
+        let b = OsStr::new("0");
+        assert!(test_integers(a, b, OsStr::new("-lt")).unwrap());
+        let a = OsStr::new("42");
+        let b = OsStr::new("42");
+        assert!(test_integers(a, b, OsStr::new("-eq")).unwrap());
+        let a = OsStr::new("42");
+        let b = OsStr::new("42");
+        assert!(!test_integers(a, b, OsStr::new("-ne")).unwrap());
+    }
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Test::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "test");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("test"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("test"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err()); // basenc needs an encoding flag to be valid
+    }
+}
+
+#[cfg(test)]
+mod tests_all {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::ffi::OsString;
+    use std::fs::File;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    // Helper function to create test files with specific permissions
+    fn create_test_file(path: &Path, mode: u32) -> std::io::Result<()> {
+        let file = File::create(path)?;
+        let mut perms = file.metadata()?.permissions();
+        perms.set_mode(mode);
+        file.set_permissions(perms)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_integer_operations() {
+        // Test all integer comparison operators
+        let test_cases = vec![
+            ("0", "0", "-eq", true),
+            ("1", "0", "-eq", false),
+            ("1", "0", "-ne", true),
+            ("0", "1", "-ne", true),
+            ("1", "0", "-gt", true),
+            ("0", "1", "-gt", false),
+            ("0", "1", "-lt", true),
+            ("1", "0", "-lt", false),
+            ("1", "1", "-ge", true),
+            ("2", "1", "-ge", true),
+            ("1", "2", "-ge", false),
+            ("1", "1", "-le", true),
+            ("1", "2", "-le", true),
+            ("2", "1", "-le", false),
+        ];
+
+        for (a, b, op, expected) in test_cases {
+            let result = test_integers(
+                OsStr::new(a),
+                OsStr::new(b),
+                OsStr::new(op)
+            ).unwrap();
+            assert_eq!(result, expected, "Failed: {} {} {}", a, op, b);
+        }
+
+        // Test invalid integer
+        assert!(test_integers(
+            OsStr::new("not_a_number"),
+            OsStr::new("0"),
+            OsStr::new("-eq")
+        ).is_err());
+
+        // Test invalid operator
+        assert!(test_integers(
+            OsStr::new("0"),
+            OsStr::new("0"),
+            OsStr::new("-invalid")
+        ).is_err());
+    }
+
+    #[test]
+    fn test_string_operations() {
+        let mut stack = Vec::new();
+        
+        // Test string equality
+        stack.push(TestSymbol::Literal(OsString::from("abc")));
+        stack.push(TestSymbol::Literal(OsString::from("abc")));
+        stack.push(TestSymbol::Op(TestOperator::String(OsString::from("="))));
+        assert!(test_eval(&mut stack).unwrap());
+
+        // Test string inequality
+        let mut stack = Vec::new();
+        stack.push(TestSymbol::Literal(OsString::from("abc")));
+        stack.push(TestSymbol::Literal(OsString::from("def")));
+        stack.push(TestSymbol::Op(TestOperator::String(OsString::from("!="))));
+        assert!(test_eval(&mut stack).unwrap());
+
+        // Test string comparison
+        let mut stack = Vec::new();
+        stack.push(TestSymbol::Literal(OsString::from("abc")));
+        stack.push(TestSymbol::Literal(OsString::from("def")));
+        stack.push(TestSymbol::Op(TestOperator::String(OsString::from("<"))));
+        assert!(test_eval(&mut stack).unwrap());
+
+        // Test empty string
+        let mut stack = Vec::new();
+        stack.push(TestSymbol::Literal(OsString::from("")));
+        stack.push(TestSymbol::UnaryOp(TestUnaryOperator::StrlenOp(OsString::from("-z"))));
+        assert!(test_eval(&mut stack).unwrap());
+    }
+
+    #[test]
+    fn test_file_operations() {
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("test_file");
+        let test_dir = temp_dir.path().join("test_dir");
+        let test_symlink = temp_dir.path().join("test_symlink");
+
+        // Create test files
+        create_test_file(&test_file, 0o644).unwrap();
+        std::fs::create_dir(&test_dir).unwrap();
+        std::os::unix::fs::symlink(&test_file, &test_symlink).unwrap();
+
+        // Test file existence (-e)
+        assert!(path(
+            &test_file.as_os_str(),
+            &TestPathCondition::Exists
+        ));
+
+        // Test regular file (-f)
+        assert!(path(
+            &test_file.as_os_str(),
+            &TestPathCondition::Regular
+        ));
+
+        // Test directory (-d)
+        assert!(path(
+            &test_dir.as_os_str(),
+            &TestPathCondition::Directory
+        ));
+
+        // Test symbolic link (-h or -L)
+        assert!(path(
+            &test_symlink.as_os_str(),
+            &TestPathCondition::SymLink
+        ));
+
+        // Test readable (-r)
+        assert!(path(
+            &test_file.as_os_str(),
+            &TestPathCondition::Readable
+        ));
+
+        // Test writable (-w)
+        assert!(path(
+            &test_file.as_os_str(),
+            &TestPathCondition::Writable
+        ));
+
+        // Test non-existent file
+        assert!(!path(
+            OsStr::new("nonexistent_file"),
+            &TestPathCondition::Exists
+        ));
+    }
+
+    #[test]
+    fn test_logical_operations() {
+        // Test AND operation
+        let mut stack = Vec::new();
+        stack.push(TestSymbol::Literal(OsString::from("true")));
+        stack.push(TestSymbol::Literal(OsString::from("true")));
+        stack.push(TestSymbol::BoolOp(OsString::from("-a")));
+        assert!(test_eval(&mut stack).unwrap());
+
+        // Test OR operation
+        let mut stack = Vec::new();
+        stack.push(TestSymbol::Literal(OsString::from("true")));
+        stack.push(TestSymbol::Literal(OsString::from("false")));
+        stack.push(TestSymbol::BoolOp(OsString::from("-o")));
+        assert!(test_eval(&mut stack).unwrap());
+
+    }
+
+    #[test]
+    fn test_command_line_args() {
+        // Test valid expression
+        let args = vec![
+            OsString::from("test"),
+            OsString::from("1"),
+            OsString::from("-eq"),
+            OsString::from("1"),
+        ];
+        assert!(test_main(args.into_iter()).is_ok());
+
+        // Test invalid expression
+        let args = vec![
+            OsString::from("test"),
+            OsString::from("1"),
+            OsString::from("-invalid"),
+            OsString::from("1"),
+        ];
+        assert!(test_main(args.into_iter()).is_err());
+    }
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Test::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "test");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("test"));
+
+        // Test execute method with valid expression
+        let args = vec![
+            OsString::from("test"),
+            OsString::from("1"),
+            OsString::from("-eq"),
+            OsString::from("1"),
+        ];
+        assert!(tool.execute(&args).is_ok());
+    }
+
+
+    #[test]
+    fn test_error_handling() {
+        // Test invalid integer
+        let args = vec![
+            OsString::from("test"),
+            OsString::from("not_a_number"),
+            OsString::from("-eq"),
+            OsString::from("0"),
+        ];
+        assert!(test_main(args.into_iter()).is_err());
+
+        // Test invalid operator
+        let args = vec![
+            OsString::from("test"),
+            OsString::from("1"),
+            OsString::from("-invalid"),
+            OsString::from("1"),
+        ];
+        assert!(test_main(args.into_iter()).is_err());
+
+    }
+}

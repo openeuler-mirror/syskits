@@ -17,6 +17,7 @@ use clap::{
 };
 use ctcore::ct_fs::make_path_relative_to;
 use ctcore::{
+    Tool,
     ct_display::Quotable,
     ct_error::{CTResult, FromIo, UClapError},
     ct_format_usage,
@@ -26,7 +27,8 @@ use ctcore::{
     ct_show_if_err,
 };
 use std::{
-    io::{Write, stdout},
+    ffi::OsString,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -210,8 +212,7 @@ impl RealpathFlags {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let mut stdout = stdout();
-
+    let mut stdout = std::io::stdout();
     realpath_main(&mut stdout, args)
 }
 
@@ -398,6 +399,24 @@ fn realpath_process_relative(
         (_, Some(to)) => make_path_relative_to(path, to),
         // 如果上述条件都不满足，返回原始的 `path`
         _ => path,
+    }
+}
+
+#[derive(Default)]
+pub struct Realpath;
+impl Tool for Realpath {
+    fn name(&self) -> &'static str {
+        "realpath"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 直接调用原有的 realpath_main 函数
+        let mut stdout = std::io::stdout();
+        realpath_main(&mut stdout, args.iter().cloned())
     }
 }
 

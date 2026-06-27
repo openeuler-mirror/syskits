@@ -20,6 +20,7 @@ use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
 
+use ctcore::Tool;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_error, ct_util_name};
 
 const RMDIR_ABOUT: &str = ct_help_about!("rmdir.md");
@@ -201,6 +202,22 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(args)
+}
+
+#[derive(Default)]
+pub struct Rmdir;
+impl Tool for Rmdir {
+    fn name(&self) -> &'static str {
+        "rmdir"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        rmdir_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

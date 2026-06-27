@@ -11,16 +11,17 @@
 
 //! unlink 命令用于删除一个文件或者一个文件的硬链接
 
-use std::ffi::OsString;
-use std::fs::remove_file;
-use std::path::Path;
-
 use clap::builder::ValueParser;
 use clap::{Arg, Command, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+
+use std::ffi::OsString;
+use std::fs::remove_file;
+use std::path::Path;
 
 const UNLINK_ABOUT: &str = ct_help_about!("unlink.md");
 const UNLINK_USAGE: &str = ct_help_usage!("unlink.md");
@@ -56,6 +57,22 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .arg(arg)
+}
+
+#[derive(Default)]
+pub struct Unlink;
+impl Tool for Unlink {
+    fn name(&self) -> &'static str {
+        "unlink"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        unlink_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

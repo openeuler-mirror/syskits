@@ -12,6 +12,7 @@
 // spell-checker:ignore (path) eacces inacc
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version, parser::ValueSource};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::{
@@ -109,6 +110,22 @@ mod rm_flags {
     pub const RM_PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
     pub const RM_ARG_FILES: &str = "files";
+}
+
+#[derive(Default)]
+pub struct Rm;
+impl Tool for Rm {
+    fn name(&self) -> &'static str {
+        "rm"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        rm_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

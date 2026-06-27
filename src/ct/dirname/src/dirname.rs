@@ -13,10 +13,12 @@
 //dirname命令主要用于从给定的文件或目录路径中剥离出目录部分，去掉路径末尾的文件名（或最后一个组件），仅保留上级目录的路径。
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::ct_print_verbatim;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 use std::path::Path;
 
 const DIRNAME_ABOUT: &str = ct_help_about!("dirname.md");
@@ -26,6 +28,22 @@ const DIRNAME_AFTER_HELP: &str = ct_help_section!("after help", "dirname.md");
 mod opt_flags {
     pub const ZERO: &str = "zero";
     pub const DIR: &str = "dir";
+}
+
+#[derive(Default)]
+pub struct Dirname;
+impl Tool for Dirname {
+    fn name(&self) -> &'static str {
+        "dirname"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        dirname_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

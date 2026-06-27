@@ -25,9 +25,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_vers
 use rand::Rng;
 use tempfile::Builder;
 
+use ctcore::Tool;
 use ctcore::ct_display::{Quotable, ct_println_verbatim};
 use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 
 const MKTEMP_ABOUT: &str = ct_help_about!("mktemp.md");
 const MKTEMP_USAGE: &str = ct_help_usage!("mktemp.md");
@@ -566,6 +568,22 @@ pub fn mktemp(flags: &MkTempFlags) -> CTResult<PathBuf> {
         mktemp_dry_exec(&tmpdir, &prefix, rand, &suffix)
     } else {
         mktemp_exec(&tmpdir, &prefix, rand, &suffix, flags.is_directory)
+    }
+}
+
+#[derive(Default)]
+pub struct Mktemp;
+impl Tool for Mktemp {
+    fn name(&self) -> &'static str {
+        "mktemp"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        mktemp_main(args.iter().cloned())
     }
 }
 

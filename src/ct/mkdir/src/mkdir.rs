@@ -9,13 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-
+use ctcore::Tool;
 #[cfg(not(windows))]
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
@@ -23,6 +20,8 @@ use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_mode;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_if_err};
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 const MKDIR_DEFAULT_PERM: u32 = 0o777;
 
@@ -80,6 +79,22 @@ fn mkdir_strip_minus_from_mode(_args: &mut [String]) -> bool {
 #[cfg(not(windows))]
 fn mkdir_strip_minus_from_mode(args: &mut [String]) -> bool {
     ct_mode::strip_minus_from_mode(args)
+}
+
+#[derive(Default)]
+pub struct Mkdir;
+impl Tool for Mkdir {
+    fn name(&self) -> &'static str {
+        "mkdir"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        mkdir_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

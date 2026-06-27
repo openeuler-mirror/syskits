@@ -13,13 +13,14 @@
 
 use clap::ArgAction;
 use clap::{Arg, Command, crate_version};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
-use std::env;
-use std::io;
-use std::path::PathBuf;
-
+use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::env;
+use std::ffi::OsString;
+use std::io;
+use std::path::PathBuf;
 
 const PWD_ABOUT: &str = ct_help_about!("pwd.md");
 const PWD_USAGE: &str = ct_help_usage!("pwd.md");
@@ -170,6 +171,23 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args(args)
 }
+
+#[derive(Default)]
+pub struct Pwd;
+impl Tool for Pwd {
+    fn name(&self) -> &'static str {
+        "pwd"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        pwd_main(args.iter().cloned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

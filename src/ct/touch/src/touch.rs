@@ -29,7 +29,7 @@ use filetime::{FileTime, set_file_times, set_symlink_file_times};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use ctcore::{Tool, ct_format_usage, ct_help_about, ct_help_usage, ct_show};
 
 const TOUCH_ABOUT: &str = ct_help_about!("touch.md");
 const TOUCH_USAGE: &str = ct_help_usage!("touch.md");
@@ -523,6 +523,23 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
         Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?
             .into())
+    }
+}
+
+#[derive(Default)]
+pub struct Touch;
+impl Tool for Touch {
+    fn name(&self) -> &'static str {
+        "touch"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 直接调用原有的 touch_main 函数
+        touch_main(args.iter().cloned())
     }
 }
 

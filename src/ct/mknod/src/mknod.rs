@@ -21,9 +21,11 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 use libc::{dev_t, mode_t};
 use std::ffi::CString;
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 
 const MKNOD_ABOUT: &str = ct_help_about!("mknod.md");
 const MKNOD_USAGE: &str = ct_help_usage!("mknod.md");
@@ -218,6 +220,22 @@ fn parse_type(tpe: &str) -> Result<MknodFileType, String> {
             'p' => Ok(MknodFileType::Fifo),
             _ => Err(format!("invalid device type {}", tpe.quote())),
         })
+}
+
+#[derive(Default)]
+pub struct Mknod;
+impl Tool for Mknod {
+    fn name(&self) -> &'static str {
+        "mknod"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        mknod_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

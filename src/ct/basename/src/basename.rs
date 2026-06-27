@@ -14,12 +14,14 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_format_usage;
 use ctcore::ct_help_about;
 use ctcore::ct_help_usage;
 use ctcore::ct_line_ending::CtLineEnding;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::path::is_separator;
 
@@ -32,6 +34,22 @@ pub mod flags {
     pub static NAME: &str = "name";
     pub static SUFFIX: &str = "suffix";
     pub static ZERO: &str = "zero";
+}
+
+#[derive(Default)]
+pub struct Basename;
+impl Tool for Basename {
+    fn name(&self) -> &'static str {
+        "basename"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        basename_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

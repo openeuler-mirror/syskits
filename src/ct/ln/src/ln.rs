@@ -45,6 +45,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 
+use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 #[cfg(unix)]
@@ -175,6 +176,22 @@ mod lnoptions {
 }
 
 static LN_ARG_FILES: &str = "files";
+
+#[derive(Default)]
+pub struct Ln;
+impl Tool for Ln {
+    fn name(&self) -> &'static str {
+        "ln"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        ln_main(args.iter().cloned())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {

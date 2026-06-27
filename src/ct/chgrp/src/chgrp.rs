@@ -10,13 +10,13 @@
  *
  */
 
-// spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
-
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
@@ -78,8 +78,28 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
     })
 }
 
+#[derive(Default)]
+pub struct Chgrp;
+impl Tool for Chgrp {
+    fn name(&self) -> &'static str {
+        "chgrp"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        chown_main(args.iter().cloned())
+    }
+}
+
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    chown_main(args)
+}
+
+pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
     chown_base(
         ct_app(),
         args,

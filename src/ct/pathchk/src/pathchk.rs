@@ -13,9 +13,11 @@
 
 use clap::ArgMatches;
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
 // operating mode
@@ -366,6 +368,24 @@ fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResul
         }
     }
     Ok(true)
+}
+
+#[derive(Default)]
+pub struct Pathchk;
+impl Tool for Pathchk {
+    fn name(&self) -> &'static str {
+        "pathchk"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stderr();
+        let mut out = stdout.lock();
+        pathchk_main(&mut out, args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

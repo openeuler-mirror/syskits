@@ -183,7 +183,8 @@ pub fn ct_app() -> Command {
                 "set or adjust the size of each file according to SIZE, which is in \
             bytes unless --io-blocks is specified",
             )
-            .value_name("SIZE"),
+            .value_name("SIZE")
+            .allow_hyphen_values(true),
         Arg::new(truncate_flags::TRUNCATE_ARG_FILES)
             .value_name("FILE")
             .action(ArgAction::Append)

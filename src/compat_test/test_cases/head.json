@@ -1,0 +1,188 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "head",
+          "description": "基本功能测试",
+          "setup_commands": [
+            "echo -e 'Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11' > tmp_test1.txt"
+          ],
+          "args": ["tmp_test1.txt"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            "rm -f tmp_test1.txt"
+          ]
+        },
+        {
+            "tstdin": "",
+            "command": "head",
+            "description": "测试指定行数",
+            "setup_commands": [
+              "echo -e 'Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11' > tmp_test2.txt"
+            ],
+            "args": ["-n", "5", "tmp_test2.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f tmp_test2.txt"
+            ]
+        },
+        {
+              "tstdin": "",
+              "command": "head",
+              "description": "测试指定字节数",
+              "setup_commands": [
+                "echo -e 'HelloWorld' > tmp_test3.txt"
+              ],
+              "args": ["-c", "5", "tmp_test3.txt"],
+              "expectation": {
+                "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+                },
+                "verifications": [
+                  {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                  }
+                ]
+              },
+              "cleanup_commands": [
+                "rm -f tmp_test3.txt"
+              ]
+        },
+        {
+            "tstdin": "",
+            "command": "head",
+            "description": "测试指定字节单位",
+            "setup_commands": [
+                "dd if=/dev/zero of=tmp_test4.txt bs=1k count=4"
+            ],
+            "args": ["-c", "1k", "tmp_test4.txt"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f tmp_test4.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "head",
+            "description": "测试静默模式",
+            "setup_commands": [
+            "echo -e 'A\nB' > test_file1",
+            "echo -e 'C\nD' > test_file2"
+            ],
+            "args": ["-q", "test_file1", "test_file2"],
+            "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+                }
+            ]
+            },
+            "cleanup_commands": [
+            "rm -f test_file1",
+            "rm -f test_file2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "head",
+            "description": "测试显示文件名",
+            "setup_commands": [
+                "echo -e 'Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11' > test_file3"
+            ],
+            "args": ["-v", "test_file3"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_file3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "head",
+            "description": "测试以 NUL 字符而非换行符作为行尾分隔符",
+            "setup_commands": [
+                "echo -e 'Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11' > test_file4"
+            ],
+            "args": ["-z", "test_file4"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                {
+                    "command": "",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_file4"
+            ]
+        }
+    ]
+  }

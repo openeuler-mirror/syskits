@@ -1,0 +1,342 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "hostname",
+          "description": "基本功能测试",
+          "setup_commands": [
+            ""
+          ],
+          "args": [],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "设置临时主机名",
+            "setup_commands": [
+              
+            ],
+            "args": ["test-node"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "通过文件设置主机名",
+            "setup_commands": [
+              "echo 'test-node-1' > hostname.txt"
+            ],
+            "args": ["-F", "hostname.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f hostname.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "设置默认主机名",
+            "setup_commands": [
+              
+            ],
+            "args": ["-b", "default-node"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示所有别名",
+            "setup_commands": [
+              
+            ],
+            "args": ["-a"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示所有FQDN",
+            "setup_commands": [
+              
+            ],
+            "args": ["-A"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示DNS域名",
+            "setup_commands": [
+              
+            ],
+            "args": ["-d"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示完整FQDN",
+            "setup_commands": [
+              
+            ],
+            "args": ["-f"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示所有IP地址",
+            "setup_commands": [
+              
+            ],
+            "args": ["-i"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示所有IP地址",
+            "setup_commands": [
+              
+            ],
+            "args": ["-I"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示短主机名",
+            "setup_commands": [
+              
+            ],
+            "args": ["-s"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "显示NIS域名",
+            "setup_commands": [
+              
+            ],
+            "args": ["-y"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "hostname",
+            "description": "通过文件设置NIS域名",
+            "setup_commands": [
+              "echo 'test-node-nis' > nis.txt"
+            ],
+            "args": ["-y", "-F", "nis.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "hostname -y",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              "rm -f nis.txt"
+            ]
+        }
+    ]
+  }

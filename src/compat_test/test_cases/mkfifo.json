@@ -1,0 +1,92 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "基本功能测试",
+            "args": ["test_fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_fifo"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "创建多个命名管道",
+            "args": ["fifo1", "fifo2", "fifo3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f fifo1 fifo2 fifo3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "设置权限模式",
+            "args": ["-m", "600", "mode_fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %a mode_fifo",
+                        "expected_exit": 0,
+                        "expected_stdout": "600"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f mode_fifo"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "文件已存在测试",
+            "setup_commands": [
+                "mkfifo existing_fifo"
+            ],
+            "args": ["existing_fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "mkfifo: cannot create fifo 'existing_fifo': File exists\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f existing_fifo"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "mkfifo",
+            "description": "目录不存在测试",
+            "args": ["nonexistent_dir/test_fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "mkfifo: cannot create fifo 'nonexistent_dir/test_fifo': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

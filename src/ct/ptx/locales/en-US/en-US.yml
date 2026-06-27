@@ -1,0 +1,26 @@
+ptx:
+  clap:
+    ptx_auto_reference: output automatically generated references
+    ptx_traditional: behave more like System V 'ptx'
+    ptx_flag_truncation: use STRING for flagging line truncations
+    ptx_macro_name: macro name to use instead of 'xx'
+    ptx_format_roff: generate output as roff directives
+    ptx_right_side_refs: put references at right, not counted in -w
+    ptx_sentence_regexp: for end of lines or end of sentences
+    ptx_format_tex: generate output as TeX directives
+    ptx_word_regexp: use REGEXP to match each keyword
+    ptx_break_file: word break characters in this FILE
+    ptx_ignore_case: fold lower case to upper case for sorting
+    ptx_gap_size: gap size in columns between output fields
+    ptx_ignore_file: read ignore word list from FILE
+    ptx_only_file: read only word list from this FILE
+    ptx_references: first field of each line is a reference
+    ptx_width: output width in columns, reference excluded
+  usage: |-
+    ptx [OPTION]... [INPUT]...
+    ptx -G [OPTION]... [INPUT [OUTPUT]]
+  about: |-
+    Produce a permuted index of file contents
+    Output a permuted index, including context, of the words in the input files.
+    Mandatory arguments to long options are mandatory for short options too.
+    With no FILE, or when FILE is -, read standard input. Default is '-F /'.

@@ -1,0 +1,8 @@
+mktemp:
+  clap:
+    mktemp_directory: 创建目录而不是文件
+    mktemp_dry_run: 不创建任何东西；仅打印名称（不安全）
+    mktemp_quiet: 如果发生错误，静默失败。
+    mktemp_p: --tmpdir的简短形式
+  usage: mktemp [选项]... [模板]
+  about: '创建临时文件或目录。'

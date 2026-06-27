@@ -1,0 +1,12 @@
+basename:
+  about: "Print NAME with any leading directory components removed"
+  usage: "basename [-z] NAME [SUFFIX]\nbasename OPTION... NAME..."
+  clap:
+    multiple: "support multiple arguments and treat each as a NAME"
+    suffix: "remove a trailing SUFFIX; implies -a"
+    zero: "end each output line with NUL, not newline"
+    help: "Show help message"
+    version: "Show version information"
+  errors:
+    missing_operand: "missing operand"
+    extra_operand: "extra operand %s"

@@ -1,0 +1,7 @@
+tac:
+  clap:
+    tac_before: attach the separator before instead of after
+    tac_regex: interpret the sequence as a regular expression
+    tac_separator: use STRING as the separator instead of newline
+  usage: tac [OPTION]... [FILE]...
+  about: Write each file to standard output, last line first.

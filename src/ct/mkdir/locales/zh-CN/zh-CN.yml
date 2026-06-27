@@ -1,0 +1,8 @@
+mkdir:
+  clap:
+    mode: 设置文件模式（在windows上未实现）
+    parents: 按需创建父目录
+    verbose: 为每个创建的目录打印消息
+  usage: mkdir [选项]... 目录...
+  about: '如果不存在，则创建给定的目录'
+  after_help: '每个模式的格式为''[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+''.'

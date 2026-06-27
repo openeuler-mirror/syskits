@@ -1,0 +1,14 @@
+chown:
+  clap:
+    help: Print help information.
+    changes: like verbose but report only when a change is made
+    preserve: fail to operate recursively on '/'
+    no_preserve: do not treat '/' specially (the default)
+    quiet: suppress most error messages
+    recursive: operate on files and directories recursively
+    reference: use RFILE's owner and group rather than specifying OWNER:GROUP values
+    verbose: output a diagnostic for every file processed
+  usage: |-
+    chown [OPTION]... [OWNER][:[GROUP]] FILE...
+    chown [OPTION]... --reference=RFILE FILE...
+  about: Change file owner and group

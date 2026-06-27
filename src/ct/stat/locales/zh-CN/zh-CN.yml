@@ -11,7 +11,7 @@ help: "打印帮助信息"
 version: "打印版本信息"
 about: "显示文件或文件系统的状态。"
 usage: "用法: stat [选项]... 文件..."
-long_usage: 
+long_usage:
   "文件的有效格式序列（无 `--file-system`）:\n
   \n
   - `%a`: 八进制访问权限（注意 `#` 和 `0` 的 `printf` 标志）\n

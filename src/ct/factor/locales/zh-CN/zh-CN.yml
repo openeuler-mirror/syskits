@@ -1,0 +1,8 @@
+factor:
+  clap:
+    exponents: 以p^e形式打印因子
+    help: 打印帮助信息。
+  usage: factor [选项]... [数字]...
+  about: |-
+    打印给定数字的质因数。
+    如果未指定数字，则从标准输入读取。

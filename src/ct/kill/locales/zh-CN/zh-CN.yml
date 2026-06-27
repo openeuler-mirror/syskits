@@ -1,0 +1,7 @@
+kill:
+  clap:
+    list: 列出信号
+    table: 列出信号表
+    signal: 发送给定的信号而不是SIGTERM
+  usage: kill [选项]... 进程ID...
+  about: '向进程发送信号或列出有关信号的信息。'

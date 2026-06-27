@@ -1,0 +1,5 @@
+tty:
+  clap:
+    tty_silent: print nothing, only return an exit status
+  usage: tty [OPTION]...
+  about: Print the file name of the terminal connected to standard input.

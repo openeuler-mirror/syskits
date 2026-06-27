@@ -1,0 +1,23 @@
+df:
+  clap:
+    df_opt_help: 打印帮助信息。
+    df_opt_all: 包括虚拟文件系统
+    df_opt_total: 生成总计
+    df_opt_human_readable_binary: 以人类可读格式打印大小（如1K 234M 2G）
+    df_opt_human_readable_decimal: 同上，但使用1000而非1024为基数
+    df_opt_inodes: 列出inode信息而非块使用情况
+    df_opt_kilo: 类似于--block-size=1K
+    df_opt_local: 仅列出本地文件系统
+    df_opt_no_sync: 获取使用信息前不调用sync（默认）
+    df_opt_portability: 使用POSIX输出格式
+    df_opt_sync: 获取使用信息前调用sync（仅限非Windows系统）
+    df_opt_print_type: 打印文件系统类型
+  usage: df [选项]... [文件]...
+  about: |-
+    显示每个文件所在的文件系统的信息，
+    默认情况下显示所有文件系统。
+  after_help: |-
+    显示值的单位为--block-size、DF_BLOCK_SIZE、BLOCK_SIZE和BLOCKSIZE环境变量中
+    首先可用的SIZE。否则，单位默认为1024字节（如果设置了POSIXLY_CORRECT，则为512）。
+    SIZE是一个整数和可选单位（例如：10M表示10*1024*1024）。
+    单位有K、M、G、T、P、E、Z、Y（1024的幂）或KB、MB...（1000的幂）。

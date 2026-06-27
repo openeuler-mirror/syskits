@@ -1,0 +1,6 @@
+sync:
+  clap:
+    sync_file_system: sync the file systems that contain the files
+    sync_data: sync only file data, no unneeded metadata (Linux only)
+  usage: sync [OPTION]... FILE...
+  about: Synchronize cached writes to persistent storage

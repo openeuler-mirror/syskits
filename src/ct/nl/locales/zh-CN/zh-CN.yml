@@ -1,0 +1,26 @@
+nl:
+  clap:
+    nl_help: 打印帮助信息。
+    nl_body_numbering: 使用STYLE对正文行进行编号
+    nl_section_delimiter: 使用CC分隔逻辑页面
+    nl_footer_numbering: 使用STYLE对页脚行进行编号
+    nl_header_numbering: 使用STYLE对页眉行进行编号
+    nl_line_increment: 每行的行号增量
+    nl_join_blank_lines: NUMBER个空行被视为一行
+    nl_number_format: 根据FORMAT插入行号
+    nl_no_renumber: 在逻辑页面处不重置行号
+    nl_number_separator: 在（可能的）行号后添加STRING
+    nl_starting_line_number: 每个逻辑页面的第一行行号
+    nl_number_width: 使用NUMBER列显示行号
+  usage: nl [选项]... [文件]...
+  about: '为文件的行添加行号'
+  after_help: |-
+    `STYLE`是以下之一：
+    * `a`     为所有行编号
+    * `t`     只为非空行编号
+    * `n`     不为任何行编号
+    * `pBRE`  只为包含基本正则表达式`BRE`匹配的行编号
+    `FORMAT`是以下之一：
+    * `ln`    左对齐，无前导零
+    * `rn`    右对齐无前导零
+    * `rz`    右对齐，有前导零

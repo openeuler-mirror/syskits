@@ -1,0 +1,6 @@
+pathchk:
+  clap:
+    pathchk_posix: 检查大多数POSIX系统
+    pathchk_portability: 检查所有POSIX系统（等同于-p -P）
+  usage: pathchk [选项]... 名称...
+  about: '检查文件名是否有效或可移植'

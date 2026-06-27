@@ -1,0 +1,29 @@
+split:
+  clap:
+    opt_bytes: 每个输出文件放置SIZE字节
+    opt_line_bytes: 每个输出文件最多放置SIZE字节的行
+    opt_lines: 每个输出文件放置NUMBER行/记录
+    opt_number: 生成CHUNKS个输出文件；见下面的说明
+    opt_additional_suffix: 附加到输出文件名的额外后缀
+    opt_elide_empty_files: 使用'-n'时不生成空输出文件
+    opt_numeric_suffixes_short: 使用从0开始的数字后缀，而不是字母
+    opt_numeric_suffixes: 与-d相同，但允许设置起始值
+    opt_hex_suffixes_short: 使用从0开始的十六进制后缀，而不是字母
+    opt_hex_suffixes: 与-x相同，但允许设置起始值
+    opt_suffix_length: 生成长度为N的后缀（默认为2）
+    opt_verbose: 在每个输出文件被打开前打印诊断信息
+    opt_separator: 使用SEP而不是换行符作为记录分隔符；'\\0'（零）指定NUL字符
+  usage: split [选项]... [输入 [前缀]]
+  about: '创建包含输入的连续或交错部分的输出文件'
+  after_help: |-
+    将输入的固定大小部分输出到前缀aa、前缀ab、...；默认大小为1000，默认前缀为'x'。没有输入，或当输入为-时，读取标准输入。
+    SIZE参数是整数和可选单位（例如：10K是10*1024）。
+    单位有K、M、G、T、P、E、Z、Y、R、Q（1024的幂）或KB、MB、...（1000的幂）。
+    也可以使用二进制前缀：KiB=K、MiB=M等。
+    CHUNKS可以是：
+    - N       根据输入大小分割成N个文件
+    - K/N     将第K个（共N个）输出到标准输出
+    - l/N     分割成N个文件，不分割行/记录
+    - l/K/N   将第K个（共N个）输出到标准输出，不分割行/记录
+    - r/N     类似'l'，但使用轮询分配
+    - r/K/N   同样，但只将第K个（共N个）输出到标准输出

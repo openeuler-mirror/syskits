@@ -1,0 +1,30 @@
+chcon:
+  about: "更改每个文件的SELinux安全上下文"
+  usage: "chcon [选项]... 上下文 文件...
+chcon [选项]... [-u 用户] [-r 角色] [-l 范围] [-t 类型] 文件...
+chcon [选项]... --reference=参考文件 文件..."
+  clap:
+    help: "显示帮助信息"
+    version: "显示版本信息"
+    dereference: "影响每个符号链接的引用（这是默认值），而不是符号链接本身"
+    no_dereference: "影响符号链接而不是任何引用的文件"
+    preserve_root: "不递归处理'/'"
+    no_preserve_root: "允许递归处理'/'"
+    recursive: "递归处理目录及其内容"
+    verbose: "输出诊断信息"
+    reference: "使用参考文件的安全上下文"
+    user: "设置用户安全上下文"
+    role: "设置角色安全上下文"
+    type: "设置类型安全上下文"
+    range: "设置范围安全上下文"
+    follow_arg_dir_sym_link: "影响命令行中列出的目录的符号链接引用"
+    follow_dir_sym_links: "影响目录的符号链接引用"
+    no_follow_sym_links: "不影响任何符号链接"
+  errors:
+    invalid_context: "无效的安全上下文 {}"
+    getting_context: "获取安全上下文时出错"
+    too_many_symlinks: "符号链接层数过多"
+    is_directory: "是一个目录"
+    output_is_input: "输入文件是输出文件"
+    unknown_filetype: "未知的文件类型: {}"
+    system_error: "系统错误"

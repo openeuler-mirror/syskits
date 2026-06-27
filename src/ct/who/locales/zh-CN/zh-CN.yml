@@ -1,0 +1,26 @@
+who:
+  about: "显示当前登录用户的信息"
+  usage: "who [选项]... [ 文件 | 参数1 参数2 ]"
+  after_help: "打印当前已登录用户的信息。"
+  clap:
+    help: "显示帮助信息"
+    version: "显示版本信息"
+    options:
+      all: "等同于 -b -d --login -p -r -t -T -u"
+      boot: "显示上次系统启动时间"
+      dead: "显示已终止的进程"
+      heading: "显示列标题行"
+      login: "显示系统登录进程"
+      lookup: "尝试通过 DNS 规范化主机名"
+      only_hostname_user: "仅显示与标准输入相关的主机名和用户"
+      process: "显示由 init 启动的活动进程"
+      count: "显示所有登录名和已登录用户数量"
+      runlevel: "显示当前运行级别"
+      short: "仅显示名称、行和时间（默认）"
+      time: "显示上次系统时钟更改时间"
+      users: "列出已登录用户"
+      mesg: "添加用户的消息状态为 +、- 或 ?"
+      file: "指定要读取的文件"
+  errors:
+    system: "系统错误"
+    unknown: "未知错误" 

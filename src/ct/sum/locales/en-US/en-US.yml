@@ -1,0 +1,9 @@
+sum:
+  clap:
+    sum_bsd_compatible: use the BSD sum algorithm, use 1K blocks (default)
+    sum_system_v_compatible: use System V sum algorithm, use 512 bytes blocks
+  usage: sum [OPTION]... [FILE]...
+  about: |-
+    Checksum and count the blocks in a file.
+
+    With no FILE, or when FILE is -, read standard input.

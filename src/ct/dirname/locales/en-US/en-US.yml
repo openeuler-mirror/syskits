@@ -1,0 +1,8 @@
+dirname:
+  clap:
+    zero: separate output with NUL rather than newline
+  usage: dirname [OPTION] NAME...
+  about: Strip last component from file name
+  after_help: |-
+    Output each NAME with its last non-slash component and trailing slashes
+    removed; if NAME contains no /'s, output '.' (meaning the current directory).

@@ -1,0 +1,12 @@
+uname:
+  clap:
+    uname_all: Behave as though all of the flags -mnrsvo were specified.
+    uname_kernel_version: print the operating system version.
+    uname_machine: print the machine hardware name.
+    uname_os: print the operating system name.
+    uname_processor: print the processor type (non-portable)
+    uname_hardware_platform: print the hardware platform (non-portable)
+  usage: uname [OPTION]...
+  about: |-
+    Print certain system information.
+    With no OPTION, same as -s.

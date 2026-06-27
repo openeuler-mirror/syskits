@@ -1,0 +1,11 @@
+touch:
+  clap:
+    touch_help: 打印帮助信息。
+    touch_access: 只更改访问时间
+    touch_timestamp: 使用[[CC]YY]MMDDhhmm[.ss]替代当前时间
+    touch_date: 解析参数并用它替代当前时间
+    touch_modification: 只更改修改时间
+    touch_no_create: 不创建任何文件
+    touch_reference: 使用此文件的时间而不是当前时间
+  usage: touch [选项]... 文件...
+  about: '将每个文件的访问和修改时间更新为当前时间。'

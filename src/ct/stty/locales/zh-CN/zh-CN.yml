@@ -1,0 +1,11 @@
+stty:
+  clap:
+    stty_all: 以人类可读形式打印所有当前设置
+    stty_save: 以stty可读形式打印所有当前设置
+    stty_file: 打开并使用指定的设备而不是标准输入
+    stty_settings: 要更改的设置
+  usage: |-
+    stty [-F 设备 | --file=设备] [设置]...
+    stty [-F 设备 | --file=设备] [-a|--all]
+    stty [-F 设备 | --file=设备] [-g|--save]
+  about: '打印或更改终端特性。'

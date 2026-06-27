@@ -1,0 +1,37 @@
+vdir:
+  about: "以长列表格式显示目录内容"
+  usage: "vdir [选项]... [文件]..."
+  after_help: |
+    以长列表格式显示目录内容。
+    默认情况下，输出按字母顺序排序。
+
+  clap:
+    help: "显示此帮助信息并退出"
+    version: "显示版本信息并退出"
+    format:
+      long: "使用长列表格式"
+      across: "横向列出条目"
+      commas: "用逗号分隔的输出"
+      vertical: "纵向列出条目"
+      single_column: "每行一个条目"
+    sort:
+      none: "不排序"
+      size: "按大小排序"
+      time: "按时间排序"
+      extension: "按扩展名排序"
+    display:
+      all: "显示所有文件"
+      almost_all: "不显示 . 和 .."
+      directory: "列出目录本身，而不是其内容"
+      no_group: "不显示组信息"
+      human_readable: "以人类可读的格式显示大小"
+      inode: "显示每个文件的索引号"
+    time:
+      access: "显示访问时间"
+      change: "显示更改时间"
+      modification: "显示修改时间"
+
+  errors:
+    invalid_path: "无效的路径: %{path}"
+    permission_denied: "权限被拒绝: %{path}"
+    io_error: "IO错误: %{error}" 

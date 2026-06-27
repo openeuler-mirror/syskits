@@ -1,0 +1,32 @@
+shred:
+  clap:
+    shred_force: 如有必要，更改权限以允许写入
+    shred_iterations: 覆盖N次而不是默认值(3)
+    shred_size: 粉碎这么多字节（接受K、M、G等后缀）
+    shred_wipesync: 覆盖后取消分配并删除文件
+    shred_remove: 类似-u，但可控制如何删除；参见下文
+    shred_verbose: 显示进度
+    shred_zero: 添加最后一次使用零的覆盖以隐藏粉碎痕迹
+  usage: shred [选项]... 文件...
+  about: |-
+    反复覆盖指定的文件，使即使是非常昂贵的硬件探测设备也难以恢复数据。
+  after_help: |-
+    如果指定了`--remove`(`-u`)，则删除`文件`。默认不删除文件，
+    因为通常是对像`/dev/hda`这样的设备文件进行操作，而这些文件通常不应该被删除。
+
+    注意：shred依赖于一个非常重要的假设：文件系统在原位覆盖数据。这是传统的做法，
+    但许多现代文件系统设计不满足这一假设。以下是shred无效或在所有文件系统模式下
+    无法保证有效的文件系统示例：
+
+    * 日志结构或日志文件系统，如AIX和Solaris提供的系统（以及JFS、ReiserFS、XFS、Ext3等）
+    * 即使某些写入失败仍能继续写入冗余数据的文件系统，如基于RAID的文件系统
+    * 创建快照的文件系统，如Network Appliance的NFS服务器
+    * 在临时位置缓存的文件系统，如NFS版本3客户端
+    * 压缩文件系统
+
+    对于ext3文件系统，上述免责声明仅适用于`data=journal`模式（因此shred的效果有限），
+    该模式除了元数据外还会记录文件数据。在`data=ordered`（默认）和`data=writeback`
+    模式下，shred正常工作。Ext3日志模式可以通过在`/etc/fstab`文件中为特定文件系统
+    添加`data=something`选项来更改，具体参见mount手册页（`man mount`）。
+
+    此外，文件系统备份和远程镜像可能包含无法删除的文件副本，这将允许恢复已粉碎的文件。

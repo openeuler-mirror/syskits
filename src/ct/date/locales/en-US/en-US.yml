@@ -1,0 +1,11 @@
+date:
+  clap:
+    date_opt_date: display time described by STRING, not 'now'
+    date_opt_file: like --date; once for each line of DATEFILE
+    date_opt_debug: annotate the parsed date, and warn about questionable usage to stderr
+    date_opt_reference: display the last modification time of FILE
+    date_opt_universal: print or set Coordinated Universal Time (UTC)
+  usage: |-
+    date [OPTION]... [+FORMAT]...
+    date [OPTION]... [MMDDhhmm[[CC]YY][.ss]]
+  about: Print or set the system date and time

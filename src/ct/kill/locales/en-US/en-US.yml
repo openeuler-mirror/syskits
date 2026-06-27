@@ -1,0 +1,7 @@
+kill:
+  clap:
+    list: Lists signals
+    table: Lists table of signals
+    signal: Sends given signal instead of SIGTERM
+  usage: kill [OPTIONS]... PID...
+  about: Send signal to processes or list information about signals.

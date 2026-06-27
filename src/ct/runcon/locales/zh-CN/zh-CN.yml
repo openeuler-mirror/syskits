@@ -1,0 +1,16 @@
+runcon:
+  clap:
+    runcon_compute: 在修改前计算进程转换上下文。
+    runcon_user: 在目标安全上下文中设置用户USER。
+    runcon_role: 在目标安全上下文中设置角色ROLE。
+    runcon_type: 在目标安全上下文中设置类型TYPE。
+    runcon_range: 在目标安全上下文中设置范围RANGE。
+  usage: |-
+    runcon [上下文 命令 [参数...]]
+    runcon [-c] [-u 用户] [-r 角色] [-t 类型] [-l 范围] 命令 [参数...]
+  about: '在启用SELinux的系统上以指定的安全上下文运行命令。'
+  after_help: |-
+    使用完全指定的上下文运行命令，或使用当前或转换的安全上下文，由级别、角色、类型和用户中的一个或多个修改。
+    如果未指定--compute、--type、--user、--role或--range，则第一个参数将用作完整上下文。
+    请注意，只有经过精心选择的上下文才可能成功运行。
+    如果未指定上下文和命令，则打印当前安全上下文。

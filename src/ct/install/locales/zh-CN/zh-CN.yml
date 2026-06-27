@@ -1,0 +1,17 @@
+install:
+  clap:
+    install_ignored: 忽略
+    install_group: 设置组所有权，而不是进程的当前组
+    install_mode: 设置权限模式（如在chmod中），而不是rwxr-xr-x
+    install_owner: 设置所有权（仅限超级用户）
+    install_strip: 去除符号表（在Windows上无操作）
+    install_strip_program: 用于去除二进制文件符号的程序（在Windows上无操作）
+    install_target_directory: 将所有SOURCE参数移动到DIRECTORY中
+    install_no_target_directory: （未实现）将DEST视为普通文件
+    install_verbose: 解释正在执行的操作
+    install_preserve_context: （未实现）保留安全上下文
+    install_context: （未实现）设置文件和目录的安全上下文
+  usage: install [选项]... [文件]...
+  about: |-
+    将SOURCE复制到DEST或将多个SOURCE复制到现有的
+    DIRECTORY，同时设置权限模式和所有者/组

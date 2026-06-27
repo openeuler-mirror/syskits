@@ -1,0 +1,20 @@
+cat:
+  about: "连接文件并打印到标准输出"
+  usage: "用法：cat [选项]... [文件]..."
+  clap:
+    file: "要读取的文件"
+    show-all: "等价于 -vET"
+    number-nonblank: "对非空输出行编号"
+    show-ends: "在每行结尾显示 $"
+    number: "对所有输出行编号"
+    squeeze-blank: "将多个相邻的空行压缩为一行"
+    show-tabs: "将 TAB 字符显示为 ^I"
+    show-nonprinting: "使用 ^ 和 M- 表示法，除了 LFD 和 TAB 之外"
+    ignored-u: "(被忽略)"
+    help: "显示此帮助信息"
+    version: "输出版本信息"
+  errors:
+    unknown_filetype: "未知文件类型：{}"
+    is_directory: "是一个目录"
+    output_is_input: "输入文件是输出文件"
+    too_many_symlinks: "符号链接层数过多"

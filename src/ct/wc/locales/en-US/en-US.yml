@@ -1,0 +1,21 @@
+wc:
+  about: "Display newline, word, and byte counts for each FILE"
+  usage: "wc [OPTION]... [FILE]..."
+  after_help: "With no FILE, or when FILE is -, read standard input."
+  clap:
+    help: "Show help message"
+    version: "Show version information"
+    bytes: "Print the byte counts"
+    chars: "Print the character counts"
+    lines: "Print the newline counts"
+    words: "Print the word counts"
+    max_line_length: "Print the maximum display width"
+    files0_from: "Read input from the files specified by NUL-terminated names in file F"
+    total: "Control when to print totals (never/auto/always/only)"
+  errors:
+    system: "System error"
+    unknown: "Unknown error"
+    disabled_files: "Extra operand '{extra}'\nFile operands cannot be combined with --files0-from"
+    stdin_repr_not_allowed: "When reading file names from stdin, no file name of '-' allowed"
+    zero_length: "Invalid zero-length file name"
+    zero_length_ctx: "{path}:{idx}: invalid zero-length file name" 

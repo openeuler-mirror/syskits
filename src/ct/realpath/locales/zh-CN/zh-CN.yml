@@ -1,0 +1,9 @@
+realpath:
+  clap:
+    realpath_quiet: 不打印无效路径的警告
+    realpath_strip: 只去除'.'和'..'组件，但不解析符号链接
+    realpath_zero: 使用\\0而不是换行符分隔输出文件名
+    realpath_logical: 在符号链接之前解析'..'组件
+    realpath_physical: 在遇到时解析符号链接（默认）
+  usage: realpath [选项]... 文件...
+  about: '打印已解析的路径'

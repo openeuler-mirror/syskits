@@ -10,7 +10,7 @@ help: "Print help"
 version: "Print version"
 about: "Display file or file system status."
 usage: "stat [OPTION]... FILE..."
-long_usage: 
+long_usage:
   "Valid format sequences for files (without `--file-system`):\n
 
   - `%a`: access rights in octal (note '#' and '0' printf flags)\n

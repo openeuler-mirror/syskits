@@ -1,0 +1,6 @@
+mkfifo:
+  clap:
+    mode: file permissions for the fifo
+    se_linux_security_context: set the SELinux security context to default type
+  usage: mkfifo [OPTION]... NAME...
+  about: Create a FIFO with the given name.

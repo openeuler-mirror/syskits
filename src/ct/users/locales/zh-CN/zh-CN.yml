@@ -1,0 +1,4 @@
+users:
+  clap: { }
+  usage: users [文件]
+  about: '打印当前登录到当前主机的用户名。'

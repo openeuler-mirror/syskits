@@ -1,0 +1,9 @@
+dir:
+  clap: { }
+  usage: dir [选项]... [文件]...
+  about: |-
+    列出目录内容。
+    默认忽略以'.'开头的文件和目录
+  after_help: |-
+    TIME_STYLE参数可以是full-iso、long-iso、iso、locale或+FORMAT。FORMAT的解释方式与date中相同。此外，
+    TIME_STYLE环境变量设置要使用的默认样式。

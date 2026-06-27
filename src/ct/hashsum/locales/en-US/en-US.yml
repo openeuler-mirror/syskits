@@ -1,0 +1,14 @@
+hashsum:
+  clap:
+    check: read hashsums from the FILEs and check them
+    tag: create a BSD-style checksum
+    quiet: don't print OK for each successfully verified file
+    status: don't output anything, status code shows success
+    strict: exit non-zero for improperly formatted checksum lines
+    warn: warn about improperly formatted checksum lines
+    zero: end each output line with NUL, not newline
+    length: digest length in bits; must not exceed the max for the blake2 algorithm (512) and must be a multiple of 8
+    bits: set the size of the output (only for SHAKE)
+    no-names: Omits filenames in the output (option not present in GNU/Coreutils)
+  usage: hashsum [OPTIONS] [FILE]...
+  about: Compute and check message digests.

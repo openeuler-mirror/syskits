@@ -1,0 +1,5 @@
+tty:
+  clap:
+    tty_silent: 不打印任何内容，只返回退出状态
+  usage: tty [选项]...
+  about: '打印连接到标准输入的终端的文件名。'

@@ -1,0 +1,30 @@
+chcon:
+  about: "Change the SELinux security context of each FILE"
+  usage: "chcon [OPTION]... CONTEXT FILE...
+chcon [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE...
+chcon [OPTION]... --reference=RFILE FILE..."
+  clap:
+    help: "Print help information"
+    version: "Print version information"
+    dereference: "Affect the referent of each symbolic link (this is the default), rather than the symbolic link itself"
+    no_dereference: "Affect symbolic links instead of any referenced file"
+    preserve_root: "Do not recurse on '/'"
+    no_preserve_root: "Allow recursing on '/'"
+    recursive: "Operate on directories and their contents recursively"
+    verbose: "Output diagnostic information"
+    reference: "Use security context of reference file"
+    user: "Set user security context"
+    role: "Set role security context"
+    type: "Set type security context"
+    range: "Set range security context"
+    follow_arg_dir_sym_link: "Affect referent of symbolic links for directories listed on command line"
+    follow_dir_sym_links: "Affect referent of symbolic links for directories"
+    no_follow_sym_links: "Do not affect symbolic links"
+  errors:
+    invalid_context: "Invalid security context {}"
+    getting_context: "Error getting security context"
+    too_many_symlinks: "Too many levels of symbolic links"
+    is_directory: "Is a directory"
+    output_is_input: "Input file is output file"
+    unknown_filetype: "Unknown filetype: {}"
+    system_error: "System error"

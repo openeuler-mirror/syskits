@@ -1,0 +1,17 @@
+chmod:
+  clap:
+    changes: like verbose but report only when a change is made
+    quiet: suppress most error messages
+    verbose: output a diagnostic for every file processed
+    no_preserve_root: do not treat '/' specially (the default)
+    preserve_root: fail to operate recursively on '/'
+    recursive: change files and directories recursively
+    reference: use RFILE's mode instead of MODE values
+  usage: |-
+    chmod [OPTION]... MODE[,MODE]... FILE...
+    chmod [OPTION]... OCTAL-MODE FILE...
+    chmod [OPTION]... --reference=RFILE FILE...
+  about: |-
+    Change the mode of each FILE to MODE.
+    With --reference, change the mode of each FILE to that of RFILE.
+  after_help: Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.

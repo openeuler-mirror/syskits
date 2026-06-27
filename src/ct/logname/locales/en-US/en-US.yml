@@ -1,0 +1,4 @@
+logname:
+  clap: { }
+  usage: logname
+  about: Print user's login name

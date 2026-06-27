@@ -1,0 +1,5 @@
+printenv:
+  clap:
+    printenv_opt_null: 以0字节而不是换行符结束每行输出
+  usage: printenv [选项]... [变量]...
+  about: '显示指定环境变量的值，或者（不带变量参数时）显示所有环境变量的名称和值对。'

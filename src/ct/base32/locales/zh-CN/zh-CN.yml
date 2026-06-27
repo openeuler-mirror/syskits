@@ -1,0 +1,25 @@
+base32:
+  about: "base32 编码/解码数据并打印到标准输出"
+  usage: "base32 [选项]... [文件]..."
+  after_help: "如果没有指定文件，或者文件为'-'，则从标准输入读取。"
+  clap:
+    help: "显示此帮助信息"
+    version: "显示版本信息"
+  errors:
+    system: "系统错误"
+    unknown: "未知错误"
+    invalid_input: "无效的输入"
+    invalid_output: "无效的输出"
+    file_not_found: "文件未找到"
+    permission_denied: "权限被拒绝"
+    io_error: "输入/输出错误"
+    invalid_wrap: "无效的换行值"
+  options:
+    decode: "解码数据"
+    ignore_garbage: "解码时忽略非字母字符"
+    wrap: "在指定字符数后换行（默认76，0表示不换行）"
+  flags:
+    help: "显示此帮助信息并退出"
+    version: "显示版本信息并退出"
+    help_short: "显示此帮助信息并退出"
+    version_short: "显示版本信息并退出" 

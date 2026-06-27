@@ -1,0 +1,6 @@
+rmdir:
+  clap:
+    rmdir_ignore_fail_non_empty: 忽略仅因目录非空而导致的每次失败
+    rmdir_verbose: 为处理的每个目录输出诊断信息
+  usage: rmdir [选项]... 目录...
+  about: '如果目录为空，则删除该目录。'

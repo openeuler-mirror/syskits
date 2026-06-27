@@ -1,0 +1,37 @@
+vdir:
+  about: "List directory contents in long format"
+  usage: "vdir [OPTION]... [FILE]..."
+  after_help: |
+    List directory contents in long format.
+    By default, entries are sorted alphabetically.
+
+  clap:
+    help: "Display this help and exit"
+    version: "Output version information and exit"
+    format:
+      long: "Use long listing format"
+      across: "List entries across"
+      commas: "Output with commas"
+      vertical: "List entries vertically"
+      single_column: "List one file per line"
+    sort:
+      none: "Do not sort"
+      size: "Sort by size"
+      time: "Sort by time"
+      extension: "Sort by extension"
+    display:
+      all: "Show all files"
+      almost_all: "Do not list . and .."
+      directory: "List directory entries instead of contents"
+      no_group: "Do not display group information"
+      human_readable: "Print sizes in human readable format"
+      inode: "Print the index number of each file"
+    time:
+      access: "Show access time"
+      change: "Show change time"
+      modification: "Show modification time"
+
+  errors:
+    invalid_path: "Invalid path: %{path}"
+    permission_denied: "Permission denied: %{path}"
+    io_error: "IO error: %{error}" 

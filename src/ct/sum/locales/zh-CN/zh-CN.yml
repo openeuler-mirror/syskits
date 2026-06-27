@@ -1,0 +1,9 @@
+sum:
+  clap:
+    sum_bsd_compatible: 使用BSD校验和算法，使用1K块（默认）
+    sum_system_v_compatible: 使用System V校验和算法，使用512字节块
+  usage: sum [选项]... [文件]...
+  about: |-
+    计算文件的校验和并计数块数。
+
+    如果没有文件，或者文件是-，则从标准输入读取。

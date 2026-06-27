@@ -1,0 +1,8 @@
+nice:
+  clap:
+    adjustment: 向nice值添加N（默认为10）
+  usage: nice [选项] [命令 [参数]]
+  about: |-
+    以调整的nice值运行命令，这会影响进程调度。
+    没有命令时，打印当前nice值。nice值范围从
+    至少-20（对进程最有利）到19（对进程最不利）。

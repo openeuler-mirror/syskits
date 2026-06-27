@@ -1,0 +1,22 @@
+mknod:
+  clap:
+    mode: 将文件权限位设置为MODE，而不是a=rw - umask
+    name: 新文件的名称
+    type: 新文件的类型（b、c、u或p）
+    major: 主设备号
+    minor: 次设备号
+  usage: mknod [选项]... 名称 类型 [主设备号 次设备号]
+  about: '创建指定类型的特殊文件。'
+  after_help: |-
+    长选项的必需参数对于短选项也是必需的。
+    `-m`, `--mode=MODE`    将文件权限位设置为`MODE`，而不是`a=rw - umask`
+    当`TYPE`为`b`、`c`或`u`时，必须同时指定`MAJOR`和`MINOR`，当`TYPE`为`p`时，
+    必须省略它们。如果`MAJOR`或`MINOR`以`0x`或`0X`开头，
+    将被解释为十六进制；否则，如果以0开头，则为八进制；
+    否则，为十进制。`TYPE`可以是：
+    * `b`      创建块（缓冲）特殊文件
+    * `c`, `u`   创建字符（非缓冲）特殊文件
+    * `p`      创建FIFO
+    注意：您的shell可能有自己的mknod版本，通常会取代
+    这里描述的版本。请参阅您的shell文档
+    了解它支持的选项详情。

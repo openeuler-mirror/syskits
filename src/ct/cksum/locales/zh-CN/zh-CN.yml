@@ -1,0 +1,22 @@
+cksum:
+  clap:
+    algorithm: 选择要使用的摘要类型，详见下面的DIGEST
+    untagged: 创建一个反向风格的校验和，不带摘要类型
+    tag: 创建一个BSD风格的校验和，撤销--untagged（默认）
+    raw: 输出原始二进制摘要，非十六进制
+    base64: 输出base64摘要，非十六进制
+  usage: cksum [选项] [文件]...
+  about: '为每个文件打印CRC和大小'
+  after_help: |-
+    DIGEST决定摘要算法和默认输出格式：
+    - `sysv`:    （等同于sum -s）
+    - `bsd`:     （等同于sum -r）
+    - `crc`:     （等同于cksum）
+    - `md5`:     （等同于md5sum）
+    - `sha1`:    （等同于sha1sum）
+    - `sha224`:  （等同于sha224sum）
+    - `sha256`:  （等同于sha256sum）
+    - `sha384`:  （等同于sha384sum）
+    - `sha512`:  （等同于sha512sum）
+    - `blake2b`: （等同于b2sum）
+    - `sm3`:     （仅通过cksum可用）

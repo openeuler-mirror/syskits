@@ -1,0 +1,6 @@
+rmdir:
+  clap:
+    rmdir_ignore_fail_non_empty: ignore each failure that is solely because a directory is non-empty
+    rmdir_verbose: output a diagnostic for every directory processed
+  usage: rmdir [OPTION]... DIRECTORY...
+  about: Remove the DIRECTORY(ies), if they are empty.

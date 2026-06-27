@@ -1,0 +1,6 @@
+pwd:
+  clap:
+    pwd_logical: 使用环境中的PWD，即使它包含符号链接
+    pwd_physical: 避免所有符号链接
+  usage: pwd [选项]...
+  about: '显示当前工作目录的完整文件名。'

@@ -1,0 +1,38 @@
+sort:
+  clap:
+    sort_help: Print help information.
+    sort_version: Print version information.
+    sort_dictionary_order: consider only blanks and alphanumeric characters
+    sort_merge: merge already sorted files; do not sort
+    sort_check: check for sorted input; do not sort
+    sort_ignore_case: fold lower case to upper case characters
+    sort_ignore_nonprinting: ignore nonprinting characters
+    sort_ignore_leading_blanks: ignore leading blanks when finding sort keys in each line
+    sort_output: write output to FILENAME instead of stdout
+    sort_reverse: reverse the output
+    sort_stable: stabilize sort by disabling last-resort comparison
+    sort_unique: output only the first of an equal run
+    sort_key: sort by a key
+    sort_separator: custom separator for -k
+    sort_zero_terminated: line delimiter is NUL, not newline
+    sort_parallel: change the number of threads running concurrently to NUM_THREADS
+    sort_buf_size: sets the maximum SIZE of each segment in number of sorted items
+    sort_tmp_dir: use DIR for temporaries, not $TMPDIR or /tmp
+    sort_compress_prog: compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and
+      output to stdout
+    sort_batch_size: Merge at most N_MERGE inputs at once.
+    sort_files0_from: read input from the files specified by NUL-terminated NUL_FILES
+    sort_debug: underline the parts of the line that are actually used for sorting
+  usage: sort [OPTION]... [FILE]...
+  about: Display sorted concatenation of all FILE(s). With no FILE, or when FILE is -, read standard input.
+  after_help: |-
+    The key format is `FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS]`.
+    Fields by default are separated by the first whitespace after a non-whitespace character. Use `-t` to specify a custom
+    separator.
+    In the default case, whitespace is appended at the beginning of each field. Custom separators however are not included
+    in fields.
+    `FIELD` and `CHAR` both start at 1 (i.e. they are 1-indexed). If there is no end specified after a comma, the end will
+    be the end of the line.
+    If `CHAR` is set 0, it means the end of the field. `CHAR` defaults to 1 for the start position and to 0 for the end
+    position.
+    Valid options are: `MbdfhnRrV`. They override the global options for this key.

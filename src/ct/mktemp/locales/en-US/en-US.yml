@@ -1,0 +1,8 @@
+mktemp:
+  clap:
+    mktemp_directory: Make a directory instead of a file
+    mktemp_dry_run: do not create anything; merely print a name (unsafe)
+    mktemp_quiet: Fail silently if an error occurs.
+    mktemp_p: short form of --tmpdir
+  usage: mktemp [OPTION]... [TEMPLATE]
+  about: Create a temporary file or directory.

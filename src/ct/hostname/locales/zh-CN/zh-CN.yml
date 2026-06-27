@@ -1,0 +1,8 @@
+hostname:
+  clap:
+    opt_domain: 如果可能，显示DNS域名
+    opt_ip_address: 显示主机的网络地址
+    opt_fqdn: 显示FQDN（完全限定域名）（默认）
+    opt_short: 如果可能，显示短主机名（第一个点之前的部分）
+  usage: hostname [选项]... [主机名]
+  about: '显示或设置系统的主机名。'

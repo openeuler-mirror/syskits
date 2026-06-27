@@ -1,0 +1,42 @@
+du:
+  clap:
+    help: Print help information.
+    all: write counts for all files, not just directories
+    bytes: equivalent to '--apparent-size --block-size=1'
+    total: produce a grand total
+    human_readable: print sizes in human readable format (e.g., 1K 234M 2G)
+    block_size_1k: like --block-size=1K
+    count_links: count sizes many times if hard linked
+    dereference: follow all symbolic links
+    dereference_args: follow only symlinks that are listed on the command line
+    no_dereference: don't follow any symbolic links (this is the default)
+    block_size_1m: like --block-size=1M
+    'null': end each output line with 0 byte rather than newline
+    separate_dirs: do not include size of subdirectories
+    summarize: display only a total for each argument
+    si: like -h, but use powers of 1000 not 1024
+    one_file_system: skip directories on different file systems
+    threshold: |-
+      exclude entries smaller than SIZE if positive, \
+                            or entries greater than SIZE if negative
+    verbose: verbose mode (option not present in GNU/Coreutils)
+    exclude: exclude files that match PATTERN
+    exclude_from: exclude files that match any pattern in FILE
+    files0_from: summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from
+      standard input
+  usage: |-
+    du [OPTION]... [FILE]...
+    du [OPTION]... --files0-from=F
+  about: Estimate file space usage
+  after_help: |-
+    Display values are in units of the first available SIZE from --block-size,
+    and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
+    Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
+    SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
+    Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
+    of 1000).
+    PATTERN allows some advanced exclusions. For example, the following syntaxes
+    are supported:
+    `?` will match only one character
+    `*` will match zero or more characters
+    `{a,b}` will match a or b

@@ -1,0 +1,26 @@
+who:
+  about: "Display information about currently logged-in users"
+  usage: "who [OPTION]... [ FILE | ARG1 ARG2 ]"
+  after_help: "Print information about users who are currently logged in."
+  clap:
+    help: "Display this help and exit"
+    version: "Display version information and exit"
+    options:
+      all: "Same as -b -d --login -p -r -t -T -u"
+      boot: "Time of last system boot"
+      dead: "Print dead processes"
+      heading: "Print line of column headings"
+      login: "Print system login processes"
+      lookup: "Attempt to canonicalize hostnames via DNS"
+      only_hostname_user: "Only hostname and user associated with stdin"
+      process: "Print active processes spawned by init"
+      count: "All login names and number of users logged on"
+      runlevel: "Print current runlevel"
+      short: "Print only name, line, and time (default)"
+      time: "Print last system clock change"
+      users: "List users logged in"
+      mesg: "Add user's message status as +, - or ?"
+      file: "Specify the file to read"
+  errors:
+    system: "System error"
+    unknown: "Unknown error" 

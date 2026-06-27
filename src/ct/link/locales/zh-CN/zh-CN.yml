@@ -1,0 +1,4 @@
+link:
+  clap: { }
+  usage: link 文件1 文件2
+  about: '调用link函数创建一个名为文件2的链接指向已存在的文件1。'

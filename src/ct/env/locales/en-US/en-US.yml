@@ -1,0 +1,7 @@
+env:
+  clap:
+    '"ignore-environment"': start with an empty environment
+    '"debug"': print verbose information for each processing step
+  usage: env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]
+  about: Set each NAME to VALUE in the environment and run COMMAND
+  after_help: A mere - implies -i. If no COMMAND, print the resulting environment.

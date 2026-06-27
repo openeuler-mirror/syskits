@@ -1,0 +1,8 @@
+expand:
+  clap:
+    initial: do not convert tabs after non blanks
+    no_utf8: interpret input file as 8-bit ASCII rather than UTF-8
+  usage: expand [OPTION]... [FILE]...
+  about: |-
+    Convert tabs in each `FILE` to spaces, writing to standard output.
+    With no `FILE`, or when `FILE` is `-`, read standard input.

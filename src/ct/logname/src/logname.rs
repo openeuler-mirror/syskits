@@ -16,7 +16,7 @@ use clap::{Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
-use ctcore::{ct_error::CTResult, ct_show_error};
+use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::CStr;
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -66,7 +66,11 @@ pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
 
     match get_user_login() {
         Some(userlogin) => println!("{userlogin}"),
-        None => ct_show_error!("no login name"),
+        None => return Err(CtSimpleError::new(
+                        1,
+                        format!("no login name"),
+                    )),
+        
     }
 
     Ok(())

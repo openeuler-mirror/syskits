@@ -22,7 +22,18 @@ default_commands = [
     "pathchk",
     "realpath",
     "timeout",    
-    "nl"
+    "nl",
+    "arch",
+    "base32",
+    "base64",
+    "basename",
+    "basenc",
+    "dircolors",
+    "dirname",
+    "sum",
+    "echo",
+    "expand",
+    "false"
 ]
 
 # 测试环境配置

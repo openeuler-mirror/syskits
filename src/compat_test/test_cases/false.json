@@ -1,0 +1,30 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "false",
+          "description": "",
+          "setup_commands": [
+            ""
+          ],
+          "args": [""],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "echo $?",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+        }
+    ]
+  }

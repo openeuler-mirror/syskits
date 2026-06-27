@@ -390,6 +390,71 @@
             "rm -rf  dest_dir",
             "rm -rf file1.txt"
         ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv自定义后缀功能",
+        "setup_commands": [
+            "echo 'Original content' > original.txt",
+            "echo 'New content' > new.txt"
+        ],
+        "args": ["--backup=simple", "-S", ".bak", "original.txt", "new.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "ls -l new.txt*",
+              "expected_exit": 0,
+              "expected_stdout": "new.txt.bak new.txt"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf  original.txt new.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv设置SELinux安全上下文",
+        "setup_commands": [
+            "touch test_file.txt",
+            "chcon -t httpd_sys_content_t test_file.txt",
+            "mkdir dest_dir"
+        ],
+        "args": ["-Z", "test_file.txt", "dest_dir/new_file.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "ls -Z dest_dir/new_file.txt",
+              "expected_exit": 0,
+              "expected_stdout": ""
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": true
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf  test_file.txt dest_dir"
+        ]
       }
     ]
 }

@@ -33,7 +33,7 @@ Linux程序员手册
 
 */
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "redox"))]
+#[cfg(target_os = "linux")]
 pub static ALL_SIGNALS: [&str; 32] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
     "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
@@ -81,12 +81,6 @@ No    Name         Default Action       Description
 
 */
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-pub static ALL_SIGNALS: [&str; 32] = [
-    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
-    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
-    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
-];
 
 /*
 
@@ -125,13 +119,6 @@ pub static ALL_SIGNALS: [&str; 32] = [
      SIGUSR2          31    User defined signal 2
      SIGPWR           32    Power fail/restart
 */
-
-#[cfg(target_os = "netbsd")]
-pub static ALL_SIGNALS: [&str; 33] = [
-    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
-    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
-    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "PWR",
-];
 
 /*
 
@@ -177,13 +164,6 @@ pub static ALL_SIGNALS: [&str; 33] = [
      SIGUSR2      terminate process    user-defined signal 2
      SIGTHR       discard signal       thread AST
 */
-
-#[cfg(target_os = "openbsd")]
-pub static ALL_SIGNALS: [&str; 33] = [
-    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
-    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
-    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "THR",
-];
 
 /*
     以下是Solaris和illumos中定义的信号；（illumos的信号与Solaris相同，
@@ -236,64 +216,6 @@ pub static ALL_SIGNALS: [&str; 33] = [
      SIGRTMIN     ((int)_sysconf(_SC_SIGRT_MIN)) first realtime signal
      SIGRTMAX     ((int)_sysconf(_SC_SIGRT_MAX)) last realtime signal
 */
-
-#[cfg(target_os = "solaris")]
-const SIGNALS_SIZE: usize = 46;
-
-#[cfg(target_os = "illumos")]
-const SIGNALS_SIZE: usize = 47;
-
-#[cfg(any(target_os = "solaris", target_os = "illumos"))]
-static ALL_SIGNALS: [&str; SIGNALS_SIZE] = [
-    "HUP",
-    "INT",
-    "QUIT",
-    "ILL",
-    "TRAP",
-    "IOT",
-    "ABRT",
-    "EMT",
-    "FPE",
-    "KILL",
-    "BUS",
-    "SEGV",
-    "SYS",
-    "PIPE",
-    "ALRM",
-    "TERM",
-    "USR1",
-    "USR2",
-    "CLD",
-    "CHLD",
-    "PWR",
-    "WINCH",
-    "URG",
-    "POLL",
-    "IO",
-    "STOP",
-    "TSTP",
-    "CONT",
-    "TTIN",
-    "TTOU",
-    "VTALRM",
-    "PROF",
-    "XCPU",
-    "XFSZ",
-    "WAITING",
-    "AIOCANCEL",
-    #[cfg(target_os = "illumos")]
-    "LWP",
-    "FREEZE",
-    "THAW",
-    "CANCEL",
-    "LOST",
-    "XRES",
-    "JVM1",
-    "JVM2",
-    "INFO",
-    "RTMIN",
-    "RTMAX",
-];
 
 pub fn get_ct_signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     if let Ok(value) = signal_name_or_value.parse() {

@@ -31,8 +31,6 @@ use std::io::{self, Write as IoWrite};
 
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(target_os = "wasi")]
-use std::os::wasi::ffi::OsStrExt;
 
 // 这些原本在这里定义，但现在它们有自己的 crate。
 pub use os_display::{Quotable, Quoted};
@@ -45,12 +43,12 @@ pub use os_display::{Quotable, Quoted};
 pub fn ct_println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
     let output = io::stdout();
     let mut stdout = output.lock();
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(target_os = "linux")]
     {
         stdout.write_all(text.as_ref().as_bytes())?;
         stdout.write_all(b"\n")?;
     }
-    #[cfg(not(any(unix, target_os = "wasi")))]
+    #[cfg(target_os = "windows")]
     {
         writeln!(stdout, "{}", std::path::Path::new(text.as_ref()).display())?;
     }
@@ -60,11 +58,11 @@ pub fn ct_println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
 /// 类似于 ct_println_verbatim，但不带尾部换行符。
 pub fn ct_print_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
     let mut stdout = io::stdout();
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(target_os = "linux")]
     {
         stdout.write_all(text.as_ref().as_bytes())
     }
-    #[cfg(not(any(unix, target_os = "wasi")))]
+    #[cfg(target_os = "windows")]
     {
         write!(stdout, "{}", std::path::Path::new(text.as_ref()).display())
     }

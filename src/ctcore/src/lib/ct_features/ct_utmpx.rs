@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 //!
-//! **ONLY** support linux, macos and freebsd for the time being
+//! **ONLY** support linux for the time being
 //!
 //! # Examples:
 //!
@@ -48,15 +48,8 @@ pub use libc::endutxent;
 pub use libc::getutxent;
 pub use libc::setutxent;
 use libc::utmpx;
-#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
+#[cfg(target_os = "linux")]
 pub use libc::utmpxname;
-
-/// # Safety
-/// Just fixed the clippy warning. Please add description here.
-#[cfg(target_os = "freebsd")]
-pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
-    0
-}
 
 use crate::*;
 // import macros from `../../ct_macros`
@@ -115,50 +108,6 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
-#[cfg(target_os = "freebsd")]
-mod ut {
-    pub static DEFAULT_FILE: &str = "";
-
-    pub const UT_LINESIZE: usize = 16;
-    pub const UT_NAMESIZE: usize = 32;
-    pub const UT_IDSIZE: usize = 8;
-    pub const UT_HOSTSIZE: usize = 128;
-
-    pub use libc::BOOT_TIME;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::SHUTDOWN_TIME;
-    pub use libc::USER_PROCESS;
-}
-
-#[cfg(target_os = "netbsd")]
-mod ut {
-    pub static DEFAULT_FILE: &str = "/var/run/utmpx";
-
-    pub const ACCOUNTING: usize = 9;
-    pub const SHUTDOWN_TIME: usize = 11;
-
-    pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
-    pub use libc::_UTX_IDSIZE as UT_IDSIZE;
-    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
-    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
-
-    pub use libc::ACCOUNTING;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::EMPTY;
-    pub use libc::INIT_PROCESS;
-    pub use libc::LOGIN_PROCESS;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::RUN_LVL;
-    pub use libc::SIGNATURE;
-    pub use libc::USER_PROCESS;
-}
-
 pub struct CtUtmpx {
     inner: utmpx,
 }
@@ -209,7 +158,7 @@ impl CtUtmpx {
     /// A.K.A. ut.ut_exit
     ///
     /// Return (0, 0) on Non-Linux platform
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
     pub fn exit_status(&self) -> (i16, i16) {
         (0, 0)
     }

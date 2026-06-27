@@ -16,7 +16,7 @@
 //! ```
 //! use ctcore::ct_entries::{self, Locate};
 //!
-//! let root_group = if cfg!(any(target_os = "linux", target_os = "android")) {
+//! let root_group = if cfg!(target_os = "linux") {
 //!     "root"
 //! } else {
 //!     "wheel"
@@ -36,8 +36,6 @@
 //! assert!(ct_entries::Group::locate(root_group).is_ok());
 //! ```
 
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-use libc::time_t;
 use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
@@ -120,14 +118,14 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// > groups is the same (in the mathematical sense of ``set''). (The
 /// > history of a process and its parents could affect the details of
 /// > the result.)
-#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+#[cfg(all(target_os = "linux", feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     let groups = get_groups()?;
     let egid = arg_id.unwrap_or_else(crate::ct_features::ct_process::getegid);
     Ok(sort_groups(groups, egid))
 }
 
-#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
+#[cfg(all(target_os = "linux", feature = "process"))]
 fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
     if let Some(index) = groups.iter().position(|&x| x == egid) {
         groups[..=index].rotate_right(1);
@@ -153,15 +151,6 @@ pub struct CtPasswd {
     pub user_dir: Option<String>,
     /// AKA passwd.pw_passwd
     pub user_passwd: Option<String>,
-    /// AKA passwd.pw_class
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub user_access_class: Option<String>,
-    /// AKA passwd.pw_change
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub passwd_change_time: time_t,
-    /// AKA passwd.pw_expire
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub expiration: time_t,
 }
 
 /// SAFETY: ptr must point to a valid C string.
@@ -182,22 +171,10 @@ impl CtPasswd {
             name: unsafe { cstr2string(raw.pw_name) }.expect("passwd without name"),
             uid: raw.pw_uid,
             gid: raw.pw_gid,
-            #[cfg(not(all(
-                target_os = "android",
-                any(target_arch = "x86", target_arch = "arm")
-            )))]
             user_info: unsafe { cstr2string(raw.pw_gecos) },
-            #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
-            user_info: None,
             user_shell: unsafe { cstr2string(raw.pw_shell) },
             user_dir: unsafe { cstr2string(raw.pw_dir) },
             user_passwd: unsafe { cstr2string(raw.pw_passwd) },
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-            user_access_class: unsafe { cstr2string(raw.pw_class) },
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-            passwd_change_time: raw.pw_change,
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-            expiration: raw.pw_expire,
         }
     }
 

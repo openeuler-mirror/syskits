@@ -49,11 +49,6 @@ impl Tool for Printf {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    printf_main(args).map(|_| ())
-}
-
 /// 主函数，用于处理命令行输入并格式化输出。
 ///
 /// # 参数

@@ -463,13 +463,6 @@ where
     Ok(())
 }
 
-/// 主函数入口点
-#[ctcore::main]
-pub fn ctmain(args: impl Args) -> CTResult<()> {
-    let mut stdout = stdout();
-    nl_main(&mut stdout, args)
-}
-
 /// 主要的行号格式化处理函数
 ///
 /// # 参数

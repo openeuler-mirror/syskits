@@ -270,18 +270,6 @@ fn preload_strings() -> CTResult<(&'static str, &'static str)> {
     ))
 }
 
-/// 主函数入口
-///
-/// # 参数
-/// * `args` - 命令行参数
-///
-/// # 返回值
-/// * `CTResult<()>` - 执行结果
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    stdbuf_main(args)
-}
-
 /// stdbuf 主执行函数
 ///
 /// # 参数

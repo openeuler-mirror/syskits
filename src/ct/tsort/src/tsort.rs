@@ -28,11 +28,6 @@ mod tsort_flags {
     pub const TSORT_FILE: &str = "file";
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    tsort_main(args)
-}
-
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

@@ -9,4 +9,4 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_nproc);
+ctcore::ct_bin!(ct_nproc, Nproc);

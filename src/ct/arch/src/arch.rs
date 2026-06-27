@@ -50,17 +50,7 @@ impl Tool for Arch {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let result = arch_main(args);
-    match result {
-        Ok(s) => {
-            println!("{}", s);
-            Ok(())
-        }
-        Err(e) => Err(e),
-    }
-}
+
 
 pub fn arch_main(args: impl ctcore::Args) -> CTResult<String> {
     // 设置语言

@@ -9,4 +9,4 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_mknod);
+ctcore::ct_bin!(ct_mknod, Mknod);

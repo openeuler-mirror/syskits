@@ -332,11 +332,6 @@ fn parse_round(arg_matches: &ArgMatches) -> NumfmtRoundMethod {
     round
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    numfmt_main(args)
-}
-
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

@@ -32,11 +32,6 @@ pub mod sync_flags {
 
 const SYNC_ARG_FILES: &str = "files";
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    sync_main(args)
-}
-
 pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

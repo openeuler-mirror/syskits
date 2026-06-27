@@ -21,13 +21,9 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::io::Write;
 use sys_locale::get_locale;
+
 mod tty_flags {
     pub const TTY_SILENT: &str = "silent";
-}
-
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    tty_main(args)
 }
 
 pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {

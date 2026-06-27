@@ -39,12 +39,6 @@ mod opt_flags {
     pub const SKIP_CHDIR: &str = "skip-chdir";
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    // 收集参数到Vec中
-    let args_vec: Vec<OsString> = args.collect();
-    chroot_main(&args_vec)
-}
 
 pub fn chroot_main(args: &[OsString]) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

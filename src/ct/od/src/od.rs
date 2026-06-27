@@ -247,12 +247,6 @@ impl OdSettings {
     }
 }
 
-/// parses and validates command line parameters, prepares data structures,
-/// opens the input and calls `odfunc` to process the input.
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    od_main(args)
-}
 pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

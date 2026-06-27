@@ -97,10 +97,6 @@ impl Tool for Mkdir {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    mkdir_main(args)
-}
 
 pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

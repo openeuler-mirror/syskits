@@ -680,15 +680,6 @@ impl Installer {
     }
 }
 
-/// Main install utility function, called from main.rs.
-///
-/// Returns a program return code.
-///
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    install_main(args)
-}
-
 pub fn install_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

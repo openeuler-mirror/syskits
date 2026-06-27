@@ -618,18 +618,6 @@ impl Tool for Env {
     }
 }
 
-// 主函数，用于启动应用程序。
-//
-// # 参数
-// `args` - 实现了 `ctcore::Args` 接口的参数对象，通常包含命令行参数。
-//
-// # 返回值
-// 返回一个 `CTResult<()>`，表示操作的成功或失败。成功时返回 `Ok(())`，失败时返回 `Err` 包含错误信息。
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    env_main(args).map(|_| ())
-}
-
 pub fn env_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

@@ -14,8 +14,6 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 
-#[ctcore::main]
-use platform::ctmain;
 use std::ffi::OsString;
 use sys_locale::get_locale;
 

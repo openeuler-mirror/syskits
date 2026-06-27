@@ -133,25 +133,6 @@ impl Tool for Groups {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let result = groups_main(args);
-    match result {
-        Ok(groups) => {
-            for g in groups.iter() {
-                println!("{}", g);
-            }
-
-            Ok(())
-        }
-        _ => {
-            // 如果出现错误，则打印错误信息并返回错误
-            eprint!("{}", result.err().unwrap());
-            Err(125.into())
-        }
-    }
-}
-
 /// 用于处理用户指定的用户组信息。
 ///
 /// # 参数

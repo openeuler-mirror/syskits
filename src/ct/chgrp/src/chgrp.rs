@@ -93,11 +93,6 @@ impl Tool for Chgrp {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    chgrp_main(args)
-}
-
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
     chown_base(
         ct_app(),

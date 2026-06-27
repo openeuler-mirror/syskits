@@ -32,7 +32,6 @@ mod ct_mods;
 mod ct_parser;
 mod tool;
 
-pub use ctcore_procs::*;
 pub use tool::Tool;
 
 // * cross-platform modules
@@ -123,15 +122,31 @@ use once_cell::sync::Lazy;
 /// 该宏扩展为一个主函数，调用util中的ctmain函数，以ctmain返回的代码退出。
 #[macro_export]
 macro_rules! ct_bin {
-    ($util:ident) => {
+    ($crate_name:ident, $struct_name:ident) => {
         pub fn main() {
             use std::io::Write;
+            use ctcore::Tool;
             // 对SIGPIPE失败/恐慌抑制冗余错误输出
             ctcore::ct_panic::ct_mute_set_panic_hook();
 
             // 执行实用工具代码
-            let code = $util::ctmain(ctcore::ct_os_args());
-            // （防御性地）在退出前刷新utility的stdout；参见https://github.com/rust-lang/rust/issues/23818
+            let args = ctcore::ct_os_args().collect::<Vec<_>>();
+            let tool = $crate_name::$struct_name::default();
+            let result = tool.execute(&args);
+            let code = match result {
+                Ok(()) => ctcore::ct_error::get_ct_exit_code(),
+                Err(err) => {
+                    let s_err = format!("{}", err);
+                    if !s_err.is_empty() {
+                        ctcore::ct_show_error!("{}", s_err);
+                    }
+                    if err.usage() {
+                        eprintln!("Try '{} --help' for more information.", ctcore::ct_execute_phrase());
+                    }
+                    err.code()
+                }
+            };
+
             if let Err(e) = std::io::stdout().flush() {
                 eprintln!("Error flushing stdout: {}", e);
             }

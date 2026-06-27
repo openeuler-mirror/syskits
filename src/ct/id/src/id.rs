@@ -98,17 +98,11 @@ impl Tool for Id {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let stdout_info = io::stdout();
-    let mut stdout_writer = stdout_info.lock();
-    id_main(&mut stdout_writer, args)
-}
 
-pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app()
         .after_help(t!("id.after_help"))
         .try_get_matches_from(args)?;

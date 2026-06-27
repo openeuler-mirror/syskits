@@ -11,4 +11,4 @@
 
 //! 因式分解命令行工具的入口点
 
-ctcore::ct_bin!(ct_factor);
+ctcore::ct_bin!(ct_factor, Factor);

@@ -175,10 +175,6 @@ fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineR
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    comm_main(args).map(|_| ())
-}
 
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

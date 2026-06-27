@@ -48,16 +48,11 @@ impl Tool for Yes {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    yes_main(args)
-}
-
-pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app().try_get_matches_from(args)?;
 
     let mut buff = Vec::with_capacity(YES_BUF_SIZE);

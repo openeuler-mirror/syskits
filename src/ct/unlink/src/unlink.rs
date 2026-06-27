@@ -28,11 +28,6 @@ use sys_locale::get_locale;
 
 static OPT_PATH: &str = "FILE";
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    unlink_main(args)
-}
-
 pub fn unlink_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

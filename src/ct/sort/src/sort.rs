@@ -1070,11 +1070,6 @@ impl Tool for Sort {
     }
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    sort_main(args)
-}
-
 // 中间测试
 pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

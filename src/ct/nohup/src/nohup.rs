@@ -92,11 +92,6 @@ impl Display for NohupError {
     }
 }
 
-// 主函数，处理命令行参数并执行nohup逻辑
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    nohup_main(args).map(|_| ())
-}
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

@@ -239,12 +239,6 @@ fn paste_unescape(s: &str) -> String {
         .replace("\u{FFFF}", "\\")
 }
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    let mut stdout = stdout().lock();
-    paste_main(&mut stdout, args)
-}
-
 pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

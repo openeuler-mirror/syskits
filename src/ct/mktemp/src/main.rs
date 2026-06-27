@@ -9,4 +9,4 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_mktemp);
+ctcore::ct_bin!(ct_mktemp, Mktemp);

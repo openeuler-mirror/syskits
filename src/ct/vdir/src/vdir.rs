@@ -23,11 +23,6 @@ use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
 
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    vdir_main(args).map(|_| ())
-}
-
 pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

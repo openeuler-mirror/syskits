@@ -41,11 +41,6 @@ mod opt_flags {
     pub const FIFO: &str = "fifo"; // FIFO路径参数
 }
 
-// 主函数，负责解析命令行参数并执行创建FIFO的操作。
-#[ctcore::main]
-pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    mkfifo_main(args).map(|_| ())
-}
 
 pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));

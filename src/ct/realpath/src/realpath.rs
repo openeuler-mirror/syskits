@@ -93,6 +93,7 @@ impl RealpathFlags {
         // 提取是否使用零字符结尾的标志，并据此确定行尾符类型
         let is_zero = matches.get_flag(realpath_flags::REALPATH_ZERO);
         let line_ending = CtLineEnding::from_zero_flag(is_zero);
+        let mut can_mode_flag = true;
 
         // 提取是否进行现有路径规范化的标志
         let is_canonicalize_existing =
@@ -101,11 +102,12 @@ impl RealpathFlags {
         let is_canonicalize_missing =
             matches.get_flag(realpath_flags::REALPATH_CANONICALIZE_MISSING);
         // 根据上述标志确定路径处理模式
-        let can_mode = if is_canonicalize_existing {
+        let mut can_mode = if is_canonicalize_existing {
             MissingHandling::Existing
         } else if is_canonicalize_missing {
             MissingHandling::Missing
         } else {
+            can_mode_flag = false;
             MissingHandling::Normal
         };
 
@@ -115,6 +117,11 @@ impl RealpathFlags {
         let is_logical = matches.get_flag(realpath_flags::REALPATH_LOGICAL);
         // 根据上述标志确定路径解析模式
         let resolve_mode = if is_strip {
+            //当指定-s参数时，不展开符号链接（直接输出原始路径），除非显示指定-e
+            //否则忽略MissingHandling参数
+            if can_mode_flag == false {
+                can_mode = MissingHandling::Missing;
+            }
             ResolveMode::None
         } else if is_logical {
             ResolveMode::Logical
@@ -362,6 +369,7 @@ fn realpath_resolve_path<W: Write>(
     p: &Path,
     flags: &RealpathFlags,
 ) -> std::io::Result<()> {
+
     // 将给定路径转换为绝对路径，并解析任何符号链接。
     let abs = canonicalize(p, flags.can_mode, flags.resolve_mode)?;
 

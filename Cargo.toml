@@ -26,7 +26,6 @@ repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
 default-run = "syskits"
 readme = "README.md"
 rust-version = "1.85.0"
-build = "build.rs"
 
 [features]
 default = ["feat_common_core"]

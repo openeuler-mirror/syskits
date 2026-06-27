@@ -33,7 +33,13 @@ default_commands = [
     "sum",
     "echo",
     "expand",
-    "false"
+    "false",
+    "groups",
+    "head",
+    "cat",
+    "cut",
+    "mv",
+    "truncate"
 ]
 
 # 测试环境配置

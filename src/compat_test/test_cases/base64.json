@@ -1,0 +1,160 @@
+{
+    "tests": [
+        {
+          "tstdin": "hello",
+          "command": "base64",
+          "description": "基本编码功能",
+          "setup_commands": [
+            
+          ],
+          "args": [],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            
+          ]
+        },
+        {
+          "tstdin": "NBSWY3DP",
+          "command": "base64",
+          "description": "基本解码功能",
+          "setup_commands": [
+            
+          ],
+          "args": ["-d"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+           
+          ]
+        },
+        {
+          "tstdin": "",
+          "command": "base64",
+          "description": "编码输出到文件",
+          "setup_commands": [
+            "echo -n 'test data' > input.txt"
+          ],
+          "args": ["input.txt"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            "rm -rf input.txt"
+          ]
+        },
+        {
+          "tstdin": "",
+          "command": "base64",
+          "description": "解码输出到文件",
+          "setup_commands": [
+            "echo -n 'dGVzdCBkYXRh' > encoded.txt"
+          ],
+          "args": ["-d", "encoded.txt"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            "rm -rf encoded.txt"
+          ]
+        },
+        {
+          "tstdin": "NB\nS WY3DP#!",
+          "command": "base64",
+          "description": "忽略非base64字符",
+          "setup_commands": [
+            
+          ],
+          "args": ["-d", "-i"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "\nhello\n",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+           
+          ]
+        },
+        {
+          "tstdin": "Lorem ipsum dolor sit amet, consectetur adipiscing elit...",
+          "command": "base64",
+          "description": "换行限制功能",
+          "setup_commands": [
+            
+          ],
+          "args": ["--wrap", "0"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+           
+          ]
+        }
+    ]
+}

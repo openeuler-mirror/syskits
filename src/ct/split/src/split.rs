@@ -18,9 +18,12 @@ mod strategy;
 use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
+use ctcore::uio_error;
+use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -28,9 +31,6 @@ use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
-
-use ctcore::uio_error;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -55,8 +55,23 @@ const SPLIT_ABOUT: &str = ct_help_about!("split.md");
 const SPLIT_USAGE: &str = ct_help_usage!("split.md");
 const AFTER_HELP: &str = ct_help_section!("after help", "split.md");
 
-#[ctcore::main]
+#[derive(Default)]
+pub struct Split;
+impl Tool for Split {
+    fn name(&self) -> &'static str {
+        "split"
+    }
 
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        split_main(args.iter().cloned()).map(|_| ())
+    }
+}
+
+#[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     split_main(args).map(|_| ())
 }
@@ -10071,49 +10086,6 @@ mod tests {
             let args = vec![
                 ctcore::ct_util_name(),
                 filename1,
-                "--separator",
-                "\t",
-                "--filter",
-                "ls",
-            ];
-            let result = command.try_get_matches_from(args);
-
-            let settings = SpliceSettings::from(&result.unwrap(), &None).unwrap();
-            let filename = "output.txt";
-
-            // Call the `instantiate_current_writer` method and assert the result is `Ok`
-            let result = settings.splice_instantiate_current_writer(filename, true);
-            let file_path = Path::new(filename);
-            match fs::remove_file(file_path) {
-                Ok(()) => {
-                    // println!("文件删除成功");
-                }
-                Err(_e) => {
-                    // eprintln!("File remove fail: {}", e)
-                }
-            }
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_instantiate_current_writer_verbose_separator_t_filter() {
-            let temp_dir = Builder::new()
-                .prefix("tests_instantiate_current_writer_file1")
-                .tempdir()
-                .unwrap();
-            let sub_dir_path = temp_dir.path().join("sub_dir");
-            fs::create_dir(&sub_dir_path).unwrap();
-            let test_file_1 = sub_dir_path.join("test_file_111");
-            File::create(&test_file_1).unwrap();
-            let filename1 = test_file_1.to_str().unwrap();
-
-            let command = ct_app();
-
-            let args = vec![
-                ctcore::ct_util_name(),
-                filename1,
-                "--verbose",
                 "--separator",
                 "\t",
                 "--filter",

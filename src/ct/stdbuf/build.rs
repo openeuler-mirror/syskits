@@ -41,7 +41,7 @@ fn main() {
     // 目标是找到我们要安装的目录，但这取决于构建方法，这是很烦人的。
     // 另外，环境变量中的配置文件只能是"debug"或"release"，而不能是自定义
     // 配置文件名称，所以我们必须使用target目录中的目录名作为配置文件名称。
-    
+
     // 从输出路径中提取配置文件名称（debug/release）
     let profile_name = out_dir
         .split(std::path::MAIN_SEPARATOR)
@@ -54,10 +54,10 @@ fn main() {
         target_dir = target_dir.parent().unwrap();
         name = target_dir.file_name().unwrap().to_string_lossy();
     }
-    
+
     // 构建完整的依赖目录路径
     let mut dir = target_dir.to_path_buf();
-    
+
     // 检查输出目录路径中是否包含llvm-cov-target
     if out_dir.contains("llvm-cov-target") {
         let llvm_cov_dir = target_dir.join("llvm-cov-target");
@@ -65,7 +65,7 @@ fn main() {
             dir = llvm_cov_dir;
         }
     }
-    
+
     dir.push(profile_name);
     dir.push("deps");
     let mut path = None;
@@ -80,7 +80,7 @@ fn main() {
             path = Some(entry.path());
         }
     }
-    
+
     // 将找到的库文件复制到输出目录中，并重命名为标准的名称
     fs::copy(
         path.expect("liblibstdbuf was not found"),

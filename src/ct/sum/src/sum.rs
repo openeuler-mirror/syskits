@@ -95,7 +95,7 @@ fn sum_open(name: &str) -> CTResult<Box<dyn Read>> {
             // 消除警告，因为我们想要错误信息
             if path.metadata().is_err() {
                 let err_message = format!("{}: No such file or directory", name.maybe_quote());
-                return Err(CtSimpleError::new(2, err_message));
+                return Err(CtSimpleError::new(1, err_message));
             };
             let f = File::open(path).map_err_context(String::new)?;
             Ok(Box::new(f) as Box<dyn Read>)

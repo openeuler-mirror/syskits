@@ -14,30 +14,21 @@ default-run = "run_tests"  # 添加这一行，指定默认运行 run_tests
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
 serde_json = "1.0"
 thiserror = { workspace = true }
 chrono = { workspace = true }
 html-escape = "0.2"
 tempfile = { workspace = true }
-nix = { workspace = true , features = ["user", "resource", "process", "signal", "sched"]}
-regex = { workspace = true }
+nix = { workspace = true, features = ["user", "resource", "process", "signal", "sched"] }
 clap = { workspace = true }
 toml = "0.8"
 dirs = "5.0"
-libc = { workspace = true }
 colored = "2.0"
 indicatif = { workspace = true }
-console = "0.15"
 rayon = { workspace = true }
-crossbeam = "0.8"
 signal-hook = "0.3"
-once_cell = { workspace = true }
 rand = { workspace = true }
 [dev-dependencies]
-assert_fs = "1.0"
-predicates = "3.0"
-test-case = "3.3"
 
 [[bin]]
 name = "run_tests"

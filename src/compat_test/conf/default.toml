@@ -39,7 +39,15 @@ default_commands = [
     "cat",
     "cut",
     "mv",
-    "truncate"
+    "truncate",
+    "ln",
+    "test",
+    "yes",
+    "who",
+    "true",
+    "users",
+    "whoami",
+    "uname"
 ]
 
 # 测试环境配置

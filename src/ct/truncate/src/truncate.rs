@@ -17,6 +17,7 @@ use std::fs::{OpenOptions, metadata};
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use clap::{Arg, ArgAction, Command, crate_version};
 use std::io::ErrorKind;
+use std::os::linux::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
@@ -82,6 +83,31 @@ impl TruncateMode {
                 let mut rp = fsize % size;
                 if rp != 0 {
                     rp = size - rp;
+                }
+
+                fsize + rp
+            }
+        }
+    }
+
+    fn to_block_size(&self, fsize: u64, blocksize: u64) -> u64 {
+        match self {
+            Self::Absolute(size) => *size * blocksize,
+            Self::Extend(size) => fsize + size * blocksize,
+            Self::Reduce(size) => {
+                if *size * blocksize > fsize {
+                    0
+                } else {
+                    fsize - size * blocksize
+                }
+            }
+            Self::AtMost(size) => fsize.min(*size * blocksize),
+            Self::AtLeast(size) => fsize.max(*size * blocksize),
+            Self::RoundDown(size) => fsize - fsize % (size * blocksize),
+            Self::RoundUp(size) => {
+                let mut rp = fsize % (size * blocksize);
+                if rp != 0 {
+                    rp = (size * blocksize) - rp;
                 }
 
                 fsize + rp
@@ -253,6 +279,7 @@ fn truncate_reference_and_size(
     size_string: &str,
     filenames: &[String],
     is_create: bool,
+    is_block: bool,
 ) -> CTResult<()> {
     let truncate_mode = match truncate_parse_mode_and_size(size_string) {
         Err(e) => {
@@ -281,7 +308,15 @@ fn truncate_reference_and_size(
     })?;
 
     let md_size = md.len();
-    let t_size = truncate_mode.to_size(md_size);
+    let t_size = match is_block {
+        true => {
+            let blocksize = md.st_blksize();
+            truncate_mode.to_block_size(md_size, blocksize)
+        }
+
+        false => truncate_mode.to_size(md_size),
+    };
+
     for filename in filenames {
         truncate_file(filename, is_create, t_size)?;
     }
@@ -333,14 +368,20 @@ fn truncate_reference_file_only(
 /// 如果有任何文件无法打开，或者至少有一个文件设置大小时出现问题。
 ///
 /// 如果至少有一个文件是命名管道（也称为fifo）。
-fn truncate_size_only(size_string: &str, filenames: &[String], is_create: bool) -> CTResult<()> {
+fn truncate_size_only(
+    size_string: &str,
+    filenames: &[String],
+    is_create: bool,
+    is_blocks: bool,
+) -> CTResult<()> {
     let truncate_mode = truncate_parse_mode_and_size(size_string)
         .map_err(|e| CtSimpleError::new(1, format!("Invalid number: {e}")))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
         return Err(CtSimpleError::new(1, "division by zero"));
     }
+
     for filename in filenames {
-        let f_size = match metadata(filename) {
+        let (f_size, blocksize) = match metadata(filename) {
             Ok(md) => {
                 #[cfg(unix)]
                 if md.file_type().is_fifo() {
@@ -350,11 +391,19 @@ fn truncate_size_only(size_string: &str, filenames: &[String], is_create: bool) 
                     );
                     return Err(CtSimpleError::new(1, err_massage));
                 }
-                md.len()
+
+                let blocksize_md = md.st_blksize();
+
+                (md.len(), blocksize_md)
             }
-            Err(_) => 0,
+            Err(_) => (0, 0),
         };
-        let t_size = truncate_mode.to_size(f_size);
+
+        let t_size = match is_blocks {
+            true => truncate_mode.to_block_size(f_size, blocksize),
+            false => truncate_mode.to_size(f_size),
+        };
+
         // TODO: 修复对stat的重复调用
         truncate_file(filename, is_create, t_size)?;
     }
@@ -363,7 +412,7 @@ fn truncate_size_only(size_string: &str, filenames: &[String], is_create: bool) 
 
 fn truncate(
     is_no_create: bool,
-    _: bool,
+    is_io_blocks: bool,
     reference: Option<String>,
     size: Option<String>,
     filenames: &[String],
@@ -375,13 +424,19 @@ fn truncate(
     // - 未给出参考文件但已给出大小，
     // - 既未给出参考文件也未给出大小，
     match (reference, size) {
-        (Some(r_file_name), Some(size_string)) => {
-            truncate_reference_and_size(&r_file_name, &size_string, filenames, is_create)
-        }
+        (Some(r_file_name), Some(size_string)) => truncate_reference_and_size(
+            &r_file_name,
+            &size_string,
+            filenames,
+            is_create,
+            is_io_blocks,
+        ),
         (Some(r_file_name), None) => {
             truncate_reference_file_only(&r_file_name, filenames, is_create)
         }
-        (None, Some(size_string)) => truncate_size_only(&size_string, filenames, is_create),
+        (None, Some(size_string)) => {
+            truncate_size_only(&size_string, filenames, is_create, is_io_blocks)
+        }
         (None, None) => unreachable!(), // 这种情况现在不可能发生，因为它已经被clap处理了
     }
 }
@@ -655,32 +710,32 @@ mod tests {
             let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
 
             // 测试相对调整大小：Extend
-            truncate_size_only("+5", &target_files, true).unwrap();
+            truncate_size_only("+5", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 19);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 19);
 
             // 测试相对调整大小：Reduce
-            truncate_size_only("-3", &target_files, true).unwrap();
+            truncate_size_only("-3", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 16);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 16);
 
             // 测试相对调整大小：AtMost
-            truncate_size_only("<8", &target_files, true).unwrap();
+            truncate_size_only("<8", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 8);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 8);
 
             // 测试相对调整大小：AtLeast
-            truncate_size_only(">20", &target_files, true).unwrap();
+            truncate_size_only(">20", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 20);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 20);
 
             // 测试相对调整大小：RoundDown
-            truncate_size_only("/4", &target_files, true).unwrap();
+            truncate_size_only("/4", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 20); // 20 already multiple of 4
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 20); // 20 already multiple of 4
 
             // 测试相对调整大小：RoundUp
-            truncate_size_only("%3", &target_files, true).unwrap();
+            truncate_size_only("%3", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 22); // next multiple of 3
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 22); // next multiple of 3
         }
@@ -695,18 +750,18 @@ mod tests {
             let target_files = vec![target_file_path.clone()];
 
             // 测试无效大小字符串
-            let result = truncate_size_only("invalid", &target_files, true);
+            let result = truncate_size_only("invalid", &target_files, true, false);
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
             assert!(error_message.contains("Invalid number"));
 
             // 测试除以零的情况
-            let result = truncate_size_only("/0", &target_files, true);
+            let result = truncate_size_only("/0", &target_files, true, false);
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
             assert!(error_message.contains("division by zero"));
 
-            let result = truncate_size_only("%0", &target_files, true);
+            let result = truncate_size_only("%0", &target_files, true, false);
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
             assert!(error_message.contains("division by zero"));
@@ -719,12 +774,12 @@ mod tests {
             let target_files = vec![non_existent_file.to_string()];
 
             // 设置 create 为 false
-            let result = truncate_size_only("+5", &target_files, false);
+            let result = truncate_size_only("+5", &target_files, false, false);
             assert!(result.is_ok());
             assert!(!std::path::Path::new(non_existent_file).exists());
 
             // 设置 create 为 true
-            truncate_size_only("+5", &target_files, true).unwrap();
+            truncate_size_only("+5", &target_files, true, false).unwrap();
             assert_eq!(metadata(non_existent_file).unwrap().len(), 5);
 
             // 清理
@@ -741,7 +796,7 @@ mod tests {
             let target_files = vec![target_file_path.clone()];
 
             // 使用绝对大小进行调整（零长度）
-            truncate_size_only("0", &target_files, true).unwrap();
+            truncate_size_only("0", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file_path).unwrap().len(), 0);
         }
 
@@ -759,7 +814,7 @@ mod tests {
             let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
 
             // 使用绝对大小进行调整
-            truncate_size_only("10", &target_files, true).unwrap();
+            truncate_size_only("10", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 10);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 10);
         }
@@ -910,32 +965,38 @@ mod tests {
             let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
 
             // 测试相对调整大小：Extend
-            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true, false)
+                .unwrap();
             assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 19);
             assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 19);
 
             // 测试相对调整大小：Reduce
-            truncate_reference_and_size(&reference_file_path, "-3", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "-3", &target_files, true, false)
+                .unwrap();
             assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 11);
             assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 11);
 
             // 测试相对调整大小：AtMost
-            truncate_reference_and_size(&reference_file_path, "<8", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "<8", &target_files, true, false)
+                .unwrap();
             assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 8);
             assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 8);
 
             // 测试相对调整大小：AtLeast
-            truncate_reference_and_size(&reference_file_path, ">20", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, ">20", &target_files, true, false)
+                .unwrap();
             assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 20);
             assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 20);
 
             // 测试相对调整大小：RoundDown
-            truncate_reference_and_size(&reference_file_path, "/4", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "/4", &target_files, true, false)
+                .unwrap();
             assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 12);
             assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 12);
 
             // 测试相对调整大小：RoundUp
-            truncate_reference_and_size(&reference_file_path, "%3", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "%3", &target_files, true, false)
+                .unwrap();
             assert_eq!(std::fs::metadata(&target_file1_path).unwrap().len(), 16);
             assert_eq!(std::fs::metadata(&target_file2_path).unwrap().len(), 16);
         }
@@ -955,15 +1016,25 @@ mod tests {
             let target_files = vec![target_file_path.clone()];
 
             // 测试无效大小字符串
-            let result =
-                truncate_reference_and_size(&reference_file_path, "invalid", &target_files, true);
+            let result = truncate_reference_and_size(
+                &reference_file_path,
+                "invalid",
+                &target_files,
+                true,
+                false,
+            );
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
             assert!(error_message.contains("Invalid number"));
 
             // 测试绝对大小与参考文件组合
-            let result =
-                truncate_reference_and_size(&reference_file_path, "100", &target_files, true);
+            let result = truncate_reference_and_size(
+                &reference_file_path,
+                "100",
+                &target_files,
+                true,
+                false,
+            );
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
             assert!(
@@ -972,7 +1043,7 @@ mod tests {
 
             // 测试除以零的情况
             let result =
-                truncate_reference_and_size(&reference_file_path, "/0", &target_files, true);
+                truncate_reference_and_size(&reference_file_path, "/0", &target_files, true, false);
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
             assert!(error_message.contains("division by zero"));
@@ -989,12 +1060,18 @@ mod tests {
             let target_files = vec![non_existent_file.to_string()];
 
             // 设置 create 为 false
-            let result =
-                truncate_reference_and_size(&reference_file_path, "+5", &target_files, false);
+            let result = truncate_reference_and_size(
+                &reference_file_path,
+                "+5",
+                &target_files,
+                false,
+                false,
+            );
             assert!(result.is_ok());
 
             // 设置 create 为 true
-            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true, false)
+                .unwrap();
             assert_eq!(metadata(non_existent_file).unwrap().len(), 19);
 
             // 清理
@@ -1015,7 +1092,8 @@ mod tests {
             let target_files = vec![target_file_path.clone()];
 
             // 使用零长度的参考文件进行调整大小
-            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "+5", &target_files, true, false)
+                .unwrap();
             assert_eq!(metadata(&target_file_path).unwrap().len(), 5);
         }
 
@@ -1038,7 +1116,8 @@ mod tests {
             let target_files = vec![target_file1_path.clone(), target_file2_path.clone()];
 
             // 使用参考文件和大小字符串调整多个文件的大小
-            truncate_reference_and_size(&reference_file_path, "-3", &target_files, true).unwrap();
+            truncate_reference_and_size(&reference_file_path, "-3", &target_files, true, false)
+                .unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 11);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 11);
         }

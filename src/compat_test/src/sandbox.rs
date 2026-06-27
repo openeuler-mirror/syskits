@@ -27,6 +27,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
+use std::process::{Command, Stdio};
 
 /// 信号处理器
 /// 用于处理测试过程中的信号（如 SIGTERM、SIGINT 等）
@@ -459,47 +460,24 @@ impl IsolatedSandbox {
             self.current_dir
         ));
 
-        let mut command = std::process::Command::new(cmd);
-        command
+        let mut command = Command::new(cmd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
             .args(args)
             .current_dir(&self.current_dir)
             .envs(&self.current_env)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .spawn()
+            .expect("Failed to create command");
 
         // 启动命令
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(e) => {
-                self.debug_fmt(format_args!("Command execution failed: {}", e));
-                self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
-                return Ok(CommandResult {
-                    stdout: String::new(),
-                    stderr: format!("Failed to execute command: {}", e),
-                    exit_code: 127, // Common error code for command not found
-                });
-            }
-        };
-
-        // 如果有标准输入内容，写入到命令的标准输入
         if let Some(content) = stdin_content {
-            if !content.is_empty() {
-                if let Some(stdin) = child.stdin.as_mut() {
-                    if let Err(e) = stdin.write_all(content.as_bytes()) {
-                        self.debug_fmt(format_args!("Failed to write to stdin: {}", e));
-                        return Ok(CommandResult {
-                            stdout: String::new(),
-                            stderr: format!("Failed to write to stdin: {}", e),
-                            exit_code: 1,
-                        });
-                    }
-                }
-            }
+            command.stdin.as_mut().unwrap()
+                .write_all(content.as_bytes())
+                .expect("Failed to write to stdin");
         }
 
         // 等待命令执行完成并获取输出
-        let output = match child.wait_with_output() {
+        let output = match command.wait_with_output() {
             Ok(output) => {
                 self.debug_fmt(format_args!("Command executed successfully"));
                 output

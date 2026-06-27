@@ -1,0 +1,66 @@
+test:
+  usage: test EXPRESSION
+  about: 检查文件类型及比较数值
+  after_help: |- 
+    退出状态：由 EXPRESSION 的评估结果决定。若未提供 EXPRESSION，默认为 false（退出状态非零）。
+
+    It is one of:
+
+    * ( EXPRESSION )               括号强制分组表达式
+    * ! EXPRESSION                 取反（若 EXPRESSION 为 false）
+    * EXPRESSION1 -a EXPRESSION2   逻辑与（两者为真）
+    * EXPRESSION1 -o EXPRESSION2   逻辑或（任一为真）
+
+    String operations:
+    * -n STRING            字符串长度非零
+    * STRING               等效于 -n STRING
+    * -z STRING            字符串长度为零
+    * STRING1 = STRING2    字符串相等
+    * STRING1 != STRING2   字符串不相等
+
+    Integer comparisons:
+    * INTEGER1 -eq INTEGER2   `INTEGER1` 	等于 `INTEGER2`
+    * INTEGER1 -ge INTEGER2   `INTEGER1` 大于等于 `INTEGER2`
+    * INTEGER1 -gt INTEGER2   `INTEGER1` 大于 `INTEGER2`
+    * INTEGER1 -le INTEGER2   `INTEGER1` 小于等于 to `INTEGER2`
+    * INTEGER1 -lt INTEGER2   `INTEGER1` 小于 `INTEGER2`
+    * INTEGER1 -ne INTEGER2   `INTEGER1` 不等于 `INTEGER2`
+
+    File operations:
+    * FILE1 -ef FILE2   相同设备及 inode（硬链接）
+    * FILE1 -nt FILE2   FILE1 比 FILE2 新（修改时间）
+    * FILE1 -ot FILE2   FILE1 比 FILE2 旧
+
+    * -b FILE     存在且为块设备文件
+    * -c FILE     存在且为字符设备文件
+    * -d FILE     存在且为目录
+    * -e FILE     文件/目录存在
+    * -f FILE     存在且为普通文件
+    * -g FILE     存在且设置 setgid 位
+    * -G FILE     存在且属于当前有效组
+    * -h FILE     存在且为符号链接
+    * -k FILE     存在且设置 sticky 位
+    * -L FILE     存在且为符号链接
+    * -N FILE     存在且自上次读取后修改过
+    * -O FILE     存在且属于当前有效用户
+    * -p FILE     存在且为命名管道（FIFO）
+    * -r FILE     存在且可读
+    * -s FILE     存在且大小大于零
+    * -S FILE     存在且为套接字文件
+    * -t FD       文件描述符 FD 关联到终端
+    * -u FILE     存在且设置 setuid 位
+    * -w FILE     存在且可写
+    * -x FILE     存在且可执行（或目录可搜索）
+
+    注意事项
+    符号链接处理：除 -h 和 -L 外，所有文件测试默认跟踪符号链接（解引用）。
+    表达式分组：括号需转义（如：\( ... \)）。
+    逻辑运算符歧义：避免使用 -a 和 -o，建议改用：
+    test EXPR1 && test EXPR2   # 逻辑与  
+    test EXPR1 || test EXPR2   # 逻辑或  
+
+    命令差异：
+    [ 支持 --help 和 --version 选项，test 不支持。
+    test 将 --help 等参数视为普通字符串。
+
+    Shell 兼容性：部分 Shell（如 Bash、Zsh）有内置的 test 或 [，功能可能扩展。建议查阅具体 Shell 文档。

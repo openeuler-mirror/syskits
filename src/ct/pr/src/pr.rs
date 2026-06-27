@@ -11468,25 +11468,25 @@ mod tests {
         #[test]
         fn test_ctmain_input_h() {
             let args = ["-h", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = pr_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 1);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_v() {
             let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = pr_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 1);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_uppercase_v() {
             let args = ["-V", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = pr_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 1);
+            assert!(result.is_err());
         }
 
         #[test]

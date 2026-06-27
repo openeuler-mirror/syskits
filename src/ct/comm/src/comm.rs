@@ -1598,38 +1598,39 @@ mod tests {
 
     #[cfg(test)]
     mod tests_ctmain {
-        use crate::ctmain;
         use std::ffi::OsString;
         use std::fs;
         use std::fs::File;
         use tempfile::Builder;
 
+        use crate::comm_main;
+
         #[test]
         fn tests_ctmain_help() {
             let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
         fn tests_ctmain_h() {
             let args = vec![ctcore::ct_util_name(), "--h"];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
         fn tests_ctmain_version() {
             let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
         fn tests_ctmain_v() {
             let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
@@ -1655,8 +1656,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-1", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1682,8 +1683,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-2", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1709,8 +1710,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-3", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1736,8 +1737,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-12", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1763,8 +1764,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-13", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1790,8 +1791,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-23", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_flag_column_123() {
@@ -1816,8 +1817,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-123", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1843,8 +1844,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "-z", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1875,8 +1876,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1902,8 +1903,8 @@ mod tests {
             let filename2 = test_file_2.to_str().unwrap();
 
             let args = vec![ctcore::ct_util_name(), "--total", filename1, filename2];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_flag_zero_total() {
@@ -1934,8 +1935,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1969,8 +1970,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2001,8 +2002,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2036,8 +2037,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2071,8 +2072,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2107,8 +2108,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         //////////////////////////////////////////////////////////////////
@@ -2141,8 +2142,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2174,8 +2175,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2207,8 +2208,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2240,8 +2241,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2273,8 +2274,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2306,8 +2307,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_flag_column_123_zero() {
@@ -2338,8 +2339,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2371,8 +2372,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2404,8 +2405,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2437,8 +2438,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2470,8 +2471,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2503,8 +2504,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2536,8 +2537,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_flag_column_123_total() {
@@ -2568,8 +2569,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2601,8 +2602,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2634,8 +2635,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2667,8 +2668,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2702,8 +2703,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2737,8 +2738,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2772,8 +2773,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_flag_column_123_output_delimiter() {
@@ -2806,8 +2807,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2842,8 +2843,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2878,8 +2879,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2914,8 +2915,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2950,8 +2951,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2986,8 +2987,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -3022,8 +3023,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_flag_column_123_output_delimiter_total_lines() {
@@ -3057,8 +3058,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -3092,8 +3093,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -3127,8 +3128,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -3162,8 +3163,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
         #[test]
         fn tests_ctmain_all_args_123() {
@@ -3196,8 +3197,8 @@ mod tests {
                 filename1,
                 filename2,
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, 0);
+            let result = comm_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_ok());
         }
     }
 }

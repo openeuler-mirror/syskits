@@ -197,7 +197,7 @@ pub struct TestCase {
     pub requires_root: bool,
     /// 超时时间（秒）
     #[serde(default = "default_timeout")]
-    pub timeout: u64,
+    pub timeout: Option<u64>,
     /// 测试标签
     #[serde(default)]
     pub tags: Vec<String>,
@@ -206,8 +206,8 @@ pub struct TestCase {
     pub environment: TestEnvironment,
 }
 
-fn default_timeout() -> u64 {
-    30
+fn default_timeout() -> Option<u64> {
+    None
 }
 
 fn default_use_patterns() -> bool {

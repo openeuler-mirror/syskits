@@ -409,7 +409,7 @@ mod tests {
             setup_commands: Vec::new(),
             cleanup_commands: Vec::new(),
             requires_root: false,
-            timeout: 30,
+            timeout: Some(30),
             tags: Vec::new(),
             environment: Default::default(),
         }

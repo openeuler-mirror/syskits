@@ -1,0 +1,38 @@
+[package]
+name = "ct_mv"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "mv ~ (ctutils) move (rename) SOURCE to DESTINATION"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/mv"
+
+[lib]
+path = "src/mv.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+fs_extra = { workspace = true }
+indicatif = { workspace = true }
+ctcore = { workspace = true, features = [
+    "backup-control",
+    "fs",
+    "fsxattr",
+    "update-control",
+] }
+tempfile = { workspace = true }
+selinux = { workspace = true, optional = true }
+
+[features]
+selinux = ["dep:selinux"]
+
+[[bin]]
+name = "mv"
+path = "src/main.rs"
+

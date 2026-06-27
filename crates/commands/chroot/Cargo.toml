@@ -1,0 +1,29 @@
+[package]
+name = "ct_chroot"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "chroot ~ (ctutils) run COMMAND under a new root directory"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/chroot"
+
+[lib]
+path = "src/chroot.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["entries", "fs"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+libc = { workspace = true }
+
+[[bin]]
+name = "chroot"
+path = "src/main.rs"

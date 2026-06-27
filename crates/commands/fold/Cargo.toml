@@ -1,0 +1,26 @@
+[package]
+name = "ct_fold"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "fold ~ (ctutils) wrap each line of input"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/fold"
+
+[lib]
+path = "src/fold.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "fold"
+path = "src/main.rs"

@@ -1,0 +1,26 @@
+[package]
+name = "ct_users"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "users ~ (ctutils) display names of currently logged-in users"
+
+homepage.workspace = true
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/users"
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/users.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["utmpx"] }
+[dev-dependencies]
+tempfile = { workspace = true }
+[[bin]]
+name = "users"
+path = "src/main.rs"

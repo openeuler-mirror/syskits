@@ -53,7 +53,9 @@ elif [ "$1" = "coverage" ]; then
     cargo llvm-cov report --lcov --output-path lcov.info
     
     # 生成hmtl报告
-    #cargo llvm-cov report --html --output-dir cover_report
+    if [ $2 = "report" ]; then
+        cargo llvm-cov report --html --output-dir cover_report
+    fi
     
     echo "Coverage test completed. Check cover_report directory for results."
 else

@@ -1,0 +1,26 @@
+[package]
+name = "ct_realpath"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "realpath ~ (ctutils) display resolved absolute path of PATHNAME"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/realpath"
+
+[lib]
+path = "src/realpath.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true, features = ["fs"] }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "realpath"
+path = "src/main.rs"

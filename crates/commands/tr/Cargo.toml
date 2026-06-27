@@ -1,0 +1,25 @@
+[package]
+name = "ct_tr"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "tr ~ (ctutils) translate characters within input and display"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/tr"
+
+[lib]
+path = "src/tr.rs"
+
+[dependencies]
+rust-i18n = { workspace = true }
+nom = { workspace = true }
+clap = { workspace = true }
+ctcore = { workspace = true }
+
+[[bin]]
+name = "tr"
+path = "src/main.rs"

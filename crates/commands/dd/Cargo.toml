@@ -1,0 +1,35 @@
+[package]
+name = "ct_dd"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/dd"
+description = "dd ~ (ctutils) copy and convert files"
+
+[lib]
+path = "src/dd.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+gcd = { workspace = true }
+libc = { workspace = true }
+ctcore = { workspace = true, features = ["format", "quoting-style"] }
+
+[dev-dependencies]
+tempfile = "3.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+signal-hook = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
+
+[[bin]]
+name = "dd"
+path = "src/main.rs"

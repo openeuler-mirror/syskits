@@ -1,0 +1,37 @@
+# spell-checker:ignore (libs) kqueue fundu
+[package]
+name = "ct_tail"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "tail ~ (ctutils) display the last lines of input"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/tail"
+
+[lib]
+path = "src/tail.rs"
+
+[dependencies]
+sys-locale = { workspace = true }
+rust-i18n = { workspace = true }
+clap = { workspace = true }
+libc = { workspace = true }
+memchr = { workspace = true }
+notify = { workspace = true }
+ctcore = { workspace = true }
+same-file = { workspace = true }
+fundu = { workspace = true }
+tempfile = "3.5.0"
+
+[dev-dependencies]
+rstest = { workspace = true }
+serial_test = "0.5"
+
+[[bin]]
+name = "tail"
+path = "src/main.rs"

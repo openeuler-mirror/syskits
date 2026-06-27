@@ -1,202 +1,23 @@
 [workspace]
+resolver = "2" # Using version 2 resolver is recommended
 members = [
-    "src/compat_test",
+    "bin/syskits",
+    "bin/compat_test",
+    "crates/ctcore",
+    "crates/tool_derive",
+    "crates/commands/*"
 ]
-# syskits workspace 信息
-[workspace.package] # 共享的package配置项
-version = "2.2.1" 
+default-members = ["bin/syskits"] # 设置 syskits 应用为默认构建目标
+
+[workspace.package] # workspace 信息，共享的package配置项
+version = "2.2.1"
 authors = ["CTyunOS linux developers"]
 license = "Mulan PSL v2.0"
 homepage = "https://www.ctyun.cn/developer"
-keywords = ["syskits", "cross-platform", "cli", "utility"]
+keywords = ["syskits", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2024"
-
-[package]
-name = "syskits"
-version.workspace = true
-authors.workspace = true
-license.workspace = true
-homepage.workspace = true
-keywords.workspace = true
-categories.workspace = true
-edition.workspace = true
-description = "CTyunOS implemented as universal (cross-platform) utils, written in Rust"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
-default-run = "syskits"
-readme = "README.md"
 rust-version = "1.85.0"
-
-[features]
-default = ["feat_common_core"]
-
-## OS feature shortcodes
-unix = ["feat_os_unix"]
-windows = ["feat_os_windows"]
-
-## project-specific feature shortcodes
-nightly = []
-test_unimplemented = []
-# * 仅在启用了 `--feature ctdoc` 时构建 `ctdoc`
-ctdoc = ["zip"]
-## features
-# "feat_acl" == 启用对ACLs（访问控制列表）的支持；使用 `--features feat_acl`
-# 注意：
-# * 在linux上，posix-acl/acl-sys crate在编译时需要访问C工具链中的 `libacl` 头文件和共享库。
-feat_acl = ["cp/feat_acl", "ls/feat_acl"]
-
-# "feat_selinux" == 启用对SELinux安全上下文的支持；使用 `--features feat_selinux`
-# 注意：
-# * selinux(-sys) crate在编译时需要访问C工具链中的 `libselinux` 头文件和共享库。
-# * 运行编译了 `feat_selinux` 的ctutils需要SELinux启用的内核。
-feat_selinux = [
-  "cp/selinux",
-  "ls/selinux",
-  "selinux",
-  "feat_require_selinux",
-]
-
-##
-## 功能集
-## (常见/核心) 功能集
-# "feat_common_core" == 可在大多数目标上构建/运行的基线核心实用工具集
-feat_common_core = [
-  "arch",
-  "base32",
-  "cat",
-  "yes",
-  "chcon",
-  "base64",
-  "whoami",
-  "wc",
-  "chroot",
-  "cp",
-  "ls",
-  "cksum",
-  "vdir",
-  "csplit",
-  "dir",
-  "split",
-  "sort",
-  "cat",
-  "cksum",
-  "comm",
-  "du",
-  "chown",
-  "uname",
-  "mkdir",
-  "mktemp",
-  "mv",
-  "unexpand",
-  "tsort",
-  "truncate",
-  "rmdir",
-  "pwd",
-  "touch",
-  "readlink",
-  "sum",
-  "sleep",
-  "unlink",
-  "hostname",
-  "cut",
-  "pr",
-  "logname",
-  "df",
-  "numfmt",
-  "tty",
-  "env",
-  "fmt",
-  "dirname",
-  "printenv",
-  "printf",
-  "echo",
-  "touch",
-  "nohup",
-  "readlink",
-  "false",
-  "sum",
-  "expr",
-  "true",
-  "groups",
-  "sleep",
-  "expand",
-  "uniq",
-  "cut",
-  "df",
-  "env",
-  "date",
-  "printenv",
-  "expr",
-  "nproc",
-  "basename",
-  "hostid",
-  "rm",
-  "head",
-  "id",
-  "fold",
-  "realpath",
-  "pathchk",
-  "dd",
-  "tail",
-  "nl",
-  "stat",
-  "tac",
-  "tr",
-  "factor",
-  "tee",
-  "seq",
-  "basenc",
-]
-
-# "feat_os_unix" == 可在现代/常见的 *nix 平台上构建/运行的实用工具集
-feat_os_unix = [
-  "feat_selinux",
-  "feat_acl",
-  "feat_common_core",
-  "chcon",
-  "chgrp",
-  "chmod",
-  "chown",
-  "chroot",
-  "dircolors",
-  "groups",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "nice",
-  "nohup",
-  "sync",
-  "tty",
-  "uptime",
-  "users",
-  "who",
-  "kill",
-  "stty",
-  "link",
-  "paste",
-  "timeout",
-  "install",
-  "ln",
-  "more",
-  "join",
-  "shuf",
-  "shred",
-  "runcon",
-  "ptx",
-  "pinky",
-  "od",
-  "hashsum",
-  "stdbuf",
-  "test"
-]
-
-# "feat_os_windows" == 可在现代/常见的windows平台上构建/运行的实用工具集
-feat_os_windows = [
-  "feat_common_core",  
-  ]
-
-# "feat_require_selinux" == 依赖SELinux的实用工具集。
-feat_require_selinux = ["chcon"]
 
 [workspace.dependencies]
 bigdecimal = "0.4"
@@ -209,9 +30,9 @@ chrono = { version = "^0.4.35", default-features = false, features = [
   "alloc",
   "clock",
 ] }
-clap = { version = "4.4", features = ["wrap_help", "cargo"] }
-clap_complete = "4.4"
-clap_mangen = "0.2"
+clap = { version = "4.5.10", features = ["derive", "cargo", "wrap_help"] }
+clap_complete = "4.5.10"
+clap_mangen = "0.2.20"
 compare = "0.1.0"
 coz = { version = "0.1.3" }
 crossterm = ">=0.27.0"
@@ -247,7 +68,7 @@ once_cell = "1.19.0"
 onig = { version = "~6.4", default-features = false }
 parse_datetime = "0.5.0"
 phf = "0.11.2"
-phf_codegen = "0.11.2"
+phf_codegen = "0.11.2" # This is a workspace-level build dependency if used by multiple crates' build scripts
 platform-info = "2.0.2"
 quick-error = "2.0.1"
 rand = { version = "0.8", features = ["small_rng"] }
@@ -276,6 +97,7 @@ winapi-util = "0.1.6"
 windows-sys = { version = "0.48.0", default-features = false }
 xattr = "1.3.1"
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+conv = "0.3"
 
 hex = "0.4.3"
 md-5 = "0.10.6"
@@ -287,183 +109,27 @@ blake3 = "1.5.1"
 sm3 = "0.4.2"
 digest = "0.10.7"
 rust-i18n = "2"
-sys-locale = "0.2" 
+sys-locale = "0.2"
 dns-lookup = "2.0"
 if-addrs = "0.13.4"
 
-ctcore = { version = ">=0.0.1", package = "ctcore", path = "src/ctcore" }
-ct_base32 = { version = ">=0.0.1", path = "src/ct/base32" }
+# 项目内部共享库 - path 属性已根据新结构更新
+ctcore = { package = "ctcore", path = "crates/ctcore" }
+compat_test = { path = "bin/compat_test" }
+tool_derive = { path = "crates/tool_derive" }
+anyhow = "1.0"
 
-ct_ls = { version = ">=0.0.1", path = "src/ct/ls" }
-
-compat_test = { path = "src/compat_test" }
-
-[dependencies]
-clap = { workspace = true }
-once_cell = { workspace = true }
-ctcore = { workspace = true }
-clap_complete = { workspace = true }
-clap_mangen = { workspace = true }
-selinux = { workspace = true, optional = true }
-textwrap = { workspace = true }
-zip = { workspace = true, optional = true }
-tool_derive = { path = "src/tool_derive" }
-
-arch = { optional = true, package = "ct_arch", path = "src/ct/arch" }
-base32 = { optional = true, package = "ct_base32", path = "src/ct/base32" }
-cat = { optional = true, package = "ct_cat", path = "src/ct/cat" }
-yes = { optional = true, package = "ct_yes", path = "src/ct/yes" }
-chcon = { optional = true, package = "ct_chcon", path = "src/ct/chcon" }
-base64 = { optional = true, package = "ct_base64", path = "src/ct/base64" }
-whoami = { optional = true, package = "ct_whoami", path = "src/ct/whoami" }
-chgrp = { optional = true, package = "ct_chgrp", path = "src/ct/chgrp" }
-basename = { optional = true, package = "ct_basename", path = "src/ct/basename" }
-who = { optional = true, package = "ct_who", path = "src/ct/who" }
-chmod = { optional = true, package = "ct_chmod", path = "src/ct/chmod" }
-basenc = { optional = true, package = "ct_basenc", path = "src/ct/basenc" }
-wc = { optional = true, package = "ct_wc", path = "src/ct/wc" }
-chroot = { optional = true, package = "ct_chroot", path = "src/ct/chroot" }
-cp = { optional = true, package = "ct_cp", path = "src/ct/cp" }
-ls = { optional = true, package = "ct_ls", path = "src/ct/ls" }
-cksum = { optional = true, package = "ct_cksum", path = "src/ct/cksum" }
-vdir = { optional = true, package = "ct_vdir", path = "src/ct/vdir" }
-csplit = { optional = true, package = "ct_csplit", path = "src/ct/csplit" }
-dir = { optional = true, package = "ct_dir", path = "src/ct/dir" }
-split = { optional = true, package = "ct_split", path = "src/ct/split" }
-sort = { optional = true, package = "ct_sort", path = "src/ct/sort" }
-comm = { optional = true, package = "ct_comm", path = "src/ct/comm" }
-du = { optional = true, package = "ct_du", path = "src/ct/du" }
-chown = { optional = true, package = "ct_chown", path = "src/ct/chown" }
-uname = { optional = true, package = "ct_uname", path = "src/ct/uname" }
-mkdir = { optional = true, package = "ct_mkdir", path = "src/ct/mkdir" }
-mktemp = { optional = true, package = "ct_mktemp", path = "src/ct/mktemp" }
-mv = { optional = true, package = "ct_mv", path = "src/ct/mv" }
-unexpand = { optional = true, package = "ct_unexpand", path = "src/ct/unexpand" }
-hostname = { optional = true, package = "ct_hostname", path = "src/ct/hostname" }
-cut = { optional = true, package = "ct_cut", path = "src/ct/cut" }
-pr = { optional = true, package = "ct_pr", path = "src/ct/pr" }
-logname = { optional = true, package = "ct_logname", path = "src/ct/logname" }
-df = { optional = true, package = "ct_df", path = "src/ct/df" }
-numfmt = { optional = true, package = "ct_numfmt", path = "src/ct/numfmt" }
-tty = { optional = true, package = "ct_tty", path = "src/ct/tty" }
-env = { optional = true, package = "ct_env", path = "src/ct/env" }
-fmt = { optional = true, package = "ct_fmt", path = "src/ct/fmt" }
-tsort = { optional = true, package = "ct_tsort", path = "src/ct/tsort" }
-date = { optional = true, package = "ct_date", path = "src/ct/date" }
-users = { optional = true, package = "ct_users", path = "src/ct/users" }
-mkfifo = { optional = true, package = "ct_mkfifo", path = "src/ct/mkfifo" }
-truncate = { optional = true, package = "ct_truncate", path = "src/ct/truncate" }
-mknod = { optional = true, package = "ct_mknod", path = "src/ct/mknod" }
-rmdir = { optional = true, package = "ct_rmdir", path = "src/ct/rmdir" }
-dircolors = { optional = true, package = "ct_dircolors", path = "src/ct/dircolors" }
-pwd = { optional = true, package = "ct_pwd", path = "src/ct/pwd" }
-dirname = { optional = true, package = "ct_dirname", path = "src/ct/dirname" }
-printenv = { optional = true, package = "ct_printenv", path = "src/ct/printenv" }
-printf = { optional = true, package = "ct_printf", path = "src/ct/printf" }
-echo = { optional = true, package = "ct_echo", path = "src/ct/echo" }
-touch = { optional = true, package = "ct_touch", path = "src/ct/touch" }
-nohup = { optional = true, package = "ct_nohup", path = "src/ct/nohup" }
-readlink = { optional = true, package = "ct_readlink", path = "src/ct/readlink" }
-false = { optional = true, package = "ct_false", path = "src/ct/false" }
-sum = { optional = true, package = "ct_sum", path = "src/ct/sum" }
-expr = { optional = true, package = "ct_expr", path = "src/ct/expr" }
-true = { optional = true, package = "ct_true", path = "src/ct/true" }
-groups = { optional = true, package = "ct_groups", path = "src/ct/groups" }
-sleep = { optional = true, package = "ct_sleep", path = "src/ct/sleep" }
-expand = { optional = true, package = "ct_expand", path = "src/ct/expand" }
-sync = { optional = true, package = "ct_sync", path = "src/ct/sync" }
-uptime = { optional = true, package = "ct_uptime", path = "src/ct/uptime" }
-nproc = { optional = true, package = "ct_nproc", path = "src/ct/nproc" }
-unlink = { optional = true, package = "ct_unlink", path = "src/ct/unlink" }
-uniq = { optional = true, package = "ct_uniq", path = "src/ct/uniq" }
-nice = { optional = true, package = "ct_nice", path = "src/ct/nice" }
-hostid = { optional = true, package = "ct_hostid", path = "src/ct/hostid" }
-rm = { optional = true, package = "ct_rm", path = "src/ct/rm" }
-head = { optional = true, package = "ct_head", path = "src/ct/head" }
-id = { optional = true, package = "ct_id", path = "src/ct/id"}
-fold = { optional = true, package = "ct_fold", path = "src/ct/fold" }
-kill = { optional = true, package = "ct_kill", path = "src/ct/kill" }
-realpath = { optional = true, package = "ct_realpath", path = "src/ct/realpath"}
-stty = { optional = true, package = "ct_stty", path = "src/ct/stty"}
-link = { optional = true, package = "ct_link", path = "src/ct/link"}
-paste = { optional = true, package = "ct_paste", path = "src/ct/paste"}
-timeout = { optional = true, package = "ct_timeout", path = "src/ct/timeout"}
-pathchk = { optional = true, package = "ct_pathchk", path = "src/ct/pathchk"}
-dd = { optional = true, package = "ct_dd", path = "src/ct/dd" }
-tail = { optional = true, package = "ct_tail", path = "src/ct/tail" }
-nl = { optional = true, package = "ct_nl", path = "src/ct/nl"}
-stat = { optional = true, package = "ct_stat", path = "src/ct/stat" }
-tac = { optional = true, package = "ct_tac", path = "src/ct/tac" }
-tr = { optional = true, package = "ct_tr", path = "src/ct/tr" }
-factor = { optional = true, package = "ct_factor", path = "src/ct/factor"}
-tee = { optional = true, package = "ct_tee", path = "src/ct/tee" }
-seq = { optional = true, package = "ct_seq", path = "src/ct/seq" }
-install = { optional = true, package = "ct_install", path = "src/ct/install" }
-ln = { optional = true, package = "ct_ln", path = "src/ct/ln" }
-more = { optional = true, package = "ct_more", path = "src/ct/more" }
-join = { optional = true, package = "ct_join", path = "src/ct/join" }
-shuf = { optional = true, package = "ct_shuf", path = "src/ct/shuf" }
-shred = { optional = true, package = "ct_shred", path = "src/ct/shred" }
-runcon = { optional = true, package = "ct_runcon", path = "src/ct/runcon" }
-ptx = { optional = true, package = "ct_ptx", path = "src/ct/ptx" }
-pinky = { optional = true, package = "ct_pinky", path = "src/ct/pinky" }
-od = { optional = true, package = "ct_od", path = "src/ct/od" }
-hashsum = { optional = true, package = "ct_hashsum", path = "src/ct/hashsum" }
-stdbuf = { optional = true, package = "ct_stdbuf", path = "src/ct/stdbuf" }
-test = { optional = true, package = "ct_test", path = "src/ct/test" }
-
-[dev-dependencies]
-conv = "0.3"
-filetime = { workspace = true }
-glob = { workspace = true }
-libc = { workspace = true }
-pretty_assertions = "1"
-rand = { workspace = true }
-regex = { workspace = true }
-sha1 = { version = "0.10", features = ["std"] }
-tempfile = { workspace = true }
-time = { workspace = true, features = ["local-offset"] }
-unindent = "0.2"
-ctcore = { workspace = true, features = ["entries", "process", "signals"] }
-walkdir = { workspace = true }
-hex-literal = "0.4.1"
-rstest = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dev-dependencies]
-procfs = { version = "0.16", default-features = false }
-
-[target.'cfg(unix)'.dev-dependencies]
-nix = { workspace = true, features = ["process", "signal", "user", "term"] }
-rlimit = "0.10.1"
-rand_pcg = "0.3"
-xattr = { workspace = true }
-
-[build-dependencies]
-phf_codegen = { workspace = true }
-
-[[bin]]
-name = "syskits"
-path = "src/bin/syskits.rs"
-
-[[bin]]
-name = "ctdoc"
-path = "src/bin/ctdoc/mod.rs"
-required-features = ["ctdoc"]
-
-# 默认的发布配置文件。它包含了所有的优化，而不牺牲调试信息。
-# 使用这个配置文件（如同标准的发布配置），调试信息和堆栈追踪依然可以获取。
 [profile.release]
 lto = true
 
-# 默认发布配置文件。它包含所有优化，不牺牲调试信息。使用此配置文件（如标准发布配置文件），调试信息和堆栈追踪仍然可用。
-# 类似发布的配置文件，调整为尽可能快，即使速度会牺牲二进制大小。这包括在panic时中止。
 [profile.release-fast]
 inherits = "release"
 panic = "abort"
 
-# 类似发布的配置文件，尽可能小。
 [profile.release-small]
 inherits = "release"
 opt-level = "z"
 panic = "abort"
 strip = true
+
+

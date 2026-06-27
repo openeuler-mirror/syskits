@@ -1,0 +1,21 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "基本功能测试",
+            "setup_commands": [
+                "echo 'test' > test_file"
+            ],
+            "args": ["test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+}

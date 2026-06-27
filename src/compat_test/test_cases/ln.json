@@ -416,6 +416,25 @@
             "cleanup_commands": [
                 "rm -rf test_dir dir_link"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "ln",
+            "description": "测试目录硬链接 - 没有-d选项",
+            "setup_commands": [
+                "mkdir test_dir2"
+            ],
+            "args": ["test_dir2", "dir_link2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "ln: 'test_dir2' is a directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dir2 dir_link2"
+            ]
         }
     ]
 } 

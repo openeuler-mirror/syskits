@@ -23,6 +23,7 @@
 //! - 提供引用和上下文显示
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
@@ -30,6 +31,7 @@ use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -903,7 +905,7 @@ impl PtxSettings {
         // 创建设置
         let settings = Self {
             config,
-            file_map,   
+            file_map,
             words: word_set,
             output_filename: output_file,
         };
@@ -1021,6 +1023,22 @@ pub fn ct_app() -> Command {
         .override_usage(ct_format_usage(PTX_USAGE))
         .infer_long_args(true)
         .args(args)
+}
+
+#[derive(Default)]
+pub struct Ptx;
+impl Tool for Ptx {
+    fn name(&self) -> &'static str {
+        "ptx"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        ptx_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

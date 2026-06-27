@@ -22,9 +22,11 @@ use std::str::from_utf8;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use unicode_width::UnicodeWidthChar;
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::{ct_crash_if_err, ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use std::ffi::OsString;
 
 const UNEXPAND_USAGE: &str = ct_help_usage!("unexpand.md");
 const UNEXPAND_ABOUT: &str = ct_help_about!("unexpand.md");
@@ -261,7 +263,7 @@ fn unexpand_next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
         1 => Some(tabstops[0] - col % tabstops[0]),
         _ => {
             // 查找下一个较大的标签。
-            // 如果列表中没有下一个更大的标签，那么当前的“tab”将被替换为一个空格。
+            // 如果列表中没有下一个更大的标签，那么当前的"tab"将被替换为一个空格。
             tabstops.iter().find(|&&t| t > col).map(|t| t - col)
         }
     }
@@ -481,6 +483,22 @@ fn unexpand_exe<W: Write>(
         }
     }
     Ok(())
+}
+
+#[derive(Default)]
+pub struct Unexpand;
+impl Tool for Unexpand {
+    fn name(&self) -> &'static str {
+        "unexpand"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        unexpand_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[cfg(test)]

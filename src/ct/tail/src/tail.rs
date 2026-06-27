@@ -20,6 +20,8 @@ pub mod text;
 pub use args::ct_app;
 use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
 use chunks::TailReverseChunks;
+use clap::Command;
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code};
 use ctcore::{ct_show, ct_show_error};
@@ -27,9 +29,26 @@ use follow::Observer;
 use paths::{TailFileExtTail, TailHeaderPrinter, TailInput, TailInputKind, TailMetadataExt};
 use same_file::Handle;
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
+
+#[derive(Default)]
+pub struct Tail;
+impl Tool for Tail {
+    fn name(&self) -> &'static str {
+        "tail"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        tail_main(args.iter().cloned())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {

@@ -19,6 +19,7 @@ use std::num::IntErrorKind;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
@@ -52,7 +53,14 @@ enum UniqDelimiters {
     None,
 }
 
-struct Uniq {
+impl Default for UniqDelimiters {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Default)]
+pub struct UniqFlags {
     is_repeats_only: bool,
     is_uniques_only: bool,
     is_all_repeated: bool,
@@ -73,7 +81,23 @@ macro_rules! uniq_write_line_terminator {
     };
 }
 
-impl Uniq {
+#[derive(Default)]
+pub struct Uniq;
+impl Tool for Uniq {
+    fn name(&self) -> &'static str {
+        "uniq"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        uniq_main(args.iter().cloned())
+    }
+}
+
+impl UniqFlags {
     pub fn print_uniq(&self, reader: impl BufRead, mut writer: impl Write) -> CTResult<()> {
         let mut is_first_line_printed = false;
         let mut group_cnt = 1;
@@ -561,7 +585,7 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     let skip_fields_modern: Option<usize> = uniq_opt_parsed(uniq_flags::SKIP_FIELDS, &matches)?;
     let skip_chars_modern: Option<usize> = uniq_opt_parsed(uniq_flags::SKIP_CHARS, &matches)?;
 
-    let uniq_config = Uniq {
+    let uniq_config = UniqFlags {
         is_repeats_only: matches.get_flag(uniq_flags::REPEATED)
             || matches.contains_id(uniq_flags::ALL_REPEATED),
         is_uniques_only: matches.get_flag(uniq_flags::UNIQUE),
@@ -726,8 +750,8 @@ mod tests {
     mod uniq_tests {
         use super::*;
         use std::io::Cursor;
-        fn default_uniq() -> Uniq {
-            Uniq {
+        fn default_uniq() -> UniqFlags {
+            UniqFlags {
                 is_repeats_only: false,
                 is_uniques_only: false,
                 is_all_repeated: false,
@@ -745,7 +769,7 @@ mod tests {
             let input_data = b"apple\nbanana\napple\nbanana\nbanana\n";
             let input = Cursor::new(input_data);
             let mut output = Cursor::new(Vec::new());
-            let uniq = Uniq {
+            let uniq = UniqFlags {
                 is_repeats_only: false,
                 is_uniques_only: false,
                 is_all_repeated: false,

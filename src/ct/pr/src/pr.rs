@@ -16,14 +16,15 @@ use std::os::unix::fs::FileTypeExt;
 
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::CTResult;
+use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use quick_error::quick_error;
 use regex::Regex;
-
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTResult;
-use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 
 const PR_ABOUT: &str = ct_help_about!("pr.md");
 const PR_USAGE: &str = ct_help_usage!("pr.md");
@@ -373,6 +374,22 @@ pub fn ct_app() -> Command {
         .after_help(PR_AFTER_HELP)
         .args_override_self(true)
         .disable_help_flag(true)
+}
+
+#[derive(Default)]
+pub struct Pr;
+impl Tool for Pr {
+    fn name(&self) -> &'static str {
+        "pr"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        pr_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

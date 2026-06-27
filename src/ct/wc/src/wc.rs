@@ -31,6 +31,7 @@ use crate::count_fast::{count_bytes_chars_lines_from_stream, count_bytes_handle}
 use crate::countable::WcWordCountable;
 use crate::read_utf8::{ReadBufDecoder, ReadBufDecoderError};
 use crate::word_count::WcWordCount;
+use ctcore::Tool;
 
 mod count_fast;
 mod countable;
@@ -883,6 +884,22 @@ fn print_stats(
         writeln!(stdout, "{space}{title}")
     } else {
         writeln!(stdout)
+    }
+}
+
+#[derive(Default)]
+pub struct Wc;
+impl Tool for Wc {
+    fn name(&self) -> &'static str {
+        "wc"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        wc_main(args.iter().cloned())
     }
 }
 

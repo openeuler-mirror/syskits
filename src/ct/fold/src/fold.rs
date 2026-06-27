@@ -12,8 +12,10 @@
 //! 对每个指定的文件设置自动换行（折行），并将重新排版后的结果输出到标准输出。
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write, stdin};
 use std::path::Path;
@@ -31,6 +33,7 @@ mod fold_flags {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    // 收集参数到Vec中
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     fold_main(&mut out, args)
@@ -48,15 +51,16 @@ struct FoldFlags {
 /// # Parameters
 ///
 /// - `writer`: 一个实现了Write trait的可变引用，用于输出结果
-/// - `args`: 一个实现了ctcore::Args trait的参数源，用于提供命令行参数
+/// - `args`: 命令行参数的切片
 ///
 /// # Returns
 ///
 /// 返回一个Result，表示操作成功或失败
 pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
-    let args = args.collect_lossy();
+    // 将OsString参数转换为String
+    let string_args: Vec<String> = args.collect_lossy();
 
-    let (args, obs_width) = handle_obsolete(&args[..]);
+    let (args, obs_width) = handle_obsolete(&string_args[..]);
     let matches = ct_app().try_get_matches_from(args)?;
 
     let flags = FoldFlags {
@@ -365,6 +369,24 @@ fn fold_file<T: Read, W: Write>(
     Ok(())
 }
 
+#[derive(Default)]
+pub struct Fold;
+impl Tool for Fold {
+    fn name(&self) -> &'static str {
+        "fold"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 调用原有的 fold_main 函数，传入 stdout 作为 writer
+        let mut stdout = std::io::stdout();
+        fold_main(&mut stdout, args.iter().cloned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,8 +401,11 @@ mod tests {
         #[test]
         fn test_ctmain_version() {
             let mut writer = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--version"),
+            ];
+            let result = fold_main(&mut writer, args.iter().cloned());
             match result {
                 Err(output) => {
                     assert_eq!(output.code(), 0);

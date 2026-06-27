@@ -1,0 +1,63 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "基本功能测试",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "8\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "显示所有处理器",
+            "args": ["--all"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "8\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "忽略指定数量的处理器",
+            "args": ["--ignore=2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "无效选项测试",
+            "args": ["--invalid-option"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "nproc: unrecognized option '--invalid-option'\nTry 'nproc --help' for more information.\n"
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": true
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

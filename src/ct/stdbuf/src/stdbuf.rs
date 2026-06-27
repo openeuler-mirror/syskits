@@ -12,9 +12,11 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
@@ -345,70 +347,88 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[derive(Default)]
+pub struct Stdbuf;
+impl Tool for Stdbuf {
+    fn name(&self) -> &'static str {
+        "stdbuf"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        stdbuf_main(args.iter().cloned())
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::{builder::Command as ClapCommand, ArgAction};
+    use clap::{ArgAction, builder::Command as ClapCommand};
     use std::path::Path;
     use tempfile::TempDir;
 
     // Helper function to create ArgMatches with specific values for testing
-    fn create_arg_matches(input: Option<&str>, output: Option<&str>, error: Option<&str>, command: Option<Vec<&str>>) -> ArgMatches {
+    fn create_arg_matches(
+        input: Option<&str>,
+        output: Option<&str>,
+        error: Option<&str>,
+        command: Option<Vec<&str>>,
+    ) -> ArgMatches {
         let mut cmd = ClapCommand::new("test");
-        
+
         // Add all the arguments we need with the correct API that matches the actual implementation
-        cmd = cmd.arg(
+        cmd = cmd
+            .arg(
                 Arg::new(stdbuf_flags::INPUT)
                     .long(stdbuf_flags::INPUT)
                     .short(stdbuf_flags::INPUT_SHORT)
-                    .value_name("MODE")
+                    .value_name("MODE"),
             )
             .arg(
                 Arg::new(stdbuf_flags::OUTPUT)
                     .long(stdbuf_flags::OUTPUT)
                     .short(stdbuf_flags::OUTPUT_SHORT)
-                    .value_name("MODE")
+                    .value_name("MODE"),
             )
             .arg(
                 Arg::new(stdbuf_flags::ERROR)
                     .long(stdbuf_flags::ERROR)
                     .short(stdbuf_flags::ERROR_SHORT)
-                    .value_name("MODE")
+                    .value_name("MODE"),
             )
-            .arg(
-                Arg::new(stdbuf_flags::COMMAND)
-                    .action(ArgAction::Append)
-            );
-        
+            .arg(Arg::new(stdbuf_flags::COMMAND).action(ArgAction::Append));
+
         // Build argument vector using owned strings
         let mut arg_strings = Vec::new();
         arg_strings.push("test".to_string());
-        
+
         if let Some(i) = input {
             arg_strings.push(format!("--{}", stdbuf_flags::INPUT));
             arg_strings.push(i.to_string());
         }
-        
+
         if let Some(o) = output {
             arg_strings.push(format!("--{}", stdbuf_flags::OUTPUT));
             arg_strings.push(o.to_string());
         }
-        
+
         if let Some(e) = error {
             arg_strings.push(format!("--{}", stdbuf_flags::ERROR));
             arg_strings.push(e.to_string());
         }
-        
+
         if let Some(c) = command {
             for arg in c {
                 arg_strings.push(arg.to_string());
             }
         }
-        
+
         // Create a vector of string slices from our owned strings
         let args: Vec<&str> = arg_strings.iter().map(|s| s.as_str()).collect();
-        
+
         cmd.get_matches_from(args)
     }
 
@@ -417,27 +437,27 @@ mod tests {
     fn test_parse_buffer_option_line_buffering() {
         // 创建一个包含行缓冲选项的参数匹配
         let matches = create_arg_matches(None, Some("L"), None, None);
-        
+
         // 测试有效的行缓冲
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
         assert!(result.is_ok());
         match result.unwrap() {
-            BufferType::Line => {},
+            BufferType::Line => {}
             _ => panic!("Expected Line buffer type"),
         }
-        
+
         // 测试输入流的行缓冲（应该失败）
         let matches = create_arg_matches(Some("L"), None, None, None);
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::INPUT);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "line buffering stdin is meaningless");
     }
-    
+
     #[test]
     fn test_parse_buffer_option_size_buffering() {
         // 创建一个包含大小缓冲选项的参数匹配
         let matches = create_arg_matches(None, Some("1024"), None, None);
-        
+
         // 测试有效的大小缓冲
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
         assert!(result.is_ok());
@@ -445,104 +465,97 @@ mod tests {
             BufferType::Size(size) => assert_eq!(size, 1024),
             _ => panic!("Expected Size buffer type"),
         }
-        
+
         // 测试无效的大小值
         let matches = create_arg_matches(None, Some("invalid"), None, None);
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid mode"));
     }
-    
+
     #[test]
     fn test_parse_buffer_option_none() {
         // 创建一个没有选项的参数匹配
         let matches = create_arg_matches(None, None, None, None);
-        
+
         // 测试默认缓冲
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
         assert!(result.is_ok());
         match result.unwrap() {
-            BufferType::Default => {},
+            BufferType::Default => {}
             _ => panic!("Expected Default buffer type"),
         }
     }
-    
+
     // 测试 StdbufFlags::new 函数
     #[test]
     fn test_stdbuf_flags_new_valid() {
         // 创建一个有效的参数匹配
-        let matches = create_arg_matches(
-            None,
-            Some("L"),
-            None,
-            Some(vec!["echo", "test"])
-        );
-        
+        let matches = create_arg_matches(None, Some("L"), None, Some(vec!["echo", "test"]));
+
         // 测试创建有效的标志
         let result = StdbufFlags::new(matches);
         assert!(result.is_ok());
-        
+
         let flags = result.unwrap();
-        assert_eq!(flags.command_args, vec!["echo".to_string(), "test".to_string()]);
+        assert_eq!(
+            flags.command_args,
+            vec!["echo".to_string(), "test".to_string()]
+        );
         match flags.stdout {
-            BufferType::Line => {},
+            BufferType::Line => {}
             _ => panic!("Expected Line buffer type for stdout"),
         }
         match flags.stdin {
-            BufferType::Default => {},
+            BufferType::Default => {}
             _ => panic!("Expected Default buffer type for stdin"),
         }
         match flags.stderr {
-            BufferType::Default => {},
+            BufferType::Default => {}
             _ => panic!("Expected Default buffer type for stderr"),
         }
     }
-    
+
     #[test]
     fn test_stdbuf_flags_new_no_command() {
         // 创建一个没有命令的参数匹配
         let matches = create_arg_matches(None, Some("L"), None, None);
-        
+
         // 测试没有命令时应该返回错误
         let result = StdbufFlags::new(matches);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_stdbuf_flags_new_invalid_option() {
         // 创建一个包含无效选项的参数匹配
-        let matches = create_arg_matches(
-            Some("L"),
-            None,
-            None,
-            Some(vec!["echo", "test"])
-        );
-        
+        let matches = create_arg_matches(Some("L"), None, None, Some(vec!["echo", "test"]));
+
         // 测试无效选项应该返回错误
         let result = StdbufFlags::new(matches);
         assert!(result.is_err());
     }
-    
+
     // 测试 set_command_env 函数
     #[test]
     fn test_set_command_env() {
         let flags = StdbufFlags::default();
         let mut command = process::Command::new("test");
-        
+
         // 测试默认缓冲不设置环境变量
         flags.set_command_env(&mut command, "TEST_DEFAULT", &BufferType::Default);
-        
+
         // 测试行缓冲设置正确的环境变量
         flags.set_command_env(&mut command, "TEST_LINE", &BufferType::Line);
-        
+
         // 测试大小缓冲设置正确的环境变量
         flags.set_command_env(&mut command, "TEST_SIZE", &BufferType::Size(1024));
-        
+
         // 由于Command的env方法将环境变量添加到内部结构中，
         // 我们无法直接测试，但可以验证代码逻辑是否正确执行
         // 这种情况下，我们只是确认函数不会崩溃
     }
-    
+
     // 测试 get_preload_env 函数
     // 注意：这个测试依赖于 OUT_DIR 环境变量，在编译时设置
     // 在单元测试环境中可能不可用，所以我们需要模拟一个替代实现
@@ -550,39 +563,39 @@ mod tests {
     fn test_get_preload_env_mock() {
         // 创建一个特殊版本的 StdbufFlags，跳过实际的 STDBUF_INJECT 使用
         struct TestStdbufFlags {}
-        
+
         impl TestStdbufFlags {
             fn get_preload_env_test(&self, tmp_dir: &TempDir) -> CTResult<(String, PathBuf)> {
                 let (preload, extension) = preload_strings()?;
                 let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
-                
+
                 // 创建一个空文件代替实际的库文件
                 let mut file = File::create(&inject_path)
                     .map_err_context(|| "failed to create libstdbuf file".to_string())?;
                 // 写入一些测试数据而不是实际的库内容
                 file.write_all(b"test data")
                     .map_err_context(|| "failed to write to libstdbuf file".to_string())?;
-                
+
                 Ok((preload.to_owned(), inject_path))
             }
         }
-        
+
         // 只在Linux平台上运行此测试
         #[cfg(target_os = "linux")]
         {
             let flags = TestStdbufFlags {};
             let tmp_dir = TempDir::new().unwrap();
-            
+
             let result = flags.get_preload_env_test(&tmp_dir);
             assert!(result.is_ok());
-            
+
             let (env_var, path) = result.unwrap();
             assert_eq!(env_var, "LD_PRELOAD");
             assert!(path.extension().unwrap() == "so");
             assert!(Path::new(&path).exists());
         }
     }
-    
+
     // 测试 preload_strings 函数
     #[test]
     fn test_preload_strings() {
@@ -590,27 +603,27 @@ mod tests {
         {
             let result = preload_strings();
             assert!(result.is_ok());
-            
+
             let (preload, extension) = result.unwrap();
             assert_eq!(preload, "LD_PRELOAD");
             assert_eq!(extension, "so");
         }
-        
+
         #[cfg(not(target_os = "linux"))]
         {
             let result = preload_strings();
             assert!(result.is_err());
         }
     }
-    
+
     // 测试 ct_app 函数
     #[test]
     fn test_ct_app() {
         let app = ct_app();
-        
+
         // 验证命令设置
         assert_eq!(app.get_name(), ctcore::ct_util_name());
-        
+
         // 验证必需的参数存在
         let args = app.get_arguments().collect::<Vec<_>>();
         assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::INPUT));
@@ -618,7 +631,7 @@ mod tests {
         assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::ERROR));
         assert!(args.iter().any(|arg| arg.get_id() == stdbuf_flags::COMMAND));
     }
-    
+
     // 模拟 execute_command 函数，不实际执行命令
     #[test]
     fn test_execute_command_mock() {
@@ -631,7 +644,7 @@ mod tests {
             stderr: BufferType,
             command_args: Vec<String>,
         }
-        
+
         impl TestStdbufFlags {
             // 这个函数模拟 execute_command 的行为，但不实际执行命令
             fn execute_command_test(&self) -> bool {
@@ -639,18 +652,18 @@ mod tests {
                 if self.command_args.is_empty() {
                     return false;
                 }
-                
+
                 // 验证缓冲设置被正确应用
                 match self.stdin {
                     BufferType::Line => return false, // 输入流行缓冲是无效的
                     _ => {}
                 }
-                
+
                 // 所有检查通过
                 true
             }
         }
-        
+
         // 测试有效配置
         let flags = TestStdbufFlags {
             stdin: BufferType::Default,
@@ -658,9 +671,9 @@ mod tests {
             stderr: BufferType::Size(1024),
             command_args: vec!["echo".to_string(), "test".to_string()],
         };
-        
+
         assert!(flags.execute_command_test());
-        
+
         // 测试无效配置 - 没有命令
         let flags = TestStdbufFlags {
             stdin: BufferType::Default,
@@ -668,9 +681,9 @@ mod tests {
             stderr: BufferType::Default,
             command_args: vec![],
         };
-        
+
         assert!(!flags.execute_command_test());
-        
+
         // 测试无效配置 - 输入流行缓冲
         let flags = TestStdbufFlags {
             stdin: BufferType::Line,
@@ -678,10 +691,10 @@ mod tests {
             stderr: BufferType::Default,
             command_args: vec!["echo".to_string(), "test".to_string()],
         };
-        
+
         assert!(!flags.execute_command_test());
     }
-    
+
     // 测试 stdbuf_main 函数
     // 注意：为了避免依赖于编译时环境变量和实际执行命令，我们创建一个简化版本的测试
     #[test]
@@ -692,19 +705,22 @@ mod tests {
         let l_arg = "L".to_string();
         let echo_arg = "echo".to_string();
         let test_arg = "test".to_string();
-        
+
         // 测试有效参数
         {
             let args = vec![&stdbuf_arg, &o_arg, &l_arg, &echo_arg, &test_arg];
             let app = ct_app();
             let result = app.try_get_matches_from(args);
             assert!(result.is_ok());
-            
+
             if let Ok(matches) = result {
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(), "L");
+                assert_eq!(
+                    matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(),
+                    "L"
+                );
             }
         }
-        
+
         // 测试无效参数 - 缺少命令
         {
             let args = vec![&stdbuf_arg, &o_arg, &l_arg];
@@ -712,7 +728,7 @@ mod tests {
             let result = app.try_get_matches_from(args);
             assert!(result.is_err());
         }
-        
+
         // 测试无效参数 - 缺少必需的缓冲选项
         {
             let args = vec![&stdbuf_arg, &echo_arg, &test_arg];
@@ -727,35 +743,35 @@ mod tests {
     fn test_multiple_buffer_options() {
         // 创建一个有多个缓冲选项的参数匹配
         let matches = create_arg_matches(
-            Some("0"),       // 无缓冲
-            Some("L"),       // 行缓冲
-            Some("4096"),    // 完全缓冲，4096字节
-            Some(vec!["cat"])
+            Some("0"),    // 无缓冲
+            Some("L"),    // 行缓冲
+            Some("4096"), // 完全缓冲，4096字节
+            Some(vec!["cat"]),
         );
-        
+
         // 测试创建有效的标志
         let result = StdbufFlags::new(matches);
         assert!(result.is_ok());
-        
+
         let flags = result.unwrap();
-        
+
         // 验证各个缓冲选项
         match flags.stdin {
-            BufferType::Size(0) => {}, // 对于无缓冲，大小是0
+            BufferType::Size(0) => {} // 对于无缓冲，大小是0
             _ => panic!("Expected unbuffered (Size(0)) for stdin"),
         }
-        
+
         match flags.stdout {
-            BufferType::Line => {},
+            BufferType::Line => {}
             _ => panic!("Expected Line buffer type for stdout"),
         }
-        
+
         match flags.stderr {
             BufferType::Size(size) => assert_eq!(size, 4096),
             _ => panic!("Expected Size buffer type for stderr"),
         }
     }
-    
+
     // 新增测试：测试各种缓冲大小的边界情况
     #[test]
     fn test_buffer_size_edge_cases() {
@@ -767,7 +783,7 @@ mod tests {
             BufferType::Size(size) => assert_eq!(size, 0),
             _ => panic!("Expected Size(0) buffer type"),
         }
-        
+
         // 测试非常大的缓冲区大小但仍在usize范围内
         let matches = create_arg_matches(None, Some("1073741824"), None, Some(vec!["ls"])); // 1GB
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
@@ -776,7 +792,7 @@ mod tests {
             BufferType::Size(size) => assert_eq!(size, 1073741824),
             _ => panic!("Expected large Size buffer type"),
         }
-        
+
         // 测试带有单位的缓冲区大小（如果parse_size_u64支持）
         // 注意：这取决于parse_size_u64的实现
         let matches = create_arg_matches(None, Some("1K"), None, Some(vec!["ls"]));
@@ -785,7 +801,7 @@ mod tests {
         // 如果支持，我们可以验证size是否为1024
         // 如果不支持，应该返回错误
     }
-    
+
     // 新增测试：测试复杂的命令行参数
     #[test]
     fn test_complex_command_args() {
@@ -795,18 +811,18 @@ mod tests {
             None,
             Some("L"),
             None,
-            Some(vec!["ls", "src", "include", "docs"])
+            Some(vec!["ls", "src", "include", "docs"]),
         );
-        
+
         let result = StdbufFlags::new(matches);
         assert!(result.is_ok());
-        
+
         let flags = result.unwrap();
         assert_eq!(flags.command_args.len(), 4);
         assert_eq!(flags.command_args[0], "ls");
         assert_eq!(flags.command_args[3], "docs");
     }
-    
+
     // 新增测试：测试BufferType枚举的Debug实现
     #[test]
     fn test_buffer_type_debug() {
@@ -814,33 +830,33 @@ mod tests {
         let default_buffer = BufferType::Default;
         let line_buffer = BufferType::Line;
         let size_buffer = BufferType::Size(1024);
-        
+
         assert_eq!(format!("{:?}", default_buffer), "Default");
         assert_eq!(format!("{:?}", line_buffer), "Line");
         assert_eq!(format!("{:?}", size_buffer), "Size(1024)");
     }
-    
+
     // 新增测试：测试StdbufFlags的默认实现
     #[test]
     fn test_stdbuf_flags_default() {
         let flags = StdbufFlags::default();
-        
+
         // 验证默认值
         match flags.stdin {
-            BufferType::Default => {},
+            BufferType::Default => {}
             _ => panic!("Expected Default buffer type for stdin"),
         }
-        
+
         match flags.stdout {
-            BufferType::Default => {},
+            BufferType::Default => {}
             _ => panic!("Expected Default buffer type for stdout"),
         }
-        
+
         match flags.stderr {
-            BufferType::Default => {},
+            BufferType::Default => {}
             _ => panic!("Expected Default buffer type for stderr"),
         }
-        
+
         assert!(flags.command_args.is_empty());
     }
 
@@ -850,19 +866,19 @@ mod tests {
     fn test_platform_specific_behavior() {
         // 测试当前平台的预加载环境变量和库扩展名
         let (preload, extension) = preload_strings().unwrap();
-        
+
         // 在Linux上应该是LD_PRELOAD和so
         assert_eq!(preload, "LD_PRELOAD");
         assert_eq!(extension, "so");
-        
+
         // 测试在临时目录中创建预加载库文件的功能
         let tmp_dir = TempDir::new().unwrap();
-        
+
         // 创建一个mock库文件
         let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
         let result = File::create(&inject_path);
         assert!(result.is_ok());
-        
+
         // 验证文件成功创建
         assert!(Path::new(&inject_path).exists());
     }
@@ -871,33 +887,36 @@ mod tests {
     #[test]
     fn test_workflow_with_mock() {
         // 这个测试模拟整个stdbuf的主要工作流程，但不实际执行命令
-        
+
         // 步骤1：解析命令行参数
         let args = vec!["stdbuf", "-o", "L", "echo", "test"];
         let app = ct_app();
         let matches_result = app.try_get_matches_from(args);
         assert!(matches_result.is_ok());
-        
+
         // 步骤2：创建StdbufFlags
         let matches = matches_result.unwrap();
         let flags_result = StdbufFlags::new(matches);
         assert!(flags_result.is_ok());
-        
+
         let flags = flags_result.unwrap();
-        
+
         // 步骤3：验证解析的选项
         match flags.stdout {
-            BufferType::Line => {},
+            BufferType::Line => {}
             _ => panic!("Expected Line buffer type for stdout"),
         }
-        
+
         // 步骤4：验证命令参数
-        assert_eq!(flags.command_args, vec!["echo".to_string(), "test".to_string()]);
-        
+        assert_eq!(
+            flags.command_args,
+            vec!["echo".to_string(), "test".to_string()]
+        );
+
         // 我们不能直接测试execute_command，因为它会尝试实际执行命令
         // 但我们已经验证了flags对象已正确设置
     }
-    
+
     // 新增测试：测试命令行参数短选项形式
     #[test]
     fn test_short_option_forms() {
@@ -911,59 +930,76 @@ mod tests {
         let size_arg = "4096".to_string();
         let echo_arg = "echo".to_string();
         let test_arg = "test".to_string();
-        
+
         // 测试短选项 -o
         {
             let args = vec![&stdbuf_arg, &o_short_arg, &l_arg, &echo_arg, &test_arg];
             let app = ct_app();
             let result = app.try_get_matches_from(args);
             assert!(result.is_ok());
-            
+
             if let Ok(matches) = result {
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(), "L");
+                assert_eq!(
+                    matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(),
+                    "L"
+                );
             }
         }
-        
+
         // 测试短选项 -i
         {
             let args = vec![&stdbuf_arg, &i_short_arg, &zero_arg, &echo_arg, &test_arg];
             let app = ct_app();
             let result = app.try_get_matches_from(args);
             assert!(result.is_ok());
-            
+
             if let Ok(matches) = result {
                 assert_eq!(matches.get_one::<String>(stdbuf_flags::INPUT).unwrap(), "0");
             }
         }
-        
+
         // 测试短选项 -e
         {
             let args = vec![&stdbuf_arg, &e_short_arg, &size_arg, &echo_arg, &test_arg];
             let app = ct_app();
             let result = app.try_get_matches_from(args);
             assert!(result.is_ok());
-            
+
             if let Ok(matches) = result {
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(), "4096");
+                assert_eq!(
+                    matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(),
+                    "4096"
+                );
             }
         }
-        
+
         // 测试多个短选项
         {
             let args = vec![
-                &stdbuf_arg, &i_short_arg, &zero_arg, 
-                &o_short_arg, &l_arg, 
-                &e_short_arg, &size_arg, 
-                &echo_arg, &test_arg
+                &stdbuf_arg,
+                &i_short_arg,
+                &zero_arg,
+                &o_short_arg,
+                &l_arg,
+                &e_short_arg,
+                &size_arg,
+                &echo_arg,
+                &test_arg,
             ];
             let app = ct_app();
             let result = app.try_get_matches_from(args);
             assert!(result.is_ok());
-            
+
             if let Ok(matches) = result {
                 assert_eq!(matches.get_one::<String>(stdbuf_flags::INPUT).unwrap(), "0");
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(), "L");
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(), "4096");
+                assert_eq!(
+                    matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(),
+                    "L"
+                );
+                assert_eq!(
+                    matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(),
+                    "4096"
+                );
             }
         }
     }

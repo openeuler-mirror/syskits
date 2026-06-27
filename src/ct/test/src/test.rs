@@ -23,6 +23,7 @@ use clap::crate_version;
 use ctcore::Tool;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
+use sys_locale::get_locale;
 
 // The help_usage method replaces util name (the first word) with {}.
 // And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
@@ -90,6 +91,8 @@ fn handle_closing_bracket(binary_name: &str, args: &mut Vec<OsString>) -> CTResu
 }
 
 pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // Get program name and collect arguments
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let mut args: Vec<_> = args.collect();

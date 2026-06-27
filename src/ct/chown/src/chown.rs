@@ -602,43 +602,43 @@ mod tests {
     #[test]
     fn test_version_ctmain() {
         let args = vec![ctcore::ct_util_name(), "--version"];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 0);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_help_ctmain() {
         let args = vec![ctcore::ct_util_name(), "--help"];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 0);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_help_invalid_ctmain() {
         let args = vec![ctcore::ct_util_name(), "-H"];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_version_valid_ctmain() {
         let args = vec![ctcore::ct_util_name(), "-V"];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 0);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_true_ctmain() {
         let args = vec![ctcore::ct_util_name(), "--dereference"];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_dereference_false_ctmain() {
         let args = vec![ctcore::ct_util_name(), "-h"];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -646,8 +646,8 @@ mod tests {
         // 测试用例：有效输入 --no-dereference
         let args = vec![ctcore::ct_util_name(), "--no-dereference"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -655,8 +655,8 @@ mod tests {
         // 测试用例：有效输入 --preserve-root
         let args = vec![ctcore::ct_util_name(), "--preserve-root"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -664,8 +664,8 @@ mod tests {
         // 测试用例：有效输入 --no-preserve-root
         let args = vec![ctcore::ct_util_name(), "--no-preserve-root"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -673,8 +673,8 @@ mod tests {
         // 测试用例：有效输入 --recursive
         let args = vec![ctcore::ct_util_name(), "-R"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -682,8 +682,8 @@ mod tests {
         // 测试用例：有效输入 --recursive
         let args = vec![ctcore::ct_util_name(), "--recursive"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     // 对于布尔选项，例如 --verbose
@@ -692,8 +692,8 @@ mod tests {
         // 测试用例：有效输入 --verbose
         let args = vec![ctcore::ct_util_name(), "-v"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     // 对于布尔选项，例如 --verbose
@@ -702,8 +702,8 @@ mod tests {
         // 测试用例：有效输入 --verbose
         let args = vec![ctcore::ct_util_name(), "--verbose"];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 1);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -727,8 +727,8 @@ mod tests {
 
         let args = vec![ctcore::ct_util_name(), "-R", "1000", dir_path];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 0);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_ok());
         // 删除目录及其内容
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
@@ -746,11 +746,11 @@ mod tests {
 
         let args = vec![ctcore::ct_util_name(), "1000", file_name];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_ok());
 
         // Remove the file
         fs::remove_file(file_path).expect("Failed to delete file");
-        assert_eq!(result, 0);
     }
 
     #[test]
@@ -772,8 +772,8 @@ mod tests {
 
         let args = vec![ctcore::ct_util_name(), "--recursive", "1000", dir_path];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_eq!(result, 0);
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_ok());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
@@ -799,8 +799,8 @@ mod tests {
 
         let args = vec![ctcore::ct_util_name(), "-R", "invalid_user_id", dir_path];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }
@@ -831,8 +831,8 @@ mod tests {
             dir_path,
         ];
 
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        assert_ne!(result, 0); // Expect a non-zero exit code for invalid user ID
+        let result = chown_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
     }

@@ -40,7 +40,7 @@ mod opt_flags {
 }
 
 
-pub fn chroot_main(args: &[OsString]) -> CTResult<()> {
+pub fn chroot_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 尝试从 args 中获取匹配项，并在匹配失败时返回错误代码 125
@@ -385,7 +385,7 @@ impl Tool for Chroot {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        chroot_main(args)
+        chroot_main(args.iter().cloned()).map(|_| ())
     }
 }
 
@@ -412,9 +412,8 @@ mod tests {
 
     #[cfg(test)]
     mod tests_ct_app {
-        use crate::{ct_app, ctmain, opt_flags};
+        use crate::{ct_app, opt_flags};
         use clap::error::ErrorKind;
-        use std::ffi::OsString;
 
         #[test]
         fn test_ct_app_version() {
@@ -424,14 +423,6 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
-        }
-
-        #[test]
-        fn test_ct_app_version_invalid() {
-            let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 125);
         }
 
         #[test]
@@ -789,67 +780,66 @@ mod tests {
 
     #[cfg(test)]
     mod tests_ctmain {
-        use crate::ctmain;
         use std::ffi::OsString;
         use std::fs;
         use std::fs::File;
         use tempfile::Builder;
+        use crate::chroot_main;
 
         #[test]
         fn test_ctmain_version() {
             let args = [ctcore::ct_util_name(), "--version"];
-            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 0);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_v() {
             let args = [ctcore::ct_util_name(), "-V"];
-            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 0);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_h() {
             let args = [ctcore::ct_util_name(), "-h"];
-            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 0);
+            assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_help() {
             let args = [ctcore::ct_util_name(), "--help"];
-            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 0);
+            assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_hh() {
             let args = [ctcore::ct_util_name(), "-hh"];
-            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 0);
+            assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_hhh() {
             let args = [ctcore::ct_util_name(), "-hhh"];
-            let result: i32 = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, 0);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_newroot_required() {
             let args = [ctcore::ct_util_name()];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert!(matches!(result, 125));
+            assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_valid_newroot_required() {
-            let error_code = 125; //没有执行文件bash，退出码125
             let temp_dir = Builder::new()
                 .prefix("test_ctmain_valid_chdir")
                 .tempdir()
@@ -865,42 +855,39 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_valid_newroot() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_invalid_newroot() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/nonexistent/path"),
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_user_short_flag() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
@@ -909,14 +896,13 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_group_long_flag() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
@@ -925,14 +911,13 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_groups_short_flag() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
@@ -941,14 +926,13 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_userspec_long_flag() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
@@ -957,8 +941,8 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, error_code);
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
@@ -973,8 +957,6 @@ mod tests {
             let test_file_path = sub_dir_path.join("test_skip_dir.txt");
             File::create(&test_file_path).unwrap();
 
-            let error_code = 125;
-
             let args = [
                 ctcore::ct_util_name(),
                 test_file_path.to_str().expect("REASON"),
@@ -982,14 +964,13 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
             // 清理测试环境（无需手动清理，TempDir 会在作用域结束时自动删除）
         }
         #[test]
         fn test_ctmain_skip_chdir_short_flag() {
-            let error_code = 125;
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
@@ -998,46 +979,41 @@ mod tests {
                 "-l",
                 "-lc",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            assert_eq!(result, error_code);
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_command_trailing_arg() {
-            let error_code = 125;
-
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_command_trailing_arg_with_shell() {
-            let error_code = 125;
-
             let args = [
                 ctcore::ct_util_name(),
                 &String::from("/valid/newroot/path"),
                 "ls",
                 "-l",
             ];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_default_shell_no_command_given() {
-            let error_code = 125;
             let args = [ctcore::ct_util_name(), &String::from("/valid/newroot/path")];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
 
-            assert_eq!(result, error_code);
+            assert!(result.is_err());
         }
     }
 

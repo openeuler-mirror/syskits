@@ -351,12 +351,8 @@ fn filter_mount_list(v_mount_info: Vec<CtMountInfo>, options: &DfOptions) -> Vec
 fn get_all_filesystems(option: &DfOptions) -> Result<Vec<Filesystem>, std::io::Error> {
     // 如果指定了同步选项，则在进行任何操作前执行同步调用。
     if option.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
         unsafe {
-            #[cfg(not(target_os = "android"))]
             ctcore::libc::sync();
-            #[cfg(target_os = "android")]
-            ctcore::libc::syscall(ctcore::libc::SYS_sync);
         }
     }
 

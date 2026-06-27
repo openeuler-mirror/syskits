@@ -57,14 +57,6 @@ pub(crate) struct TableRow {
     /// If the filesystem has zero bytes, then this is `None`.
     bytes_usage: Option<f64>,
 
-    /// Percentage of bytes that are available, given as a float between 0 and 1.
-    ///
-    /// These are the bytes that are available to non-privileged processes.
-    ///
-    /// If the filesystem has zero bytes, then this is `None`.
-    #[cfg(target_os = "macos")]
-    bytes_capacity: Option<f64>,
-
     /// Total number of inodes in the filesystem.
     inodes: u128,
 
@@ -91,8 +83,6 @@ impl TableRow {
             bytes_used: 0,
             bytes_avail: 0,
             bytes_usage: None,
-            #[cfg(target_os = "macos")]
-            bytes_capacity: None,
             inodes: 0,
             inodes_used: 0,
             inodes_free: 0,
@@ -130,9 +120,6 @@ impl AddAssign for TableRow {
                 // 因此这里使用“(bytes_used + bytes_avail)”来计算使用率。
                 Some(bytes_used as f64 / (bytes_used + bytes_avail) as f64)
             },
-            // macOS平台的特定字段，当前未计算。
-            #[cfg(target_os = "macos")]
-            bytes_capacity: None,
             inodes,
             inodes_used,
             inodes_free: self.inodes_free + rhs.inodes_free,
@@ -193,13 +180,6 @@ impl From<Filesystem> for TableRow {
             } else {
                 // 计算字节使用率，考虑了某些文件系统中的保留块。
                 Some(bused as f64 / (bused + bavail) as f64)
-            },
-            #[cfg(target_os = "macos")]
-            bytes_capacity: if bavail == 0 {
-                None
-            } else {
-                // 计算 macOS 上的字节可用率。
-                Some(bavail as f64 / ((bused + bavail) as f64))
             },
             inodes: files as u128,
             inodes_used: fused as u128,
@@ -331,8 +311,6 @@ impl<'a> TableRowFormatter<'a> {
                 Column::File => self.row.file.as_ref().unwrap_or(&"-".into()).to_string(),
 
                 Column::Fstype => self.row.fs_type.to_string(),
-                #[cfg(target_os = "macos")]
-                Column::Capacity => Self::percentage(self.row.bytes_capacity),
             };
 
             strings.push(string);
@@ -401,8 +379,6 @@ impl TableHeader {
                 Column::Ipcent => String::from("IUse%"),
                 Column::File => String::from("File"),
                 Column::Fstype => String::from("Type"),
-                #[cfg(target_os = "macos")]
-                Column::Capacity => String::from("Capacity"),
             };
 
             headers.push(header); // 将生成的头部信息添加到向量中。
@@ -574,8 +550,6 @@ mod tests {
                 bytes_avail: 75,
                 bytes_usage: Some(0.25),
 
-                #[cfg(target_os = "macos")]
-                bytes_capacity: Some(0.5),
 
                 inodes: 10,
                 inodes_used: 2,

@@ -53,9 +53,6 @@ pub(crate) enum Column {
     /// 文件系统的类型，如 "ext4" 或 "squashfs"。
     Fstype,
 
-    /// 非特权进程可用字节的百分比。
-    #[cfg(target_os = "macos")]
-    Capacity,
 }
 
 /// 在定义输出表格中的列时可能出现的错误。
@@ -86,8 +83,6 @@ impl Column {
                 Self::Size,
                 Self::Used,
                 Self::Avail,
-                #[cfg(target_os = "macos")]
-                Self::Capacity,
                 Self::Pcent,
                 Self::Target,
             ]),
@@ -123,8 +118,6 @@ impl Column {
                 Self::Size,
                 Self::Used,
                 Self::Avail,
-                #[cfg(target_os = "macos")]
-                Self::Capacity,
                 Self::Pcent,
                 Self::Target,
             ]),

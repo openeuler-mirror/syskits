@@ -26,14 +26,8 @@ use std::{env, thread};
 use sys_locale::get_locale;
 
 // 根据操作系统的不同，定义 _SC_NPROCESSORS_CONF 常量以获取系统上配置的处理器数量
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 pub const _SC_NUM_PROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_vendor = "apple")]
-pub const _SC_NUM_PROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
-#[cfg(target_os = "freebsd")]
-pub const _SC_NUM_PROCESSORS_CONF: libc::c_int = 57;
-#[cfg(target_os = "netbsd")]
-pub const _SC_NUM_PROCESSORS_CONF: libc::c_int = 1001;
 
 // 定义静态字符串常量用于命令行参数解析
 
@@ -222,12 +216,7 @@ pub fn ct_app() -> Command {
  * 返回值:
  *  - usize: 系统上的核心数量。
  */
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-))]
+#[cfg(target_os = "linux")]
 fn nproc_all() -> usize {
     let nprocs_num = unsafe { libc::sysconf(_SC_NUM_PROCESSORS_CONF) };
     if nprocs_num == 1 {
@@ -241,12 +230,7 @@ fn nproc_all() -> usize {
 }
 
 // 在其他平台上，直接调用 available_parallelism()
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-)))]
+#[cfg(target_os = "windows")]
 fn nproc_all() -> usize {
     available_parallelism()
 }

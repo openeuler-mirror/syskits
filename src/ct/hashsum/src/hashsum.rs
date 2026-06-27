@@ -13,6 +13,7 @@ use clap::ArgAction;
 use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::{Arg, ArgMatches, Command};
+use ctcore::Tool;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_sum::{
@@ -462,6 +463,285 @@ fn create_algorithm_from_flags(
 // TODO: 返回自定义错误类型
 fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
     arg.parse()
+}
+
+#[derive(Default)]
+pub struct Hashsum;
+impl Tool for Hashsum {
+    fn name(&self) -> &'static str {
+        "hashsum"
+    }
+
+    fn command(&self) -> Command {
+        create_custom_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+
+#[derive(Default)]
+pub struct Md5sum;
+impl Tool for Md5sum {
+    fn name(&self) -> &'static str {
+        "md5sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+
+#[derive(Default)]
+pub struct Sha1sum;
+impl Tool for Sha1sum {
+    fn name(&self) -> &'static str {
+        "sha1sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+
+#[derive(Default)]
+pub struct Sha224sum;
+impl Tool for Sha224sum {
+    fn name(&self) -> &'static str {
+        "sha224sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+
+#[derive(Default)]
+pub struct Sha256sum;
+impl Tool for Sha256sum {
+    fn name(&self) -> &'static str {
+        "sha256sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+
+#[derive(Default)]
+pub struct Sha384sum;
+impl Tool for Sha384sum {
+    fn name(&self) -> &'static str {
+        "sha384sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Sha512sum;
+impl Tool for Sha512sum {
+    fn name(&self) -> &'static str {
+        "sha512sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Sha3_224sum;
+impl Tool for Sha3_224sum {
+    fn name(&self) -> &'static str {
+        "sha3-224sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Sha3_256sum;
+impl Tool for Sha3_256sum {
+    fn name(&self) -> &'static str {
+        "sha3-256sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Sha3_384sum;
+impl Tool for Sha3_384sum {
+    fn name(&self) -> &'static str {
+        "sha3-384sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Sha3_512sum;
+impl Tool for Sha3_512sum {
+    fn name(&self) -> &'static str {
+        "sha3-512sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct B2sum;
+impl Tool for B2sum {
+    fn name(&self) -> &'static str {
+        "b2sum"
+    }
+
+    fn command(&self) -> Command {
+        create_common_command()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+
+#[derive(Default)]
+pub struct Sha3sum;
+impl Tool for Sha3sum {
+    fn name(&self) -> &'static str {
+        "sha3sum"
+    }
+
+    fn command(&self) -> Command {
+        add_bits_option(create_common_command())
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Shake128sum;
+impl Tool for Shake128sum {
+    fn name(&self) -> &'static str {
+        "shake128sum"
+    }
+
+    fn command(&self) -> Command {
+        add_bits_option(create_common_command())
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct Shake256sum;
+impl Tool for Shake256sum {
+    fn name(&self) -> &'static str {
+        "shake256sum"
+    }
+
+    fn command(&self) -> Command {
+        add_bits_option(create_common_command())
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
+}
+#[derive(Default)]
+pub struct B3sum;
+impl Tool for B3sum {
+    fn name(&self) -> &'static str {
+        "b3sum"
+    }
+
+    fn command(&self) -> Command {
+        add_b3sum_options(create_common_command())
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        hashsum_main(&mut out, args.iter().cloned())
+    }
 }
 
 /// 程序入口函数
@@ -1193,7 +1473,6 @@ fn digest_reader<T: Read>(
         Ok(encode(bytes))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1992,17 +2271,20 @@ mod tests {
         #[test]
         fn test_create_sha3_224() {
             // Test with 224 bits parameter
-            let command = Command::new("test_cmd")
-                .arg(Arg::new("bits")
+            let command = Command::new("test_cmd").arg(
+                Arg::new("bits")
                     .long("bits")
                     .value_name("BITS")
-                    .value_parser(parse_bit_num));
-            
-            let matches = command.try_get_matches_from(["test_cmd", "--bits", "224"]).unwrap();
-            
+                    .value_parser(parse_bit_num),
+            );
+
+            let matches = command
+                .try_get_matches_from(["test_cmd", "--bits", "224"])
+                .unwrap();
+
             let result = create_sha3(&matches);
             assert!(result.is_ok());
-            
+
             let (name, digest, bits) = result.unwrap();
             assert_eq!(name, "SHA3-224");
             assert_eq!(bits, 224);
@@ -2012,17 +2294,20 @@ mod tests {
         #[test]
         fn test_create_sha3_256() {
             // Test with 256 bits parameter
-            let command = Command::new("test_cmd")
-                .arg(Arg::new("bits")
+            let command = Command::new("test_cmd").arg(
+                Arg::new("bits")
                     .long("bits")
                     .value_name("BITS")
-                    .value_parser(parse_bit_num));
-            
-            let matches = command.try_get_matches_from(["test_cmd", "--bits", "256"]).unwrap();
-            
+                    .value_parser(parse_bit_num),
+            );
+
+            let matches = command
+                .try_get_matches_from(["test_cmd", "--bits", "256"])
+                .unwrap();
+
             let result = create_sha3(&matches);
             assert!(result.is_ok());
-            
+
             let (name, digest, bits) = result.unwrap();
             assert_eq!(name, "SHA3-256");
             assert_eq!(bits, 256);
@@ -2032,17 +2317,20 @@ mod tests {
         #[test]
         fn test_create_sha3_384() {
             // Test with 384 bits parameter
-            let command = Command::new("test_cmd")
-                .arg(Arg::new("bits")
+            let command = Command::new("test_cmd").arg(
+                Arg::new("bits")
                     .long("bits")
                     .value_name("BITS")
-                    .value_parser(parse_bit_num));
-            
-            let matches = command.try_get_matches_from(["test_cmd", "--bits", "384"]).unwrap();
-            
+                    .value_parser(parse_bit_num),
+            );
+
+            let matches = command
+                .try_get_matches_from(["test_cmd", "--bits", "384"])
+                .unwrap();
+
             let result = create_sha3(&matches);
             assert!(result.is_ok());
-            
+
             let (name, digest, bits) = result.unwrap();
             assert_eq!(name, "SHA3-384");
             assert_eq!(bits, 384);
@@ -2052,17 +2340,20 @@ mod tests {
         #[test]
         fn test_create_sha3_512() {
             // Test with 512 bits parameter
-            let command = Command::new("test_cmd")
-                .arg(Arg::new("bits")
+            let command = Command::new("test_cmd").arg(
+                Arg::new("bits")
                     .long("bits")
                     .value_name("BITS")
-                    .value_parser(parse_bit_num));
-            
-            let matches = command.try_get_matches_from(["test_cmd", "--bits", "512"]).unwrap();
-            
+                    .value_parser(parse_bit_num),
+            );
+
+            let matches = command
+                .try_get_matches_from(["test_cmd", "--bits", "512"])
+                .unwrap();
+
             let result = create_sha3(&matches);
             assert!(result.is_ok());
-            
+
             let (name, digest, bits) = result.unwrap();
             assert_eq!(name, "SHA3-512");
             assert_eq!(bits, 512);
@@ -2072,17 +2363,20 @@ mod tests {
         #[test]
         fn test_create_sha3_invalid_bits() {
             // Test with invalid bits parameter (not 224, 256, 384, or 512)
-            let command = Command::new("test_cmd")
-                .arg(Arg::new("bits")
+            let command = Command::new("test_cmd").arg(
+                Arg::new("bits")
                     .long("bits")
                     .value_name("BITS")
-                    .value_parser(parse_bit_num));
-            
-            let matches = command.try_get_matches_from(["test_cmd", "--bits", "123"]).unwrap();
-            
+                    .value_parser(parse_bit_num),
+            );
+
+            let matches = command
+                .try_get_matches_from(["test_cmd", "--bits", "123"])
+                .unwrap();
+
             let result = create_sha3(&matches);
             assert!(result.is_err());
-            
+
             // Should mention the expected valid bit values
             match result {
                 Err(err) => {
@@ -2092,7 +2386,7 @@ mod tests {
                     assert!(err_str.contains("256"));
                     assert!(err_str.contains("384"));
                     assert!(err_str.contains("512"));
-                },
+                }
                 _ => panic!("Expected error"),
             }
         }
@@ -2100,17 +2394,18 @@ mod tests {
         #[test]
         fn test_create_sha3_missing_bits() {
             // Test with missing bits parameter
-            let command = Command::new("test_cmd")
-                .arg(Arg::new("bits")
+            let command = Command::new("test_cmd").arg(
+                Arg::new("bits")
                     .long("bits")
                     .value_name("BITS")
-                    .value_parser(parse_bit_num));
-            
+                    .value_parser(parse_bit_num),
+            );
+
             let matches = command.try_get_matches_from(["test_cmd"]).unwrap();
-            
+
             let result = create_sha3(&matches);
             assert!(result.is_err());
-            
+
             // Should mention --bits is required
             match result {
                 Err(err) => assert!(err.to_string().contains("--bits required for SHA3")),
@@ -2119,4 +2414,3 @@ mod tests {
         }
     }
 }
-

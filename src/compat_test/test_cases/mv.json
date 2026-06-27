@@ -258,6 +258,73 @@
             "rm -rf dest_dir",
             "rm -rf file1.txt file2.txt"
         ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv备份文件功能",
+        "setup_commands": [
+            "echo 'existing content' > existing.txt"
+        ],
+        "args": ["--backup=simple", "existing.txt", "backup.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "ls -l backup_existing.txt backup.txt",
+              "expected_exit": 0,
+              "expected_stdout": "backup_existing.txt backup.txt"
+            }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf backup_existing.txt backup.txt"
+        ]
+      },
+      {
+        "tstdin": "",
+        "command": "mv",
+        "description": "测试mv移动目录功能",
+        "setup_commands": [
+            "mkdir source_dir dest_dir"
+        ],
+        "args": ["source_dir", "dest_dir"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+          },
+          "verifications": [
+            {
+              "command": "ls -l dest_dir/",
+              "expected_exit": 0,
+              "expected_stdout": "dest_dir/source_dir"
+            },
+            {
+                "command": "ls -l source_dir",
+                "expected_exit": 0,
+                "expected_stdout": "no such file or directory"
+              }
+          ],
+          "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false
+          }
+        },
+        "cleanup_commands": [
+            "rm -rf source_dir dest_dir"
+        ]
       }
     ]
 }

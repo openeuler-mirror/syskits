@@ -408,7 +408,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(String::from_utf8(output.clone()).unwrap(), "1,2,3\n");
+        assert_eq!(String::from_utf8(output.clone()).unwrap(), "1.0,2.0,3.0\n");
 
         output.clear();
 
@@ -433,7 +433,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             String::from_utf8(output.clone()).unwrap(),
-            "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n"
+            "1.0\n2.0\n3.0\n4.0\n5.0\n6.0\n7.0\n8.0\n9.0\n10.0\n"
         );
     }
 

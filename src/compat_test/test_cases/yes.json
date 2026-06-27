@@ -1,0 +1,58 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "基本功能测试",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "y\ny\ny\ny\ny\ny\ny\ny\ny\ny\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "指定输出字符串",
+            "args": ["test"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test\ntest\ntest\ntest\ntest\ntest\ntest\ntest\ntest\ntest\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "指定多个参数",
+            "args": ["hello", "world"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "hello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        }
+    ]
+} 

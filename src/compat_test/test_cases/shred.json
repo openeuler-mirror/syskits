@@ -1,0 +1,187 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "基本功能测试",
+            "setup_commands": [
+                "echo 'test' > test_file"
+            ],
+            "args": ["test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "cat test_file | grep test",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "测试-v参数",
+            "setup_commands": [
+                "echo 'test' > test_file1"
+            ],
+            "args": ["-v","test_file1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "cat test_file1 | grep test",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "测试-u 删除文件参数",
+            "setup_commands": [
+                "echo 'test' > test_file2"
+            ],
+            "args": ["-u","test_file2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "ls test_file2",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "测试-f 强制删除文件参数",
+            "setup_commands": [
+                "echo 'test' > test_file3",
+                "chmod 444 test_file3"
+            ],
+            "args": ["-f","test_file3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "ls test_file3",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file3"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "测试-z 使用0填充参数",
+            "setup_commands": [
+                "echo 'test' > test_file4"
+            ],
+            "args": ["-z","test_file4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "cat test_file4",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file4"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "测试-x 精确覆盖参数",
+            "setup_commands": [
+                "echo 'test' > test_file5"
+            ],
+            "args": ["-x","test_file5"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "cat test_file5 | grep test",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file5"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "测试-s 覆盖时使用指定字节",
+            "setup_commands": [
+                "echo 'test' > test_file5"
+            ],
+            "args": ["-s", "1K", "test_file5"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "verifications": [
+                {
+                    "command": "cat test_file5 | grep test",
+                    "expected_exit": 0,
+                    "expected_stdout": ""
+                }
+            ],
+            "cleanup_commands": [
+                "rm -f test_file5"
+            ]
+        }
+    ]
+} 

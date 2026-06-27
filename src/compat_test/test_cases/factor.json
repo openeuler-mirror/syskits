@@ -63,6 +63,54 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "质数测试",
+            "setup_commands": [],
+            "args": ["17"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "17: 17",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "1的测试",
+            "setup_commands": [],
+            "args": ["1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1:",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "0的测试",
+            "setup_commands": [],
+            "args": ["0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0:",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

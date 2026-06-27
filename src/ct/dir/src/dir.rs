@@ -123,17 +123,17 @@ mod tests {
         #[test]
         fn test_ctmain_input_err_no_app_name_v() {
             let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 2);
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
+
+            assert!(result.is_ok());
         }
 
         #[test]
         fn test_ctmain_input_err_no_app_name_uppercase_v() {
             let args = ["-V", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
+            let result = dir_main(args.iter().map(|s| OsString::from(s)));
             //println!("{}", result);
-            assert_eq!(result, 2);
+            assert!(result.is_ok());
         }
 
         #[test]

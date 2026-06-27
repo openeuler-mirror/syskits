@@ -14,8 +14,6 @@ can run, however this flag has no functionality yet.
 
 The `--follow=descriptor`, `--follow=name` and `--retry` flags have very good
 support on Linux (inotify backend).
-They work good enough on macOS/BSD (kqueue backend) with some tests failing due
-to differences of how kqueue works compared to inotify.
 Windows support is there in theory due to ReadDirectoryChanges support by the
 notify-crate, however these flags are completely untested on Windows.
 

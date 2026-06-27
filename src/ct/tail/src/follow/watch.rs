@@ -204,16 +204,8 @@ impl Observer {
         platform. In addition to such event driven implementations, a polling implementation
         is also provided that should work on any platform.
         Linux / Android: inotify
-        macOS: FSEvents / kqueue
         Windows: ReadDirectoryChangesWatcher
-        FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
         Fallback: polling every n seconds
-
-        NOTE:
-        We force the use of kqueue with: ct_features=["macos_kqueue"].
-        On macOS only `kqueue` is suitable for our use case because `FSEvents`
-        waits for file close util it delivers a modify event. See:
-        https://github.com/notify-rs/notify/issues/240
         */
 
         let watcher: Box<dyn Watcher>;

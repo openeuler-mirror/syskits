@@ -22,7 +22,6 @@ fn fmt_char_width(c: char) -> usize {
     match (c as usize) < 0xA0 {
         true => {
             // 如果是 ASCII 码，调用时宽度正好为 1（包括控制字符）
-            // 调用控制字符的宽度为 1 与 OpenBSD fmt 一致
             1
         }
         false => {

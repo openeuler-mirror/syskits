@@ -9,24 +9,24 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use libc::S_IFIFO;
 #[cfg(unix)]
 use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
 use nix::sys::stat;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use ctcore::ct_pipes::{pipe, splice, splice_exact};
 
 // cSpell:ignore sysconf
@@ -222,7 +222,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn test_count_bytes_using_splice_regular_file() {
         let mut temp_file = tempfile().unwrap();
         writeln!(temp_file, "Hello, world!").unwrap();

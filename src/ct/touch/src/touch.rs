@@ -465,13 +465,9 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
 ///
 /// 在Windows上，使用GetFinalPathNameByHandleW尝试从stdout句柄获取路径。
 fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
-    #[cfg(all(unix, not(target_os = "android")))]
+    #[cfg(target_os = "linux")]
     {
         Ok(PathBuf::from("/dev/stdout"))
-    }
-    #[cfg(target_os = "android")]
-    {
-        Ok(PathBuf::from("/proc/self/fd/1"))
     }
     #[cfg(windows)]
     {

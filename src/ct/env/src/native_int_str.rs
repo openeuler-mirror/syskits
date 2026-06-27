@@ -15,13 +15,13 @@
 // 这阻止了在Windows上直接从OsStr借用。然而，如果使用得当，这种转换只需要在开始和结束时各做一次。
 
 use std::ffi::OsString;
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 use u8 as NativeIntCharU;
 #[cfg(target_os = "windows")]
 use u16 as NativeIntCharU;
@@ -48,7 +48,7 @@ impl<'a> EnvConvert<&'a str, Cow<'a, NativeIntStr>> for NCvt {
             Cow::Owned(f.encode_utf16().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             Cow::Borrowed(f.as_bytes())
         }
@@ -62,7 +62,7 @@ impl<'a> EnvConvert<&'a String, Cow<'a, NativeIntStr>> for NCvt {
             Cow::Owned(f.encode_utf16().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             Cow::Borrowed(f.as_bytes())
         }
@@ -76,7 +76,7 @@ impl<'a> EnvConvert<String, Cow<'a, NativeIntStr>> for NCvt {
             Cow::Owned(f.encode_utf16().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             Cow::Owned(f.into_bytes())
         }
@@ -113,7 +113,7 @@ impl<'a> EnvConvert<OsString, Cow<'a, NativeIntStr>> for NCvt {
             Cow::Owned(f.encode_wide().collect())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             // 在非 Windows 平台，直接将 OsString 转换为字节 Vec。
             Cow::Owned(f.into_vec())
@@ -169,7 +169,7 @@ pub(crate) fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntSt
     Cow::Owned(input.encode_wide().collect())
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub(crate) fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
     Cow::Borrowed(input.as_bytes())
 }
@@ -184,7 +184,7 @@ pub(crate) fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Co
     Cow::Owned(OsString::from_wide(&input))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub(crate) fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, OsStr> {
     match input {
         Cow::Borrowed(borrow) => Cow::Borrowed(OsStr::from_bytes(borrow)),
@@ -204,7 +204,7 @@ pub fn from_native_int_representation_owned(input: NativeIntString) -> OsString 
         OsString::from_wide(&input)
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         OsString::from_vec(input)
     }
@@ -223,7 +223,7 @@ pub fn get_single_native_int_value(c: &char) -> Option<NativeCharInt> {
     if s.len() == 1 { Some(buf[0]) } else { None }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub fn get_single_native_int_value(c: &char) -> Option<NativeCharInt> {
     let mut buf = [0u8, 0, 0, 0];
     let s = c.encode_utf8(&mut buf);
@@ -243,7 +243,7 @@ pub fn get_char_from_native_int(ni: NativeCharInt) -> Option<(char, NativeCharIn
         c_opt = char::decode_utf16([ni; 1]).next().unwrap().ok();
     };
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         c_opt = std::str::from_utf8(&[ni; 1])
             .ok()
@@ -484,7 +484,7 @@ mod tests {
             assert_eq!(converted.len(), s.len() * 2);
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             assert_eq!(converted.len(), s.len());
         }
@@ -500,7 +500,7 @@ mod tests {
             assert_eq!(converted.len(), s.len() * 2);
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             assert_eq!(converted.len(), s.len());
         }
@@ -516,7 +516,7 @@ mod tests {
             assert_eq!(converted.len(), s.into_vec().len() * 2);
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             assert_eq!(converted.len(), s.into_vec().len());
         }
@@ -532,7 +532,7 @@ mod tests {
             assert_eq!(converted.len(), s.into_vec().len() * 2);
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             assert_eq!(converted.len(), s.into_vec().len());
         }
@@ -551,7 +551,7 @@ mod tests {
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             assert_eq!(converted.len(), s.len());
             for c in converted {
@@ -573,7 +573,7 @@ mod tests {
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         {
             assert_eq!(converted.len(), s.len());
             for c in converted {

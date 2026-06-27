@@ -206,8 +206,6 @@ impl Who {
     #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> CTResult<()> {
         let run_level_chk = |_record: i16| {
-            #[cfg(not(target_os = "linux"))]
-            return false;
 
             #[cfg(target_os = "linux")]
             return _record == ct_utmpx::RUN_LVL;
@@ -365,14 +363,8 @@ impl Who {
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
-                #[cfg(all(
-                    not(target_os = "freebsd"),
-                    not(target_os = "android"),
-                    not(target_vendor = "apple")
-                ))]
+                #[cfg(target_os = "linux")]
                 let iwgrp = S_IWGRP;
-                #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
-                let iwgrp = S_IWGRP as u32;
                 let mesg = match meta.mode() & iwgrp == 0 {
                     true => '-',
                     false => '+',

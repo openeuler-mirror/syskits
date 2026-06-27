@@ -35,7 +35,7 @@ use ctcore::ct_fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
 };
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 use ctcore::ct_fsxattr;
 use ctcore::ct_update_control;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -833,8 +833,8 @@ fn mv_rename_with_fallback(
                 None
             };
 
-            // 仅在非 macOS 的 Unix 系统上，收集源文件的扩展属性。
-            #[cfg(all(unix, not(target_os = "macos")))]
+            // 仅在linux系统上，收集源文件的扩展属性。
+            #[cfg(target_os = "linux")]
             let fsxattrs = ct_fsxattr::ct_retrieve_xattrs(from)
                 .unwrap_or_else(|_| std::collections::HashMap::new());
 
@@ -849,8 +849,8 @@ fn mv_rename_with_fallback(
                 move_dir(from, to, &dir_copy_opts)
             };
 
-            // 在非 macOS 的 Unix 系统上，将收集到的扩展属性应用到目标文件。
-            #[cfg(all(unix, not(target_os = "macos")))]
+            // 在linux系统上，将收集到的扩展属性应用到目标文件。
+            #[cfg(target_os = "linux")]
             ct_fsxattr::ct_apply_xattrs(to, fsxattrs).unwrap();
 
             // 处理复制过程中可能出现的错误。
@@ -864,12 +864,12 @@ fn mv_rename_with_fallback(
                 };
             }
         } else {
-            // 对于非目录类型的文件，在非 macOS Unix 系统上复制文件并保留扩展属性，其他情况下只复制文件。
-            #[cfg(all(unix, not(target_os = "macos")))]
+            // 对于非目录类型的文件，在linux系统上复制文件并保留扩展属性，其他情况下只复制文件。
+            #[cfg(target_os = "linux")]
             fs::copy(from, to)
                 .and_then(|_| ct_fsxattr::ct_copy_xattrs(&from, &to))
                 .and_then(|_| fs::remove_file(from))?;
-            #[cfg(any(target_os = "macos", not(unix)))]
+            #[cfg(target_os = "windows")]
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
     }

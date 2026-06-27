@@ -2933,7 +2933,7 @@ fn display_uname(metadata: &Metadata, config: &LsConfig) -> String {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 fn cached_gid2grp(gid: u32) -> String {
     static GID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -2944,7 +2944,7 @@ fn cached_gid2grp(gid: u32) -> String {
         .clone()
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(target_os = "linux")]
 fn display_group(metadata: &Metadata, config: &LsConfig) -> String {
     match config.long.is_numeric_uid_gid {
         true => metadata.gid().to_string(),
@@ -2952,17 +2952,12 @@ fn display_group(metadata: &Metadata, config: &LsConfig) -> String {
     }
 }
 
-#[cfg(target_os = "redox")]
-fn display_group(metadata: &Metadata, _config: &LsConfig) -> String {
-    metadata.gid().to_string()
-}
-
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
 fn display_uname(_metadata: &Metadata, _config: &LsConfig) -> String {
     "somebody".to_string()
 }
 
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
 fn display_group(_metadata: &Metadata, _config: &LsConfig) -> String {
     "somegroup".to_string()
 }
@@ -3053,18 +3048,7 @@ enum SizeOrDeviceId {
 }
 
 fn display_len_or_rdev(mdata: &Metadata, config: &LsConfig) -> SizeOrDeviceId {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "android",
-        target_os = "ios",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "illumos",
-        target_os = "solaris"
-    ))]
+    #[cfg(target_os = "linux")]
     {
         let ft = mdata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
@@ -3290,7 +3274,7 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
     let absolute_path_buf = fs::canonicalize(&path.p_buf).unwrap_or_default();
     let absolute_path = absolute_path_buf.to_string_lossy();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     let unencoded_chars = "_-.:~/";
     #[cfg(target_os = "windows")]
     let unencoded_chars = "_-.:~/\\";

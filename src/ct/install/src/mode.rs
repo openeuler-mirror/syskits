@@ -26,7 +26,7 @@ pub fn install_parse(mode_string: &str, considering_dir: bool, umask: u32) -> Re
 ///
 /// Adapted from mkdir.rs.  Handles own error printing.
 ///
-#[cfg(any(unix, target_os = "redox"))]
+#[cfg(target_os = "linux")]
 pub fn install_chmod(path: &Path, mode: u32) -> Result<(), ()> {
     use ctcore::{ct_display::Quotable, ct_show_error};
     use std::os::unix::fs::PermissionsExt;

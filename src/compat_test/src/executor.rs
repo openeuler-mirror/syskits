@@ -142,6 +142,7 @@ impl CommandExecutor {
             &test_case.command,
             &test_case.args,
             &mut sandbox,
+            test_case.timeout,
         )?;
         // 执行验证命令
         if self.config.debug {
@@ -193,6 +194,7 @@ impl CommandExecutor {
             &test_case.command,
             &test_case.args,
             &mut coreutils_sandbox,
+            test_case.timeout,
         )?;
 
         // 执行验证命令
@@ -227,6 +229,7 @@ impl CommandExecutor {
         command: &str,
         args: &[String],
         sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
     ) -> Result<CommandResult> {
         let (cmd, args) = match self.config.mode {
             SyskitsMode::Single => {
@@ -253,7 +256,7 @@ impl CommandExecutor {
             SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
         };
 
-        sandbox.execute_command(&cmd, &args, Some(tstdin), true)
+        sandbox.execute_command(&cmd, &args, Some(tstdin), true, timeout)
     }
 
     /// 在沙箱中执行 GNU coreutils 命令
@@ -263,6 +266,7 @@ impl CommandExecutor {
         command: &str,
         args: &[String],
         sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
     ) -> Result<CommandResult> {
         // 确保设置正确的 PATH 环境变量
         if let Some(ref coreutils_path) = self.config.coreutils_path {
@@ -273,7 +277,7 @@ impl CommandExecutor {
             sandbox.add_env("PATH", &new_path);
         }
 
-        sandbox.execute_command(command, args, Some(tstdin), true)
+        sandbox.execute_command(command, args, Some(tstdin), true, timeout)
     }
 }
 

@@ -26,8 +26,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use tempfile::TempDir;
+
 
 /// 信号处理器
 /// 用于处理测试过程中的信号（如 SIGTERM、SIGINT 等）
@@ -453,7 +455,9 @@ impl IsolatedSandbox {
         args: &[String],
         stdin_content: Option<&str>,
         is_record_result: bool,
+        timeout: Option<u64>,
     ) -> Result<CommandResult> {
+
         self.debug_fmt(format_args!("Executing command: {} {:?}", cmd, args));
         self.debug_fmt(format_args!(
             "Current working directory: {:?}",
@@ -497,21 +501,62 @@ impl IsolatedSandbox {
             }
         }
 
+        let output;
+        let timeout_args;
         // 等待命令执行完成并获取输出
-        let output = match child.wait_with_output() {
-            Ok(output) => {
-                self.debug_fmt(format_args!("Command executed successfully"));
-                output
+        if let Some(timeout_secs) = timeout {
+            timeout_args = Duration::from_secs(timeout_secs);
+            let start = std::time::Instant::now();
+            
+            loop {
+                if start.elapsed() >= timeout_args {
+                    child.kill().unwrap();
+                    break;
+                }
+
+                match child.try_wait() {
+                    Ok(Some(_)) => break,
+                    Ok(None) => thread::sleep(Duration::from_millis(100)),
+                    Err(e) => {
+                        return Ok(CommandResult {
+                            stdout: String::new(),
+                            stderr: format!("Failed to wait for command: {}", e),
+                            exit_code: 1,
+                        });
+                    }
+                }
             }
-            Err(e) => {
-                self.debug_fmt(format_args!("Failed to wait for command: {}", e));
-                return Ok(CommandResult {
-                    stdout: String::new(),
-                    stderr: format!("Failed to wait for command: {}", e),
-                    exit_code: 1,
-                });
-            }
-        };
+
+            output = match child.wait_with_output() {
+                Ok(output) => {
+                    self.debug_fmt(format_args!("Command executed successfully"));
+                    output
+                }
+                Err(e) => {
+                    self.debug_fmt(format_args!("Failed to wait for command: {}", e));
+                    return Ok(CommandResult {
+                        stdout: String::new(),
+                        stderr: format!("Failed to wait for command: {}", e),
+                        exit_code: 1,
+                    });
+                }
+            };
+        } else {
+            output = match child.wait_with_output() {
+                Ok(output) => {
+                    self.debug_fmt(format_args!("Command executed successfully"));
+                    output
+                }
+                Err(e) => {
+                    self.debug_fmt(format_args!("Failed to wait for command: {}", e));
+                    return Ok(CommandResult {
+                        stdout: String::new(),
+                        stderr: format!("Failed to wait for command: {}", e),
+                        exit_code: 1,
+                    });
+                }
+            };
+        }
 
         let result = CommandResult::from(output);
 
@@ -633,7 +678,7 @@ mod tests {
     #[test]
     fn test_execute_command_simple() -> Result<()> {
         let mut sandbox = IsolatedSandbox::new(false)?;
-        let result = sandbox.execute_command("echo", &["hello".to_string()], None, true)?;
+        let result = sandbox.execute_command("echo", &["hello".to_string()], None, true, None)?;
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout.trim(), "hello");
         assert_eq!(result.stderr, "");
@@ -643,7 +688,7 @@ mod tests {
     #[test]
     fn test_execute_command_with_stdin() -> Result<()> {
         let mut sandbox = IsolatedSandbox::new(false)?;
-        let result = sandbox.execute_command("cat", &[], Some("test input"), true)?;
+        let result = sandbox.execute_command("cat", &[], Some("test input"), true, None)?;
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "test input");
         assert_eq!(result.stderr, "");
@@ -653,7 +698,7 @@ mod tests {
     #[test]
     fn test_execute_command_not_found() -> Result<()> {
         let mut sandbox = IsolatedSandbox::new(false)?;
-        let result = sandbox.execute_command("nonexistent_command", &[], None, true)?;
+        let result = sandbox.execute_command("nonexistent_command", &[], None, true, None)?;
         assert_eq!(result.exit_code, 127);
         assert!(result.stderr.contains("Failed to execute command"));
         Ok(())
@@ -762,6 +807,7 @@ mod tests {
             &[test_file.to_str().unwrap().to_string()],
             None,
             true,
+            None,
         )?;
         assert_eq!(result.exit_code, 0);
         assert!(result.stdout.contains('\0'));
@@ -781,6 +827,7 @@ mod tests {
             ],
             None,
             true,
+            None,
         )?;
 
         assert_eq!(result.exit_code, 0);
@@ -801,6 +848,7 @@ mod tests {
             &["-c".to_string(), "while true; do : ; done".to_string()],
             None,
             true,
+            None,
         )?;
 
         // 命令应该因为超时而被终止

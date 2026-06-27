@@ -34,7 +34,7 @@ registry = "sparse+https://rsproxy.cn/index/"\n\
 [registries.rsproxy]\n\
 index = "https://rsproxy.cn/crates.io-index"\n\
 [net]\n\
-git-fetch-with-cli = true' > /root/.cargo/config
+git-fetch-with-cli = true' > /root/.cargo/config.toml
 
 # 验证安装
 RUN rustup --version && cargo --version

@@ -449,7 +449,7 @@ fn mv_handle_two_paths(
             MvOverwriteMode::NoClobber => return Ok(()),
             MvOverwriteMode::Interactive => {
                 if !ct_prompt_yes!("overwrite {}? ", target_path.quote()) {
-                    return Ok(());
+                    return Err(io::Error::new(io::ErrorKind::Other, "").into());
                 }
             }
             MvOverwriteMode::Force => {}
@@ -673,16 +673,17 @@ fn mv_rename(
             return Ok(());
         }
 
-        // 根据覆盖模式处理目标文件已存在的情况66
+        // 根据覆盖模式处理目标文件已存在的情况
         match options.overwrite {
             MvOverwriteMode::NoClobber => {
-                // 如果设置为不覆盖，不操作直接返回
-                return Ok(());
+                // 如果设置为不覆盖,返回错误码
+                let err_msg = format!("not replacing {}", to_path.quote());
+                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
             }
             MvOverwriteMode::Interactive => {
                 // 如果设置为交互式覆盖，询问用户是否覆盖
                 if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
-                    return Ok(());
+                    return Err(io::Error::new(io::ErrorKind::Other, ""));
                 }
             }
             MvOverwriteMode::Force => {

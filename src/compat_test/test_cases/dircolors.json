@@ -1,0 +1,150 @@
+{
+    "tests": [
+        {
+          "tstdin": "",
+          "command": "dircolors",
+          "description": "基本功能测试",
+          "setup_commands": [
+            ""
+          ],
+          "args": [],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "ignore_fields": {
+              "ignore_stdout": true
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+          
+        },
+        {
+            "tstdin": "",
+            "command": "dircolors",
+            "description": "测试无效文件",
+            "setup_commands": [
+              "echo 'this is a test file' > test.txt"
+            ],
+            "args": ["-b", "test.txt"],
+            "expectation": {
+              "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+              },
+              "verifications": [
+                {
+                  "command": "",
+                  "expected_exit": 0,
+                  "expected_stdout": ""
+                }
+              ]
+            },
+            "cleanup_commands": [
+              ""
+            ]
+        },
+        {
+          "tstdin": "",
+          "command": "dircolors",
+          "description": "Bourne shell 命令",
+          "setup_commands": [
+            ""
+          ],
+          "args": ["-b"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "ignore_fields": {
+              "ignore_stdout": true
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+          
+        },
+        {
+          "tstdin": "",
+          "command": "dircolors",
+          "description": "C shell 命令",
+          "setup_commands": [
+            ""
+          ],
+          "args": ["-c"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "ignore_fields": {
+              "ignore_stdout": true
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+          
+        },
+        {
+          "tstdin": "",
+          "command": "dircolors",
+          "description": "输出默认的色彩设置",
+          "setup_commands": [
+            ""
+          ],
+          "args": ["-p"],
+          "expectation": {
+            "execution": {
+              "exit_code": 0,
+              "stdout": "",
+              "stderr": ""
+            },
+            "ignore_fields": {
+              "ignore_stdout": true
+            },
+            "verifications": [
+              {
+                "command": "",
+                "expected_exit": 0,
+                "expected_stdout": ""
+              }
+            ]
+          },
+          "cleanup_commands": [
+            ""
+          ]
+          
+        }
+    ]
+}

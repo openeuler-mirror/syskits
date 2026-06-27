@@ -665,6 +665,24 @@ fn df_args_init() -> Vec<Arg> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Df::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "df");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("df"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("df"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     mod tests_ct_app {
         use crate::{

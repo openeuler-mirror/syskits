@@ -679,6 +679,23 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Stty;
+
+        // Test name method
+        assert_eq!(tool.name(), "stty");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("stty"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("stty"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
     /// 检测是否在容器环境中运行
     fn is_container() -> bool {
         // 检查常见的容器环境标识

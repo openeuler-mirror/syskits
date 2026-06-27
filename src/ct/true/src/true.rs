@@ -111,6 +111,25 @@ pub fn ct_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = True::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "true");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("true"));
+
+        // Test execute method (should always succeed)
+        let args: Vec<OsString> = vec![OsString::from("true"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_ok());
+    }
 
     mod tests_true_main {
         use crate::true_main;

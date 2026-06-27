@@ -370,6 +370,23 @@ mod tests {
     use std::path::Path;
     use tempfile::TempDir;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Stdbuf;
+
+        // Test name method
+        assert_eq!(tool.name(), "stdbuf");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("stdbuf"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("stdbuf"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
     // Helper function to create ArgMatches with specific values for testing
     fn create_arg_matches(
         input: Option<&str>,

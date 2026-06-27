@@ -243,6 +243,27 @@ impl Tool for Nohup {
 
 #[cfg(test)]
 mod tests {
+    mod tests_tool_implementation {
+        use crate::Nohup;
+        use ctcore::Tool;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_tool_implementation() {
+            let tool = Nohup::default();
+
+            // 测试 name 方法
+            assert_eq!(tool.name(), "nohup");
+
+            // 测试 command 方法
+            let command = tool.command();
+            assert!(command.get_name().contains("nohup"));
+
+            // 测试 execute 方法
+            let args = vec![OsString::from("nohup"), OsString::from("--help")];
+            assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+        }
+    }
 
     mod tests_echo_main {
         use crate::nohup_main;

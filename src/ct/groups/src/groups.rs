@@ -226,6 +226,27 @@ fn groups_main(args: impl ctcore::Args) -> CTResult<Vec<GroupInfo>> {
 
 #[cfg(test)]
 mod tests {
+    mod tests_tool_implementation {
+        use crate::Groups;
+        use ctcore::Tool;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_tool_implementation() {
+            let tool = Groups::default();
+
+            // 测试 name 方法
+            assert_eq!(tool.name(), "groups");
+
+            // 测试 command 方法
+            let command = tool.command();
+            assert!(command.get_name().contains("groups"));
+
+            // 测试 execute 方法
+            let args = vec![OsString::from("groups"), OsString::from("--help")];
+            assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+        }
+    }
 
     mod tests_groups_main {
         use crate::groups_main;

@@ -128,6 +128,24 @@ impl Tool for Printenv {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Printenv::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "printenv");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("printenv"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("printenv"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod tests_printenv_main {
         use crate::printenv_main;

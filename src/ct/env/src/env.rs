@@ -643,7 +643,24 @@ pub fn env_main(args: impl ctcore::Args) -> CTResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Env::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "env");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("env"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("env"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
     mod tests_env_main {
         use crate::env_main;
 

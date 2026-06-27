@@ -376,7 +376,25 @@ impl Tool for Kill {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::io::Cursor;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Kill::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "kill");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("kill"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("kill"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     #[cfg(test)]
     mod kill_parse_pids_tests {
         use super::*;

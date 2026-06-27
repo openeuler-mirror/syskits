@@ -81,9 +81,24 @@ fn hostid() {
 
 #[cfg(test)]
 mod tests {
-    use clap::error::ErrorKind;
-
     use super::*;
+    use clap::error::ErrorKind;
+    use std::ffi::OsString;
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Hostid::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "hostid");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("hostid"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("hostid")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     #[cfg(test)]
     mod tests_ct_main {

@@ -410,6 +410,23 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
 
+    // 新增：测试 Tool trait 的基本实现
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Timeout::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "timeout");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("timeout"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("timeout"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     mod timeout_flags_tests {
         use super::*;
 

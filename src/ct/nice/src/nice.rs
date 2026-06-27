@@ -294,6 +294,24 @@ impl Tool for Nice {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Nice::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "nice");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("nice"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("nice"), OsString::from("ls")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod tests_nice_main {
         use crate::nice_main;

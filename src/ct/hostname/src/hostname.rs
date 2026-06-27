@@ -220,6 +220,25 @@ impl Tool for Hostname {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Hostname::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "hostname");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("hostname"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("hostname"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     mod tests_ct_app {
         use crate::{OPT_DOMAIN, OPT_FQDN, OPT_HOST, OPT_IP_ADDRESS, OPT_SHORT, ct_app};
         use clap::error::ErrorKind;

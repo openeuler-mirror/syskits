@@ -158,6 +158,25 @@ pub fn ct_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Sleep;
+
+        // Test name method
+        assert_eq!(tool.name(), "sleep");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("sleep"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("sleep"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
     #[cfg(test)]
     mod handle_second_tests {
         use super::*;

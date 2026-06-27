@@ -597,6 +597,22 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Runcon;
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "runcon");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("runcon"));
+
+        // 测试 execute 方法 (使用 --help 应该成功)
+        let args = vec![OsString::from("runcon"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_ok());
+    }
+
     mod command_line_tests {
         use super::*;
 

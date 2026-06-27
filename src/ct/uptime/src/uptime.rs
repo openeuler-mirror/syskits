@@ -135,6 +135,24 @@ impl Tool for Uptime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::Tool;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Uptime::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "uptime");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("uptime"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("uptime")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     #[cfg(test)]
     mod uptime_print_uptime_tests {

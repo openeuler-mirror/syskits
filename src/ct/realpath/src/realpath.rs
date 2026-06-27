@@ -426,6 +426,24 @@ mod tests {
     use std::ffi::OsString;
     use std::fs::File;
     use tempfile::Builder;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Realpath::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "realpath");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("realpath"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("realpath"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err()); // realpath命令需要参数，所以不带参数应该返回错误
+    }
+
     mod realpath_flags_tests {
         use super::*;
 

@@ -656,4 +656,26 @@ mod tests {
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
         }
     }
+
+    mod tests_tool_implementation {
+        use crate::Pathchk;
+        use ctcore::Tool;
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_tool_implementation() {
+            let tool = Pathchk::default();
+
+            // 测试 name 方法
+            assert_eq!(tool.name(), "pathchk");
+
+            // 测试 command 方法
+            let command = tool.command();
+            assert!(command.get_name().contains("pathchk"));
+
+            // 测试 execute 方法
+            let args = vec![OsString::from("pathchk"), OsString::from("--help")];
+            assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+        }
+    }
 }

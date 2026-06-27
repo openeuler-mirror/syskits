@@ -127,6 +127,28 @@ pub fn ct_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Dirname::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "dirname");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("dirname"));
+
+        // Test execute method - should fail without arguments
+        let args = vec![OsString::from("dirname"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+
+        // Test execute method with valid argument
+        let args = vec![OsString::from("dirname"), OsString::from("/path/to/file")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod tests_dirname_main {
         use crate::dirname_main;

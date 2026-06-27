@@ -137,6 +137,22 @@ mod test {
     use clap::error::ErrorKind;
     use std::io::{self, Write};
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Basenc::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "basenc");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("basenc"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("basenc"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err()); // basenc needs an encoding flag to be valid
+    }
+
     // 创建文件并写入内容
     fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
         let mut file = File::create(filename)?;

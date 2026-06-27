@@ -20,6 +20,7 @@ rust-i18n = { workspace = true }
 clap = { workspace = true }
 libc = { workspace = true }
 ctcore = { workspace = true }
+selinux = { workspace = true }
 
 [[bin]]
 name = "mkfifo"

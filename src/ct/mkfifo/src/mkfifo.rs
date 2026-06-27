@@ -17,6 +17,7 @@
 
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
+use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
@@ -24,8 +25,9 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
 use libc::mkfifo;
-use std::ffi::CString;
-use std::ffi::OsString;
+use selinux::SecurityContext;
+use std::ffi::{CString, OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 // 定义了用于创建FIFO（命名管道）的命令行工具的主逻辑。
@@ -51,7 +53,9 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 检查不支持的选项
     if args_match.contains_id(opt_flags::CONTEXT) {
-        return Err(CtSimpleError::new(1, "--context is not implemented"));
+        let context = args_match.get_one::<OsString>(opt_flags::CONTEXT);
+        set_security_context(context)
+            .map_err(|e| CtSimpleError::new(1, e))?;
     }
     if args_match.get_flag(opt_flags::SE_LINUX_SECURITY_CONTEXT) {
         return Err(CtSimpleError::new(1, "-Z is not implemented"));
@@ -89,6 +93,28 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     Ok(())
 }
 
+fn set_security_context(context: Option<&OsString>) -> Result<(), String> {
+    match context {
+        Some(ctx) => {
+            let c_context = os_str_to_c_string(ctx);
+            // 如果提供了具体的上下文，使用它
+            SecurityContext::from_c_str(&c_context, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| format!("Failed to set security context: {}", e))
+        }
+        None => {
+            // 使用空字符串来触发默认安全上下文
+            let empty_ctx = CString::new("").unwrap();
+            SecurityContext::from_c_str(&empty_ctx, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| format!("Failed to set default security context: {}", e))
+        }
+    }
+}
+pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
+    CString::new(os_str.as_bytes())
+        .expect("Failed to convert OsStr to CString")
+}
 // 构建命令行解析器
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
@@ -119,6 +145,8 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::CONTEXT)
             .long(opt_flags::CONTEXT)
             .value_name("CTX")
+            .value_parser(ValueParser::os_string())
+            .num_args(0..=1)
             .help(
                 "like -Z, or if CTX is specified then set the SELinux \
                     or SMACK security context to CTX",

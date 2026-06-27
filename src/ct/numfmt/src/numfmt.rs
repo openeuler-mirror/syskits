@@ -480,16 +480,32 @@ impl Tool for Numfmt {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufReader, Error, ErrorKind, Read};
-
+    use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
-
+    use std::ffi::OsString;
+    use std::io::{BufReader, Error, ErrorKind, Read};
     // use super::*;
     use super::{
-        CtRange, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
+        CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
         NumfmtTransformOptions, NumfmtUnit, numfmt_handle_args, numfmt_handle_buffer,
         numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Numfmt::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "numfmt");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("numfmt"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("numfmt"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     struct MockBuffer {}
 

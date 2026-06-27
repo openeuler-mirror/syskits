@@ -423,7 +423,25 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::fs::File;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Truncate;
+
+        // Test name method
+        assert_eq!(tool.name(), "truncate");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("truncate"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("truncate"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     #[cfg(test)]
     mod is_modifier_tests {

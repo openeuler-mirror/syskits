@@ -1343,8 +1343,24 @@ fn format_error_message(pase_error: &ParseSizeError, s: &str, opt: &str) -> Stri
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Du::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "du");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("du"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("du")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod test_ct_app {
         use super::*;

@@ -166,6 +166,34 @@ impl Tool for Expr {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Expr::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "expr");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("expr"));
+
+        // Test execute method - should return error without arguments
+        let args = vec![OsString::from("expr")];
+        assert!(tool.execute(&args).is_err());
+
+        // Test execute with valid arguments
+        let args = vec![
+            OsString::from("expr"),
+            OsString::from("5"),
+            OsString::from("+"),
+            OsString::from("3"),
+        ];
+        assert!(tool.execute(&args).is_ok());
+    }
+
     mod tests_expr_main {
         use crate::expr_main;
 

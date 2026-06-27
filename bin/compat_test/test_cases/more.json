@@ -1,0 +1,252 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "基本功能测试 - 显示文件内容",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file1"
+            ],
+            "args": ["test_file1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file1"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "设置每页显示行数",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["-2", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "从指定行开始显示",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["+3", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "显示多个文件",
+            "setup_commands": [
+                "echo 'file1 content' > file1",
+                "echo 'file2 content' > file2"
+            ],
+            "args": ["file1", "file2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1 content\n\n::::::::::::::\nfile2\n::::::::::::::\nfile2 content",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1 file2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "不显示提示信息",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3' > test_file"
+            ],
+            "args": ["-d", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "不显示空行",
+            "setup_commands": [
+                "echo -e 'line1\n\nline2\n\nline3' > test_file"
+            ],
+            "args": ["-s", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "显示行号",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3' > test_file"
+            ],
+            "args": ["-n", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "      1  line1\n      2  line2\n      3  line3",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "计算逻辑行而不是屏幕行",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["-f", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "在换页符后不暂停",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["-l", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "不滚动，显示文本并清理行尾",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["-c", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "不滚动，清理屏幕并显示文本",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["-p", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "不显示下划线和粗体",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["-u", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "more",
+            "description": "从匹配模式的行开始显示",
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
+            ],
+            "args": ["+/line3", "test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line3\nline4\nline5",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        }
+    ]
+} 

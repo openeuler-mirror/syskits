@@ -13,12 +13,13 @@
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
-use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use ctcore::{Tool, ct_format_usage, ct_help_about, ct_help_usage};
 
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
+use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
@@ -27,6 +28,9 @@ static CHOWN_ABOUT: &str = ct_help_about!("chown.md");
 const CHOWN_USAGE: &str = ct_help_usage!("chown.md");
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    chown_main(args)
+}
+pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
     chown_base(
         ct_app(),
         args,
@@ -308,6 +312,22 @@ fn chown_parse_spec(spec_str: &str, sep: char) -> CTResult<(Option<u32>, Option<
 
     // 返回解析结果
     Ok((uid_value, gid_value))
+}
+
+#[derive(Default)]
+pub struct Chown;
+impl Tool for Chown {
+    fn name(&self) -> &'static str {
+        "chown"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        chown_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]
@@ -684,86 +704,6 @@ mod test {
         assert_eq!(result, 1);
     }
 
-    // #[test]
-    // fn test_chgrp_ctmain() {
-    //     // 创建文件并写入内容
-    //     fn chgrp_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
-    //         let mut file = File::create(filename)?;
-    //         file.write_all(content.as_bytes())?;
-    //         file.sync_all()?;
-    //         Ok(())
-    //     }
-    //
-    //     // 删除指定文件
-    //     fn chgrp_delete_file(filename: &str) -> io::Result<()> {
-    //         fs::remove_file(filename)?;
-    //         Ok(())
-    //     }
-    //
-    //     let filename = "test_chcon_h_ctmain.txt";
-    //
-    //     let content = "test_chcon_h_ctmain";
-    //
-    //     // 创建文件并写入内容
-    //     match chgrp_create_file_with_content(filename, content) {
-    //         Ok(_) => println!("File '{}' created successfully.", filename),
-    //         Err(e) => eprintln!("Error creating file: {}", e),
-    //     }
-    //
-    //     let args = vec![
-    //         ctcore::util_name(),
-    //         "--reference=test_chcon_h_ctmain.txt",
-    //         filename,
-    //     ];
-    //
-    //     let result = ctmain(args.iter().map(|s| OsString::from(s)));
-    //
-    //     // 删除文件
-    //     match chgrp_delete_file(filename) {
-    //         Ok(_) => println!("File '{}' deleted successfully.", filename),
-    //         Err(e) => eprintln!("Error deleting file: {}", e),
-    //     }
-    //
-    //     assert_eq!(result, 0);
-    // }
-    //
-    // #[test]
-    // fn test_chgrp_r_t_ctmain() {
-    //     fn chgrp_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
-    //         let mut file = File::create(filename)?;
-    //         file.write_all(content.as_bytes())?;
-    //         file.sync_all()?;
-    //         Ok(())
-    //     }
-    //
-    //     // 删除指定文件
-    //     fn chgrp_delete_file(filename: &str) -> io::Result<()> {
-    //         fs::remove_file(filename)?;
-    //         Ok(())
-    //     }
-    //
-    //     let filename = "test_chcon_h_ctmain.txt";
-    //
-    //     let content = "test_chcon_h_ctmain";
-    //
-    //     // 创建文件并写入内容
-    //     match chgrp_create_file_with_content(filename, content) {
-    //         Ok(_) => println!("File '{}' created successfully.", filename),
-    //         Err(e) => eprintln!("Error creating file: {}", e),
-    //     }
-    //
-    //     let args = vec![ctcore::util_name(), "-R", "root", filename];
-    //
-    //     let result = ctmain(args.iter().map(|s| OsString::from(s)));
-    //
-    //     // 删除文件
-    //     match chgrp_delete_file(filename) {
-    //         Ok(_) => println!("File '{}' deleted successfully.", filename),
-    //         Err(e) => eprintln!("Error deleting file: {}", e),
-    //     }
-    //
-    //     assert_eq!(result, 1);
-    // }
     #[test]
     fn test_chgrp_r_ctmain() {
         let dir_path = "test_chgrp_r_ctmain";

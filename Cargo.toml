@@ -306,6 +306,7 @@ phf = { workspace = true }
 selinux = { workspace = true, optional = true }
 textwrap = { workspace = true }
 zip = { workspace = true, optional = true }
+tool_derive = { path = "src/tool_derive" }
 
 cthelp_parser = { optional = true, version = ">=0.0.1", path = "src/cthelp_parser" }
 

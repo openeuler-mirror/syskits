@@ -480,7 +480,7 @@ impl IsolatedSandbox {
                 });
             }
         };
-    
+
         // 启动命令
         if let Some(content) = stdin_content {
             if !content.is_empty() {

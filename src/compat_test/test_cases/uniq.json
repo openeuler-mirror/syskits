@@ -1,0 +1,273 @@
+{
+    "tests": [
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "基本功能测试 - 删除相邻的重复行",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nc\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "计数重复行",
+            "args": ["-c"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^\\s*2 a\\n\\s*1 b\\n\\s*2 c\\n\\s*1 d\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "只显示重复行",
+            "args": ["-d"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "只显示不重复的行",
+            "args": ["-u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "b\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "aaa\naab\naac\n",
+            "command": "uniq",
+            "description": "跳过前N个字符比较",
+            "args": ["-s", "2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "aaa\naab\naac\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "aaa\naab\naac\n",
+            "command": "uniq",
+            "description": "只比较前N个字符",
+            "args": ["-w", "2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "aaa\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "A\na\nB\nb\n",
+            "command": "uniq",
+            "description": "忽略大小写",
+            "args": ["-i"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "A\nB\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "从文件读取",
+            "setup_commands": [
+                "echo -e 'a\\na\\nb\\nc\\nc\\nd' > input.txt"
+            ],
+            "args": ["input.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nc\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "输出到文件",
+            "setup_commands": [
+                "echo -e 'a\\na\\nb\\nc\\nc\\nd' > input.txt"
+            ],
+            "args": ["input.txt", "output.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat output.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "a\nb\nc\nd\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input.txt output.txt"
+            ]
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "使用 -D 选项打印所有重复行",
+            "args": ["-D"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\na\nc\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "使用 --all-repeated=prepend 选项",
+            "args": ["--all-repeated=prepend"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\na\na\n\nc\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "使用 --all-repeated=separate 选项",
+            "args": ["--all-repeated=separate"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\na\n\nc\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "1 a\n1 b\n2 c\n2 d\n",
+            "command": "uniq",
+            "description": "使用 -f 选项跳过前N个域",
+            "args": ["-f", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 a\n2 c\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "使用 --group=prepend 选项",
+            "args": ["--group=prepend"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\na\na\nb\n\nc\nc\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "使用 --group=append 选项",
+            "args": ["--group=append"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\na\n\nb\nc\nc\n\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nc\nc\nd\n",
+            "command": "uniq",
+            "description": "使用 --group=both 选项",
+            "args": ["--group=both"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\na\na\n\nb\n\nc\nc\n\nd\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\\0a\\0b\\0c\\0c\\0d\\0",
+            "command": "uniq",
+            "description": "使用 -z 选项以NUL字符作为行尾分隔符",
+            "args": ["-z"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\\0b\\0c\\0d\\0",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\\0a\\0b\\0c\\0c\\0d\\0",
+            "command": "uniq",
+            "description": "组合使用 -z 和 -D 选项",
+            "args": ["-z", "-D"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

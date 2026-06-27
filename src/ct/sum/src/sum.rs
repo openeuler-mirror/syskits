@@ -17,9 +17,11 @@
 //!    计算文件的大小，并以块的形式报告。块的大小可以是 512 字节（System V 算法）或 1024 字节（BSD 算法）。
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, stdin};
 use std::path::Path;
@@ -105,6 +107,22 @@ mod sum_flags {
     pub static SUM_FILE: &str = "file";
     pub static SUM_BSD_COMPATIBLE: &str = "r";
     pub static SUM_SYSTEM_V_COMPATIBLE: &str = "sysv";
+}
+
+#[derive(Default)]
+pub struct Sum;
+impl Tool for Sum {
+    fn name(&self) -> &'static str {
+        "sum"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        sum_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

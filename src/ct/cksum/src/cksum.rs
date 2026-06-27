@@ -12,6 +12,7 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{Arg, ArgAction, Command, crate_version, value_parser};
+use ctcore::Tool;
 use ctcore::{
     ct_encoding,
     ct_error::{CTError, CTResult, CtSimpleError, FromIo},
@@ -25,6 +26,7 @@ use hex::decode;
 use hex::encode;
 use std::error::Error;
 use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write, stdin, stdout};
@@ -167,7 +169,7 @@ struct CksumOptions {
  *   计算文件或标准输入的校验和。
  *
  * @param mut options 包含校验和计算选项的结构体。
- * @param files 一个迭代器，提供要计算校验和的文件名或“-”表示标准输入。
+ * @param files 一个迭代器，提供要计算校验和的文件名或"-"表示标准输入。
  * @return CTResult<()>，成功时返回Ok(())，错误时返回Err(Box<CkSumError>)。
  */
 fn cksum<'a, I>(mut cksum_opts: CksumOptions, cksum_files: I) -> CTResult<()>
@@ -189,7 +191,7 @@ where
         let file_buffer;
         let not_file = filename == OsStr::new("-");
 
-        // 根据文件名是否为“-”，或者是否为目录，选择不同的读取方式
+        // 根据文件名是否为"-"，或者是否为目录，选择不同的读取方式
         let mut file = BufReader::new(if not_file {
             stdin_buffer = stdin();
             Box::new(stdin_buffer) as Box<dyn Read>
@@ -336,6 +338,22 @@ mod opt_flags {
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
     pub const BASE64: &str = "base64";
+}
+
+#[derive(Default)]
+pub struct Cksum;
+impl Tool for Cksum {
+    fn name(&self) -> &'static str {
+        "cksum"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        cksum_main(args.iter().cloned()).map(|_| ())
+    }
 }
 
 #[ctcore::main]

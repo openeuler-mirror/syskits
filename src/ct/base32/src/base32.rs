@@ -10,6 +10,7 @@
  *
  */
 
+use std::ffi::OsString;
 use std::io::Read;
 use std::io::stdin;
 
@@ -21,13 +22,29 @@ use clap::Command;
 use clap::crate_version;
 
 use ctcore::{
-    ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,
+    Tool, ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,
 };
 
 pub mod base_common;
 
 const BASE32_ABOUT: &str = ct_help_about!("base32.md");
 const BASE32_USAGE: &str = ct_help_usage!("base32.md");
+
+#[derive(Default)]
+pub struct Base32;
+impl Tool for Base32 {
+    fn name(&self) -> &'static str {
+        "base32"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        base32_main(args.iter().cloned()).map(|_| ())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
@@ -100,7 +117,6 @@ fn base32_args_init() -> Vec<Arg> {
 mod test {
     use super::*;
     use clap::error::ErrorKind;
-    use std::ffi::OsString;
     use std::fs;
     use std::fs::File;
     use std::io::{self, Write};

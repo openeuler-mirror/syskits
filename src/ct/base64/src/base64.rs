@@ -20,11 +20,29 @@ use clap::Command;
 use clap::crate_version;
 
 use ctcore::{
-    ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,
+    Tool, ct_encoding::Format, ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage,
 };
+
+use std::ffi::OsString;
 
 const BASE64_ABOUT: &str = ct_help_about!("base64.md");
 const BASE64_USAGE: &str = ct_help_usage!("base64.md");
+
+#[derive(Default)]
+pub struct Base64;
+impl Tool for Base64 {
+    fn name(&self) -> &'static str {
+        "base64"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        base64_main(args.iter().cloned()).map(|_| ())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {

@@ -1,0 +1,334 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "基本功能测试 - 删除单个文件",
+            "setup_commands": [
+                "touch test_file"
+            ],
+            "args": ["test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e test_file && echo 'removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "删除多个文件",
+            "setup_commands": [
+                "touch file1 file2 file3"
+            ],
+            "args": ["file1", "file2", "file3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e file1 && test ! -e file2 && test ! -e file3 && echo 'all removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "all removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "递归删除目录",
+            "setup_commands": [
+                "mkdir -p dir/subdir",
+                "touch dir/file1 dir/subdir/file2"
+            ],
+            "args": ["-r", "dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e dir && echo 'removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "强制删除",
+            "setup_commands": [
+                "touch readonly_file",
+                "chmod 400 readonly_file"
+            ],
+            "args": ["-f", "readonly_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e readonly_file && echo 'removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "y\n",
+            "command": "rm",
+            "description": "交互式删除 - 确认",
+            "setup_commands": [
+                "touch interactive_file"
+            ],
+            "args": ["-i", "interactive_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*remove.*interactive_file.*"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e interactive_file && echo 'removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "n\n",
+            "command": "rm",
+            "description": "交互式删除 - 取消",
+            "setup_commands": [
+                "touch interactive_file"
+            ],
+            "args": ["-i", "interactive_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*remove.*interactive_file.*"
+                },
+                "verifications": [
+                    {
+                        "command": "test -f interactive_file && echo 'not removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "not removed"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f interactive_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "删除空目录",
+            "setup_commands": [
+                "mkdir empty_dir"
+            ],
+            "args": ["-d", "empty_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e empty_dir && echo 'removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "删除不存在的文件",
+            "args": ["nonexistent_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ".*cannot remove.*No such file or directory.*"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "verbose模式",
+            "setup_commands": [
+                "touch verbose_file"
+            ],
+            "args": ["-v", "verbose_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*removed.*verbose_file.*",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "y\n",
+            "command": "rm",
+            "description": "使用 -I 选项在删除多个文件时提示一次",
+            "setup_commands": [
+                "touch file1 file2 file3 file4"
+            ],
+            "args": ["-I", "file1", "file2", "file3", "file4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*remove 4 arguments.*"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e file1 && test ! -e file2 && test ! -e file3 && test ! -e file4 && echo 'all removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "all removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "n\n",
+            "command": "rm",
+            "description": "使用 -I 选项在递归删除时提示一次",
+            "setup_commands": [
+                "mkdir -p dir/subdir",
+                "touch dir/file1 dir/subdir/file2"
+            ],
+            "args": ["-rI", "dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*remove.*dir.*"
+                },
+                "verifications": [
+                    {
+                        "command": "test -d dir && echo 'not removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "not removed"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf dir"
+            ]
+        },
+        {
+            "tstdin": "y\n",
+            "command": "rm",
+            "description": "使用 --interactive=once 选项（等效于 -I）",
+            "setup_commands": [
+                "touch file1 file2 file3 file4"
+            ],
+            "args": ["--interactive=once", "file1", "file2", "file3", "file4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*remove 4 arguments.*"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e file1 && test ! -e file2 && test ! -e file3 && test ! -e file4 && echo 'all removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "all removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "y\ny\ny\ny\n",
+            "command": "rm",
+            "description": "使用 --interactive=always 选项（等效于 -i）",
+            "setup_commands": [
+                "touch file1 file2 file3 file4"
+            ],
+            "args": ["--interactive=always", "file1", "file2", "file3", "file4"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ".*remove.*file1.*remove.*file2.*remove.*file3.*remove.*file4.*"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e file1 && test ! -e file2 && test ! -e file3 && test ! -e file4 && echo 'all removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "all removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rm",
+            "description": "使用 --one-file-system 选项",
+            "setup_commands": [
+                "mkdir -p dir/subdir",
+                "touch dir/file1 dir/subdir/file2"
+            ],
+            "args": ["-r", "--one-file-system", "dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e dir && echo 'removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

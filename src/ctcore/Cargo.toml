@@ -23,13 +23,11 @@ dns-lookup = { version = "2.0.4", optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2"
 glob = { workspace = true }
-# * optional
-itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
-  "formatting",
-  "local-offset",
-  "macros",
+    "formatting",
+    "local-offset",
+    "macros",
 ] }
 # * "problem" dependencies (pinned)
 data-encoding = { version = "2.5", optional = true }
@@ -63,35 +61,35 @@ tempfile = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
-  "Win32_Storage_FileSystem",
-  "Win32_Foundation",
-  "Win32_System_WindowsProgramming",
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+    "Win32_System_WindowsProgramming",
 ] }
 
 [features]
 default = ["backup-control",
-  "colors",
-  "encoding",
-  "entries",
-  "fs",
-  "fsext",
-  "fsxattr",
-  "lines",
-  "format",
-  "mode",
-  "perms",
-  "pipes",
-  "process",
-  "quoting-style",
-  "ranges",
-  "ringbuffer",
-  "signals",
-  "sum",
-  "update-control",
-  "utf8",
-  "utmpx",
-  "version-cmp",
-  "wide",
+    "colors",
+    "encoding",
+    "entries",
+    "fs",
+    "fsext",
+    "fsxattr",
+    "lines",
+    "format",
+    "mode",
+    "perms",
+    "pipes",
+    "process",
+    "quoting-style",
+    "ranges",
+    "ringbuffer",
+    "signals",
+    "sum",
+    "update-control",
+    "utf8",
+    "utmpx",
+    "version-cmp",
+    "wide",
 ]
 # * non-default ct_features
 backup-control = []
@@ -102,7 +100,7 @@ fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
-format = ["itertools", "quoting-style"]
+format = [ "quoting-style"]
 mode = ["libc"]
 perms = ["libc", "walkdir"]
 pipes = []
@@ -112,16 +110,16 @@ ranges = []
 ringbuffer = []
 signals = []
 sum = [
-  "digest",
-  "hex",
-  "memchr",
-  "md-5",
-  "sha1",
-  "sha2",
-  "sha3",
-  "blake2b_simd",
-  "blake3",
-  "sm3",
+    "digest",
+    "hex",
+    "memchr",
+    "md-5",
+    "sha1",
+    "sha2",
+    "sha3",
+    "blake2b_simd",
+    "blake3",
+    "sm3",
 ]
 update-control = []
 utf8 = []

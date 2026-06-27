@@ -14,15 +14,13 @@
 // 它通过读取一个名为"docs/tldr.zip"的压缩文件来获取一些信息，并使用这些信息来更新"docs/src/SUMMARY.md"和其他Markdown文件的内容。
 // 该程序还使用一个名为"./util/show-utils.sh"的外部脚本来获取一些命令行工具的信息，并将这些信息写入Markdown文件中。
 
+extern crate tool_derive;
 use clap::Command;
 use ctcore::Tool;
 use std::collections::HashMap;
-use std::ffi::OsString;
-use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Seek, Write};
 use zip::ZipArchive;
-extern crate tool_derive;
 #[derive(tool_derive::Tools)]
 struct Ctdoc;
 
@@ -187,10 +185,10 @@ impl<'a, 'b> CtMDWriter<'a, 'b> {
     fn ct_markdown(&mut self) -> io::Result<()> {
         write!(self.ct_writebox, "# {}\n\n", self.ct_name)?;
         self.ct_additional()?;
-        self.ct_usage()?;
-        self.ct_about()?;
+        // self.ct_usage()?;
+        // self.ct_about()?;
         self.ct_options()?;
-        self.ct_after_help()?;
+        // self.ct_after_help()?;
         self.ct_examples()
     }
 
@@ -231,46 +229,46 @@ impl<'a, 'b> CtMDWriter<'a, 'b> {
         Ok(())
     }
 
-    fn ct_usage(&mut self) -> io::Result<()> {
-        match &self.ct_markdown {
-            Some(ct_markdown) => {
-                let ct_usage_src = cthelp_parser::ct_parse_usage(ct_markdown);
-                let ct_usage = ct_usage_src.replace("{}", self.ct_name);
+    // fn ct_usage(&mut self) -> io::Result<()> {
+    //     match &self.ct_markdown {
+    //         Some(ct_markdown) => {
+    //             let ct_usage_src = cthelp_parser::ct_parse_usage(ct_markdown);
+    //             let ct_usage = ct_usage_src.replace("{}", self.ct_name);
 
-                writeln!(self.ct_writebox, "\n```")?;
-                writeln!(self.ct_writebox, "{}", ct_usage)?;
-                writeln!(self.ct_writebox, "```")
-            }
-            None => Ok(()),
-        }
-    }
+    //             writeln!(self.ct_writebox, "\n```")?;
+    //             writeln!(self.ct_writebox, "{}", ct_usage)?;
+    //             writeln!(self.ct_writebox, "```")
+    //         }
+    //         None => Ok(()),
+    //     }
+    // }
 
-    fn ct_about(&mut self) -> io::Result<()> {
-        match &self.ct_markdown {
-            Some(ct_markdown) => {
-                let ct_about_info = cthelp_parser::ct_parse_about(ct_markdown);
-                writeln!(self.ct_writebox, "{}", ct_about_info)
-            }
-            None => Ok(()),
-        }
+    // fn ct_about(&mut self) -> io::Result<()> {
+    //     match &self.ct_markdown {
+    //         Some(ct_markdown) => {
+    //             let ct_about_info = cthelp_parser::ct_parse_about(ct_markdown);
+    //             writeln!(self.ct_writebox, "{}", ct_about_info)
+    //         }
+    //         None => Ok(()),
+    //     }
 
-        //Ok(())
-    }
+    //     //Ok(())
+    // }
 
-    fn ct_after_help(&mut self) -> io::Result<()> {
-        match &self.ct_markdown {
-            Some(ct_markdown) => {
-                if let Some(ct_after_help) =
-                    cthelp_parser::ct_parse_section("after help", ct_markdown)
-                {
-                    writeln!(self.ct_writebox, "\n\n{}", ct_after_help)?;
-                }
-            }
-            None => {}
-        }
+    // fn ct_after_help(&mut self) -> io::Result<()> {
+    //     match &self.ct_markdown {
+    //         Some(ct_markdown) => {
+    //             if let Some(ct_after_help) =
+    //                 cthelp_parser::ct_parse_section("after help", ct_markdown)
+    //             {
+    //                 writeln!(self.ct_writebox, "\n\n{}", ct_after_help)?;
+    //             }
+    //         }
+    //         None => {}
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     fn ct_examples(&mut self) -> io::Result<()> {
         match self.ct_dr_zip {

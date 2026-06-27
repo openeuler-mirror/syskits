@@ -591,23 +591,20 @@ mod test {
 
         let args = vec![ctcore::ct_util_name(), "--wrap=64", filename];
         //let args = ["--wrap", ""];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        println!("{}", result);
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_ok());
         // 删除文件
         match delete_file(filename) {
             Ok(_) => println!("File '{}' deleted successfully.", filename),
             Err(e) => eprintln!("Error deleting file: {}", e),
         }
-
-        assert_eq!(result, 0);
     }
     #[test]
     fn test_i_ctmain() {
         // 测试用例1：
         let args = ["--ignore-garbage", ""];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        println!("{}", result);
-        assert_eq!(result, 1);
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_err());
 
         let filename = "test_i_ctmain.txt";
         let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */
@@ -625,25 +622,22 @@ mod test {
             filename,
         ];
         //let args = ["--wrap", ""];
-        let result = ctmain(args.iter().map(|s| OsString::from(s)));
-        println!("{}", result);
+        let result = base32_main(args.iter().map(|s| OsString::from(s)));
+        assert!(result.is_ok());
 
         // 删除文件
         match delete_file(filename) {
             Ok(_) => println!("File '{}' deleted successfully.", filename),
             Err(e) => eprintln!("Error deleting file: {}", e),
         }
-
-        assert_eq!(result, 0);
     }
 
     #[test]
     fn test_h_ctmain() {
         {
             let args = ["--help", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = base32_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
         {
             let command = ct_app();
@@ -659,9 +653,8 @@ mod test {
     fn test_hh_ctmain() {
         {
             let args = ["-h", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = base32_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
 
         {
@@ -679,9 +672,8 @@ mod test {
     fn test_v_ctmain() {
         {
             let args = ["--version", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = base32_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
         {
             let command = ct_app();
@@ -698,9 +690,8 @@ mod test {
     fn test_vv_ctmain() {
         {
             let args = ["-V", ""];
-            let result = ctmain(args.iter().map(|s| OsString::from(s)));
-            println!("{}", result);
-            assert_eq!(result, 1);
+            let result = base32_main(args.iter().map(|s| OsString::from(s)));
+            assert!(result.is_err());
         }
         {
             let command = ct_app();

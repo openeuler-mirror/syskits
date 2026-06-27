@@ -258,6 +258,84 @@
             "cleanup_commands": [
                 "rm -f min.txt"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE前缀测试 - / (向下取整到倍数)",
+            "setup_commands": [
+                "dd if=/dev/zero of=round_down.txt bs=1000 count=1"
+            ],
+            "args": ["-s", "/512", "round_down.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s round_down.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "512"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f round_down.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE前缀测试 - % (向上取整到倍数)",
+            "setup_commands": [
+                "dd if=/dev/zero of=round_up.txt bs=1000 count=1"
+            ],
+            "args": ["-s", "%1024", "round_up.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s round_up.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f round_up.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "多文件测试",
+            "setup_commands": [
+                "touch file1.txt file2.txt file3.txt"
+            ],
+            "args": ["-s", "1024", "file1.txt", "file2.txt", "file3.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s file1.txt file2.txt file3.txt | sort -u",
+                        "expected_exit": 0,
+                        "expected_stdout": "1024"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt file3.txt"
+            ]
         }
     ]
-}
+} 

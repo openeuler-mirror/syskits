@@ -31,10 +31,8 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::ct_show_error;
 use std::ffi::OsString;
+use selinux::SecurityContext;
 
-#[cfg(not(feature = "selinux"))]
-static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
-#[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
 
 mod id_flags {
@@ -130,8 +128,7 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
     if state.is_cflag {
         if state.is_selinux_supported {
             // print SElinux context and exit
-            #[cfg(feature = "selinux")]
-            if let Ok(context) = selinux::SecurityContext::current(false) {
+            if let Ok(context) = SecurityContext::current(false) {
                 let bytes = context.as_bytes();
                 write!(writer, "{}{}", String::from_utf8_lossy(bytes), line_ending)?;
             } else {
@@ -318,14 +315,7 @@ fn id_get_state(matches: &clap::ArgMatches, users: &[String]) -> IdState {
         is_cflag: matches.get_flag(id_flags::ID_CONTEXT),
 
         is_selinux_supported: {
-            #[cfg(feature = "selinux")]
-            {
-                selinux::kernel_support() != selinux::KernelSupport::Unsupported
-            }
-            #[cfg(not(feature = "selinux"))]
-            {
-                false
-            }
+            selinux::kernel_support() != selinux::KernelSupport::Unsupported
         },
         is_user_specified: !users.is_empty(),
         ids: None,
@@ -468,8 +458,7 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
         && std::env::var_os("POSIXLY_CORRECT").is_none()
     {
         // print SElinux context (does not depend on "-Z")
-        #[cfg(feature = "selinux")]
-        if let Ok(context) = selinux::SecurityContext::current(false) {
+        if let Ok(context) = SecurityContext::current(false) {
             let bytes = context.as_bytes();
             write!(writer, " context={}", String::from_utf8_lossy(bytes)).unwrap();
         }

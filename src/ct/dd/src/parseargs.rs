@@ -101,10 +101,10 @@ enum Block {
     Unblock(usize),
 }
 
-/// Return an Unimplemented error when the target is not Linux or Android
+/// Return an Unimplemented error when the target is not Linux
 macro_rules! linux_only {
     ($s: expr, $val: expr) => {
-        if cfg!(any(target_os = "linux", target_os = "android")) {
+        if cfg!(target_os = "linux") {
             $val
         } else {
             return Err(ParseError::Unimplemented($s.to_string()).into());

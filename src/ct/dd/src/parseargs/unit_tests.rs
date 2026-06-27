@@ -17,7 +17,7 @@ use crate::conversion_tables::{
 };
 use crate::parseargs::Parser;
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(target_os = "windows")]
 #[allow(clippy::useless_vec)]
 #[test]
 fn unimplemented_flags_should_error_non_linux() {
@@ -406,7 +406,7 @@ fn parse_oflag_tokens() {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn parse_iflag_tokens_linux() {
     let args = &["iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
@@ -429,7 +429,7 @@ fn parse_iflag_tokens_linux() {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn parse_oflag_tokens_linux() {
     let args = &["oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];

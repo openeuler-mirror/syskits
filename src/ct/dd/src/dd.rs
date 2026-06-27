@@ -24,9 +24,9 @@ rust_i18n::i18n!("locales", fallback = "zh-CN");
 use blocks::conv_block_unblock_helper;
 use ctcore::ct_io::CtOwnedFileDescriptorOrHandle;
 use datastructures::*;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use nix::fcntl::FcntlArg::F_SETFL;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
@@ -51,7 +51,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::{
@@ -319,7 +319,7 @@ impl<'a> Input<'a> {
             let mut opts = OpenOptions::new();
             opts.read(true);
 
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
                 opts.custom_flags(libc_flags);
             }
@@ -340,7 +340,7 @@ impl<'a> Input<'a> {
     fn new_fifo(filename: &Path, settings: &'a DdOptions) -> CTResult<Self> {
         let mut opts = OpenOptions::new();
         opts.read(true);
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(target_os = "linux")]
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
@@ -350,7 +350,7 @@ impl<'a> Input<'a> {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
@@ -684,7 +684,7 @@ impl<'a> DdOutput<'a> {
                 .create_new(cflags.is_excl)
                 .append(oflags.is_append);
 
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             if let Some(libc_flags) = make_linux_oflags(oflags) {
                 opts.custom_flags(libc_flags);
             }
@@ -729,7 +729,7 @@ impl<'a> DdOutput<'a> {
     /// (current position) that shall be used.
     fn new_file_from_stdout(settings: &'a DdOptions) -> CTResult<Self> {
         let fx = CtOwnedFileDescriptorOrHandle::from(io::stdout())?;
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(target_os = "linux")]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
                 fx.as_raw().as_raw_fd(),
@@ -763,7 +763,7 @@ impl<'a> DdOutput<'a> {
             .create(!settings.oconv.is_nocreat)
             .create_new(settings.oconv.is_excl)
             .append(settings.oflags.is_append);
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(target_os = "linux")]
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
         let dst = Dest::Fifo(opts.open(filename)?);
         Ok(Self { dst, settings })
@@ -1076,7 +1076,7 @@ fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<(
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[allow(clippy::cognitive_complexity)]
 fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;

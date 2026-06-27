@@ -25,7 +25,7 @@ use ctcore::ct_pipes::{pipe, splice, splice_exact};
 const SPLICE_SIZE: usize = 1024 * 128;
 const SPLICE_BUF_SIZE: usize = 1024 * 16;
 
-/// This function is called from `write_fast()` on Linux and Android. The
+/// This function is called from `write_fast()` on Linux. The
 /// function `splice()` is used to move data between two file descriptors
 /// without copying between kernel and user spaces. This results in a large
 /// speedup.

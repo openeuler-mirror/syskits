@@ -343,12 +343,7 @@ fn chroot_set_main_group(chroot_group: &str) -> CTResult<()> {
     Ok(())
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
-fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
-    unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux"))]
 fn chroot_set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }

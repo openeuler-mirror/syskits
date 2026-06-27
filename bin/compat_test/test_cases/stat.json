@@ -1,0 +1,241 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "基本功能测试",
+            "setup_commands": [
+                "touch test_file"
+            ],
+            "args": ["test_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*File:.*test_file.*Size:.*Blocks:.*IO Block:.*regular empty file.*Device:.*Inode:.*Links:.*Access:.*Uid:.*Gid:.*Access:.*Modify:.*Change:.*Birth:.*",
+                    "stderr": ""
+                },
+		"ignore_fields": {
+                    "ignore_stdout": true
+                }
+
+            },
+            "cleanup_commands": [
+                "rm -f test_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "文件系统状态测试",
+            "args": ["-f", "/"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*File:.*\"/\".*ID:.*Namelen:.*Type:.*Block size:.*Blocks:.*Total:.*Free:.*Available:.*Files:.*Free nodes:.*",
+                    "stderr": ""
+                },
+		"ignore_fields": {
+                    "ignore_stdout": true
+                }
+
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "符号链接测试",
+            "setup_commands": [
+                "touch target_file",
+                "ln -s target_file link_file"
+            ],
+            "args": ["link_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*File:.*link_file.*-> target_file.*Size:.*Blocks:.*IO Block:.*symbolic link.*Device:.*Inode:.*Links:.*Access:.*Uid:.*Gid:.*Access:.*Modify:.*Change:.*Birth:.*",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+
+            },
+            "cleanup_commands": [
+                "rm -f target_file link_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "符号链接解引用测试",
+            "setup_commands": [
+                "touch target_file",
+                "ln -s target_file link_file"
+            ],
+            "args": ["-L", "link_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*File:.*link_file.*Size:.*Blocks:.*IO Block:.*regular empty file.*Device:.*Inode:.*Links:.*Access:.*Uid:.*Gid:.*Access:.*Modify:.*Change:.*Birth:.*",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target_file link_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "简洁格式测试",
+            "setup_commands": [
+                "touch terse_file"
+            ],
+            "args": ["--terse", "terse_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "terse_file.*0.*0.*81a4.*0.*0.*[0-9a-f]+.*[0-9]+.*1.*[0-9]+.*[0-9]+.*[0-9]+.*[0-9]+.*[0-9]+.*[0-9]+.*0.*-\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f terse_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "多个文件测试",
+            "setup_commands": [
+                "touch file1 file2"
+            ],
+            "args": ["file1", "file2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".*File:.*file1.*Size:.*Blocks:.*IO Block:.*regular empty file.*Device:.*Inode:.*Links:.*Access:.*Uid:.*Gid:.*Access:.*Modify:.*Change:.*Birth:.*File:.*file2.*Size:.*Blocks:.*IO Block:.*regular empty file.*Device:.*Inode:.*Links:.*Access:.*Uid:.*Gid:.*Access:.*Modify:.*Change:.*Birth:.*",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1 file2"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "文件不存在测试",
+            "args": ["nonexistent_file"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "stat: cannot stat 'nonexistent_file': No such file or directory\n"
+                },
+                "ignore_fields": {
+                    "ignore_stderr": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "printf格式测试",
+            "setup_commands": [
+                "touch printf_test"
+            ],
+            "args": ["--printf", "文件名：%n\n大小：%s字节\n类型：%F\n权限：%A\n", "printf_test"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "文件名：printf_test\n大小：0字节\n类型：regular empty file\n权限：-rw-r--r--\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f printf_test"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "使用 -c 短选项的格式测试",
+            "setup_commands": [
+                "touch format_test"
+            ],
+            "args": ["-c", "%A %U:%G", "format_test"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-rw-r--r-- .*:.*\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f format_test"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "使用 --printf 的转义字符测试",
+            "setup_commands": [
+                "touch printf_test"
+            ],
+            "args": ["--printf", "文件名：%n\\n大小：%s字节\\n类型：%F\\n权限：%A\\n", "printf_test"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "文件名：printf_test\n大小：0字节\n类型：regular empty file\n权限：-rw-r--r--\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f printf_test"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "使用 --printf 不自动添加换行符的测试",
+            "setup_commands": [
+                "touch printf_test"
+            ],
+            "args": ["--printf", "文件名：%n 大小：%s字节", "printf_test"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "文件名：printf_test 大小：0字节",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -f printf_test"
+            ]
+        }
+    ]
+} 

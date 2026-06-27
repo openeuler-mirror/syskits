@@ -1926,6 +1926,24 @@ fn sort_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Sort;
+
+        // Test name method
+        assert_eq!(tool.name(), "sort");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("sort"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("sort"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_ok());
+    }
 
     #[cfg(test)]
     mod format_error_message_tests {

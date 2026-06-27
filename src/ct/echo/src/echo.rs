@@ -235,6 +235,24 @@ fn echo_execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Echo;
+
+        // Test name method
+        assert_eq!(tool.name(), "echo");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("echo"));
+
+        // Test execute method with simple args
+        let args = vec![OsString::from("echo"), OsString::from("hello")];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod tests_echo_main {
         use crate::echo_main;

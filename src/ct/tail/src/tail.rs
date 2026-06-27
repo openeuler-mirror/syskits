@@ -655,10 +655,28 @@ mod tests {
     use crate::follow::Observer;
     use crate::paths::{TailHeaderPrinter, TailInput};
     use crate::tail_forwards_thru_file;
+    use std::ffi::OsString;
     use std::fs::File;
     use std::io::Cursor;
     use std::io::{Read, Write};
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Tail;
+
+        // Test name method
+        assert_eq!(tool.name(), "tail");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("tail"));
+
+        // Test execute method with help flag (should work)
+        let args: Vec<OsString> = vec![OsString::from("tail"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
 
     /// 辅助函数：创建临时文件并写入内容
     fn create_temp_file(content: &str) -> NamedTempFile {

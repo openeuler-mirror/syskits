@@ -390,6 +390,24 @@ impl Tool for Fold {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+
+    // 新增：测试 Tool trait 的基本实现
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Fold::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "fold");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("fold"));
+
+        // 测试 execute 方法
+        let args = vec![OsString::from("fold"), OsString::from("--version")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     #[cfg(test)]
     mod fold_main_tests {

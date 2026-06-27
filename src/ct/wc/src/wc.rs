@@ -917,7 +917,24 @@ mod tests {
 
     use super::*;
 
-    // ----------------- 测试wc 函数 -----------------
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Wc;
+
+        // Test name method
+        assert_eq!(tool.name(), "wc");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("wc"));
+
+        // Test execute method with help flag (should work)
+        let args = vec![OsString::from("wc"), OsString::from("--help")];
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
+    // ----------------- 测试 wc 函数 -----------------
     #[cfg(test)]
     mod tests {
         use std::io::Write;

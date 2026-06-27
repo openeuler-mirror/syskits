@@ -267,6 +267,29 @@ impl Tool for Comm {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_implementation() {
+        let comm = Comm::default();
+
+        // Test name method
+        assert_eq!(comm.name(), "comm");
+
+        // Test command method
+        assert!(comm.command().get_name().contains("comm"));
+
+        // Test execute method - should fail with wrong arguments
+        let args: Vec<OsString> = vec![OsString::from("comm")];
+        let result = comm.execute(&args);
+        assert!(result.is_err()); // Should fail because comm requires two files
+
+        // Test execute with proper arguments (help should work)
+        let help_args: Vec<OsString> = vec![OsString::from("comm"), OsString::from("--help")];
+        let help_result = comm.execute(&help_args);
+        assert!(help_result.is_err());
+    }
+
     // 这里是 `comm` 命令的使用说明和示例：
     //
     // 1. **基本用法**：

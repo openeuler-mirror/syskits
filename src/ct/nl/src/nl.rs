@@ -659,7 +659,24 @@ impl Tool for Nl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use std::io::Cursor;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Nl::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "nl");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("nl"));
+
+        // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
+        let args = vec![OsString::from("nl"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
 
     /// 测试参数标准化函数
     #[test]

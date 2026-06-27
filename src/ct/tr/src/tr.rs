@@ -305,6 +305,22 @@ mod tests {
     use std::ffi::OsString;
     use std::io::Cursor;
 
+    #[test]
+    fn test_tool_implementation() {
+        let tool = super::Tr::default();
+
+        // Test name method
+        assert_eq!(tool.name(), "tr");
+
+        // Test command method
+        let command = tool.command();
+        assert!(command.get_name().contains("tr"));
+
+        // Test execute method - help command should return an error but not crash
+        let args = vec![OsString::from("tr"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_err());
+    }
+
     /// 测试命令行参数解析相关功能
     mod cli_tests {
         use super::*;

@@ -146,6 +146,28 @@ pub fn ct_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_tool_implementation() {
+        let tool = Printf::default();
+
+        // 测试 name 方法
+        assert_eq!(tool.name(), "printf");
+
+        // 测试 command 方法
+        let command = tool.command();
+        assert!(command.get_name().contains("printf"));
+
+        // 测试 execute 方法 - 有效的格式化字符串和参数
+        let args = vec![
+            OsString::from("printf"),
+            OsString::from("%s"),
+            OsString::from("test"),
+        ];
+        assert!(tool.execute(&args).is_ok());
+    }
 
     mod tests_printf_main {
         use crate::printf_main;

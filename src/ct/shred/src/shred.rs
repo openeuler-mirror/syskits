@@ -35,6 +35,7 @@
 // spell-checker:ignore (words) wipesync prefill
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
@@ -44,6 +45,7 @@ use ctcore::{
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Seek, Write};
 #[cfg(unix)]
@@ -194,7 +196,7 @@ impl Iterator for ShredFilenameIter {
 }
 
 /// 用于生成擦除数据的写入器
-/// 
+///
 /// # 变体说明
 /// * `Random` - 生成随机数据
 ///   - `rng`: 随机数生成器
@@ -209,12 +211,12 @@ impl Iterator for ShredFilenameIter {
 /// 避免了重复填充缓冲区的开销。
 enum BytesWriter {
     Random {
-        rng: StdRng,
-        buffer: [u8; SHRED_BLOCK_SIZE],
+        rng: Box<StdRng>,
+        buffer: Box<[u8; SHRED_BLOCK_SIZE]>,
     },
     Pattern {
         offset: usize,
-        buffer: [u8; SHRED_PATTERN_BUFFER_SIZE],
+        buffer: Box<[u8; SHRED_PATTERN_BUFFER_SIZE]>,
     },
 }
 
@@ -223,8 +225,8 @@ impl BytesWriter {
         match pass {
             // 创建随机数据生成器
             PassType::Random => Self::Random {
-                rng: StdRng::from_entropy(),
-                buffer: [0; SHRED_BLOCK_SIZE],
+                rng: Box::new(StdRng::from_entropy()),
+                buffer: Box::new([0; SHRED_BLOCK_SIZE]),
             },
             // 创建固定模式生成器
             PassType::Pattern(pattern) => {
@@ -240,7 +242,10 @@ impl BytesWriter {
                         buf
                     }
                 };
-                Self::Pattern { offset: 0, buffer }
+                Self::Pattern {
+                    offset: 0,
+                    buffer: Box::new(buffer),
+                }
             }
         }
     }
@@ -715,6 +720,23 @@ fn shred_do_remove(
     Ok(())
 }
 
+#[derive(Default)]
+pub struct Shred;
+impl Tool for Shred {
+    fn name(&self) -> &'static str {
+        "shred"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        shred_main(args.iter().cloned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,8 +750,8 @@ mod tests {
         #[test]
         fn test_bytes_writer_random() {
             let mut writer = BytesWriter::Random {
-                rng: StdRng::from_entropy(),
-                buffer: [0; SHRED_BLOCK_SIZE],
+                rng: Box::new(StdRng::from_entropy()),
+                buffer: Box::new([0; SHRED_BLOCK_SIZE]),
             };
 
             let block1 = writer.bytes_for_pass(10).to_vec();

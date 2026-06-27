@@ -19,10 +19,12 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_colors::{CT_FILE_ATTRIBUTE_CODES, CT_FILE_COLORS, CT_FILE_TYPES, CT_TERMS};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::{ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 
 mod opt_flags {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -644,6 +646,22 @@ pub fn generate_dircolors_config() -> String {
     config.push_str("# config specific to those matching environment variables.");
 
     config
+}
+
+#[derive(Default)]
+pub struct Dircolors;
+impl Tool for Dircolors {
+    fn name(&self) -> &'static str {
+        "dircolors"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 直接调用原有的 dircolors_main 函数
+        dircolors_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

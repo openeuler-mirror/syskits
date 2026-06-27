@@ -10,11 +10,28 @@
  *
  */
 use clap::{Arg, ArgAction, Command};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use ctcore::ct_help_about;
 use std::{ffi::OsString, io::Write};
 
 const FALSE_ABOUT: &str = ct_help_about!("false.md");
+
+#[derive(Default)]
+pub struct False;
+impl Tool for False {
+    fn name(&self) -> &'static str {
+        "false"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        false_main(args.iter().cloned())
+    }
+}
 
 /// 主函数，负责处理命令行输入并调用相应的操作。
 #[ctcore::main]

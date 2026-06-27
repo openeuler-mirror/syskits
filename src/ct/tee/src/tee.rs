@@ -13,9 +13,11 @@
 //! 这在需要将输出保存到文件并同时查看终端输出时非常有用。
 
 use clap::{Arg, ArgAction, Command, builder::PossibleValue, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_show_error};
+use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Read, Result, Write, copy, sink, stdin, stdout};
 use std::path::PathBuf;
@@ -382,6 +384,22 @@ impl Read for NamedReader {
             }
             okay => okay,
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Tee;
+impl Tool for Tee {
+    fn name(&self) -> &'static str {
+        "tee"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        tee_main(args.iter().cloned())
     }
 }
 

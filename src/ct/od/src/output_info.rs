@@ -136,11 +136,11 @@ impl OutputInfo {
 
         // 初始化空格数组
         let mut spacing = [0; MAX_BYTES_PER_UNIT];
-        
+
         // 获取当前类型的基本信息
         let mut byte_size = sf.byte_size();
         let mut items_in_block = byte_size_block / byte_size;
-        
+
         // 计算当前块的总宽度和需要填充的空格数
         let thisblock_width = sf.print_width() * items_in_block;
         let mut remaining_spaces = print_width_block - thisblock_width;
@@ -149,7 +149,7 @@ impl OutputInfo {
         while items_in_block > 0 {
             // 计算每个位置应该分配的空格数
             let spaces_per_item = remaining_spaces / items_in_block;
-            
+
             // 为每个位置分配空格
             for i in 0..items_in_block {
                 spacing[i * byte_size] += spaces_per_item;

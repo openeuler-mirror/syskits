@@ -30,6 +30,8 @@ use ctcore::{
     ct_format_usage, ct_help_about, ct_help_usage,
 };
 
+use ctcore::Tool;
+
 const HOSTNAME_ABOUT: &str = ct_help_about!("hostname.md");
 const HOSTNAME_USAGE: &str = ct_help_usage!("hostname.md");
 
@@ -71,8 +73,9 @@ mod wsa {
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
-    hostname_main(args).map(|_| ())
+    hostname_main(args)
 }
+
 pub fn hostname_main(args: impl ctcore::Args) -> CTResult<()> {
     let arg_matches = ct_app().try_get_matches_from(args)?;
 
@@ -195,6 +198,23 @@ fn hostname_display(args_match: &ArgMatches) -> CTResult<()> {
         println!("{hostname}");
 
         Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct Hostname;
+impl Tool for Hostname {
+    fn name(&self) -> &'static str {
+        "hostname"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 直接调用原有的 hostname_main 函数
+        hostname_main(args.iter().cloned())
     }
 }
 

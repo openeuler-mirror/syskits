@@ -14,8 +14,10 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::{Arg, ArgAction, Command, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 
 use crate::platform::{get_uptime, print_loadavg, process_utmpx};
 
@@ -112,6 +114,22 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .arg(arg)
+}
+
+#[derive(Default)]
+pub struct Uptime;
+impl Tool for Uptime {
+    fn name(&self) -> &'static str {
+        "uptime"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        uptime_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

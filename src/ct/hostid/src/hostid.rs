@@ -10,8 +10,10 @@
  */
 
 use clap::{Command, crate_version};
+use ctcore::Tool;
 use ctcore::{ct_error::CTResult, ct_format_usage, ct_help_about, ct_help_usage};
 use libc::c_long;
+use std::ffi::OsString;
 
 const HOSTID_USAGE: &str = ct_help_usage!("hostid.md");
 const HOSTID_ABOUT: &str = ct_help_about!("hostid.md");
@@ -19,6 +21,22 @@ const HOSTID_ABOUT: &str = ct_help_about!("hostid.md");
 // currently rust libc interface doesn't include gethostid
 unsafe extern "C" {
     pub unsafe fn gethostid() -> c_long;
+}
+
+#[derive(Default)]
+pub struct Hostid;
+impl Tool for Hostid {
+    fn name(&self) -> &'static str {
+        "hostid"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        hostid_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

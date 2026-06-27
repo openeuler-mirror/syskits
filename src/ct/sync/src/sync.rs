@@ -14,8 +14,10 @@
 
 use clap::{Arg, ArgAction, Command, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
+use std::ffi::OsString;
 
 mod platform;
 
@@ -104,6 +106,23 @@ fn sync_fs(files: Vec<String>) -> isize {
 
 fn check_files(f: &String) -> CTResult<()> {
     platform::check_files(f)
+}
+
+#[derive(Default)]
+pub struct Sync;
+impl Tool for Sync {
+    fn name(&self) -> &'static str {
+        "sync"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        sync_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

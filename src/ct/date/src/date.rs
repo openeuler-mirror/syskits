@@ -27,7 +27,9 @@ use std::path::PathBuf;
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
+use ctcore::Tool;
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
+use std::ffi::OsString;
 
 // Options
 const DATE: &str = "date";
@@ -139,6 +141,22 @@ impl From<&str> for DateRfc3339Format {
             // 应该被clap捕获
             _ => panic!("Invalid format: {s}"),
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Date;
+impl Tool for Date {
+    fn name(&self) -> &'static str {
+        "date"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        date_main(args.iter().cloned()).map(|_| ())
     }
 }
 

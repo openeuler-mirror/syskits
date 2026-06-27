@@ -17,9 +17,11 @@ use std::io::stdout;
 use std::ops::ControlFlow;
 
 use clap::{Arg, ArgAction, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_format::{FormatArgument, FormatItem, parse_spec_and_escape};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 
 const PRINTF_VERSION: &str = "version";
 const PRINTF_HELP: &str = "help";
@@ -31,6 +33,23 @@ mod opt_flags {
     pub const PRINTF_FORMATSTRING: &str = "FORMATSTRING";
     pub const PRINTF_ARGUMENT: &str = "ARGUMENT";
 }
+
+#[derive(Default)]
+pub struct Printf;
+impl Tool for Printf {
+    fn name(&self) -> &'static str {
+        "printf"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        printf_main(args.iter().cloned())
+    }
+}
+
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
     printf_main(args).map(|_| ())

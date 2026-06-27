@@ -23,6 +23,8 @@ use ctcore::ct_help_about;
 use ctcore::ct_help_section;
 use ctcore::ct_help_usage;
 
+use ctcore::Tool;
+use std::ffi::OsString;
 use std::io;
 use std::io::Write;
 use std::iter::Peekable;
@@ -130,6 +132,22 @@ fn echo_print_escaped(input: &str, mut output: impl Write) -> io::Result<Control
     }
 
     Ok(ControlFlow::Continue(()))
+}
+
+#[derive(Default)]
+pub struct Echo;
+impl Tool for Echo {
+    fn name(&self) -> &'static str {
+        "echo"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        echo_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

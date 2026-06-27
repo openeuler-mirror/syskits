@@ -22,6 +22,8 @@ use std::convert::TryInto;
 use std::io::Error;
 use std::io::Write;
 
+use ctcore::Tool;
+use std::ffi::OsString;
 const KILL_ABOUT: &str = ct_help_about!("kill.md");
 const KILL_USAGE: &str = ct_help_usage!("kill.md");
 
@@ -350,6 +352,24 @@ fn kill(sig: Signal, pids: &[i32]) {
                     .map_err_context(|| format!("sending signal to {pid} failed"))
             );
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Kill;
+impl Tool for Kill {
+    fn name(&self) -> &'static str {
+        "kill"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        kill_main(&mut out, args.iter().cloned())
     }
 }
 

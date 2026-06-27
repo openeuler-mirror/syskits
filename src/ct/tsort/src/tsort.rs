@@ -12,10 +12,12 @@
 //! tsort 命令行工具，用于对有依赖关系的项目进行拓扑排序
 
 use clap::{Arg, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, Read, stdin};
 use std::path::Path;
@@ -198,6 +200,22 @@ impl<'input> TSortGraph<'input> {
 
     fn is_acyclic(&self) -> bool {
         self.tsort_out_edges.values().all(|edge| edge.is_empty())
+    }
+}
+
+#[derive(Default)]
+pub struct Tsort;
+impl Tool for Tsort {
+    fn name(&self) -> &'static str {
+        "tsort"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        tsort_main(args.iter().cloned())
     }
 }
 

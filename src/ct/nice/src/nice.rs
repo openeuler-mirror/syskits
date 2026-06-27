@@ -19,6 +19,7 @@ use std::ptr;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::{
+    Tool,
     ct_error::{CTResult, CTsageError, CtSimpleError, UClapError, set_ct_exit_code},
     ct_format_usage, ct_help_about, ct_help_usage, ct_show_error,
 };
@@ -272,6 +273,23 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .version(command_version)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Nice;
+impl Tool for Nice {
+    fn name(&self) -> &'static str {
+        "nice"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        // 将&[OsString]转换为符合Args trait要求的iterator
+        nice_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

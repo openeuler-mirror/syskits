@@ -54,6 +54,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use clap::{Arg, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 #[cfg(unix)]
 use ctcore::ct_error::set_ct_exit_code;
@@ -1265,6 +1266,22 @@ fn is_fifo(filename: &str) -> bool {
         }
     }
     false
+}
+
+#[derive(Default)]
+pub struct Dd;
+impl Tool for Dd {
+    fn name(&self) -> &'static str {
+        "dd"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        dd_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

@@ -10,11 +10,28 @@
  *
  */
 use clap::{Arg, ArgAction, Command};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use ctcore::ct_help_about;
 use std::{ffi::OsString, io::Write};
 
 const TRUE_ABOUT: &str = ct_help_about!("true.md");
+
+#[derive(Default)]
+pub struct True;
+impl Tool for True {
+    fn name(&self) -> &'static str {
+        "true"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        true_main(args.iter().cloned())
+    }
+}
 
 #[ctcore::main]
 pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {

@@ -42,7 +42,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::{io, ptr};
 
 mod errors;
-
+use ctcore::Tool;
 use errors::error_exit_status;
 use errors::{DefaultError, Result, RunconError};
 
@@ -574,6 +574,22 @@ fn runcon_exec(command: &OsStr, arguments: &[OsString]) -> CTResult<()> {
 fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
     CString::new(s.as_bytes())
         .map_err(|_r| DefaultError::from_io("CString::new()", io::ErrorKind::InvalidInput.into()))
+}
+
+#[derive(Default)]
+pub struct Runcon;
+impl Tool for Runcon {
+    fn name(&self) -> &'static str {
+        "runcon"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        runcon_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

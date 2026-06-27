@@ -11,10 +11,12 @@
  */
 
 use clap::{Arg, ArgAction, Command, crate_version};
-
+use ctcore::Tool;
+use ctcore::ct_error::CTResult;
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 #[ctcore::main]
 use platform::ctmain;
+use std::ffi::OsString;
 
 mod platform;
 
@@ -132,6 +134,22 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Who;
+impl Tool for Who {
+    fn name(&self) -> &'static str {
+        "who"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        platform::who_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

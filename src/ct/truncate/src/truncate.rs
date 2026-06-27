@@ -19,10 +19,12 @@ use std::path::Path;
 
 use clap::{Arg, ArgAction, Command, crate_version};
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage};
+use std::ffi::OsString;
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -88,6 +90,22 @@ pub mod truncate_flags {
     pub const TRUNCATE_REFERENCE: &str = "reference";
     pub const TRUNCATE_SIZE: &str = "size";
     pub const TRUNCATE_ARG_FILES: &str = "files";
+}
+
+#[derive(Default)]
+pub struct Truncate;
+impl Tool for Truncate {
+    fn name(&self) -> &'static str {
+        "truncate"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        truncate_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

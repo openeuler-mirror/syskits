@@ -17,6 +17,7 @@ mod settings;
 mod termios;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::{ct_format_usage, ct_help_about, ct_help_usage};
 use device::Device;
@@ -27,6 +28,7 @@ use nix::sys::termios::{
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
+use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use std::os::fd::AsFd;
@@ -654,6 +656,22 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(&args)
+}
+
+#[derive(Default)]
+pub struct Stty;
+impl Tool for Stty {
+    fn name(&self) -> &'static str {
+        "stty"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        stty_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

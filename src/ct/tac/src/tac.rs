@@ -24,8 +24,10 @@ use std::{
     path::Path,
 };
 
+use ctcore::Tool;
 use ctcore::ct_error::CTError;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::Display;
 
 // 定义about和usage
@@ -477,6 +479,23 @@ fn tac_try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+#[derive(Default)]
+pub struct Tac;
+impl Tool for Tac {
+    fn name(&self) -> &'static str {
+        "tac"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let mut stdout = stdout().lock();
+        tac_main(&mut stdout, args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

@@ -38,7 +38,6 @@
 ///
 /// [`OsRng`]: rand::rngs::OsRng
 /// [`try_fill_bytes`]: RngCore::try_fill_bytes
-
 use std::fmt;
 use std::io::Read;
 

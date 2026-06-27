@@ -20,8 +20,10 @@ use ctcore::{ct_format_usage, ct_help_about, ct_help_section, ct_help_usage, ct_
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
 
+use ctcore::Tool;
 use std::env;
 use std::ffi::CString;
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{Error, IsTerminal};
@@ -221,6 +223,22 @@ fn nohup_find_stdout() -> CTResult<File> {
 ))]
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
     std::ptr::null()
+}
+
+#[derive(Default)]
+pub struct Nohup;
+impl Tool for Nohup {
+    fn name(&self) -> &'static str {
+        "nohup"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        nohup_main(args.iter().cloned())
+    }
 }
 
 #[cfg(test)]

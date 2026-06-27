@@ -20,6 +20,9 @@ use ctcore::{
     ct_format_usage, ct_help_about, ct_help_usage,
 };
 
+use ctcore::Tool;
+use std::ffi::OsString;
+
 const UNAME_ABOUT: &str = ct_help_about!("uname.md");
 const UNAME_USAGE: &str = ct_help_usage!("uname.md");
 
@@ -125,6 +128,22 @@ pub struct UnameFlags {
     pub is_processor: bool,
     pub is_hardware_platform: bool,
     pub is_os: bool,
+}
+
+#[derive(Default)]
+pub struct Uname;
+impl Tool for Uname {
+    fn name(&self) -> &'static str {
+        "uname"
+    }
+
+    fn command(&self) -> Command {
+        ct_app()
+    }
+
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        uname_main(args.iter().cloned())
+    }
 }
 
 #[ctcore::main]

@@ -9,413 +9,371 @@
  * See the Mulan PSL v2 for more details.
  */
 
-//! 因式分解实现
-//!
-//! 结合了高效的 Miller-Rabin 素性测试和 Pollard's Rho 算法
-//! 使用 num-prime 和 num-modular 库提高性能
+//! 因式分解的命令行接口
 
-use smallvec::SmallVec;
-use std::cell::RefCell;
-use std::fmt;
+use ctcore::Tool;
+use std::ffi::OsString;
+use std::io::BufRead;
+use std::io::{self, Write, stdin, stdout};
+mod factor_algorithm;
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, FromIo, set_ct_exit_code};
+use ctcore::{ct_format_usage, ct_help_about, ct_help_usage, ct_show_error, ct_show_warning};
+pub use factor_algorithm::*;
 
-use crate::miller_rabin::{self, is_prime};
-use crate::rho::find_divisor;
-use crate::table;
+pub mod miller_rabin;
+pub mod numeric;
+pub mod rho;
+pub mod table;
 
-type Exponent = u8;
+const FACTOR_ABOUT: &str = ct_help_about!("factor.md");
+const FACTOR_USAGE: &str = ct_help_usage!("factor.md");
 
-#[derive(Clone, Debug, Default)]
-struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
+/// 定义配置标志常量
+pub mod factor_flags {
+    /// 使用指数表示法标志
+    pub const EXPONENTS: &str = "exponents";
+    /// 帮助标志
+    pub const HELP: &str = "help";
+    /// 要分解的数字参数
+    pub const NUMBER: &str = "NUMBER";
+}
 
-// 根据 Erdős–Kac 定理，小于 10²⁵ ≃ 2⁸³ 的整数的平均素因子数为 4
-// 因此我们使用稍高的值
-const NUM_FACTORS_INLINE: usize = 5;
+/// 因式分解命令的配置结构体
+struct FactorFlags {
+    /// 是否使用指数表示法
+    print_exponents: bool,
+    /// 要分解的数字列表
+    numbers: Vec<String>,
+}
 
-impl Decomposition {
-    fn one() -> Self {
-        Self::default()
-    }
-
-    fn add(&mut self, factor: u64, exp: Exponent) {
-        debug_assert!(exp > 0);
-
-        if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
-            *e += exp;
-        } else {
-            self.0.push((factor, exp));
+/// 为 `FactorFlags` 实现默认值
+impl Default for FactorFlags {
+    fn default() -> Self {
+        Self {
+            print_exponents: false,
+            numbers: Vec::new(),
         }
-    }
-
-    #[cfg(test)]
-    fn product(&self) -> u64 {
-        self.0
-            .iter()
-            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
-    }
-
-    fn get(&self, p: u64) -> Option<&(u64, u8)> {
-        self.0.iter().find(|(q, _)| *q == p)
     }
 }
 
-impl PartialEq for Decomposition {
-    fn eq(&self, other: &Self) -> bool {
-        for p in &self.0 {
-            if other.get(p.0) != Some(p) {
-                return false;
-            }
+impl FactorFlags {
+    /// 从命令行参数创建配置结构体
+    fn new(matches: &ArgMatches) -> Self {
+        // 布尔标志提取模式
+        let print_exponents = matches.get_flag(factor_flags::EXPONENTS);
+
+        // 向量类型参数提取模式
+        let numbers = matches
+            .get_many::<String>(factor_flags::NUMBER)
+            .map_or_else(Vec::new, |v| v.cloned().collect());
+
+        // 构建并返回结构体
+        Self {
+            print_exponents,
+            numbers,
         }
-
-        for p in &other.0 {
-            if self.get(p.0) != Some(p) {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-impl Eq for Decomposition {}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors(RefCell<Decomposition>);
-
-impl Factors {
-    pub fn one() -> Self {
-        Self(RefCell::new(Decomposition::one()))
-    }
-
-    pub fn add(&mut self, prime: u64, exp: Exponent) {
-        debug_assert!(is_prime(prime));
-        self.0.borrow_mut().add(prime, exp);
-    }
-
-    pub fn push(&mut self, prime: u64) {
-        self.add(prime, 1);
-    }
-
-    #[cfg(test)]
-    fn product(&self) -> u64 {
-        self.0.borrow().product()
     }
 }
 
-impl fmt::Display for Factors {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let v = &mut (self.0).borrow_mut().0;
-        v.sort_unstable();
+/// 处理单个数字的因式分解并输出结果
+fn factors_print_str(
+    num_str: &str,
+    w: &mut io::BufWriter<impl io::Write>,
+    is_print_exponents: bool,
+) -> io::Result<()> {
+    let x = match num_str.trim().parse::<u64>() {
+        Ok(x) => x,
+        Err(e) => {
+            // We return Ok() instead of Err(), because it's non-fatal and we should try the next
+            // number.
+            ct_show_warning!("{}: {}", num_str.maybe_quote(), e);
+            set_ct_exit_code(1);
+            return Ok(());
+        }
+    };
 
-        let include_exponents = f.alternate();
-        for (p, exp) in v {
-            if include_exponents && *exp > 1 {
-                write!(f, " {p}^{exp}")?;
-            } else {
-                for _ in 0..*exp {
-                    write!(f, " {p}")?;
+    if is_print_exponents {
+        writeln!(w, "{}:{:#}", x, factor(x))?;
+    } else {
+        writeln!(w, "{}:{}", x, factor(x))?;
+    }
+
+    w.flush()
+}
+
+/// 处理从标准输入读取的数字
+fn process_stdin(w: &mut io::BufWriter<impl io::Write>, print_exponents: bool) -> CTResult<()> {
+    let stdin = stdin();
+    let lines = stdin.lock().lines();
+    for line in lines {
+        match line {
+            Ok(line) => {
+                for number in line.split_whitespace() {
+                    factors_print_str(number, w, print_exponents)
+                        .map_err_context(|| "write error".into())?;
                 }
             }
+            Err(e) => {
+                set_ct_exit_code(1);
+                ct_show_error!("error reading input: {}", e);
+                return Ok(());
+            }
         }
-
-        Ok(())
     }
+    Ok(())
 }
 
-/// 因式分解函数
-fn _factor(num: u64, f: Factors) -> Factors {
-    use miller_rabin::Result::*;
-
-    if num == 1 {
-        return f;
+/// 处理命令行参数中提供的数字
+fn process_numbers(
+    numbers: &[String],
+    w: &mut io::BufWriter<impl io::Write>,
+    print_exponents: bool,
+) -> CTResult<()> {
+    for number in numbers {
+        factors_print_str(number, w, print_exponents).map_err_context(|| "write error".into())?;
     }
-
-    // 使用 Miller-Rabin 测试
-    let test_result = miller_rabin::test(num);
-
-    match test_result {
-        Prime => {
-            #[cfg(feature = "coz")]
-            coz::progress!("factor found");
-            let mut r = f;
-            r.push(num);
-            r
-        }
-
-        Composite(d) => {
-            // 找到因子，递归分解
-            let f = _factor(d, f);
-            _factor(num / d, f)
-        }
-
-        Pseudoprime => {
-            // 使用 Pollard's Rho 算法找因子
-            let divisor = find_divisor(num);
-            let f = _factor(divisor, f);
-            _factor(num / divisor, f)
-        }
-    }
+    Ok(())
 }
 
-/// 因式分解的公共接口
-pub fn factor(mut n: u64) -> Factors {
-    #[cfg(feature = "coz")]
-    coz::begin!("factorization");
+#[ctcore::main]
+pub fn ctmain(args: impl ctcore::Args) -> CTResult<()> {
+    let stdout = stdout();
+    let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
+    factor_main(args, &mut w)
+}
 
-    let mut factors = Factors::one();
-
-    if n == 0 {
-        // 特殊处理0的情况
-        // 0不是素数，所以不能使用push方法
-        // 创建一个特殊的Factors对象表示0
-        let mut decomp = Decomposition::one();
-        decomp.0.push((0, 1));
-        return Factors(RefCell::new(decomp));
+#[derive(Default)]
+pub struct Factor;
+impl Tool for Factor {
+    fn name(&self) -> &'static str {
+        "factor"
     }
 
-    if n < 2 {
-        return factors;
+    fn command(&self) -> Command {
+        ct_app()
     }
 
-    // 处理 2 的因子
-    let n_zeros = n.trailing_zeros();
-    if n_zeros > 0 {
-        factors.add(2, n_zeros as Exponent);
-        n >>= n_zeros;
+    fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        let stdout = stdout();
+        let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
+        factor_main(args.iter().cloned(), &mut w)
+    }
+}
+/// 因式分解命令的主函数
+///
+/// # Errors
+///
+/// 返回错误如果：
+/// - 命令行参数解析失败
+/// - 写入输出时发生 I/O 错误
+/// - 处理输入数字时发生错误
+pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write>) -> CTResult<()> {
+    // 1. 解析命令行参数
+    let matches = ct_app().try_get_matches_from(args)?;
+
+    // 2. 创建配置对象
+    let settings = FactorFlags::new(&matches);
+
+    // 3. 使用配置执行主要逻辑
+    if settings.numbers.is_empty() {
+        // 处理从标准输入读取的数字
+        process_stdin(w, settings.print_exponents)?;
+    } else {
+        // 处理命令行参数中提供的数字
+        process_numbers(&settings.numbers, w, settings.print_exponents)?;
     }
 
-    if n == 1 {
-        #[cfg(feature = "coz")]
-        coz::end!("factorization");
-        return factors;
+    // 确保所有输出都被刷新
+    if let Err(e) = w.flush() {
+        ct_show_error!("{}", e);
     }
 
-    // 使用预计算的素数表进行试除法
-    table::pre_factor(&mut n, &mut factors);
+    Ok(())
+}
 
-    // 使用因式分解算法
-    let result = _factor(n, factors);
+/// 创建命令行应用程序
+#[must_use]
+pub fn ct_app() -> Command {
+    let utility_name = ctcore::ct_util_name();
+    let command_version = crate_version!();
+    let application_info = FACTOR_ABOUT;
+    let usage_description = ct_format_usage(FACTOR_USAGE);
+    let args = vec![
+        Arg::new(factor_flags::NUMBER).action(ArgAction::Append),
+        Arg::new(factor_flags::EXPONENTS)
+            .short('h')
+            .long(factor_flags::EXPONENTS)
+            .help("Print factors in the form p^e")
+            .action(ArgAction::SetTrue),
+        Arg::new(factor_flags::HELP)
+            .long(factor_flags::HELP)
+            .help("Print help information.")
+            .action(ArgAction::Help),
+    ];
 
-    #[cfg(feature = "coz")]
-    coz::end!("factorization");
-
-    result
+    // 构建并配置命令行解析器
+    Command::new(utility_name)
+        .version(command_version)
+        .about(application_info)
+        .override_usage(usage_description)
+        .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .args(&args)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Decomposition, Factors, factor};
-    use quickcheck::quickcheck;
-    use smallvec::smallvec;
-    use std::cell::RefCell;
+    use super::*;
+    use std::io::BufWriter;
 
+    /// 测试 FactorFlags 的默认值
     #[test]
-    #[ignore] // 忽略这个测试，因为它可能会超时
-    fn factor_2044854919485649() {
-        let f = Factors(RefCell::new(Decomposition(smallvec![
-            (503, 1),
-            (2423, 1),
-            (40961, 2)
-        ])));
-        assert_eq!(factor(f.product()), f);
+    fn test_factor_flags_default() {
+        let flags = FactorFlags::default();
+        assert!(!flags.print_exponents);
+        assert!(flags.numbers.is_empty());
     }
 
+    /// 测试从 ArgMatches 创建 FactorFlags
     #[test]
-    fn factor_recombines_small() {
+    fn test_factor_flags_new() {
+        // 创建一个带有指数标志的 ArgMatches
+        let matches = ct_app().try_get_matches_from(vec!["factor", "-h"]).unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert!(flags.numbers.is_empty());
+
+        // 创建一个带有数字参数的 ArgMatches
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "12", "24"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(!flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["12", "24"]);
+
+        // 创建一个同时带有指数标志和数字参数的 ArgMatches
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "-h", "12", "24"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["12", "24"]);
+    }
+
+    /// 测试 factors_print_str 函数 - 普通格式
+    #[test]
+    fn test_factors_print_str_normal_format() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试数字 12 的因式分解（普通格式）
+        factors_print_str("12", &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "12: 2 2 3\n");
+    }
+
+    /// 测试 factors_print_str 函数 - 指数格式
+    #[test]
+    fn test_factors_print_str_exponent_format() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试数字 12 的因式分解（指数格式）
+        factors_print_str("12", &mut writer, true).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "12: 2^2 3\n");
+    }
+
+    /// 测试 process_numbers 函数
+    #[test]
+    fn test_process_numbers() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试处理多个数字
+        let numbers = vec!["12".to_string(), "24".to_string()];
+        process_numbers(&numbers, &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "12: 2 2 3\n24: 2 2 2 3\n");
+    }
+
+    /// 测试无效输入的处理
+    #[test]
+    fn test_invalid_input() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试无效输入（非数字）
+        // 注意：这个测试会产生警告消息，但不会失败
+        factors_print_str("abc", &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, ""); // 无效输入不会产生输出
+    }
+
+    /// 测试边界情况
+    #[test]
+    fn test_edge_cases() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试 0
+        factors_print_str("0", &mut writer, false).unwrap();
+
+        // 测试 1
+        factors_print_str("1", &mut writer, false).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "0: 0\n1:\n"); // 0 的因子是 0，1 没有素因子
+    }
+
+    /// 测试大数
+    #[test]
+    fn test_large_numbers() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+
+        // 测试较大的数字
+        factors_print_str("1234567", &mut writer, true).unwrap();
+
+        // 获取 writer 中的 buffer
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        // 1234567 = 127 * 9721
+        assert_eq!(output, "1234567: 127 9721\n");
+    }
+
+    /// 测试命令行应用程序配置
+    #[test]
+    fn test_ct_app_configuration() {
+        let app = ct_app();
+
+        // 验证应用程序名称和版本
+        assert_eq!(app.get_name(), ctcore::ct_util_name());
+
+        // 验证参数配置
+        let args: Vec<_> = app.get_arguments().collect();
+        assert!(args.iter().any(|arg| arg.get_id() == factor_flags::NUMBER));
         assert!(
-            (1..10_000)
-                .map(|i| 2 * i + 1)
-                .all(|i| factor(i).product() == i)
+            args.iter()
+                .any(|arg| arg.get_id() == factor_flags::EXPONENTS)
         );
-    }
-
-    #[test]
-    #[ignore] // 忽略这个测试，因为它可能会超时
-    fn factor_recombines_overflowing() {
-        assert!(
-            (0..3) // 进一步减少测试范围，只测试3个数字
-                .map(|i| 2 * i + 2u64.pow(32) + 1)
-                .all(|i| factor(i).product() == i)
-        );
-    }
-
-    #[test]
-    fn factor_recombines_strong_pseudoprime() {
-        // 这是一个强伪素数，测试算法处理特殊情况的能力
-        let pseudoprime = 17_179_869_183;
-        for _ in 0..20 {
-            // 重复测试 20 次，因为它只在一部分时间内失败
-            assert!(factor(pseudoprime).product() == pseudoprime);
-        }
-    }
-
-    quickcheck! {
-        // 限制测试范围，只测试较小的数字
-        fn factor_recombines(i: u16) -> bool {
-            let i = i as u64; // 将 u16 转换为 u64，限制测试范围
-            i == 0 || factor(i).product() == i
-        }
-    }
-
-    // 新增测试用例
-
-    #[test]
-    fn test_decomposition_one() {
-        let d = Decomposition::one();
-        assert_eq!(d.0.len(), 0);
-        assert_eq!(d.product(), 1);
-    }
-
-    #[test]
-    fn test_decomposition_add() {
-        let mut d = Decomposition::one();
-
-        // 添加一个因子
-        d.add(3, 1);
-        assert_eq!(d.0.len(), 1);
-        assert_eq!(d.0[0], (3, 1));
-        assert_eq!(d.product(), 3);
-
-        // 添加另一个因子
-        d.add(5, 2);
-        assert_eq!(d.0.len(), 2);
-        assert_eq!(d.0[1], (5, 2));
-        assert_eq!(d.product(), 3 * 5 * 5);
-
-        // 增加已有因子的指数
-        d.add(3, 2);
-        assert_eq!(d.0.len(), 2);
-        assert_eq!(d.0[0], (3, 3));
-        assert_eq!(d.product(), 3 * 3 * 3 * 5 * 5);
-    }
-
-    #[test]
-    fn test_decomposition_get() {
-        let mut d = Decomposition::one();
-        d.add(3, 1);
-        d.add(5, 2);
-
-        assert_eq!(d.get(3), Some(&(3, 1)));
-        assert_eq!(d.get(5), Some(&(5, 2)));
-        assert_eq!(d.get(7), None);
-    }
-
-    #[test]
-    fn test_decomposition_eq() {
-        let mut d1 = Decomposition::one();
-        d1.add(3, 1);
-        d1.add(5, 2);
-
-        let mut d2 = Decomposition::one();
-        d2.add(5, 2);
-        d2.add(3, 1);
-
-        assert_eq!(d1, d2);
-
-        let mut d3 = Decomposition::one();
-        d3.add(3, 1);
-        d3.add(5, 1);
-
-        assert_ne!(d1, d3);
-    }
-
-    #[test]
-    fn test_factors_one() {
-        let f = Factors::one();
-        assert_eq!(f.product(), 1);
-    }
-
-    #[test]
-    fn test_factors_add() {
-        let mut f = Factors::one();
-        f.add(3, 1);
-        assert_eq!(f.product(), 3);
-
-        f.add(5, 2);
-        assert_eq!(f.product(), 3 * 5 * 5);
-    }
-
-    #[test]
-    fn test_factors_push() {
-        let mut f = Factors::one();
-        f.push(3);
-        assert_eq!(f.product(), 3);
-
-        f.push(5);
-        assert_eq!(f.product(), 3 * 5);
-    }
-
-    #[test]
-    fn test_factors_display() {
-        let mut f = Factors::one();
-        f.add(3, 1);
-        f.add(5, 2);
-
-        // 测试默认格式
-        let s = format!("{}", f);
-        assert_eq!(s, " 3 5 5");
-
-        // 测试替代格式（带指数）
-        let s = format!("{:#}", f);
-        assert_eq!(s, " 3 5^2");
-    }
-
-    #[test]
-    fn test_factor_small_numbers() {
-        // 测试小数字的因式分解
-        assert_eq!(factor(0).product(), 0);
-        assert_eq!(factor(1).product(), 1);
-
-        let f2 = factor(2);
-        assert_eq!(f2.product(), 2);
-
-        let f3 = factor(3);
-        assert_eq!(f3.product(), 3);
-
-        let f4 = factor(4);
-        assert_eq!(f4.product(), 4);
-
-        let f6 = factor(6);
-        assert_eq!(f6.product(), 6);
-
-        let f12 = factor(12);
-        assert_eq!(f12.product(), 12);
-    }
-
-    #[test]
-    fn test_factor_powers_of_two() {
-        // 测试 2 的幂
-        for i in 0..20 {
-            let n = 1u64 << i;
-            let f = factor(n);
-            assert_eq!(f.product(), n);
-        }
-    }
-
-    #[test]
-    fn test_factor_primes() {
-        // 测试素数
-        let primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47];
-        for &p in &primes {
-            let f = factor(p);
-            assert_eq!(f.product(), p);
-        }
-    }
-
-    #[test]
-    fn test_factor_semiprime() {
-        // 测试半素数（两个素数的乘积）
-        let semiprimes = [(3, 5), (5, 7), (11, 13), (17, 19), (29, 31)];
-        for &(p, q) in &semiprimes {
-            let n = p * q;
-            let f = factor(n);
-            assert_eq!(f.product(), n);
-        }
-    }
-
-    #[test]
-    fn test_factor_highly_composite() {
-        // 测试高度合成数（有很多因子的数）
-        let n = 2 * 2 * 3 * 5 * 7 * 11; // 2310
-        let f = factor(n);
-        assert_eq!(f.product(), n);
+        assert!(args.iter().any(|arg| arg.get_id() == factor_flags::HELP));
     }
 }

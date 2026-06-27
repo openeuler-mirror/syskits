@@ -78,7 +78,14 @@ impl TruncateMode {
             Self::AtMost(size) => fsize.min(*size),
             Self::AtLeast(size) => fsize.max(*size),
             Self::RoundDown(size) => fsize - fsize % size,
-            Self::RoundUp(size) => fsize + fsize % size,
+            Self::RoundUp(size) => {
+                let mut rp = fsize % size;
+                if rp != 0 {
+                    rp = size - rp;
+                }
+
+                fsize + rp
+            }
         }
     }
 }

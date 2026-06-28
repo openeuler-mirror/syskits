@@ -281,6 +281,162 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "测试 C locale 下的文件名排序（字节比较）",
+            "setup_commands": [
+                "mkdir -p test_locale_dir",
+                "touch test_locale_dir/Windows",
+                "touch test_locale_dir/linux",
+                "touch test_locale_dir/windows",
+                "touch test_locale_dir/Apple"
+            ],
+            "args": ["test_locale_dir"],
+            "env": {
+                "LC_COLLATE": "C"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Apple\nWindows\nlinux\nwindows",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_locale_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "测试 UTF-8 locale 下的文件名排序（字典序比较）",
+            "setup_commands": [
+                "mkdir -p test_locale_dir",
+                "touch test_locale_dir/Windows",
+                "touch test_locale_dir/linux",
+                "touch test_locale_dir/windows",
+                "touch test_locale_dir/Apple"
+            ],
+            "args": ["test_locale_dir"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Apple\nlinux\nWindows\nwindows",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_locale_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "测试带有特殊字符的文件名在 UTF-8 locale 下的排序",
+            "setup_commands": [
+                "mkdir -p test_unicode_dir",
+                "touch 'test_unicode_dir/café'",
+                "touch 'test_unicode_dir/naïve'", 
+                "touch 'test_unicode_dir/apple'",
+                "touch 'test_unicode_dir/zèbre'"
+            ],
+            "args": ["test_unicode_dir"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "apple\ncafé\nnaïve\nzèbre", 
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_unicode_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "测试中文文件名在 UTF-8 locale 下的排序",
+            "setup_commands": [
+                "mkdir -p test_chinese_dir",
+                "touch 'test_chinese_dir/北京'",
+                "touch 'test_chinese_dir/上海'",
+                "touch 'test_chinese_dir/广州'",
+                "touch 'test_chinese_dir/深圳'"
+            ],
+            "args": ["test_chinese_dir"],
+            "env": {
+                "LC_COLLATE": "zh_CN.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "北京\n广州\n上海\n深圳",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_chinese_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "测试 -v 选项（版本排序）与 locale 的结合",
+            "setup_commands": [
+                "mkdir -p test_version_dir",
+                "touch test_version_dir/file1.txt",
+                "touch test_version_dir/file10.txt",
+                "touch test_version_dir/file2.txt",
+                "touch test_version_dir/File11.txt"
+            ],
+            "args": ["-v", "test_version_dir"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1.txt\nfile2.txt\nfile10.txt\nFile11.txt",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_version_dir"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "ls",
+            "description": "测试 POSIX locale 下的文件名排序",
+            "setup_commands": [
+                "mkdir -p test_posix_dir",
+                "touch test_posix_dir/Test1",
+                "touch test_posix_dir/test2",
+                "touch test_posix_dir/TEST3",
+                "touch test_posix_dir/test4"
+            ],
+            "args": ["test_posix_dir"],
+            "env": {
+                "LC_COLLATE": "POSIX"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "TEST3\nTest1\ntest2\ntest4",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_posix_dir"
+            ]
         }
     ]
 } 

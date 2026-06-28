@@ -22,6 +22,7 @@ use operation::{
     Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
 use std::io::{BufRead, BufWriter, Write, stdin, stdout};
+use sys_locale::get_locale;
 
 use crate::operation::DeleteOperation;
 use ctcore::Tool;
@@ -172,6 +173,8 @@ pub fn tr_main<R: BufRead, W: Write>(
     writer: &mut W,
     args: impl ctcore::Args,
 ) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
     // 1. 解析命令行参数
     let matches = ct_app().try_get_matches_from(args)?;
 

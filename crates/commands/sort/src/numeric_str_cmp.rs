@@ -77,6 +77,7 @@ impl NumInfo {
         let mut is_had_decimal_pt = false;
         let mut is_had_digit = false;
         let mut start = None;
+        let mut end = 0;
         let mut sign = NumSign::Positive;
 
         let mut is_first_char = true;
@@ -93,11 +94,20 @@ impl NumInfo {
             }
             is_first_char = false;
 
+            // Thousands separator should only be processed between digits
+            // Check if current char is thousands separator AND we have more digits coming
             if matches!(
                 parse_settings.thousands_separator,
                 Some(c) if c == char
             ) {
-                continue;
+                // Look ahead to see if there are more digits
+                let rest = &num[idx + char.len_utf8()..];
+                if rest.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                    // Skip thousands separator but update end position
+                    end = idx + char.len_utf8();
+                    continue;
+                }
+                // If no digit follows, treat as invalid character
             }
 
             if Self::is_invalid_char(char, &mut is_had_decimal_pt, parse_settings) {
@@ -107,7 +117,11 @@ impl NumInfo {
                             && matches!(char, 'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y');
                         (
                             Self { exponent, sign },
-                            start..if has_si_unit { idx + 1 } else { idx },
+                            start..if has_si_unit {
+                                idx + char.len_utf8()
+                            } else {
+                                end
+                            },
                         )
                     }
                     _ => (
@@ -116,16 +130,19 @@ impl NumInfo {
                             exponent: 0,
                         },
                         match is_had_digit {
-                            true => idx..idx,
+                            true => end..end,
                             false => 0..0,
                         },
                     ),
                 };
             }
             if Some(char) == parse_settings.decimal_pt {
+                // Update end position for decimal point
+                end = idx + char.len_utf8();
                 continue;
             }
             is_had_digit = true;
+            end = idx + char.len_utf8(); // Update end position for valid digit
             if start.is_none() && char == '0' {
                 if is_had_decimal_pt {
                     // We're parsing a number whose first nonzero digit is after the decimal point.
@@ -144,14 +161,14 @@ impl NumInfo {
         }
 
         match start {
-            Some(start) => (Self { exponent, sign }, start..num.len()),
+            Some(start) => (Self { exponent, sign }, start..end),
             _ => (
                 Self {
                     sign: NumSign::Positive,
                     exponent: 0,
                 },
                 match is_had_digit {
-                    true => num.len()..num.len(),
+                    true => end..end,
                     false => 0..0,
                 },
             ),
@@ -174,6 +191,7 @@ impl NumInfo {
         } else {
             !c.is_ascii_digit()
         }
+        
     }
 }
 
@@ -468,7 +486,12 @@ mod tests {
 
         #[test]
         fn test_number_with_spaces_inside() {
-            let settings = NumInfoParseSettings::default();
+            // Test with settings that don't use space as thousands separator
+            let settings = NumInfoParseSettings {
+                accept_si_units: false,
+                thousands_separator: None, // No thousands separator
+                decimal_pt: Some('.'),
+            };
             // Spaces inside numbers are not typically allowed unless specified as thousands separators
             let (num_info, range) = NumInfo::parse("1 234", &settings);
             assert_eq!(
@@ -534,7 +557,9 @@ mod tests {
         #[test]
         fn test_number_with_leading_and_trailing_whitespace() {
             let settings = NumInfoParseSettings::default();
-            let (num_info, range) = NumInfo::parse("  4567  ", &settings);
+            let input = "  4567  ";
+            let (num_info, range) = NumInfo::parse(input, &settings);
+
             assert_eq!(
                 num_info,
                 NumInfo {

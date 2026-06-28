@@ -1306,6 +1306,37 @@ mod tests {
     }
 
     #[test]
+    fn test_determine_padding_char_behaviour() {
+        let mut flags = StatFlags::default();
+        flags.is_zero = true;
+        assert!(matches!(
+            determine_padding_char(&flags, &None),
+            StatPadding::Zero
+        ));
+
+        flags.is_left = true;
+        assert!(matches!(
+            determine_padding_char(&flags, &None),
+            StatPadding::Space
+        ));
+
+        flags.is_left = false;
+        assert!(matches!(
+            determine_padding_char(&flags, &Some(3)),
+            StatPadding::Space
+        ));
+    }
+
+    #[test]
+    fn test_pretty_time_returns_expected_prefix() {
+        let formatted = pretty_time(0, 0);
+        assert!(
+            formatted.contains("1970-01-01"),
+            "格式化结果应包含 Unix Epoch 日期，当前输出为 {formatted}"
+        );
+    }
+
+    #[test]
     fn normal_format() {
         let s = "%'010.2ac%-#5.w\n";
         let expected = vec![

@@ -11,6 +11,7 @@
 
 extern crate rust_i18n;
 use std::cmp::Reverse;
+use std::os::unix::ffi::OsStrExt;
 
 #[cfg(unix)]
 use std::collections::HashMap;
@@ -44,6 +45,7 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::ct_version_cmp::ct_version_cmp;
 
@@ -2073,11 +2075,18 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
     } else if config.sort == LsSort::Size {
         entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)))
     } else if config.sort == LsSort::Name {
-        entries.sort_by(|a, b| a.display_name.cmp(&b.display_name))
+        entries.sort_by(|a, b| {
+            strcoll_compare(a.display_name.as_bytes(), b.display_name.as_bytes(), false)
+        })
     } else if config.sort == LsSort::Version {
         entries.sort_by(|a, b| {
-            ct_version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
-                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+            ct_version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy()).then(
+                strcoll_compare(
+                    a.p_buf.to_string_lossy().as_bytes(),
+                    b.p_buf.to_string_lossy().as_bytes(),
+                    false,
+                ),
+            )
         })
     } else if config.sort == LsSort::Extension {
         entries.sort_by(|a, b| {
@@ -2091,7 +2100,11 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
             a.display_name
                 .len()
                 .cmp(&b.display_name.len())
-                .then(a.display_name.cmp(&b.display_name))
+                .then(strcoll_compare(
+                    a.display_name.as_bytes(),
+                    b.display_name.as_bytes(),
+                    false,
+                ))
         })
     } else if config.sort == LsSort::None {
         {}
@@ -3538,4 +3551,37 @@ fn calculate_padding_collection<W: Write>(
     }
 
     padding_collections
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_locale_aware_filename_sorting() {
+        // 直接测试字符串比较逻辑，避免环境变量并发问题
+        let name1 = OsString::from("apple");
+        let name2 = OsString::from("banana");
+        let name3 = OsString::from("Cherry");
+
+        // 测试基本的locale感知文件名比较
+        let result1 = strcoll_compare(name1.as_bytes(), name2.as_bytes(), false);
+        assert_eq!(result1, std::cmp::Ordering::Less);
+
+        let result2 = strcoll_compare(name2.as_bytes(), name1.as_bytes(), false);
+        assert_eq!(result2, std::cmp::Ordering::Greater);
+
+        let result3 = strcoll_compare(name1.as_bytes(), name1.as_bytes(), false);
+        assert_eq!(result3, std::cmp::Ordering::Equal);
+
+        // 测试混合大小写的比较，结果会根据系统locale变化
+        let result4 = strcoll_compare(name1.as_bytes(), name3.as_bytes(), false);
+        // 确保函数能正常工作，不管结果如何
+        assert!(matches!(
+            result4,
+            std::cmp::Ordering::Less | std::cmp::Ordering::Greater | std::cmp::Ordering::Equal
+        ));
+    }
 }

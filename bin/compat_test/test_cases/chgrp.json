@@ -1,0 +1,98 @@
+{
+  "tests": [
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试单个普通文件修改所属组",
+        "args": ["chgrp_test_group", "test_file"],
+        "setup_commands": [
+            "groupadd chgrp_test_group",
+            "touch test_file",
+            "chgrp root test_file"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' test_file",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file",
+            "groupdel chgrp_test_group"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试一次修改多个文件的所属组",
+        "args": ["chgrp_test_group2", "file1.txt", "file2.txt"],
+        "setup_commands": [
+            "groupadd chgrp_test_group2",
+            "touch file1.txt file2.txt",
+            "chgrp root file1.txt file2.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' file1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group2\n"
+            },
+            {
+                "command": "stat -c '%G' file2.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group2\n"
+            }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -f file1.txt file2.txt",
+            "groupdel chgrp_test_group2"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试对不存在的单个文件修改所属组",
+        "args": ["root", "nonexistent_file.txt"],
+        "setup_commands": [
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+            },
+            "verifications": [
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [],
+        "requires_root": true
+    }
+  ]
+}

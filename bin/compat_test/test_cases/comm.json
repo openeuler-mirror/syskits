@@ -1,0 +1,216 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "基本功能测试 - 比较两个已排序文件",
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\t\tb\n\t\tc\n\t\td\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试 -1 选项 - 不显示第一列",
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "args": ["-1", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\tb\n\tc\n\td\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试 -2 选项 - 不显示第二列",
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "args": ["-2", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\tb\n\tc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试 -3 选项 - 不显示第三列",
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "args": ["-3", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\t\td\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试 -12 选项 - 只显示公共行",
+            "setup_commands": [
+                "echo -e 'a\\nb\\nc' > file1.txt",
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "args": ["-12", "file1.txt", "file2.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "b\nc\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试 C locale 下的字符串比较（字节比较）",
+            "setup_commands": [
+                "echo -e 'ABC\\nabc' > file1.txt",
+                "echo -e 'ABC\\nabc\\nxyz' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "C"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\t\tABC\n\t\tabc\n\t\txyz\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试非 C locale 下的字符串比较（locale感知比较）",
+            "setup_commands": [
+                "echo -e 'apple\\nbanana' > file1.txt",
+                "echo -e 'apple\\ncherry' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "banana\n\t\tapple\n\tcherry\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试中文字符在 UTF-8 locale 下的比较",
+            "setup_commands": [
+                "echo -e '北京\\n上海' > file1.txt",
+                "echo -e '北京\\n广州' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "zh_CN.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "上海\n\t\t北京\n\t广州\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试 POSIX locale 下的比较行为",
+            "setup_commands": [
+                "echo -e 'Test1\\ntest2' > file1.txt",
+                "echo -e 'Test1\\ntest3' > file2.txt"
+            ],
+            "args": ["file1.txt", "file2.txt"],
+            "env": {
+                "LC_COLLATE": "POSIX"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test2\n\t\tTest1\n\ttest3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1.txt file2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "comm",
+            "description": "测试标准输入",
+            "setup_commands": [
+                "echo -e 'b\\nc\\nd' > file2.txt"
+            ],
+            "args": ["-", "file2.txt"],
+            "input": "a\nb\nc\n",
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\t\tb\n\t\tc\n\t\td\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file2.txt"
+            ]
+        }
+    ]
+}

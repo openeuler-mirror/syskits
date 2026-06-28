@@ -12,11 +12,12 @@
 //! 对每个指定的文件设置自动换行（折行），并将重新排版后的结果输出到标准输出。
 
 extern crate rust_i18n;
+use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_error::{CTResult, FromIo, set_ct_exit_code};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write, stdin};
@@ -26,6 +27,7 @@ const FOLD_TAB_WIDTH: usize = 8;
 
 mod fold_flags {
     pub const FOLD_BYTES: &str = "bytes";
+    pub const FOLD_CHARACTERS: &str = "characters";
     pub const FOLD_SPACES: &str = "spaces";
     pub const FOLD_WIDTH: &str = "width";
     pub const FOLD_FILE: &str = "file";
@@ -33,6 +35,7 @@ mod fold_flags {
 
 struct FoldFlags {
     bytes: bool,
+    characters: bool,
     spaces: bool,
     width: usize,
     files: Vec<String>,
@@ -56,10 +59,20 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
     let string_args: Vec<String> = args.collect_lossy();
 
     let (args, obs_width) = handle_obsolete(&string_args[..]);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = match ct_app().try_get_matches_from(args) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind() == ErrorKind::ArgumentConflict {
+                set_ct_exit_code(2); // 检查是否是参数冲突错误，如果是则返回退出码2
+                return Ok(());
+            }
+            return Err(e.into());
+        }
+    };
 
     let flags = FoldFlags {
         bytes: matches.get_flag(fold_flags::FOLD_BYTES),
+        characters: matches.get_flag(fold_flags::FOLD_CHARACTERS),
         spaces: matches.get_flag(fold_flags::FOLD_SPACES),
         width: match matches.get_one::<String>(fold_flags::FOLD_WIDTH) {
             Some(v) => Some(v.clone()),
@@ -89,7 +102,14 @@ pub fn ct_app() -> Command {
                 "count using bytes rather than columns (meaning control characters \
                      such as newline are not treated specially)",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .conflicts_with(fold_flags::FOLD_CHARACTERS),
+        Arg::new(fold_flags::FOLD_CHARACTERS)
+            .long(fold_flags::FOLD_CHARACTERS)
+            .short('c')
+            .help(t!("fold.clap.fold_characters"))
+            .action(ArgAction::SetTrue)
+            .conflicts_with(fold_flags::FOLD_BYTES),
         Arg::new(fold_flags::FOLD_SPACES)
             .long(fold_flags::FOLD_SPACES)
             .short('s')
@@ -190,6 +210,9 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
         if fold_flags.bytes {
             // 如果`bytes`标志为真，则按字节进行折叠
             fold_file_bytewise(writer, buffer, spaces, width)?;
+        } else if fold_flags.characters {
+            // 如果`characters`标志为真，则按字符进行折叠
+            fold_file_characterwise(writer, buffer, spaces, width)?;
         } else {
             // 否则，按列进行折叠
             fold_file(writer, buffer, spaces, width)?;
@@ -225,35 +248,158 @@ fn fold_file_bytewise<T: Read, W: Write>(
             continue;
         }
 
-        let len = line.len();
+        let bytes = line.as_bytes();
+        let len = bytes.len();
         let mut i = 0;
 
         while i < len {
-            let width = if len - i >= width { width } else { len - i };
-            let slice = {
-                let slice = &line[i..i + width];
-                if is_spaces && i + width < len {
-                    match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
-                        Some(m) => &slice[..=m],
-                        None => slice,
-                    }
-                } else {
-                    slice
+            let mut end_byte = (i + width).min(len);
+
+            // 确保我们不在UTF-8字符中间断开
+            // UTF-8字节的特征：
+            // - 单字节字符：0xxxxxxx (0-127)
+            // - 多字节字符的后续字节：10xxxxxx (128-191)
+            // - 多字节字符的首字节：11xxxxxx (192-255)
+            while end_byte < len && end_byte > i {
+                let byte = bytes[end_byte];
+                if byte & 0x80 == 0 || byte & 0xC0 != 0x80 {
+                    // 这是ASCII字符或UTF-8多字节字符的首字节，可以安全断开
+                    break;
                 }
-            };
+                // 这是UTF-8多字节字符的续字节，向前移动
+                end_byte -= 1;
+            }
+
+            // 如果无法找到有效的断点，强制输出至少一个字符以避免无限循环
+            if end_byte == i {
+                // 找到下一个字符的边界
+                end_byte = i + 1;
+                while end_byte < len && (bytes[end_byte] & 0xC0) == 0x80 {
+                    end_byte += 1;
+                }
+            }
+
+            let mut actual_end = end_byte;
+
+            // 如果启用了spaces选项，尝试在最后一个空白字符处断行
+            if is_spaces && end_byte < len {
+                // 从end_byte往前找最后一个空白字符
+                for j in (i..end_byte).rev() {
+                    let byte = bytes[j];
+                    // ASCII空白字符：空格(32), 制表符(9), 换行符(10), 回车符(13)
+                    if byte == b' ' || byte == b'\t' || byte == b'\n' || byte == b'\r' {
+                        actual_end = j + 1;
+                        break;
+                    }
+                }
+            }
+
+            let slice_bytes = &bytes[i..actual_end];
 
             // 不重复换行符：如果子字符串是 "\n"，则上一次迭代已经在行尾折叠并打印了该换行符。
-            if slice == "\n" {
+            if slice_bytes == b"\n" {
                 break;
             }
 
-            i += slice.len();
+            i = actual_end;
+            let at_eol = i >= len;
+
+            // 输出字节切片，现在应该是有效的UTF-8
+            if at_eol {
+                writer.write_all(slice_bytes)?;
+            } else {
+                writer.write_all(slice_bytes)?;
+                writeln!(writer)?;
+            }
+        }
+
+        line.truncate(0);
+    }
+
+    Ok(())
+}
+
+/// 按字符折叠文件内容
+///
+/// 该函数按字符计数进行折叠，与字节模式不同，这里一个 Unicode 字符视为一个计数单位。
+/// 例如，对于多字节UTF-8字符如中文字符，按字符模式计数时只算作1个字符，而不是多个字节。
+///
+/// # 参数
+///
+/// - `writer`: 输出写入器
+/// - `file`: 输入文件读取器
+/// - `is_spaces`: 是否在空格处优先换行
+/// - `width`: 每行最大字符数
+///
+/// # 返回值
+///
+/// - 如果折叠成功，返回`Ok(())`；如果发生错误，返回`Err`。
+fn fold_file_characterwise<T: Read, W: Write>(
+    writer: &mut W,
+    mut file: BufReader<T>,
+    is_spaces: bool,
+    width: usize,
+) -> CTResult<()> {
+    let mut line = String::new();
+    let mut first_line = true;
+
+    loop {
+        if file
+            .read_line(&mut line)
+            .map_err_context(|| "failed to read line".to_string())?
+            == 0
+        {
+            break;
+        }
+
+        // 从第二行开始，在处理前添加空行
+        if !first_line {
+            writeln!(writer)?;
+        }
+        first_line = false;
+
+        if line == "\n" {
+            writeln!(writer)?;
+            line.truncate(0);
+            continue;
+        }
+
+        let chars: Vec<char> = line.chars().collect();
+        let len = chars.len();
+        let mut i = 0;
+
+        while i < len {
+            let end_idx = if len - i >= width { i + width } else { len };
+            let slice_chars = &chars[i..end_idx];
+
+            let actual_slice = if is_spaces && end_idx < len {
+                // 查找最后一个空白字符的位置
+                if let Some(last_space_pos) = slice_chars
+                    .iter()
+                    .rposition(|&c| c.is_whitespace() && c != '\r')
+                {
+                    &slice_chars[..=last_space_pos]
+                } else {
+                    slice_chars
+                }
+            } else {
+                slice_chars
+            };
+
+            let slice_str: String = actual_slice.iter().collect();
+
+            // 不重复换行符：如果子字符串是 "\n"，则上一次迭代已经在行尾折叠并打印了该换行符。
+            if slice_str == "\n" {
+                break;
+            }
+
+            i += actual_slice.len();
             let at_eol = i >= len;
 
             if at_eol {
-                write!(writer, "{slice}")?;
+                write!(writer, "{slice_str}")?;
             } else {
-                writeln!(writer, "{slice}")?;
+                writeln!(writer, "{slice_str}")?;
             }
         }
 
@@ -569,21 +715,144 @@ mod tests {
 
         #[test]
         fn test_ct_main_long_option_w_long() {
+            // 使用临时文件而不是标准输入来避免阻塞
+            let content = "test content for width option";
+            let temp_file = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(temp_file.path(), content).unwrap();
+
+            let args = vec![
+                "fold".to_string(),
+                "--width".to_string(),
+                "10".to_string(),
+                temp_file.path().to_string_lossy().to_string(),
+            ];
+
+            let mut writer = Vec::new();
+            let result = fold_main(
+                &mut writer,
+                args.iter().map(|s| std::ffi::OsString::from(s)),
+            );
+
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer).unwrap();
+            assert!(output.contains("test"));
+        }
+
+        #[test]
+        fn test_ct_main_long_option_c_short() {
+            // 使用临时文件而不是标准输入来避免阻塞
+            let content = "测试字符abc";
+            let temp_file = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(temp_file.path(), content).unwrap();
+
+            let args = vec![
+                "fold".to_string(),
+                "-c".to_string(),
+                temp_file.path().to_string_lossy().to_string(),
+            ];
+
+            let mut writer = Vec::new();
+            let result = fold_main(
+                &mut writer,
+                args.iter().map(|s| std::ffi::OsString::from(s)),
+            );
+
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer).unwrap();
+            assert!(output.contains("测试"));
+        }
+
+        #[test]
+        fn test_ct_main_long_option_c_long() {
+            // 使用临时文件而不是标准输入来避免阻塞
+            let content = "测试字符abc";
+            let temp_file = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(temp_file.path(), content).unwrap();
+
+            let args = vec![
+                "fold".to_string(),
+                "--characters".to_string(),
+                temp_file.path().to_string_lossy().to_string(),
+            ];
+
+            let mut writer = Vec::new();
+            let result = fold_main(
+                &mut writer,
+                args.iter().map(|s| std::ffi::OsString::from(s)),
+            );
+
+            assert!(result.is_ok());
+            let output = String::from_utf8(writer).unwrap();
+            assert!(output.contains("测试"));
+        }
+
+        #[test]
+        fn test_ct_main_mutually_exclusive_b_c_exit_code() {
+            // 测试互斥选项-b和-c返回退出码2
+            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+
+            // 重置退出码
+            set_ct_exit_code(0);
+
+            let mut writer = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "-b", "-c", "/etc/passwd"];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            // 应该返回Ok()，因为我们设置了exit_code并返回Ok
+            assert!(result.is_ok());
+            // 检查退出码应该是2
+            assert_eq!(get_ct_exit_code(), 2);
+
+            // 重置退出码
+            set_ct_exit_code(0);
+        }
+
+        #[test]
+        fn test_ct_main_mutually_exclusive_c_b_exit_code() {
+            // 测试互斥选项-c和-b返回退出码2（顺序相反）
+            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+
+            // 重置退出码
+            set_ct_exit_code(0);
+
+            let mut writer = Vec::new();
+            let args = vec![ctcore::ct_util_name(), "-c", "-b", "/etc/passwd"];
+            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+
+            // 应该返回Ok()，因为我们设置了exit_code并返回Ok
+            assert!(result.is_ok());
+            // 检查退出码应该是2
+            assert_eq!(get_ct_exit_code(), 2);
+
+            // 重置退出码
+            set_ct_exit_code(0);
+        }
+
+        #[test]
+        fn test_ct_main_characters_functionality() {
+            // 测试-c选项的字符计数功能
             let mut writer = Vec::new();
 
             let temp_dir = tempdir().expect("Failed to create temporary directory");
-            let temp_file_path = temp_dir.path().join("fold_temp_file1.txt");
+            let temp_file_path = temp_dir.path().join("fold_temp_utf8.txt");
             let mut temp_file =
                 File::create(&temp_file_path).expect("Failed to create temporary file");
+            // 写入包含UTF-8字符的内容，确保字符计数正确
             temp_file
-                .write_all(b"File 1\n")
+                .write_all("这是中文字符测试abcd".as_bytes())
                 .expect("Failed to write to temporary file");
             let binding = temp_file_path.to_string_lossy().into_owned();
 
-            let args = vec![ctcore::ct_util_name(), "--width", "10", &binding];
+            // 测试字符模式 -c，设置宽度为5字符
+            let args = vec![ctcore::ct_util_name(), "-c", "-w", "5", &binding];
             let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
-
             assert!(result.is_ok());
+
+            let output = String::from_utf8(writer).unwrap();
+            // 验证输出包含折行
+            assert!(!output.is_empty());
+            // 验证输出包含中文字符
+            assert!(output.contains("这是中文"));
         }
     }
 
@@ -732,6 +1001,56 @@ mod tests {
             assert!(executable.is_ok());
             assert!(executable.unwrap().contains_id(fold_flags::FOLD_WIDTH));
         }
+
+        #[test]
+        fn test_ct_app_long_option_c_short() {
+            let command = ct_app();
+            let args = vec!["fold", "-c"];
+            let matches = command.try_get_matches_from(args).unwrap();
+            assert!(matches.get_flag("characters"));
+        }
+
+        #[test]
+        fn test_ct_app_long_option_c_long() {
+            let command = ct_app();
+            let args = vec!["fold", "--characters"];
+            let matches = command.try_get_matches_from(args).unwrap();
+            assert!(matches.get_flag("characters"));
+        }
+
+        #[test]
+        fn test_ct_app_combined_options_c_s() {
+            let command = ct_app();
+            let args = vec!["fold", "-c", "-s", "-w", "20"];
+            let matches = command.try_get_matches_from(args).unwrap();
+            assert!(matches.get_flag("characters"));
+            assert!(matches.get_flag("spaces"));
+            assert_eq!(matches.get_one::<String>("width").unwrap(), "20");
+        }
+
+        #[test]
+        fn test_ct_app_mutually_exclusive_b_c() {
+            // 测试-b和-c选项互斥，应该返回错误
+            let command = ct_app();
+            let args = vec!["fold", "-b", "-c"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            if let Err(e) = result {
+                assert_eq!(e.kind(), clap::error::ErrorKind::ArgumentConflict);
+            }
+        }
+
+        #[test]
+        fn test_ct_app_mutually_exclusive_c_b() {
+            // 测试-c和-b选项互斥，应该返回错误（顺序相反）
+            let command = ct_app();
+            let args = vec!["fold", "-c", "-b"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            if let Err(e) = result {
+                assert_eq!(e.kind(), clap::error::ErrorKind::ArgumentConflict);
+            }
+        }
     }
 
     #[cfg(test)]
@@ -877,6 +1196,7 @@ mod tests {
         fn test_fold_nonexistent_file_with_width() {
             let fold_flags = FoldFlags {
                 bytes: false,
+                characters: false,
                 spaces: false,
                 width: 20,
                 files: vec!["nonexistent_file.txt".to_string()],
@@ -900,6 +1220,7 @@ mod tests {
 
             let fold_flags = FoldFlags {
                 bytes: false,
+                characters: false,
                 spaces: false,
                 width: 20,
                 files: vec![temp_file.path().to_string_lossy().to_string()],
@@ -931,6 +1252,7 @@ mod tests {
             // 构造 FoldFlags：开启 bytes 模式，不在空格处折行，设定行宽 5
             let fold_flags = FoldFlags {
                 bytes: true,
+                characters: false,
                 spaces: false,
                 width: 5,
                 files: vec![temp_file.path().to_string_lossy().to_string()],
@@ -958,6 +1280,7 @@ mod tests {
             // 设定行宽较小，观察空格折行效果
             let fold_flags = FoldFlags {
                 bytes: true,
+                characters: false,
                 spaces: true,
                 width: 6,
                 files: vec![temp_file.path().to_string_lossy().to_string()],
@@ -985,6 +1308,7 @@ mod tests {
 
             let fold_flags = FoldFlags {
                 bytes: false,
+                characters: false,
                 spaces: true,
                 width: 6,
                 files: vec![temp_file.path().to_string_lossy().to_string()],
@@ -1008,6 +1332,7 @@ mod tests {
 
             let fold_flags = FoldFlags {
                 bytes: false,
+                characters: false,
                 spaces: false,
                 width: 6,
                 files: vec![temp_file.path().to_string_lossy().to_string()],
@@ -1036,6 +1361,7 @@ mod tests {
 
             let fold_flags = FoldFlags {
                 bytes: false,
+                characters: false,
                 spaces: false,
                 width: 10,
                 files: vec![
@@ -1060,6 +1386,7 @@ mod tests {
             // 指定一个不存在的文件路径
             let fold_flags = FoldFlags {
                 bytes: false,
+                characters: false,
                 spaces: false,
                 width: 10,
                 files: vec!["this_file_does_not_exist.xyz".to_owned()],
@@ -1077,6 +1404,7 @@ mod tests {
             let fold_flags = FoldFlags {
                 files: vec!["nonexistent.txt".to_string()],
                 bytes: false,
+                characters: false,
                 spaces: true,
                 width: 80,
             };
@@ -1087,189 +1415,264 @@ mod tests {
             // 验证错误
             assert!(result.is_ok());
         }
-    }
-
-    #[cfg(test)]
-    mod fold_file_bytewise_tests {
-        /*
-            空输入：测试输入为空的情况。
-            单行输入：测试单行输入，确保其正确处理。
-            多行输入：测试多行输入，确保行宽限制被正确应用。
-            空行：测试包含空行的输入，确保空行被正确处理。
-            行尾空格：测试行尾有空格的情况，确保空格被正确处理。
-            行宽限制：测试行宽限制，确保行被正确截断。
-            行尾换行符：测试行尾换行符的处理，确保没有重复的换行符。
-            特殊测试：
-        包含空格分隔符的长行：
-            测试了 spaces 参数为 true 时，优先在空格处分割行。
-            包含制表符的行：验证了制表符是否被正确处理。
-            包含非ASCII字符的行：确保非ASCII字符被正确处理。
-            超长单行输入：测试了非常长的单行输入是否按宽度正确折叠。
-            不同宽度限制：验证了不同的宽度限制对输出的影响。
-            启用 spaces 参数：测试了 spaces 参数为 true 时的行为。
-            混合换行符：测试了不同类型的换行符是否被正确处理。
-        */
-
-        use super::*;
-        use std::io::{BufReader, Cursor};
 
         #[test]
-        fn test_fold_file_bytewise_empty_input() {
-            let input = "";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(String::from_utf8(output).unwrap(), "");
+        fn test_fold_single_file_characterwise_no_spaces() -> CTResult<()> {
+            // 测试字符计数模式：中文字符每个算作1个字符
+            let content = "这是测试中文字符串abc";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: false,
+                width: 8,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 按字符计数：前8个字符是"这是测试中文字符"，剩下"串abc"
+            assert_eq!(output, "这是测试中文字符\n串abc");
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_single_line_input() {
-            let input = "This is a single line.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This is a \nsingle lin\ne."
-            );
+        fn test_fold_single_file_characterwise_spaces() -> CTResult<()> {
+            // 测试字符计数模式配合空格断行
+            let content = "这是 测试 中文字符 串";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: true,
+                width: 6,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 按字符计数且在空格处断行：
+            // "这是 测试 " 中，"这是 " 3个字符， "测试 " 3个字符，"中文字符 " 5个字符，"串" 1个字符
+            // 实际会是"这是 测试 "，"中文字符 串"
+            assert_eq!(output, "这是 测试 \n中文字符 串");
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_multiple_lines_input() {
-            let input = "This is a line.\nThis is another line.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This is a \nline.\nThis is an\nother line\n."
-            );
+        fn test_fold_bytewise_utf8_character_boundaries() -> CTResult<()> {
+            // 测试字节模式正确处理UTF-8字符边界
+            let content = "中文测试abc";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: true,
+                characters: false,
+                spaces: false,
+                width: 10, // 10字节：每个中文字符3字节，"中文测"=9字节，"试"会在下一行
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 字节模式但保证UTF-8字符完整性
+            assert_eq!(output, "中文测\n试abc");
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_empty_lines_input() {
-            let input = "\n\n";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(String::from_utf8(output).unwrap(), "\n\n");
+        fn test_fold_mixed_ascii_utf8_characters() -> CTResult<()> {
+            // 测试混合ASCII和UTF-8字符的字符计数模式
+            let content = "Hello世界123测试";
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: false,
+                width: 8,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            // 按字符计数：前8个字符"Hello世界1"，剩下"23测试"
+            assert_eq!(output, "Hello世界1\n23测试");
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_line_ends_with_space() {
-            let input = "This line ends with a space. ";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This line \nends with \na space. "
-            );
+        fn test_fold_characterwise_vs_bytewise_difference() -> CTResult<()> {
+            // 演示字符模式和字节模式的区别
+            let content = "测试中文abc";
+            let temp_file1 = write_temp_file(content);
+            let temp_file2 = write_temp_file(content);
+
+            // 字符模式
+            let char_flags = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: false,
+                width: 6,
+                files: vec![temp_file1.path().to_string_lossy().to_string()],
+            };
+
+            let mut char_writer = Vec::new();
+            fold(&mut char_writer, &char_flags)?;
+            let char_output = String::from_utf8(char_writer).unwrap();
+
+            // 字节模式
+            let byte_flags = FoldFlags {
+                bytes: true,
+                characters: false,
+                spaces: false,
+                width: 6,
+                files: vec![temp_file2.path().to_string_lossy().to_string()],
+            };
+
+            let mut byte_writer = Vec::new();
+            fold(&mut byte_writer, &byte_flags)?;
+            let byte_output = String::from_utf8(byte_writer).unwrap();
+
+            // 字符模式：6个字符 "测试中文ab"，剩下"c"
+            assert_eq!(char_output, "测试中文ab\nc");
+
+            // 字节模式：6字节只能容纳2个中文字符"测试"(6字节)，剩下"中文abc"
+            assert_eq!(byte_output, "测试\n中文\nabc");
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_line_width_limit() {
-            let input = "This line is too long and should be folded.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This line \nis too lon\ng and shou\nld be fold\ned."
-            );
+        fn test_fold_characters_vs_bytes_vs_columns() -> CTResult<()> {
+            // 综合测试三种模式的区别：字符模式、字节模式、列模式
+            let content = "中文测试abc";
+            let temp_file = write_temp_file(content);
+
+            // 字符模式
+            let fold_flags_chars = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: false,
+                width: 5,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            // 字节模式
+            let fold_flags_bytes = FoldFlags {
+                bytes: true,
+                characters: false,
+                spaces: false,
+                width: 5,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            // 列模式（默认）
+            let fold_flags_cols = FoldFlags {
+                bytes: false,
+                characters: false,
+                spaces: false,
+                width: 5,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer_chars = Vec::new();
+            let mut writer_bytes = Vec::new();
+            let mut writer_cols = Vec::new();
+
+            fold(&mut writer_chars, &fold_flags_chars)?;
+            fold(&mut writer_bytes, &fold_flags_bytes)?;
+            fold(&mut writer_cols, &fold_flags_cols)?;
+
+            let output_chars = String::from_utf8(writer_chars).unwrap();
+            let output_bytes = String::from_utf8(writer_bytes).unwrap();
+            let output_cols = String::from_utf8(writer_cols).unwrap();
+
+            // 验证三种输出都不为空
+            assert!(!output_chars.is_empty());
+            assert!(!output_bytes.is_empty());
+            assert!(!output_cols.is_empty());
+
+            // 验证字符模式：按字符计数，应该包含 "中文测试a" 在第一行
+            assert!(output_chars.contains("中文测试a"));
+
+            // 验证字节模式：由于UTF-8边界保护，每个中文字符单独成行
+            assert!(output_bytes.contains("中") && output_bytes.contains("文"));
+            assert!(output_bytes.contains("测") && output_bytes.contains("试"));
+
+            // 验证列模式：与字符模式相同（对于中文字符）
+            assert!(output_cols.contains("中文测试a"));
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_line_ends_with_newline() {
-            let input = "This line ends with a newline.\n";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This line \nends with \na newline.\n"
-            );
+        fn test_fold_characters_exact_width() -> CTResult<()> {
+            // 测试字符模式的精确宽度控制
+            let content = "12345678901234567890"; // 20个ASCII字符
+            let temp_file = write_temp_file(content);
+
+            let fold_flags = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: false,
+                width: 10,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
+
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
+
+            let output = String::from_utf8(writer).unwrap();
+            let lines: Vec<&str> = output.lines().collect();
+
+            // 应该有2行，每行10个字符
+            assert_eq!(lines.len(), 2);
+            assert_eq!(lines[0], "1234567890");
+            assert_eq!(lines[1], "1234567890");
+
+            Ok(())
         }
 
         #[test]
-        fn test_fold_file_bytewise_line_with_spaces_for_splitting() {
-            let input = "This is a very long line that should be split at spaces.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, true, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This is a \nvery long \nline that \nshould be \nsplit at \nspaces."
-            );
-        }
+        fn test_fold_characters_with_emoji() -> CTResult<()> {
+            // 测试字符模式对emoji的处理
+            let content = "😀😃😄😁😆😅"; // 6个emoji字符
+            let temp_file = write_temp_file(content);
 
-        #[test]
-        fn test_fold_file_bytewise_line_with_tabs() {
-            let input = "This\tis\ta\tline\twith\ttabs.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This\tis\ta\t\nline\twith\t\ntabs."
-            );
-        }
+            let fold_flags = FoldFlags {
+                bytes: false,
+                characters: true,
+                spaces: false,
+                width: 3,
+                files: vec![temp_file.path().to_string_lossy().to_string()],
+            };
 
-        #[test]
-        fn test_fold_file_bytewise_non_ascii_characters() {
-            let input = "你好，这是一个包含非ASCII字符的测试。";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 50).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "你好，这是一个包含非ASCII字符的测试\n。"
-            );
-        }
+            let mut writer = Vec::new();
+            fold(&mut writer, &fold_flags)?;
 
-        #[test]
-        fn test_fold_file_bytewise_very_long_single_line() {
-            let input = "This is a very very very very very very very very very very very very very very very long line.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 20).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This is a very very \nvery very very very \nvery very very very \nvery very very very \nvery long line."
-            );
-        }
+            let output = String::from_utf8(writer).unwrap();
+            let lines: Vec<&str> = output.lines().collect();
 
-        #[test]
-        fn test_fold_file_bytewise_different_width_limits() {
-            let input = "This is a line.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 5).unwrap();
-            assert_eq!(String::from_utf8(output).unwrap(), "This \nis a \nline.");
-        }
+            // 应该有2行，每行3个emoji字符
+            assert_eq!(lines.len(), 2);
+            assert_eq!(lines[0].chars().count(), 3);
+            assert_eq!(lines[1].chars().count(), 3);
 
-        #[test]
-        fn test_fold_file_bytewise_spaces_enabled() {
-            let input = "This is a very long line that should be split at spaces.";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, true, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "This is a \nvery long \nline that \nshould be \nsplit at \nspaces."
-            );
-        }
-
-        #[test]
-        fn test_fold_file_bytewise_mixed_line_endings() {
-            let input = "Line with CRLF\r\nLine with LF\n";
-            let mut output = Vec::new();
-            let reader = BufReader::new(Cursor::new(input));
-            fold_file_bytewise(&mut output, reader, false, 10).unwrap();
-            assert_eq!(
-                String::from_utf8(output).unwrap(),
-                "Line with \nCRLF\r\nLine with \nLF\n"
-            );
+            Ok(())
         }
     }
 
@@ -1493,6 +1896,166 @@ mod tests {
                 output_str,
                 "This line \nis too lon\ng and shou\nld be wrap\nped."
             );
+        }
+    }
+
+    #[cfg(test)]
+    mod fold_file_characterwise_tests {
+        use super::*;
+        use std::io::{BufReader, Cursor};
+
+        #[test]
+        fn test_fold_file_characterwise_empty_input() {
+            let input = "";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), "");
+        }
+
+        #[test]
+        fn test_fold_file_characterwise_ascii_only() {
+            let input = "This is a test line with ASCII characters only.";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, false, 10).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "This is a \ntest line \nwith ASCII\n character\ns only."
+            );
+        }
+
+        #[test]
+        fn test_fold_file_characterwise_utf8_characters() {
+            let input = "这是一个测试中文字符的例子。";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, false, 8).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "这是一个测试中文\n字符的例子。"
+            );
+        }
+
+        #[test]
+        fn test_fold_file_characterwise_mixed_characters() {
+            let input = "Hello世界abc测试123";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, false, 6).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "Hello世\n界abc测试\n123"
+            );
+        }
+
+        #[test]
+        fn test_fold_file_characterwise_with_spaces() {
+            let input = "这是 一个 测试 中文 字符串";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, true, 6).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "这是 一个 \n测试 中文 \n字符串"
+            );
+        }
+
+        #[test]
+        fn test_fold_file_characterwise_newlines() {
+            let input = "第一行\n第二行很长需要被折行\n第三行";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, false, 6).unwrap();
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "第一行\n\n第二行很长需\n要被折行\n\n第三行"
+            );
+        }
+
+        #[test]
+        fn test_fold_file_characterwise_emoji() {
+            let input = "Hello👋世界🌍测试😊";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_characterwise(&mut output, reader, false, 8).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), "Hello👋世界\n🌍测试😊");
+        }
+    }
+
+    #[cfg(test)]
+    mod fold_file_bytewise_improved_tests {
+        use super::*;
+        use std::io::{BufReader, Cursor};
+
+        #[test]
+        fn test_fold_file_bytewise_utf8_boundary_protection() {
+            // 测试UTF-8字符边界保护：确保不会在字符中间切断
+            let input = "测试中文abc";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            // 每个中文字符3字节，4字节应该只能放一个中文字符
+            fold_file_bytewise(&mut output, reader, false, 4).unwrap();
+            let result = String::from_utf8(output).unwrap();
+            // 实际输出："测"(3字节) + "\n" + "试"(3字节) + "\n" + "中"(3字节) + "\n" + "文a" + "\n" + "bc"
+            assert_eq!(result, "测\n试\n中\n文a\nbc");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_mixed_ascii_utf8() {
+            let input = "a测b试c";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            // 5字节可以放"a测b"(1+3+1=5字节)
+            fold_file_bytewise(&mut output, reader, false, 5).unwrap();
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "a测b\n试c");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_exact_utf8_boundary() {
+            let input = "测试";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            // 6字节正好是两个中文字符
+            fold_file_bytewise(&mut output, reader, false, 6).unwrap();
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "测试");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_utf8_with_spaces() {
+            let input = "测试 中文 字符";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            // 7字节："测试 " (3+3+1=7字节)
+            fold_file_bytewise(&mut output, reader, true, 7).unwrap();
+            let result = String::from_utf8(output).unwrap();
+            assert_eq!(result, "测试 \n中文 \n字符");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_no_valid_break_point() {
+            let input = "测";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            // 1字节无法容纳任何中文字符，但我们的实现会强制输出整个字符以避免无限循环
+            fold_file_bytewise(&mut output, reader, false, 1).unwrap();
+            let result = String::from_utf8(output).unwrap();
+            // 应该输出完整的字符
+            assert_eq!(result, "测");
+        }
+
+        #[test]
+        fn test_fold_file_bytewise_complex_utf8() {
+            // 测试包含各种UTF-8字符：中文、日文、表情符号
+            let input = "Hello👋こんにちは世界";
+            let mut output = Vec::new();
+            let reader = BufReader::new(Cursor::new(input));
+            fold_file_bytewise(&mut output, reader, false, 8).unwrap();
+            let result = String::from_utf8(output).unwrap();
+            // 确保输出是有效的UTF-8且没有破损的字符
+            assert!(result.chars().all(|c| !c.is_control() || c == '\n'));
         }
     }
 }

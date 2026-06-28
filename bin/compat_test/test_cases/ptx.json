@@ -1,0 +1,253 @@
+{
+    "tests": [
+        {
+            "command": "ptx",
+            "description": "ptx: 扩展模式",
+            "args": ["ptx_example.txt"],
+            "setup_commands": [
+                "echo 'Hello world \nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt\n"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，基本功能测试",
+            "args": ["-G", "ptx_example.txt"],
+            "setup_commands": [
+                "echo 'Hello world \nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt\n"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "tstdin": "hello world\nthis is a test\n",
+            "command": "ptx",
+            "description": "ptx: 传统模式，从标准输入读取",
+            "args": ["-G"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，忽略大小写",
+            "args": ["-G", "-f",
+            "ptx_example.txt"],
+            "setup_commands": [
+                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，将结果写入到文件",
+            "args": ["-G", "ptx_example.txt", "output_index.txt"],
+            "setup_commands": [
+                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat output_index.txt",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt output_index.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，自定义行宽",
+            "args": ["-G", "-w", "30", "ptx_example.txt"],
+            "setup_commands": [
+                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，忽略特定词",
+            "args": ["-G", "-i", "stopwords.txt",
+            "ptx_example.txt"],
+            "setup_commands": [
+                "echo -e 'the\\nan' > stopwords.txt",
+                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt stopwords.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，错误参数处理",
+            "args": ["-G", "--badoption",
+            "ptx_example.txt"],
+            "setup_commands": [
+                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f ptx_example.txt"
+            ],
+            "requires_root": false
+        },
+        {
+            "command": "ptx",
+            "description": "ptx: 传统模式，文件不存在",
+            "args": ["-G", "not_exist.txt"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ],
+            "requires_root": false
+        }
+    ]
+}

@@ -357,6 +357,335 @@
                 "width-option",
                 "multiple-files"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字符计数选项(-c)基本功能",
+            "setup_commands": [
+                "echo 'This is a test line with exactly 30 characters' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "15",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "This is a test \nline with exact\nly 30 character\ns"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字符计数长选项(--characters)",
+            "setup_commands": [
+                "echo 'Testing the long option for character counting mode' > input.txt"
+            ],
+            "args": [
+                "--characters",
+                "-w",
+                "20",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Testing the long opt\nion for character co\nunting mode"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "long-option"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试UTF-8中文字符计数",
+            "setup_commands": [
+                "echo '测试中文字符abc12345678' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "10",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "测试中文字符abc1\n2345678"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "utf8",
+                "chinese"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试混合ASCII和UTF-8字符",
+            "setup_commands": [
+                "echo 'Hello世界abc测试123' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "8",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello世界\nabc测试12\n3"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "utf8",
+                "mixed-charset"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试emoji字符计数",
+            "setup_commands": [
+                "echo 'Hello👋世界🌍测试😊' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "8",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Hello👋世界\n🌍测试😊"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "utf8",
+                "emoji"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字符计数与空格换行组合(-c -s)",
+            "setup_commands": [
+                "echo '这是 测试 中文 字符 换行' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-s",
+                "-w",
+                "8",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "这是 测试 \n中文 字符 \n换行"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "spaces-option",
+                "utf8",
+                "combined-options"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节计数与字符计数互斥(-b -c)",
+            "setup_commands": [
+                "echo 'test content' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-c",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            },
+            "tags": [
+                "characters-option",
+                "bytes-option",
+                "mutually-exclusive",
+                "error-handling"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式下UTF-8字符边界保护",
+            "setup_commands": [
+                "echo '测试中文abc' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "4",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "测\n试\n中\n文a\nbc"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "utf8",
+                "boundary-protection"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字符计数与字节计数的差异",
+            "setup_commands": [
+                "echo '测试中文abc' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "6",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "测试中文ab\nc"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "utf8",
+                "comparison"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试标准输入的字符计数",
+            "args": [
+                "-c",
+                "-w",
+                "12"
+            ],
+            "expectation": {
+                "execution": {
+                    "stdin": "这是从标准输入读取的中文测试内容",
+                    "exit_code": 0,
+                    "stdout": "这是从标准输入读取\n的中文测试内容"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "stdin",
+                "utf8"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字符计数处理多行内容",
+            "setup_commands": [
+                "echo -e '第一行中文内容\\n第二行很长需要被折行的中文内容\\n第三行' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "8",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "第一行中文内容\n第二行很长需\n要被折行的中\n文内容\n第三行"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "utf8",
+                "multiline"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字符计数处理日文字符",
+            "setup_commands": [
+                "echo 'こんにちは世界Hello' > input.txt"
+            ],
+            "args": [
+                "-c",
+                "-w",
+                "10",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "こんにちは世界He\nllo"
+                }
+            },
+            "tags": [
+                "characters-option",
+                "utf8",
+                "japanese"
+            ]
         }
     ]
 }

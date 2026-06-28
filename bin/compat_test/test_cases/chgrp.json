@@ -93,6 +93,103 @@
         },
         "cleanup_commands": [],
         "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试多文件场景下部分文件不存在",
+        "args": ["chgrp_test_group3", "exist1.txt", "missing.txt", "exist2.txt"],
+        "setup_commands": [
+            "groupadd chgrp_test_group3",
+            "touch exist1.txt exist2.txt",
+            "chgrp root exist1.txt exist2.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' exist1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group3\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' exist2.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group3\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f exist1.txt exist2.txt",
+            "groupdel chgrp_test_group3"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试递归修改目录及其内容的所属组 (-R)",
+        "args": ["-R", "chgrp_test_group4", "test_dir"],
+        "setup_commands": [
+            "groupadd chgrp_test_group4",
+            "mkdir -p test_dir/subdir",
+            "touch test_dir/file1.txt test_dir/subdir/file2.txt",
+            "chgrp root test_dir test_dir/file1.txt test_dir/subdir test_dir/subdir/file2.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' test_dir",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group4\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' test_dir/file1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group4\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' test_dir/subdir",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group4\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' test_dir/subdir/file2.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group4\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir",
+            "groupdel chgrp_test_group4"
+        ],
+        "requires_root": true
     }
   ]
 }

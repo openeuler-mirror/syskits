@@ -1008,6 +1008,7 @@ dependencies = [
  "rust-i18n",
  "sys-locale",
  "tempfile",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]

@@ -10625,8 +10625,10 @@ mod tests {
     mod locale_tests {
         use super::*;
         use std::env;
+        use serial_test::serial;
 
         #[test]
+        #[serial]
         fn test_sort_month_parse_chinese_locale() {
             // 模拟中文locale环境
             unsafe {
@@ -10650,6 +10652,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_sort_month_parse_c_locale() {
             // 模拟C locale环境
             unsafe {
@@ -10670,6 +10673,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_sort_month_compare_with_locale() {
             // 测试月份比较在不同locale下的一致性
             assert_eq!(sort_month_compare("JAN", "FEB"), Ordering::Less);
@@ -10684,7 +10688,7 @@ mod tests {
             // 检查实际的中文月份解析是否工作（不依赖hard_locale_time判断）
             let jan_parsed = sort_month_parse("一月");
             let feb_parsed = sort_month_parse("二月");
-            
+
             if jan_parsed != SortMonth::Unknown && feb_parsed != SortMonth::Unknown {
                 // 中文月份解析成功时才进行中文月份测试
                 assert_eq!(sort_month_compare("一月", "二月"), Ordering::Less);
@@ -10696,7 +10700,7 @@ mod tests {
                 // 在不支持中文locale的环境中，中文月份应该返回Unknown，比较结果为Equal
                 assert_eq!(sort_month_compare("一月", "二月"), Ordering::Equal);
                 assert_eq!(sort_month_compare("十二月", "一月"), Ordering::Equal);
-                
+
                 // 英文vs中文，英文应该被识别，中文为Unknown，所以JAN(1) vs Unknown(0) -> Greater
                 assert_eq!(sort_month_compare("JAN", "二月"), Ordering::Greater);
             }
@@ -10708,6 +10712,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn test_hard_locale_time_integration() {
             // 测试hard_locale_time函数的使用
             unsafe {

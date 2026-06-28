@@ -888,10 +888,15 @@ fn mv_rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
 
         let is_cross_device = matches!(rename_error.raw_os_error(), Some(EXDEV));
-
         // 如果不是跨设备错误，直接返回
         if !is_cross_device {
-            return Err(rename_error);
+            let message = format!(
+                    "cannot move {} to {}: {}",
+                    from.quote(),
+                    to.quote(),
+                    rename_error
+                );
+            return Err(io::Error::new(rename_error.kind(), message));
         }
         // 如果启用了调试模式，说明重命名失败的原因
         if options.debug {

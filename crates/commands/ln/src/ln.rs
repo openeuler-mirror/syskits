@@ -40,7 +40,7 @@ use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
-use ctcore::ct_fs::{make_path_relative_to, paths_refer_to_same_file};
+use ctcore::ct_fs::make_path_relative_to;
 use ctcore::libc;
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
@@ -105,7 +105,7 @@ enum LnError {
     /// 参数:
     /// - 源文件路径
     /// - 目标文件路径
-    SameFile(PathBuf, PathBuf),
+    ///SameFile(PathBuf, PathBuf),
     /// 缺少目标文件路径参数
     /// 参数: 最后一个提供的参数
     MissingDestination(PathBuf),
@@ -124,9 +124,9 @@ impl Display for LnError {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
 
             // 源文件和目标文件是同一个文件时的错误信息
-            Self::SameFile(s, d) => {
-                write!(f, "{} and {} are the same file", s.quote(), d.quote())
-            }
+            //Self::SameFile(s, d) => {
+            //    write!(f, "{} and {} are the same file", s.quote(), d.quote())
+            //}
 
             // 部分链接创建失败时返回空字符串(错误信息已在其他地方处理)
             Self::SomeLinksFailed => Ok(()),

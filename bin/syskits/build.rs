@@ -372,9 +372,12 @@ fn generate_tools_code(
         let (feature_name, module_name_for_import) = if tool.module_name == "test" {
             ("command_test", "command_test")
         } else {
-            (tool.module_name.as_str(), final_crate_name_for_use_stmt.as_str())
+            (
+                tool.module_name.as_str(),
+                final_crate_name_for_use_stmt.as_str(),
+            )
         };
-        
+
         // 生成导入语句
         use_statements.push_str(&format!(
             "#[cfg(feature = \"{}\")]\nuse {}::{};\n",

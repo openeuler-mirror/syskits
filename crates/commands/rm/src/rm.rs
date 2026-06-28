@@ -728,7 +728,21 @@ fn custom_remove_dir_all(path: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
+    use std::fs;
+    use std::ffi::{OsStr, OsString};
+    use std::path::PathBuf;
+
+    fn base_options() -> RMOptions {
+        RMOptions {
+            force: false,
+            interactive: InteractiveMode::Never,
+            one_fs: false,
+            preserve_root: true,
+            recursive: false,
+            dir: false,
+            verbose: false,
+        }
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -758,6 +772,123 @@ mod tests {
         let result = rm.execute(&args);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code(), 0);
+    }
+
+    #[test]
+    fn test_should_force_prompt_never_logic() {
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "-f", "target"])
+            .unwrap();
+        assert!(should_force_prompt_never(&matches, true));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "-f", "-i", "target"])
+            .unwrap();
+        assert!(!should_force_prompt_never(&matches, true));
+    }
+
+    #[test]
+    fn test_extract_files_and_validate_input() {
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "a", "b"])
+            .unwrap();
+        let files = extract_files(&matches);
+        assert_eq!(files.len(), 2);
+
+        assert!(validate_input(&[], false).is_err());
+        assert!(validate_input(&[], true).is_ok());
+        assert!(validate_input(&[OsStr::new("file")], false).is_ok());
+    }
+
+    #[test]
+    fn test_custom_remove_dir_all_removes_everything() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir_path = temp_dir.path();
+        let nested = dir_path.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("file.txt"), b"content").unwrap();
+        std::fs::write(dir_path.join("root.txt"), b"root").unwrap();
+
+        custom_remove_dir_all(dir_path).unwrap();
+        assert!(!dir_path.exists());
+    }
+
+    #[test]
+    fn test_rm_options_new_and_interactive_modes() {
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "-f", "-r", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(opts.force);
+        assert!(opts.recursive);
+        assert!(matches!(opts.interactive, InteractiveMode::Never));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "-i", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(matches!(opts.interactive, InteractiveMode::Always));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "-I", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(matches!(opts.interactive, InteractiveMode::Once));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "--interactive=never", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(matches!(opts.interactive, InteractiveMode::Never));
+    }
+
+    #[test]
+    fn test_should_prompt_user_logic() {
+        let mut options = base_options();
+        options.interactive = InteractiveMode::Once;
+        options.recursive = true;
+        let files: Vec<&OsStr> = vec![OsStr::new("a"), OsStr::new("b")];
+        assert!(should_prompt_user(&options, &files));
+
+        options.recursive = false;
+        let files: Vec<&OsStr> =
+            vec![OsStr::new("a"), OsStr::new("b"), OsStr::new("c"), OsStr::new("d")];
+        assert!(should_prompt_user(&options, &files));
+
+        options.interactive = InteractiveMode::Never;
+        assert!(!should_prompt_user(&options, &files));
+    }
+
+    #[test]
+    fn test_should_remove_file_without_prompt() {
+        let options = base_options();
+        let files: Vec<&OsStr> = vec![OsStr::new("dummy")];
+        assert!(should_remove_file(&files, &options));
+    }
+
+    #[test]
+    fn test_remove_successfully_deletes_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let file_path = temp.path().join("file.txt");
+        std::fs::write(&file_path, b"content").unwrap();
+
+        let options = base_options();
+        let files_vec = vec![file_path.into_os_string()];
+        let removed_path = PathBuf::from(&files_vec[0]);
+        let refs: Vec<&OsStr> = files_vec.iter().map(|s| s.as_os_str()).collect();
+
+        let result = remove(&refs, &options);
+        assert!(!result);
+        assert!(!removed_path.exists());
+    }
+
+    #[test]
+    fn test_remove_with_missing_file_sets_error() {
+        let options = base_options();
+        let missing = OsString::from("nonexistent.txt");
+        let refs: Vec<&OsStr> = vec![missing.as_os_str()];
+        let result = remove(&refs, &options);
+        assert!(result);
     }
 
     #[test]

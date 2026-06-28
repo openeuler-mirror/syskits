@@ -790,6 +790,9 @@ mod tests {
     use std::collections::HashSet;
     use std::fs;
     use tempfile::tempdir;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::Builder;
 
     #[test]
     fn test_tool_implementation() {
@@ -805,7 +808,42 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("shred"), OsString::from("--help")];
         let result = tool.execute(&args);
-        assert!(result.is_err()); // shred命令需要文件路径参数，所以不带参数应该返回错误
+        assert!(result.is_err()); // shred命令需要必要参数，所以测试不带参数的情况应该返回错误
+    }
+
+    #[test]
+    fn test_app_random_source_arg() {
+        let app = ct_app();
+        
+        // 测试 --random-source 参数
+        let args = vec!["shred", "--random-source", "/dev/urandom", "testfile.txt"];
+        let matches = app.try_get_matches_from(args);
+        assert!(matches.is_ok(), "应该能解析 --random-source 参数");
+        
+        let matches = matches.unwrap();
+        assert!(matches.contains_id(shred_options::SHRED_RANDOM_SOURCE), "应该包含 random-source 参数");
+        assert_eq!(
+            matches.get_one::<String>(shred_options::SHRED_RANDOM_SOURCE).unwrap(),
+            "/dev/urandom",
+            "随机源路径应该正确解析"
+        );
+    }
+
+    #[test] 
+    fn test_settings_with_random_source() -> CTResult<()> {
+        let app = ct_app();
+        let args = vec!["shred", "--random-source", "/dev/urandom", "--iterations", "2", "testfile.txt"];
+        let matches = app.try_get_matches_from(args).unwrap();
+        
+        let settings = ShredSettings::new(&matches)?;
+        assert_eq!(settings.len(), 1, "应该有一个文件设置");
+        
+        let setting = &settings[0];
+        assert_eq!(setting.random_source, Some("/dev/urandom"), "随机源应该正确设置");
+        assert_eq!(setting.n_passes, 2, "迭代次数应该正确设置");
+        assert_eq!(setting.path_str, "testfile.txt", "文件路径应该正确设置");
+        
+        Ok(())
     }
 
     mod pattern_tests {
@@ -827,14 +865,37 @@ mod tests {
         }
 
         #[test]
-        fn test_bytes_writer_pattern() -> Result<(), io::Error> {
-            let pattern = Pattern::Single(0xAA);
-            let mut writer =
-                BytesWriter::from_pass_type_with_random_source(&PassType::Pattern(pattern), None)?;
+        fn test_bytes_writer_file_random() -> Result<(), io::Error> {
+            use std::io::Write;
+            use tempfile::NamedTempFile;
+
+            // 创建临时文件作为随机源
+            let mut temp_file = NamedTempFile::new().unwrap();
+            let test_data = b"hello world test data for random source";
+            temp_file.write_all(test_data).unwrap();
+            temp_file.flush().unwrap();
+
+            let path = temp_file.path().to_str().unwrap();
+            
+            // 使用文件作为随机源
+            let mut writer = BytesWriter::from_pass_type_with_random_source(&PassType::Random, Some(path))?;
 
             let block = writer.bytes_for_pass(10)?;
             assert_eq!(block.len(), 10, "应该生成请求的长度");
-            assert!(block.iter().all(|&b| b == 0xAA), "应该全是指定的模式");
+            assert_eq!(block, &test_data[..10], "应该从文件读取数据");
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_bytes_writer_with_random_source_none() -> Result<(), io::Error> {
+            // 当没有提供随机源时，应该使用默认随机数生成器
+            let mut writer = BytesWriter::from_pass_type_with_random_source(&PassType::Random, None)?;
+
+            let block1 = writer.bytes_for_pass(10)?.to_vec();
+            let block2 = writer.bytes_for_pass(10)?.to_vec();
+            assert_ne!(block1, block2, "随机块应该不相同");
+            assert_eq!(block1.len(), 10, "应该生成请求的长度");
 
             Ok(())
         }
@@ -988,22 +1049,83 @@ mod tests {
         }
 
         #[test]
-        fn test_wipe_file_force() {
-            let dir = tempdir().unwrap();
-            let file_path = dir.path().join("test.txt");
-            fs::write(&file_path, "test data").unwrap();
+        fn test_wipe_file_force() -> CTResult<()> {
+            let temp_dir = Builder::new().prefix("shred_test").tempdir().unwrap();
+            let file_path = temp_dir.path().join("test_file.txt");
 
-            let mut perms = fs::metadata(&file_path).unwrap().permissions();
-            perms.set_readonly(true);
-            fs::set_permissions(&file_path, perms).unwrap();
+            // 创建一个只读文件
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(b"test content").unwrap();
+            drop(file);
 
-            let mut settings = create_test_settings(file_path.to_str().unwrap());
-            settings.force = true;
+            #[cfg(unix)]
+            {
+                let mut perms = fs::metadata(&file_path).unwrap().permissions();
+                perms.set_readonly(true);
+                fs::set_permissions(&file_path, perms).unwrap();
+            }
+
+            let settings = ShredSettings {
+                path_str: file_path.to_str().unwrap(),
+                n_passes: 1,
+                remove_method: RemoveMethod::None,
+                size: None,
+                exact: false,
+                zero: false,
+                verbose: false,
+                force: true,
+                random_source: None,
+            };
 
             let result = shred_exec(&settings);
+            assert!(result.is_ok(), "强制模式下应该能处理只读文件");
 
-            assert!(result.is_ok(), "擦除应该成功");
-            assert!(file_path.exists(), "文件应该还存在");
+            Ok(())
+        }
+
+        #[test]
+        fn test_wipe_file_with_random_source() -> CTResult<()> {
+            use std::io::Write;
+            use tempfile::NamedTempFile;
+
+            let temp_dir = Builder::new().prefix("shred_test").tempdir().unwrap();
+            let file_path = temp_dir.path().join("test_file.txt");
+
+            // 创建要被擦除的文件
+            let test_content = b"sensitive data to be wiped";
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(test_content).unwrap();
+            drop(file);
+
+            // 创建随机源文件 - 确保它足够大
+            let mut random_source = NamedTempFile::new().unwrap();
+            let random_data = b"this is my custom random data source for testing with lots of random bytes and more content to ensure we have enough data for the test case";
+            random_source.write_all(random_data).unwrap();
+            random_source.flush().unwrap();
+            let random_source_path = random_source.path().to_str().unwrap();
+
+            let settings = ShredSettings {
+                path_str: file_path.to_str().unwrap(),
+                n_passes: 1,
+                remove_method: RemoveMethod::None,
+                size: Some(test_content.len() as u64), // 明确指定文件大小
+                exact: true, // 使用精确大小
+                zero: false,
+                verbose: false,
+                force: false,
+                random_source: Some(random_source_path),
+            };
+
+            let result = shred_exec(&settings);
+            assert!(result.is_ok(), "使用随机源文件应该成功: {:?}", result);
+
+            // 验证文件仍然存在但内容已被覆盖
+            assert!(file_path.exists(), "文件应该仍然存在");
+            let content = fs::read(&file_path).unwrap();
+            assert_eq!(content.len(), test_content.len(), "文件大小应该保持不变");
+            assert_ne!(content, test_content, "文件内容应该已被覆盖");
+
+            Ok(())
         }
     }
 

@@ -74,7 +74,7 @@ pub struct TestEnvironment {
 }
 
 /// Resource limits for the test environment
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ResourceLimits {
     /// Maximum file size (bytes)
     pub file_size: Option<u64>,
@@ -303,6 +303,7 @@ impl From<&FunctionalVerification> for CommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_deserialize_test_case() {
@@ -562,5 +563,330 @@ mod tests {
         assert_eq!(result.exit_code, 1);
         assert_eq!(result.stdout, "");
         assert_eq!(result.stderr, "error");
+    }
+
+    #[test]
+    fn test_test_case_manager_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_cases_dir = temp_dir.path().to_path_buf();
+
+        let manager = TestCaseManager::new(&test_cases_dir);
+
+        assert_eq!(manager.test_cases_dir, test_cases_dir);
+    }
+
+    #[test]
+    fn test_test_case_manager_save_and_load() -> Result<()> {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let test_cases_dir = temp_dir.path().to_path_buf();
+
+        // 创建测试用例管理器
+        let manager = TestCaseManager::new(&test_cases_dir);
+
+        // 创建测试用例
+        let test_cases = vec![TestCase {
+            tstdin: "".to_string(),
+            command: "echo".to_string(),
+            description: "Test echo command".to_string(),
+            args: vec!["Hello".to_string()],
+            expectation: TestExpectation {
+                execution: CommandExecution {
+                    exit_code: Some(0),
+                    stdout: Some("Hello\n".to_string()),
+                    stderr: Some("".to_string()),
+                },
+                verifications: vec![],
+                use_patterns: false,
+                env_changes: HashMap::new(),
+                file_changes: vec![],
+                ignore_fields: IgnoreFields::default(),
+            },
+            setup_commands: vec![],
+            cleanup_commands: vec![],
+            requires_root: false,
+            timeout: None,
+            tags: vec!["basic".to_string()],
+            environment: TestEnvironment::default(),
+        }];
+
+        // 保存测试用例
+        manager.save_test_cases("echo", &test_cases)?;
+
+        // 验证文件是否创建
+        let test_file = test_cases_dir.join("echo.json");
+        assert!(test_file.exists());
+
+        // 加载测试用例
+        let loaded_cases = manager.load_test_cases("echo")?;
+
+        // 验证加载的测试用例
+        assert_eq!(loaded_cases.len(), 1);
+        assert_eq!(loaded_cases[0].command, "echo");
+        assert_eq!(loaded_cases[0].description, "Test echo command");
+        assert_eq!(loaded_cases[0].args, vec!["Hello"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_test_case_manager_get_available_commands() -> Result<()> {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let test_cases_dir = temp_dir.path().to_path_buf();
+
+        // 创建测试用例管理器
+        let manager = TestCaseManager::new(&test_cases_dir);
+
+        // 创建测试文件
+        fs::write(test_cases_dir.join("cmd1.json"), "{\"tests\":[]}")?;
+        fs::write(test_cases_dir.join("cmd2.json"), "{\"tests\":[]}")?;
+        fs::write(test_cases_dir.join("cmd3.json"), "{\"tests\":[]}")?;
+
+        // 获取可用命令
+        let commands = manager.get_available_commands()?;
+
+        // 验证命令列表
+        assert_eq!(commands.len(), 3);
+        assert!(commands.contains(&"cmd1".to_string()));
+        assert!(commands.contains(&"cmd2".to_string()));
+        assert!(commands.contains(&"cmd3".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_test_case_manager_load_nonexistent_file() -> Result<()> {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let test_cases_dir = temp_dir.path().to_path_buf();
+
+        // 创建测试用例管理器
+        let manager = TestCaseManager::new(&test_cases_dir);
+
+        // 加载不存在的测试用例文件
+        let cases = manager.load_test_cases("nonexistent")?;
+
+        // 验证返回空列表
+        assert!(cases.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_test_case_manager_invalid_json() -> Result<()> {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let test_cases_dir = temp_dir.path().to_path_buf();
+
+        // 创建测试用例管理器
+        let manager = TestCaseManager::new(&test_cases_dir);
+
+        // 创建无效的测试文件
+        fs::write(
+            test_cases_dir.join("invalid.json"),
+            "{ this is not valid json }",
+        )?;
+
+        // 尝试加载无效的测试用例文件
+        let result = manager.load_test_cases("invalid");
+
+        // 验证返回错误
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_test_environment_default() {
+        // 测试 TestEnvironment 默认值
+        let env = TestEnvironment::default();
+
+        assert!(env.files.is_empty());
+        assert!(env.env_vars.is_empty());
+        assert_eq!(env.working_dir, None);
+        assert_eq!(env.run_as_user, None);
+        assert_eq!(env.run_as_group, None);
+        assert_eq!(env.umask, None);
+        assert_eq!(env.resource_limits, None);
+    }
+
+    #[test]
+    fn test_ignore_fields_default() {
+        // 测试 IgnoreFields 默认值
+        let ignore = IgnoreFields::default();
+
+        assert!(!ignore.ignore_exit_code);
+        assert!(!ignore.ignore_stdout);
+        assert!(!ignore.ignore_stderr);
+        assert!(!ignore.ignore_verifications);
+    }
+
+    #[test]
+    fn test_file_type_serialization() {
+        // 测试 FileType 序列化和反序列化
+        let types = vec![
+            FileType::Regular,
+            FileType::Directory,
+            FileType::Symlink,
+            FileType::CharDevice,
+            FileType::BlockDevice,
+            FileType::Fifo,
+            FileType::Socket,
+        ];
+
+        for file_type in types {
+            let serialized = serde_json::to_string(&file_type).unwrap();
+            let deserialized: FileType = serde_json::from_str(&serialized).unwrap();
+
+            // 检查反序列化结果与原始值匹配
+            match (file_type, deserialized) {
+                (FileType::Regular, FileType::Regular) => (),
+                (FileType::Directory, FileType::Directory) => (),
+                (FileType::Symlink, FileType::Symlink) => (),
+                (FileType::CharDevice, FileType::CharDevice) => (),
+                (FileType::BlockDevice, FileType::BlockDevice) => (),
+                (FileType::Fifo, FileType::Fifo) => (),
+                (FileType::Socket, FileType::Socket) => (),
+                _ => panic!("FileType serialization/deserialization failed"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_test_file_serialization() {
+        // 创建 TestFile
+        let test_file = TestFile {
+            path: "test_file.txt".to_string(),
+            content: Some("Test content".to_string()),
+            permissions: Some("644".to_string()),
+            owner: Some("user".to_string()),
+            group: Some("group".to_string()),
+            file_type: FileType::Regular,
+            symlink_target: None,
+            size: Some(100),
+            timestamp: Some(1234567890),
+        };
+
+        // 序列化
+        let serialized = serde_json::to_string(&test_file).unwrap();
+
+        // 反序列化
+        let deserialized: TestFile = serde_json::from_str(&serialized).unwrap();
+
+        // 验证字段
+        assert_eq!(deserialized.path, test_file.path);
+        assert_eq!(deserialized.content, test_file.content);
+        assert_eq!(deserialized.permissions, test_file.permissions);
+        assert_eq!(deserialized.owner, test_file.owner);
+        assert_eq!(deserialized.group, test_file.group);
+        assert_eq!(deserialized.size, test_file.size);
+        assert_eq!(deserialized.timestamp, test_file.timestamp);
+
+        // 验证枚举类型
+        match (test_file.file_type, deserialized.file_type) {
+            (FileType::Regular, FileType::Regular) => (),
+            _ => panic!("FileType mismatch after serialization/deserialization"),
+        }
+    }
+
+    #[test]
+    fn test_file_change_serialization() {
+        // 创建 FileChange
+        let file_change = FileChange {
+            path: "test_file.txt".to_string(),
+            content: Some("New content".to_string()),
+            permissions: Some("755".to_string()),
+            owner: Some("new_user".to_string()),
+            group: Some("new_group".to_string()),
+            should_exist: true,
+        };
+
+        // 序列化
+        let serialized = serde_json::to_string(&file_change).unwrap();
+
+        // 反序列化
+        let deserialized: FileChange = serde_json::from_str(&serialized).unwrap();
+
+        // 验证字段
+        assert_eq!(deserialized.path, file_change.path);
+        assert_eq!(deserialized.content, file_change.content);
+        assert_eq!(deserialized.permissions, file_change.permissions);
+        assert_eq!(deserialized.owner, file_change.owner);
+        assert_eq!(deserialized.group, file_change.group);
+        assert_eq!(deserialized.should_exist, file_change.should_exist);
+    }
+
+    #[test]
+    fn test_resource_limits_serialization() {
+        // 创建 ResourceLimits
+        let limits = ResourceLimits {
+            file_size: Some(1024),
+            cpu_time: Some(10),
+            memory_size: Some(1_000_000),
+            open_files: Some(100),
+        };
+
+        // 序列化
+        let serialized = serde_json::to_string(&limits).unwrap();
+
+        // 反序列化
+        let deserialized: ResourceLimits = serde_json::from_str(&serialized).unwrap();
+
+        // 验证字段
+        assert_eq!(deserialized.file_size, limits.file_size);
+        assert_eq!(deserialized.cpu_time, limits.cpu_time);
+        assert_eq!(deserialized.memory_size, limits.memory_size);
+        assert_eq!(deserialized.open_files, limits.open_files);
+    }
+
+    #[test]
+    fn test_functional_verification_conversion() {
+        // 创建 FunctionalVerification
+        let verification = FunctionalVerification {
+            command: "test command".to_string(),
+            expected_exit: Some(0),
+            expected_stdout: Some("expected output".to_string()),
+            expected_stderr: Some("expected error".to_string()),
+        };
+
+        // 转换为 CommandResult
+        let result: CommandResult = (&verification).into();
+
+        // 验证转换结果
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "expected output");
+        assert_eq!(result.stderr, "expected error");
+    }
+
+    #[test]
+    fn test_functional_verification_null_fields() {
+        // 创建具有null字段的 FunctionalVerification
+        let verification = FunctionalVerification {
+            command: "test command".to_string(),
+            expected_exit: None,
+            expected_stdout: None,
+            expected_stderr: None,
+        };
+
+        // 转换为 CommandResult
+        let result: CommandResult = (&verification).into();
+
+        // 验证转换结果（应使用默认值）
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "");
+        assert_eq!(result.stderr, "");
+    }
+
+    #[test]
+    fn test_test_case_timeout_default() {
+        // 验证 TestCase 的 timeout 默认值
+        assert_eq!(default_timeout(), None);
+    }
+
+    #[test]
+    fn test_use_patterns_default() {
+        // 验证 TestExpectation 的 use_patterns 默认值
+        assert_eq!(default_use_patterns(), false);
     }
 }

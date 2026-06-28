@@ -69,7 +69,7 @@ pub struct TestSettings {
 }
 
 /// 测试环境配置
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct TestEnvConfig {
     /// 是否显示差异
     #[serde(default = "default_show_diff")]
@@ -100,8 +100,24 @@ pub struct TestEnvConfig {
     pub detail: DetailConfig,
 }
 
+impl Default for TestEnvConfig {
+    fn default() -> Self {
+        Self {
+            show_diff: default_show_diff(),
+            default_timeout: default_timeout(),
+            cleanup: default_cleanup(),
+            show_progress: default_show_progress(),
+            verbose: default_verbose(),
+            debug: default_debug(),
+            report_format: default_report_format(),
+            report_dir: default_report_dir(),
+            detail: DetailConfig::default(),
+        }
+    }
+}
+
 /// 详细配置选项
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct DetailConfig {
     /// 是否显示命令
     #[serde(default = "default_true")]
@@ -124,6 +140,20 @@ pub struct DetailConfig {
     /// 是否显示标签
     #[serde(default = "default_true")]
     pub show_tags: bool,
+}
+
+impl Default for DetailConfig {
+    fn default() -> Self {
+        Self {
+            show_command: default_true(),
+            show_description: default_true(),
+            show_env_vars: default_true(),
+            show_resource_limits: default_true(),
+            show_file_changes: default_true(),
+            show_full_output: default_true(),
+            show_tags: default_true(),
+        }
+    }
 }
 
 /// 默认值：显示差异
@@ -169,4 +199,211 @@ fn default_report_dir() -> PathBuf {
 /// 默认值：true
 fn default_true() -> bool {
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_syskits_mode_default() {
+        let default_mode = SyskitsMode::default();
+        assert!(matches!(default_mode, SyskitsMode::Single));
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+
+        // 验证 SyskitsConfig 默认值
+        assert!(config.syskits.syskits_path.is_none());
+        assert!(config.syskits.coreutils_path.is_none());
+        assert!(matches!(config.syskits.mode, SyskitsMode::Single));
+        assert!(config.syskits.commands_dir.is_none());
+
+        // 验证 TestSettings 默认值
+        assert!(config.test.test_cases_dir.is_none());
+        assert!(config.test.default_commands.is_none());
+
+        // 验证 TestEnvConfig 默认值通过默认函数设置
+        assert_eq!(config.test.env.show_diff, default_show_diff());
+        assert_eq!(config.test.env.default_timeout, default_timeout());
+        assert_eq!(config.test.env.cleanup, default_cleanup());
+        assert_eq!(config.test.env.show_progress, default_show_progress());
+        assert_eq!(config.test.env.verbose, default_verbose());
+        assert_eq!(config.test.env.debug, default_debug());
+        assert_eq!(config.test.env.report_format, default_report_format());
+        assert_eq!(config.test.env.report_dir, default_report_dir());
+
+        // 验证 DetailConfig 默认值
+        assert_eq!(config.test.env.detail.show_command, default_true());
+        assert_eq!(config.test.env.detail.show_description, default_true());
+        assert_eq!(config.test.env.detail.show_env_vars, default_true());
+        assert_eq!(config.test.env.detail.show_resource_limits, default_true());
+        assert_eq!(config.test.env.detail.show_file_changes, default_true());
+        assert_eq!(config.test.env.detail.show_full_output, default_true());
+        assert_eq!(config.test.env.detail.show_tags, default_true());
+    }
+
+    #[test]
+    fn test_syskits_config_default() {
+        let config = SyskitsConfig::default();
+
+        assert!(config.syskits_path.is_none());
+        assert!(config.coreutils_path.is_none());
+        assert!(matches!(config.mode, SyskitsMode::Single));
+        assert!(config.commands_dir.is_none());
+    }
+
+    #[test]
+    fn test_test_settings_default() {
+        let settings = TestSettings::default();
+
+        assert!(settings.test_cases_dir.is_none());
+        assert!(settings.default_commands.is_none());
+
+        // 环境配置应采用默认值
+        assert_eq!(settings.env.show_diff, default_show_diff());
+        assert_eq!(settings.env.default_timeout, default_timeout());
+        assert_eq!(settings.env.cleanup, default_cleanup());
+        assert_eq!(settings.env.show_progress, default_show_progress());
+        assert_eq!(settings.env.verbose, default_verbose());
+        assert_eq!(settings.env.debug, default_debug());
+        assert_eq!(settings.env.report_format, default_report_format());
+        assert_eq!(settings.env.report_dir, default_report_dir());
+    }
+
+    #[test]
+    fn test_test_env_config_default() {
+        let env_config = TestEnvConfig::default();
+
+        assert_eq!(env_config.show_diff, default_show_diff());
+        assert_eq!(env_config.default_timeout, default_timeout());
+        assert_eq!(env_config.cleanup, default_cleanup());
+        assert_eq!(env_config.show_progress, default_show_progress());
+        assert_eq!(env_config.verbose, default_verbose());
+        assert_eq!(env_config.debug, default_debug());
+        assert_eq!(env_config.report_format, default_report_format());
+        assert_eq!(env_config.report_dir, default_report_dir());
+
+        // 详细配置应全部为 true
+        assert_eq!(env_config.detail.show_command, default_true());
+        assert_eq!(env_config.detail.show_description, default_true());
+        assert_eq!(env_config.detail.show_env_vars, default_true());
+        assert_eq!(env_config.detail.show_resource_limits, default_true());
+        assert_eq!(env_config.detail.show_file_changes, default_true());
+        assert_eq!(env_config.detail.show_full_output, default_true());
+        assert_eq!(env_config.detail.show_tags, default_true());
+    }
+
+    #[test]
+    fn test_detail_config_default() {
+        let detail_config = DetailConfig::default();
+
+        assert_eq!(detail_config.show_command, default_true());
+        assert_eq!(detail_config.show_description, default_true());
+        assert_eq!(detail_config.show_env_vars, default_true());
+        assert_eq!(detail_config.show_resource_limits, default_true());
+        assert_eq!(detail_config.show_file_changes, default_true());
+        assert_eq!(detail_config.show_full_output, default_true());
+        assert_eq!(detail_config.show_tags, default_true());
+    }
+
+    #[test]
+    fn test_default_functions() {
+        assert_eq!(default_show_diff(), true);
+        assert_eq!(default_timeout(), 30);
+        assert_eq!(default_cleanup(), true);
+        assert_eq!(default_show_progress(), true);
+        assert_eq!(default_verbose(), false);
+        assert_eq!(default_debug(), false);
+        assert_eq!(default_report_format(), "text");
+        assert_eq!(default_report_dir(), Path::new("test_reports"));
+        assert_eq!(default_true(), true);
+    }
+
+    #[test]
+    fn test_config_deserialization() {
+        // 使用JSON格式而不是YAML
+        let json = r#"
+        {
+            "syskits": {
+                "syskits_path": "/usr/bin/syskits",
+                "coreutils_path": "/usr/bin/coreutils",
+                "mode": "multiple",
+                "commands_dir": "/usr/lib/syskits/commands"
+            },
+            "test": {
+                "test_cases_dir": "/path/to/test_cases",
+                "default_commands": ["ls", "cp", "rm"],
+                "env": {
+                    "show_diff": false,
+                    "default_timeout": 60,
+                    "cleanup": false,
+                    "show_progress": false,
+                    "verbose": true,
+                    "debug": true,
+                    "report_format": "json",
+                    "report_dir": "custom_reports",
+                    "detail": {
+                        "show_command": false,
+                        "show_description": false,
+                        "show_env_vars": false,
+                        "show_resource_limits": false,
+                        "show_file_changes": false,
+                        "show_full_output": false,
+                        "show_tags": false
+                    }
+                }
+            }
+        }
+        "#;
+
+        let config: Config = serde_json::from_str(json).unwrap();
+
+        // 验证 SyskitsConfig
+        assert_eq!(
+            config.syskits.syskits_path.unwrap(),
+            Path::new("/usr/bin/syskits")
+        );
+        assert_eq!(
+            config.syskits.coreutils_path.unwrap(),
+            Path::new("/usr/bin/coreutils")
+        );
+        assert!(matches!(config.syskits.mode, SyskitsMode::Multiple));
+        assert_eq!(
+            config.syskits.commands_dir.unwrap(),
+            Path::new("/usr/lib/syskits/commands")
+        );
+
+        // 验证 TestSettings
+        assert_eq!(
+            config.test.test_cases_dir.unwrap(),
+            Path::new("/path/to/test_cases")
+        );
+        assert_eq!(config.test.default_commands.as_ref().unwrap().len(), 3);
+        assert_eq!(config.test.default_commands.as_ref().unwrap()[0], "ls");
+        assert_eq!(config.test.default_commands.as_ref().unwrap()[1], "cp");
+        assert_eq!(config.test.default_commands.as_ref().unwrap()[2], "rm");
+
+        // 验证 TestEnvConfig
+        assert_eq!(config.test.env.show_diff, false);
+        assert_eq!(config.test.env.default_timeout, 60);
+        assert_eq!(config.test.env.cleanup, false);
+        assert_eq!(config.test.env.show_progress, false);
+        assert_eq!(config.test.env.verbose, true);
+        assert_eq!(config.test.env.debug, true);
+        assert_eq!(config.test.env.report_format, "json");
+        assert_eq!(config.test.env.report_dir, Path::new("custom_reports"));
+
+        // 验证 DetailConfig
+        assert_eq!(config.test.env.detail.show_command, false);
+        assert_eq!(config.test.env.detail.show_description, false);
+        assert_eq!(config.test.env.detail.show_env_vars, false);
+        assert_eq!(config.test.env.detail.show_resource_limits, false);
+        assert_eq!(config.test.env.detail.show_file_changes, false);
+        assert_eq!(config.test.env.detail.show_full_output, false);
+        assert_eq!(config.test.env.detail.show_tags, false);
+    }
 }

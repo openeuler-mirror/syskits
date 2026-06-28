@@ -1,0 +1,524 @@
+{
+  "tests": [
+    {
+        "command": "chown",
+        "description": "chown: 测试单个普通文件修改 owner",
+        "args": ["testuser_chown", "test_file_chown"],
+        "setup_commands": [
+            "useradd testuser_chown",
+            "touch test_file_chown",
+            "chown root test_file_chown",
+            "chmod 644 test_file_chown"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' test_file_chown",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file_chown",
+            "userdel testuser_chown"
+        ],
+        "requires_root": true,
+        "timeout": 30
+    },
+    {
+        "command": "chown",
+        "description": "chown: 测试一次修改多个文件的 owner",
+        "args": ["testuser_chown_multi", "file1_chown.txt", "file2_chown.txt"],
+        "setup_commands": [
+            "useradd testuser_chown_multi",
+            "touch file1_chown.txt file2_chown.txt",
+            "chown root file1_chown.txt file2_chown.txt",
+            "chmod 644 file1_chown.txt file2_chown.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' file1_chown.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_multi\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%U' file2_chown.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_multi\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f file1_chown.txt file2_chown.txt",
+            "userdel testuser_chown_multi"
+        ],
+        "requires_root": true,
+        "timeout": 30
+    },
+    {
+        "command": "chown",
+        "description": "chown: 测试对不存在的单个文件修改 owner",
+        "args": ["testuser_chown_nonexistent", "nonexistent_file.txt"],
+        "setup_commands": [
+            "useradd testuser_chown_nonexistent"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+            },
+            "verifications": [
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "userdel testuser_chown_nonexistent"
+        ],
+        "requires_root": true,
+        "timeout": 30
+    },
+    {
+        "command": "chown",
+        "description": "chown: 测试多文件修改 owner，部分文件不存在",
+        "args": ["testuser_chown_partial", "file_exist1.txt", "file_missing.txt", "file_exist2.txt"],
+        "setup_commands": [
+            "useradd testuser_chown_partial",
+            "touch file_exist1.txt",
+            "touch file_exist2.txt",
+            "chown root file_exist1.txt file_exist2.txt",
+            "chmod 644 file_exist1.txt file_exist2.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' file_exist1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_partial\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%U' file_exist2.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_partial\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f file_exist1.txt file_exist2.txt",
+            "userdel testuser_chown_partial"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: 测试递归修改目录及子文件/子目录的 owner",
+        "args": ["-R", "testuser_chown_recursive", "test_dir_chown"],
+        "setup_commands": [
+            "useradd testuser_chown_recursive",
+            "mkdir -p test_dir_chown/subdir",
+            "touch test_dir_chown/file1.txt test_dir_chown/subdir/file2.txt",
+            "chown root test_dir_chown test_dir_chown/file1.txt test_dir_chown/subdir test_dir_chown/subdir/file2.txt",
+            "chmod -R 755 test_dir_chown"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' test_dir_chown",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_recursive\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%U' test_dir_chown/file1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_recursive\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%U' test_dir_chown/subdir",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_recursive\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%U' test_dir_chown/subdir/file2.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_recursive\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir_chown",
+            "userdel testuser_chown_recursive"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: 测试目标 owner 不存在",
+        "args": ["nonexistent_user_chown", "file_chown_nonexistent"],
+        "setup_commands": [
+            "touch file_chown_nonexistent",
+            "chown root file_chown_nonexistent",
+            "chmod 644 file_chown_nonexistent"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' file_chown_nonexistent",
+                "expected_exit": 0,
+                "expected_stdout": "root\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f file_chown_nonexistent"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: 测试符号链接行为",
+        "args": ["testuser_chown_symlink", "link_file_chown"],
+        "setup_commands": [
+            "useradd testuser_chown_symlink",
+            "touch target_file_chown",
+            "ln -s target_file_chown link_file_chown",
+            "chown root target_file_chown",
+            "chmod 644 target_file_chown"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' target_file_chown",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_symlink\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%U' link_file_chown",
+                "expected_exit": 0,
+                "expected_stdout": "root\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f target_file_chown link_file_chown",
+            "userdel testuser_chown_symlink"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: -R 遇到指向父目录的符号链接，不跟随且不发生死循环",
+        "args": ["-R", "testuser_chown_loop", "loop_dir"],
+        "setup_commands": [
+            "useradd testuser_chown_loop",
+            "mkdir -p loop_dir/subdir",
+            "touch loop_dir/file.txt",
+            "ln -s .. loop_dir/subdir/back",
+            "chown root loop_dir loop_dir/file.txt loop_dir/subdir",
+            "chown -h root loop_dir/subdir/back",
+            "chmod -R 755 loop_dir"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%U' loop_dir",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_loop\n"
+            },
+            {
+                "command": "stat -c '%U' loop_dir/file.txt",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_loop\n"
+            },
+            {
+                "command": "stat -c '%U' loop_dir/subdir",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_loop\n"
+            },
+            {
+                "command": "stat -c '%U' loop_dir/subdir/back",
+                "expected_exit": 0,
+                "expected_stdout": "testuser_chown_loop\n"
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -rf loop_dir",
+            "userdel testuser_chown_loop"
+        ],
+        "requires_root": true,
+        "timeout": 10
+    },
+    {
+        "command": "chown",
+        "description": "chown: 同时修改文件的 owner 和 group (user:group)",
+        "args": ["testuser_chown_both:testgroup_chown_both", "test_file_chown_both"],
+        "setup_commands": [
+            "useradd testuser_chown_both",
+            "groupadd testgroup_chown_both",
+            "touch test_file_chown_both",
+            "chown root:root test_file_chown_both",
+            "chmod 644 test_file_chown_both"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%U' test_file_chown_both",
+                    "expected_exit": 0,
+                    "expected_stdout": "testuser_chown_both\n",
+                    "expected_stderr": null
+                },
+                {
+                    "command": "stat -c '%G' test_file_chown_both",
+                    "expected_exit": 0,
+                    "expected_stdout": "testgroup_chown_both\n",
+                    "expected_stderr": null
+                }
+            ],
+            "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file_chown_both",
+            "userdel testuser_chown_both",
+            "groupdel testgroup_chown_both"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: 只修改文件的 group（:group），owner 保持不变",
+        "args": [":testgroup_chown_only", "test_file_chown_only_group"],
+        "setup_commands": [
+            "groupadd testgroup_chown_only",
+            "touch test_file_chown_only_group",
+            "chown root:root test_file_chown_only_group",
+            "chmod 644 test_file_chown_only_group"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%U' test_file_chown_only_group",
+                    "expected_exit": 0,
+                    "expected_stdout": "root\n",
+                    "expected_stderr": null
+                },
+                {
+                    "command": "stat -c '%G' test_file_chown_only_group",
+                    "expected_exit": 0,
+                    "expected_stdout": "testgroup_chown_only\n",
+                    "expected_stderr": null
+                }
+            ],
+            "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file_chown_only_group",
+            "groupdel testgroup_chown_only"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: 使用 -h 只修改符号链接本身的 owner，不影响 target",
+        "args": ["-h", "testuser_chown_h", "link_file_chown_h"],
+        "setup_commands": [
+            "useradd testuser_chown_h",
+            "touch target_file_chown_h",
+            "ln -s target_file_chown_h link_file_chown_h",
+            "chown root target_file_chown_h",
+            "chown -h root link_file_chown_h",
+            "chmod 644 target_file_chown_h"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%U' link_file_chown_h",
+                    "expected_exit": 0,
+                    "expected_stdout": "testuser_chown_h\n",
+                    "expected_stderr": null
+                },
+                {
+                    "command": "stat -c '%U' target_file_chown_h",
+                    "expected_exit": 0,
+                    "expected_stdout": "root\n",
+                    "expected_stderr": null
+                }
+            ],
+            "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f target_file_chown_h link_file_chown_h",
+            "userdel testuser_chown_h"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chown",
+        "description": "chown: 使用 user: 形式",
+        "args": ["testuser_chown_user_colon:", "test_file_chown_user_colon"],
+        "setup_commands": [
+            "useradd testuser_chown_user_colon",
+            "touch test_file_chown_user_colon",
+            "chown root:root test_file_chown_user_colon",
+            "chmod 644 test_file_chown_user_colon"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%U' test_file_chown_user_colon",
+                    "expected_exit": 0,
+                    "expected_stdout": "testuser_chown_user_colon\n",
+                    "expected_stderr": null
+                },
+                {
+                    "command": "stat -c '%G' test_file_chown_user_colon",
+                    "expected_exit": 0,
+                    "expected_stdout": "testuser_chown_user_colon\n",
+                    "expected_stderr": null
+                }
+            ],
+            "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file_chown_user_colon",
+            "userdel testuser_chown_user_colon"
+        ],
+        "requires_root": true
+    }
+  ]
+} 

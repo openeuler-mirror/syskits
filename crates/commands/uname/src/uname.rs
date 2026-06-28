@@ -55,9 +55,9 @@ impl UNameOutput {
             self.kernel_release.as_ref(),
             self.kernel_version.as_ref(),
             self.machine.as_ref(),
-            self.os.as_ref(),
             self.processor.as_ref(),
             self.hardware_platform.as_ref(),
+            self.os.as_ref(),   
         ]
         .into_iter()
         .flatten()
@@ -96,11 +96,11 @@ impl UNameOutput {
         let machine =
             (opts.is_machine || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
 
+        let processor = (opts.is_processor || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
+
+        let hardware_platform = (opts.is_hardware_platform || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
+
         let os = (opts.is_os || opts.is_all).then(|| uname.osname().to_string_lossy().to_string());
-
-        let processor = opts.is_processor.then(|| "unknown".to_string());
-
-        let hardware_platform = opts.is_hardware_platform.then(|| "unknown".to_string());
 
         Ok(Self {
             kernel_name,
@@ -108,9 +108,9 @@ impl UNameOutput {
             kernel_release,
             kernel_version,
             machine,
-            os,
             processor,
             hardware_platform,
+            os,
         })
     }
 }
@@ -214,14 +214,12 @@ pub fn ct_app() -> Command {
             .short('p')
             .long(uname_flags::UNAME_PROCESSOR)
             .help(t!("uname.clap.uname_processor"))
-            .action(ArgAction::SetTrue)
-            .hide(true),
+            .action(ArgAction::SetTrue),
         Arg::new(uname_flags::UNAME_HARDWARE_PLATFORM)
             .short('i')
             .long(uname_flags::UNAME_HARDWARE_PLATFORM)
             .help(t!("uname.clap.uname_hardware_platform"))
-            .action(ArgAction::SetTrue)
-            .hide(true),
+            .action(ArgAction::SetTrue),
     ];
 
     Command::new(utility_name)

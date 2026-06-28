@@ -22,7 +22,7 @@ filetime = { workspace = true }
 clap = { workspace = true }
 chrono = { workspace = true }
 parse_datetime = { workspace = true }
-ctcore = { workspace = true, features = ["libc"] }
+ctcore = { workspace = true, features = ["libc", "datetime"] }
 [dev-dependencies]
 tempfile = { workspace = true }
 

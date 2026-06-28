@@ -686,6 +686,180 @@
                 "utf8",
                 "japanese"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式下换行符的正确处理 - 修复验证核心问题",
+            "setup_commands": [
+                "printf 'a\\nb' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "1",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\n\nb"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "newline-handling",
+                "core-fix",
+                "verification"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式下复杂ASCII序列的处理",
+            "setup_commands": [
+                "printf '12345678\\n123456789' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "8",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12345678\n\n1234567\n89"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "ascii",
+                "complex-sequence",
+                "verification"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式下中文字符与换行符的组合处理",
+            "setup_commands": [
+                "printf '容\\n第二行' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "8",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "容\n第\n二行"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "utf8",
+                "chinese",
+                "newline-handling",
+                "verification"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式下连续换行符的处理",
+            "setup_commands": [
+                "printf 'a\\n\\nb' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "1",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n\n\n\n\nb"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "consecutive-newlines",
+                "edge-case",
+                "verification"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式的rescan机制",
+            "setup_commands": [
+                "printf 'abc\\ndef' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "2",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ab\nc\n\nde\nf"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "rescan-mechanism",
+                "algorithm-verification"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "测试字节模式与字符模式的差异对比",
+            "setup_commands": [
+                "echo '测试abc' > input.txt"
+            ],
+            "args": [
+                "-b",
+                "-w",
+                "6",
+                "input.txt"
+            ],
+            "cleanup_commands": [
+                "rm -f input.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "测试\nabc"
+                }
+            },
+            "tags": [
+                "bytes-option",
+                "utf8",
+                "comparison",
+                "mode-difference"
+            ]
         }
     ]
 }

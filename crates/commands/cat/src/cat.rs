@@ -540,6 +540,7 @@ fn cat_write_lines<R: CatFdReadable>(
                 output_state.skipped_carriage_return = false;
                 output_state.at_line_start = false;
             }
+            // 重置空行保留状态，因为我们遇到了非空行内容
             output_state.one_blank_kept = false;
             if output_state.at_line_start && output_options.num_mode != CatNumberingMode::None {
                 write!(stdout_writer, "{0:6}\t", output_state.line_number)?;
@@ -555,7 +556,26 @@ fn cat_write_lines<R: CatFdReadable>(
                 break;
             }
             if in_buffer[position + offset] == b'\r' {
-                output_state.skipped_carriage_return = true;
+                // 检查是否为\r\n序列
+                if position + offset + 1 < in_buffer.len()
+                    && in_buffer[position + offset + 1] == b'\n'
+                {
+                    // 这是\r\n序列，作为一个完整的换行处理
+                    if output_options.show_ends {
+                        stdout_writer.write_all(b"^M")?;
+                    } else {
+                        stdout_writer.write_all(b"\r")?;
+                    }
+                    cat_write_end_of_line(
+                        &mut stdout_writer,
+                        output_options.cat_end_of_line().as_bytes(),
+                        input_handle.is_interactive,
+                    )?;
+                    output_state.at_line_start = true;
+                    position += 1; // 跳过\n，因为我们已经处理了\r\n序列
+                } else {
+                    output_state.skipped_carriage_return = true;
+                }
             } else {
                 assert_eq!(in_buffer[position + offset], b'\n');
                 // 打印适当的行尾字符。
@@ -587,27 +607,37 @@ fn cat_write_new_line<W: Write>(
     output_state: &mut CatOutputState,
     is_interactive: bool,
 ) -> CatResult<()> {
-    // 如果之前跳过了回车符且设置为显示文件两端，则输出回车符的转义序列
-    if output_state.skipped_carriage_return && output_options.show_ends {
-        cat_writer.write_all(b"^M")?;
+    // 如果之前跳过了回车符，需要先处理它
+    if output_state.skipped_carriage_return {
+        if output_options.show_ends {
+            cat_writer.write_all(b"^M")?;
+        } else {
+            cat_writer.write_all(b"\r")?;
+        }
         output_state.skipped_carriage_return = false;
     }
 
-    // 不在行首、或设置为不压缩空行、或已保留一个空格，则准备写入新的行
-    if !output_state.at_line_start || !output_options.squeeze_blank || !output_state.one_blank_kept
-    {
-        output_state.one_blank_kept = true;
-        // 如果处于行首且要求对所有行编号，则写入行号
-        if output_state.at_line_start && output_options.num_mode == CatNumberingMode::All {
-            write!(cat_writer, "{0:6}\t", output_state.line_number)?;
-            output_state.line_number += 1;
+    // squeeze_blank逻辑：仅当处于行首、需要压缩空行、且已经保留了一个空行时才跳过
+    // 但要确保至少输出一个空行
+    if output_state.at_line_start && output_options.squeeze_blank {
+        if output_state.one_blank_kept {
+            return Ok(()); // 跳过额外的空行
+        } else {
+            output_state.one_blank_kept = true; // 标记已保留一个空行
         }
-        // 根据选项，写入行尾标记
-        cat_writer.write_all(output_options.cat_end_of_line().as_bytes())?;
-        // 如果处于交互模式，刷新输出
-        if is_interactive {
-            cat_writer.flush()?;
-        }
+    }
+
+    // 如果处于行首且要求对所有行编号，则写入行号
+    if output_state.at_line_start && output_options.num_mode == CatNumberingMode::All {
+        write!(cat_writer, "{0:6}\t", output_state.line_number)?;
+        output_state.line_number += 1;
+    }
+
+    // 根据选项，写入行尾标记
+    cat_writer.write_all(output_options.cat_end_of_line().as_bytes())?;
+    // 如果处于交互模式，刷新输出
+    if is_interactive {
+        cat_writer.flush()?;
     }
     Ok(())
 }

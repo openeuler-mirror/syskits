@@ -17,7 +17,7 @@ od:
     s: decimal 2-byte units
     e: floating point double precision (64-bit) units
     f: floating point double precision (64-bit) units
-    od_format: select output ct_format or formats
+    od_format: select output format or formats
     od_output_duplicates: do not use * to mark line suppression
     od_traditional: compatibility mode with one input, offset and label.
   usage: |-

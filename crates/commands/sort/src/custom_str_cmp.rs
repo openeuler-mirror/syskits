@@ -637,7 +637,7 @@ mod tests {
         }
         let result = custom_cmp_str("ABCDEF", "abcdef", false, false, false);
         assert_eq!(result, Ordering::Less);
-        
+
         // 恢复原始locale设置
         unsafe {
             env::remove_var("LC_COLLATE");

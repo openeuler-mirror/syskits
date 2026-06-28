@@ -549,9 +549,9 @@ mod tests {
     #[cfg(test)]
     mod determine_times_tests {
         use super::*;
-        use clap::ArgMatches;
         use chrono::Local;
-        use filetime::{set_file_times, FileTime};
+        use clap::ArgMatches;
+        use filetime::{FileTime, set_file_times};
         use tempfile::tempdir;
 
         fn build_matches(args: &[&str]) -> ArgMatches {
@@ -572,9 +572,7 @@ mod tests {
         fn determine_times_with_timestamp_argument() {
             let matches = build_matches(&["-t", "202406150830", "dummy"]);
             let (atime, mtime) = touch_determine_times(&matches).unwrap();
-            let expected = Local
-                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
-                .unwrap();
+            let expected = Local.with_ymd_and_hms(2024, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(atime.unix_seconds(), expected.timestamp());
             assert_eq!(mtime, atime);
         }
@@ -583,9 +581,7 @@ mod tests {
         fn determine_times_with_date_argument() {
             let matches = build_matches(&["-d", "2024-06-15 08:30:00", "dummy"]);
             let (atime, mtime) = touch_determine_times(&matches).unwrap();
-            let expected = Local
-                .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
-                .unwrap();
+            let expected = Local.with_ymd_and_hms(2024, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(atime.unix_seconds(), expected.timestamp());
             assert_eq!(mtime, atime);
         }

@@ -106,17 +106,14 @@ fn is_splice_retryable(err: Errno) -> bool {
 fn is_splice_unsupported(err: Errno) -> bool {
     // 注意: EOPNOTSUPP 和 ENOTSUP 在某些平台上是相同的值，
     // 所以我们只匹配 EOPNOTSUPP 来避免不可达模式警告
-    matches!(
-        err,
-        Errno::EINVAL | Errno::EOPNOTSUPP | Errno::ENOSYS
-    )
+    matches!(err, Errno::EINVAL | Errno::EOPNOTSUPP | Errno::ENOSYS)
 }
 #[cfg(test)]
 mod tests {
     // 导入必要的库和模块
     use crate::{
-        splice::{is_splice_retryable, is_splice_unsupported, splice_copy_exact},
         CatInputHandle,
+        splice::{is_splice_retryable, is_splice_unsupported, splice_copy_exact},
     };
     use nix::errno::Errno;
     use nix::unistd::{pipe, read, write};
@@ -242,8 +239,7 @@ mod tests {
             is_interactive: false,
         };
 
-        let fd =
-            unsafe { nix::libc::eventfd(0, nix::libc::EFD_NONBLOCK) };
+        let fd = unsafe { nix::libc::eventfd(0, nix::libc::EFD_NONBLOCK) };
         assert!(fd >= 0, "eventfd 创建失败: {}", fd);
         let event_fd = unsafe { OwnedFd::from_raw_fd(fd) };
 

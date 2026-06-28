@@ -1809,9 +1809,9 @@ mod tests {
     mod locale_tests {
         use super::*;
         use ctcore::ct_locale::hard_locale_collate;
+        use serial_test::serial;
         use std::cmp::Ordering;
         use std::env;
-        use serial_test::serial;
 
         #[test]
         #[serial]

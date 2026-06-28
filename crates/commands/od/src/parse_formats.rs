@@ -695,9 +695,9 @@ mod tests {
         let args = vec![
             "od".to_string(),
             "-t".to_string(),
-            "x2z".to_string(),            // 16位十六进制，带ASCII转储
+            "x2z".to_string(),         // 16位十六进制，带ASCII转储
             "--format=d4".to_string(), // 32位十进制
-            "-F".to_string(),             // 64位浮点数
+            "-F".to_string(),          // 64位浮点数
         ];
 
         let result = od_parse_format_flags(&args).unwrap();

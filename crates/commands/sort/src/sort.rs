@@ -10624,8 +10624,8 @@ mod tests {
     #[cfg(test)]
     mod locale_tests {
         use super::*;
-        use std::env;
         use serial_test::serial;
+        use std::env;
 
         #[test]
         #[serial]

@@ -291,8 +291,8 @@ mod tests {
             assert!(uname_output.kernel_version.is_some());
             assert!(uname_output.machine.is_some());
             assert!(uname_output.os.is_some());
-            assert!(uname_output.processor.is_none());
-            assert!(uname_output.hardware_platform.is_none());
+            assert!(uname_output.processor.is_some());
+            assert!(uname_output.hardware_platform.is_some());
             assert!(!uname_output.display().is_empty());
         }
 

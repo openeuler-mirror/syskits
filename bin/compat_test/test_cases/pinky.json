@@ -110,7 +110,12 @@
                 "ignore_fields": {
                   "ignore_stdout": true
                 },
-                "verifications": []
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -v Login",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": []
         },
@@ -129,7 +134,12 @@
                 "ignore_fields": {
                   "ignore_stdout": true
                 },
-                "verifications": []
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -v Name",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": []
         },
@@ -263,6 +273,72 @@
                   "ignore_stdout": true
                 },
                 "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "C locale下的时间格式测试",
+            "setup_commands": ["export LC_TIME=C"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": ["unset LC_TIME"]
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "UTF-8 locale下的时间格式测试",
+            "setup_commands": ["export LC_TIME=en_US.UTF-8"],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": []
+            },
+            "cleanup_commands": ["unset LC_TIME"]
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "组合参数测试：-fw（无标题且无用户名）",
+            "setup_commands": [],
+            "args": ["-fw"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                  "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -v Login",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -v Name",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": []
         }

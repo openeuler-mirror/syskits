@@ -1110,7 +1110,7 @@ mod tests {
         let result = command.try_get_matches_from(args);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
     }
     #[test]
     fn test_ct_app_arg_version() {

@@ -1,323 +1,336 @@
 {
-    "tests": [
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat命令基本功能",
-        "setup_commands": [
-          "echo -e 'Hello\nWorld\nThis is a test' > test1.txt",
-          "cat test1.txt",
-          "export TEST_VAR=test_value"
-        ],
-        "args": ["test1.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "Hello\nWorld\nThis is a test",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat命令基本功能",
+      "setup_commands": [
+        "echo -e 'Hello\nWorld\nThis is a test' > test1.txt",
+        "cat test1.txt",
+        "export TEST_VAR=test_value"
+      ],
+      "args": [
+        "test1.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Hello\nWorld\nThis is a test",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf test1.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat显示行号功能",
-        "setup_commands": [
-          "echo -e 'Line 1\n\nLine 3' > test2.txt",
-          "cat -n test2.txt"
-        ],
-        "args": ["-n", "test2.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "  1  Line 1\n  2  \n  3  Line 3",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf test1.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat显示行号功能",
+      "setup_commands": [
+        "echo -e 'Line 1\n\nLine 3' > test2.txt",
+        "cat -n test2.txt"
+      ],
+      "args": [
+        "-n",
+        "test2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "  1  Line 1\n  2  \n  3  Line 3",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf test2.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat非空行行号功能",
-        "setup_commands": [
-          "echo -e 'Line 1\n\nLine 3' > test3.txt",
-          "cat -b test3.txt"
-        ],
-        "args": ["-b", "test3.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "\\n     1\\tLine 1\\n\\n     2\\tLine 3\\n\\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf test2.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat非空行行号功能",
+      "setup_commands": [
+        "echo -e 'Line 1\n\nLine 3' > test3.txt",
+        "cat -b test3.txt"
+      ],
+      "args": [
+        "-b",
+        "test3.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\n     1\\tLine 1\\n\\n     2\\tLine 3\\n\\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf test3.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat合并多个空行功能",
-        "setup_commands": [ 
-          "echo -e 'A\n\n\nB\n\nC' > test4.txt",
-          "cat -s test4.txt"
-        ],
-        "args": ["-s", "test4.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "\nA\n\nB\n\nC\n\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf test3.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat合并多个空行功能",
+      "setup_commands": [
+        "echo -e 'A\n\n\nB\n\nC' > test4.txt",
+        "cat -s test4.txt"
+      ],
+      "args": [
+        "-s",
+        "test4.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\nA\n\nB\n\nC\n\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf test4.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat末尾显示‘$’符号",
-        "setup_commands": [ 
-          "echo -e 'Hello\nWorld\nThis is a test' > test5.txt",
-          "cat -E test5.txt"
-        ],
-        "args": ["-E", "test5.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "\nHello$\nWorld$\nThis is a test$\n\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf test4.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat末尾显示‘$’符号",
+      "setup_commands": [
+        "echo -e 'Hello\nWorld\nThis is a test' > test5.txt",
+        "cat -E test5.txt"
+      ],
+      "args": [
+        "-E",
+        "test5.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\nHello$\nWorld$\nThis is a test$\n\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf test5.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat显示制表符功能",
-        "setup_commands": [ 
-          "echo -e 'Name\tAge\tCity' > test6.txt",
-          "cat -T test6.txt"
-        ],
-        "args": ["-T", "test6.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "\nName^IAge^ICity\n\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf test5.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat显示制表符功能",
+      "setup_commands": [
+        "echo -e 'Name\tAge\tCity' > test6.txt",
+        "cat -T test6.txt"
+      ],
+      "args": [
+        "-T",
+        "test6.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\nName^IAge^ICity\n\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf test6.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat合并多个文件功能",
-        "setup_commands": [ 
-          "echo 'File1 1' > file7.txt",
-          "echo 'File2 2' > file8.txt",
-          "cat file7.txt file8.txt"
-        ],
-        "args": ["file7.txt", "file8.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "\nFile1 1\nFile2 2\n\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf test6.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat合并多个文件功能",
+      "setup_commands": [
+        "echo 'File1 1' > file7.txt",
+        "echo 'File2 2' > file8.txt",
+        "cat file7.txt file8.txt"
+      ],
+      "args": [
+        "file7.txt",
+        "file8.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\nFile1 1\nFile2 2\n\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-            "rm -rf file7.txt",
-            "rm -rf file8.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat输入重定向功能",
-        "setup_commands": [
-          "cat > temp.txt << 'EOF'\nInput from stdin\nEOF",
-          "cat temp.txt"
-        ],
-        "args": ["temp.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "\nInput from stdin\n\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "",
-              "expected_exit": 0,
-              "expected_stdout": ""
-            }
-
-          ]
+      "cleanup_commands": [
+        "rm -rf file7.txt",
+        "rm -rf file8.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat输入重定向功能",
+      "setup_commands": [
+        "cat > temp.txt << 'EOF'\nInput from stdin\nEOF",
+        "cat temp.txt"
+      ],
+      "args": [
+        "temp.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\nInput from stdin\n\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf temp.txt"
+        "verifications": [
+          {
+            "command": "",
+            "expected_exit": 0,
+            "expected_stdout": ""
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat -s处理\\r\\n序列的兼容性",
-        "setup_commands": [
-          "echo 1234 > crlf_test.txt",
-          "echo -e '\\O\\r\\n' >> crlf_test.txt",
-          "cat -s crlf_test.txt"
-        ],
-        "args": ["-s", "crlf_test.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "1234\n\\O\n\n",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "cat -s crlf_test.txt | wc -l",
-              "expected_exit": 0,
-              "expected_stdout": "3"
-            }
-          ]
+      "cleanup_commands": [
+        "rm -rf temp.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat -s处理\\r\\n序列的兼容性",
+      "setup_commands": [
+        "echo 1234 > crlf_test.txt",
+        "echo -e '\\O\\r\\n' >> crlf_test.txt",
+        "cat -s crlf_test.txt"
+      ],
+      "args": [
+        "-s",
+        "crlf_test.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1234\n\\O\n\n",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf crlf_test.txt"
+        "verifications": [
+          {
+            "command": "cat -s crlf_test.txt | wc -l",
+            "expected_exit": 0,
+            "expected_stdout": "3"
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat -s处理混合行结束符的兼容性",
-        "setup_commands": [
-          "echo -e 'line1\\n\\nline2\\r\\n\\nline3' > mixed_endings.txt",
-          "cat -s mixed_endings.txt"
-        ],
-        "args": ["-s", "mixed_endings.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "line1\n\nline2\n\nline3",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "cat -s mixed_endings.txt | wc -l",
-              "expected_exit": 0,
-              "expected_stdout": "5"
-            }
-          ]
+      "cleanup_commands": [
+        "rm -rf crlf_test.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat -s处理混合行结束符的兼容性",
+      "setup_commands": [
+        "echo -e 'line1\\n\\nline2\\r\\n\\nline3' > mixed_endings.txt",
+        "cat -s mixed_endings.txt"
+      ],
+      "args": [
+        "-s",
+        "mixed_endings.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "line1\n\nline2\n\nline3",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf mixed_endings.txt"
+        "verifications": [
+          {
+            "command": "cat -s mixed_endings.txt | wc -l",
+            "expected_exit": 0,
+            "expected_stdout": "5"
+          }
         ]
       },
-
-      {
-        "tstdin": "",
-        "command": "cat",
-        "description": "测试cat -s处理多个连续空行与\\r\\n的兼容性",
-        "setup_commands": [
-          "echo -e 'start\\n\\n\\n\\r\\n\\nend' > multi_blank.txt",
-          "cat -s multi_blank.txt"
-        ],
-        "args": ["-s", "multi_blank.txt"],
-        "expectation": {
-          "execution": {
-            "exit_code": 0,
-            "stdout": "start\n\n\nend",
-            "stderr": ""
-          },
-          "verifications": [
-            {
-              "command": "cat -s multi_blank.txt | wc -l",
-              "expected_exit": 0,
-              "expected_stdout": "4"
-            }
-          ]
+      "cleanup_commands": [
+        "rm -rf mixed_endings.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat -s处理多个连续空行与\\r\\n的兼容性",
+      "setup_commands": [
+        "echo -e 'start\\n\\n\\n\\r\\n\\nend' > multi_blank.txt",
+        "cat -s multi_blank.txt"
+      ],
+      "args": [
+        "-s",
+        "multi_blank.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "start\n\n\nend",
+          "stderr": ""
         },
-        "cleanup_commands": [
-          "rm -rf multi_blank.txt"
+        "verifications": [
+          {
+            "command": "cat -s multi_blank.txt | wc -l",
+            "expected_exit": 0,
+            "expected_stdout": "4"
+          }
         ]
-      }
-    ]
-  } 
+      },
+      "cleanup_commands": [
+        "rm -rf multi_blank.txt"
+      ]
+    }
+  ]
+}

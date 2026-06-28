@@ -1,0 +1,144 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "基本功能测试 - 无参数",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示所有信息",
+            "args": ["-a"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\s+[A-Za-z0-9_.-]+\\s+[0-9][0-9.]*[0-9](?:-[A-Za-z0-9]+)?\\s+(?:#[0-9]+\\s+)?[A-Za-z0-9_.-]+\\s+[A-Za-z0-9_.-]+(?:\\s+[A-Za-z0-9_.-]+)*\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示内核名称",
+            "args": ["-s"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示网络主机名",
+            "args": ["-n"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9][A-Za-z0-9._-]*\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示内核发行号",
+            "args": ["-r"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[0-9][0-9.]*[0-9](?:-[A-Za-z0-9]+)?\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示机器硬件名",
+            "args": ["-m"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示处理器类型",
+            "args": ["-p"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^(?:[A-Za-z0-9_.-]+|unknown)\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示操作系统",
+            "args": ["-o"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示内核版本",
+            "args": ["-v"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "显示硬件平台",
+            "args": ["-i"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^[A-Za-z0-9_.-]+\\n$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        }
+    ]
+} 

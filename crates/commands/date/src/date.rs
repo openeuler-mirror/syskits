@@ -313,7 +313,9 @@ fn get_date_source(args_match: &ArgMatches) -> DateSource {
     // 根据命令行参数确定日期来源
     let date_source = if let Some(date) = args_match.get_one::<String>(DATE_OPT_DATE) {
         let ref_time = Local::now();
-        if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
+        if let Ok(new_time) =
+            ctcore::ct_parse_datetime::parse_datetime_gnu_compat(date.as_str(), ref_time)
+        {
             let duration = new_time.signed_duration_since(ref_time);
             DateSource::Human(duration)
         } else {

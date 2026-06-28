@@ -20,7 +20,7 @@ sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-ctcore = { workspace = true }
+ctcore = { workspace = true, features = ["datetime"] }
 parse_datetime = { workspace = true }
 
 [dev-dependencies]

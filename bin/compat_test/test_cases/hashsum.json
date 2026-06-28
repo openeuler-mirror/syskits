@@ -393,6 +393,951 @@
             "cleanup_commands": [
                 "rm -f test_sha_file"
             ]
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 单个文件计算哈希值",
+            "args": ["test_file"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 多个文件计算哈希值",
+            "args": ["test_file1", "test_file2"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file1",
+                "echo -n 'Hello, Coreutils!' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file1\nf664a938b72e89775793c26801e99ccd  test_file2\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 显式标准输入",
+            "args": ["-"],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 隐式标准输入",
+            "args": [],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 文件不存在",
+            "args": ["missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 部分文件不存在",
+            "args": [
+                "test_file1",
+                "missing_file",
+                "test_file2"
+            ],
+            "setup_commands": [
+                "echo 'hello' > test_file1",
+                "echo 'hello' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file1 test_file2"
+            ]
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 校验模式 -c，验证 checksum 文件的正确性(成功)（仅有中英文差异）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_check",
+                "md5sum test_file_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_check checksum.txt"
+            ]
+        },
+        {
+            "command": "md5sum",
+            "description": "md5sum: 校验模式 -c，验证 checksum 文件的正确性（失败）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 单个文件计算哈希值",
+            "args": ["test_file"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 多个文件计算哈希值",
+            "args": ["test_file1", "test_file2"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file1",
+                "echo -n 'Hello, Coreutils!' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file1\nf664a938b72e89775793c26801e99ccd  test_file2\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 显式标准输入",
+            "args": ["-"],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 隐式标准输入",
+            "args": [],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 文件不存在",
+            "args": ["missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 部分文件不存在",
+            "args": [
+                "test_file1",
+                "missing_file",
+                "test_file2"
+            ],
+            "setup_commands": [
+                "echo 'hello' > test_file1",
+                "echo 'hello' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file1 test_file2"
+            ]
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 校验模式 -c，验证 checksum 文件的正确性(成功)（仅有中英文差异）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_check",
+                "sha1sum test_file_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha1sum",
+            "description": "sha1sum: 校验模式 -c，验证 checksum 文件的正确性（失败）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 单个文件计算哈希值",
+            "args": ["test_file"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 多个文件计算哈希值",
+            "args": ["test_file1", "test_file2"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file1",
+                "echo -n 'Hello, Coreutils!' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file1\nf664a938b72e89775793c26801e99ccd  test_file2\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 显式标准输入",
+            "args": ["-"],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 隐式标准输入",
+            "args": [],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 文件不存在",
+            "args": ["missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 部分文件不存在",
+            "args": [
+                "test_file1",
+                "missing_file",
+                "test_file2"
+            ],
+            "setup_commands": [
+                "echo 'hello' > test_file1",
+                "echo 'hello' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file1 test_file2"
+            ]
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 校验模式 -c，验证 checksum 文件的正确性(成功)（仅有中英文差异）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_check",
+                "sha224sum test_file_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha224sum",
+            "description": "sha224sum: 校验模式 -c，验证 checksum 文件的正确性（失败）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 单个文件计算哈希值",
+            "args": ["test_file"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 多个文件计算哈希值",
+            "args": ["test_file1", "test_file2"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file1",
+                "echo -n 'Hello, Coreutils!' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file1\nf664a938b72e89775793c26801e99ccd  test_file2\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 显式标准输入",
+            "args": ["-"],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 隐式标准输入",
+            "args": [],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 文件不存在",
+            "args": ["missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 部分文件不存在",
+            "args": [
+                "test_file1",
+                "missing_file",
+                "test_file2"
+            ],
+            "setup_commands": [
+                "echo 'hello' > test_file1",
+                "echo 'hello' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file1 test_file2"
+            ]
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 校验模式 -c，验证 checksum 文件的正确性(成功)（仅有中英文差异）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_check",
+                "sha384sum test_file_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha384sum",
+            "description": "sha384sum: 校验模式 -c，验证 checksum 文件的正确性（失败）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 单个文件计算哈希值",
+            "args": ["test_file"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 多个文件计算哈希值",
+            "args": ["test_file1", "test_file2"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file1",
+                "echo -n 'Hello, Coreutils!' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f664a938b72e89775793c26801e99ccd  test_file1\nf664a938b72e89775793c26801e99ccd  test_file2\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            }
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 显式标准输入",
+            "args": ["-"],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 隐式标准输入",
+            "args": [],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "910c8bc73110b0cd1bc5d2bcae782511  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 文件不存在",
+            "args": ["missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 部分文件不存在",
+            "args": [
+                "test_file1",
+                "missing_file",
+                "test_file2"
+            ],
+            "setup_commands": [
+                "echo 'hello' > test_file1",
+                "echo 'hello' > test_file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file1 test_file2"
+            ]
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 校验模式 -c，验证 checksum 文件的正确性(成功)（仅有中英文差异）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_check",
+                "sha512sum test_file_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha512sum",
+            "description": "sha512sum: 校验模式 -c，验证 checksum 文件的正确性（失败）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
         }
     ]
   }

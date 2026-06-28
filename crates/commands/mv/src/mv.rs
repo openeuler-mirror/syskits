@@ -729,15 +729,6 @@ fn mv_rename(
             }
         }
     }
-
-    if !to_path.exists() {
-        let message = format!(
-                "cannot move {} to {}: Not a directory",
-                from_path.quote(),
-                to_path.quote()
-            );
-        return Err(io::Error::new(io::ErrorKind::Other, message));
-    }
     // 执行重命名操作
     mv_rename_with_fallback(from_path, to_path, options, multi_progress)?;
 
@@ -871,6 +862,16 @@ fn mv_rename_with_fallback(
             // 对符号链接执行特定的重命名策略。
             mv_rename_symlink_fallback(from, to)?;
         } else if file_type.is_dir() {
+
+            if rename_error.kind() == io::ErrorKind::NotADirectory {
+                let message = format!(
+                    "cannot move {} to {}: {}",
+                    from.quote(),
+                    to.quote(),
+                    rename_error
+                );
+                return Err(io::Error::new(io::ErrorKind::Other, message).into());
+            }
             // 如果启用了调试模式，说明正在处理目录
             if options.debug {
                 let message = format!("copying directory {} to {}", from.quote(), to.quote());

@@ -1862,6 +1862,153 @@ mod tests {
             .expect("Failed to remove temporary directory");
     }
 
+    // Test case: Test squeeze_blank with \r\n sequences
+    #[test]
+    fn test_squeeze_blank_with_carriage_return_newline() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("test_crlf.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+
+        // Create test content: "1234\n\O\r\n\n"
+        temp_file
+            .write_all(b"1234\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\\O\r\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: true,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test that \r\n sequences are handled correctly with squeeze_blank
+    #[test]
+    fn test_squeeze_blank_preserves_crlf_sequences() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("test_crlf_preserve.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+
+        // Test content with multiple \r\n sequences and blank lines
+        temp_file
+            .write_all(b"line1\r\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\r\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\r\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"line2\r\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: true,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test mixed \n and \r\n with squeeze_blank
+    #[test]
+    fn test_squeeze_blank_mixed_line_endings() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("test_mixed_endings.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+
+        // Mixed line endings: Unix \n and Windows \r\n
+        temp_file
+            .write_all(b"unix\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"windows\r\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\r\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"end\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: true,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
+    // Test case: Test squeeze_blank doesn't affect non-blank lines with \r
+    #[test]
+    fn test_squeeze_blank_with_carriage_return_only() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let temp_file_path = temp_dir.path().join("test_cr_only.txt");
+        let mut temp_file = File::create(&temp_file_path).expect("Failed to create temporary file");
+
+        // Content with standalone \r characters
+        temp_file
+            .write_all(b"line1\r")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"overwritten\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"\n")
+            .expect("Failed to write to temporary file");
+        temp_file
+            .write_all(b"line2\n")
+            .expect("Failed to write to temporary file");
+
+        let files = vec![temp_file_path.to_string_lossy().into_owned()];
+        let options = CatOutputOptions {
+            num_mode: CatNumberingMode::None,
+            squeeze_blank: true,
+            show_tabs: false,
+            show_ends: false,
+            show_non_print: false,
+        };
+        assert!(cat_files_info(&files, &options).is_ok());
+
+        temp_dir
+            .close()
+            .expect("Failed to remove temporary directory");
+    }
+
     // #[test]
     // fn test_read_more_large_file() {
     //     let temp_dir = tempdir().expect("Failed to create temporary directory");

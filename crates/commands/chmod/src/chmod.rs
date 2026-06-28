@@ -240,6 +240,11 @@ fn chmod_args_init() -> Vec<Arg> {
             .required_unless_present(chmod_flags::MODE)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath),
+        Arg::new("help")
+            .short('h')
+            .long("help")
+            .help(t!("chmod.clap.help"))
+            .action(ArgAction::Help),
     ];
     args
 }

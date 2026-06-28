@@ -3,7 +3,7 @@
     {
       "tstdin": "",
       "command": "cksum",
-      "description": "测试cksum命令对单个文件计算校验和",
+      "description": "cksum: 测试cksum命令对单个文件计算校验和",
       "setup_commands": [
         "echo -n 'Hello World' > test_cksum.txt"
       ],
@@ -31,7 +31,7 @@
     {
       "tstdin": "",
       "command": "cksum",
-      "description": "测试cksum对多个文件的多行输出及顺序",
+      "description": "cksum: 测试cksum对多个文件的多行输出及顺序",
       "setup_commands": [
         "echo 'one' > file1.txt",
         "echo 'two' > file2.txt",
@@ -62,39 +62,163 @@
     },
     {
       "command": "cksum",
-      "description": "测试cksum命令对标准输入计算校验和",
+      "description": "cksum: 测试cksum命令对标准输入计算校验和",
       "args": [],
       "tstdin": "abc\n",
       "setup_commands": [],
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "1219131554 4\n",
+          "stdout": "1112837078 4\n",
           "stderr": ""
-        },
-        "ignore_fields": {
-          "ignore_stdout": false,
-          "ignore_stderr": false
         }
       }
     },
     {
       "command": "cksum",
-      "description": "测试使用 - 表示标准输入",
+      "description": "cksum: 测试标准输入的显式处理",
       "args": ["-"],
       "tstdin": "Hello stdin\n",
       "setup_commands": [],
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "4038471504 13 -\n",
+          "stdout": "1357239235 12 -\n",
           "stderr": ""
-        },
-        "ignore_fields": {
-          "ignore_stdout": false,
-          "ignore_stderr": false
         }
       }
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试标准输入的隐式处理",
+      "args": [],
+      "tstdin": "Hello stdin\n",
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1357239235 12\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试空文件的校验和计算",
+      "args": ["empty"],
+      "tstdin": "",
+      "setup_commands": [
+        "touch empty"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "4294967295 0 empty\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f empty"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试有无换行的文件",
+      "args": ["f1", "f2"],
+      "tstdin": "",
+      "setup_commands": [
+        "touch f1",
+        "touch f2",
+        "echo 'abc' > f1",
+        "echo -n 'abc' > f2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1112837078 4 f1\n1219131554 3 f2\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f f1 f2"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试不存在的文件",
+      "args": ["not_exist_file"],
+      "tstdin": "",
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试多文件输入，其中部分文件不存在",
+      "setup_commands": [
+        "echo 'Hello World' > ok1.txt",
+        "echo 'Hello World' > ok2.txt"
+      ],
+      "args": [
+        "ok1.txt",
+        "missing.txt",
+        "ok2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "2146730865 12 ok1.txt\n2146730865 12 ok2.txt\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ok1.txt ok2.txt"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试非法参数",
+      "setup_commands": [],
+      "args": [
+        "--bad-option"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 stdin 与文件混合输入，保证输出顺序正确",
+      "setup_commands": [
+        "echo 'abc' > file"
+      ],
+      "args": [
+        "-",
+        "file"
+      ],
+      "tstdin": "abc\n",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1112837078 4 -\n1112837078 4 file\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file"
+      ]
     }
   ]
 }

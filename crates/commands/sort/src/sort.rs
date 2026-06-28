@@ -38,6 +38,7 @@ use ctcore::ct_error::{
     CTError, CTResult, CTsageError, CtSimpleError, set_ct_exit_code, strip_errno,
 };
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_version_cmp::ct_version_cmp;
 use sys_locale::get_locale;
@@ -1834,10 +1835,12 @@ enum SortMonth {
 }
 
 /// 将开头字符串解析为月份，如果出错，则返回 Month::Unknown。
+/// 根据locale设置支持本地化月份名称。
 fn sort_month_parse(line: &str) -> SortMonth {
     let line = line.trim();
 
-    const MONTHS: [(&str, SortMonth); 12] = [
+    // 英文月份名称（C/POSIX locale）
+    const MONTHS_EN: [(&str, SortMonth); 12] = [
         ("JAN", SortMonth::January),
         ("FEB", SortMonth::February),
         ("MAR", SortMonth::March),
@@ -1852,11 +1855,37 @@ fn sort_month_parse(line: &str) -> SortMonth {
         ("DEC", SortMonth::December),
     ];
 
-    for (month_str, month) in &MONTHS {
+    // 首先尝试英文月份（保持向后兼容）
+    for (month_str, month) in &MONTHS_EN {
         if line.is_char_boundary(month_str.len())
             && line[..month_str.len()].eq_ignore_ascii_case(month_str)
         {
             return *month;
+        }
+    }
+
+    // 如果使用非C locale，尝试本地化月份名称
+    if hard_locale_time() {
+        // 中文月份名称示例（可以根据需要扩展）
+        const MONTHS_ZH: [(&str, SortMonth); 12] = [
+            ("一月", SortMonth::January),
+            ("二月", SortMonth::February),
+            ("三月", SortMonth::March),
+            ("四月", SortMonth::April),
+            ("五月", SortMonth::May),
+            ("六月", SortMonth::June),
+            ("七月", SortMonth::July),
+            ("八月", SortMonth::August),
+            ("九月", SortMonth::September),
+            ("十月", SortMonth::October),
+            ("十一月", SortMonth::November),
+            ("十二月", SortMonth::December),
+        ];
+
+        for (month_str, month) in &MONTHS_ZH {
+            if line.starts_with(month_str) {
+                return *month;
+            }
         }
     }
 
@@ -10566,6 +10595,99 @@ mod tests {
             let invalid_input = ["nonsense", "1B", "B", "b", "p", "e", "z", "y"];
             for input in &invalid_input {
                 assert!(SortGlobalConfigs::parse_byte_count(input).is_err());
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod locale_tests {
+        use super::*;
+        use std::env;
+
+        #[test]
+        fn test_sort_month_parse_chinese_locale() {
+            // 模拟中文locale环境
+            unsafe {
+                env::set_var("LC_TIME", "zh_CN.UTF-8");
+            }
+
+            // 测试中文月份名称
+            assert_eq!(sort_month_parse("一月"), SortMonth::January);
+            assert_eq!(sort_month_parse("二月"), SortMonth::February);
+            assert_eq!(sort_month_parse("三月"), SortMonth::March);
+            assert_eq!(sort_month_parse("十二月"), SortMonth::December);
+
+            // 英文月份仍然应该工作
+            assert_eq!(sort_month_parse("JAN"), SortMonth::January);
+            assert_eq!(sort_month_parse("feb"), SortMonth::February);
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+        }
+
+        #[test]
+        fn test_sort_month_parse_c_locale() {
+            // 模拟C locale环境
+            unsafe {
+                env::set_var("LC_TIME", "C");
+            }
+
+            // 只有英文月份应该工作
+            assert_eq!(sort_month_parse("JAN"), SortMonth::January);
+            assert_eq!(sort_month_parse("feb"), SortMonth::February);
+
+            // 中文月份应该返回Unknown
+            assert_eq!(sort_month_parse("一月"), SortMonth::Unknown);
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+        }
+
+        #[test]
+        fn test_sort_month_compare_with_locale() {
+            // 测试月份比较在不同locale下的一致性
+            assert_eq!(sort_month_compare("JAN", "FEB"), Ordering::Less);
+            assert_eq!(sort_month_compare("DEC", "JAN"), Ordering::Greater);
+            assert_eq!(sort_month_compare("MAY", "MAY"), Ordering::Equal);
+
+            // 模拟中文locale
+            unsafe {
+                env::set_var("LC_TIME", "zh_CN.UTF-8");
+            }
+
+            // 中文月份比较
+            assert_eq!(sort_month_compare("一月", "二月"), Ordering::Less);
+            assert_eq!(sort_month_compare("十二月", "一月"), Ordering::Greater);
+
+            // 混合比较（英文vs中文）
+            assert_eq!(sort_month_compare("JAN", "二月"), Ordering::Less);
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+        }
+
+        #[test]
+        fn test_hard_locale_time_integration() {
+            // 测试hard_locale_time函数的使用
+            unsafe {
+                env::set_var("LC_TIME", "C");
+            }
+            assert!(!hard_locale_time());
+
+            unsafe {
+                env::set_var("LC_TIME", "zh_CN.UTF-8");
+            }
+            assert!(hard_locale_time());
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
             }
         }
     }

@@ -18,6 +18,7 @@
 //! 更具体地说，可以将指数理解为原始数字的 (1..10)*10^exponent 值。
 //! 由此得出该算法的限制条件： 它能够比较 ±(1*10^[i64::MIN]..10*10^[i64::MAX]) 范围内的数字。
 
+use ctcore::ct_locale::hard_locale_numeric;
 use std::{cmp::Ordering, ops::Range};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -41,10 +42,23 @@ pub struct NumInfoParseSettings {
 
 impl Default for NumInfoParseSettings {
     fn default() -> Self {
-        Self {
-            accept_si_units: false,
-            thousands_separator: None,
-            decimal_pt: Some('.'),
+        // 根据locale设置默认的数值格式
+        if hard_locale_numeric() {
+            // 对于非C locale，可能需要不同的数值格式
+            // 例如：某些欧洲locale使用逗号作为小数点，点作为千分位分隔符
+            // 这里提供一个基本的示例，实际实现可能需要更复杂的locale检测
+            Self {
+                accept_si_units: false,
+                thousands_separator: Some(' '), // 使用空格作为千分位分隔符（ISO标准）
+                decimal_pt: Some('.'),          // 保持点作为小数点（可根据需要调整）
+            }
+        } else {
+            // C/POSIX locale使用标准格式
+            Self {
+                accept_si_units: false,
+                thousands_separator: None,
+                decimal_pt: Some('.'),
+            }
         }
     }
 }

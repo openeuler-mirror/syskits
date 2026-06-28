@@ -1,0 +1,382 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 基本列出当前目录（时间中英文区别）",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": [],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 指定单个目录（时间中英文区别）",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir",
+                "cd .."
+            ],
+            "args": [
+                "test_vdir_vdir_basic"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "a.txt\nb.txt\nc.txt\nsubvdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 指定多个路径（文件+目录）（时间中英文区别）",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir",
+                "cd .."
+            ],
+            "args": [
+                "test_vdir_vdir_basic/a.txt",
+                "test_vdir_vdir_basic",
+                "test_vdir_vdir_basic/subdir"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "-rw-r--r-- 1 root root   0  1月16日 10:53 test_vdir_vdir_basic/a.txt\n\ntest_vdir_vdir_basic:\n总计 0\n-rw-r--r-- 1 root root  0  1月16日 10:53 a.txt\n-rw-r--r-- 1 root root  0  1月16日 10:53 b.txt\n-rw-r--r-- 1 root root  0  1月16日 10:53 c.txt\ndrwxr-xr-x 2 root root 40  1月16日 10:53 subdir\n\ntest_vdir_vdir_basic/subdir:\n总计 0\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 错误路径处理",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir",
+                "cd .."
+            ],
+            "args": [
+                "test_vdir_vdir_basic/a.txt",
+                "not_exist_file",
+                "test_vdir_vdir_basic/subdir"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 2,
+                "stdout": "-rw-r--r-- 1 root root 0 Jan 16 11:00 test_vdir_vdir_basic/a.txt\n\ntest_vdir_vdir_basic/subdir:\ntotal 0\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 使用-a显示所有的文件（时间中英文区别）",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": [
+                "-a"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\ndrwxr-xr-x 3 root root 140 Jan 16 11:12 .\ndrwxr-xr-x 3 root root  60 Jan 16 11:12 ..\n-rw-r--r-- 1 root root   0 Jan 16 11:12 a.txt\n-rw-r--r-- 1 root root   0 Jan 16 11:12 b.txt\n-rw-r--r-- 1 root root   0 Jan 16 11:12 c.txt\n-rw-r--r-- 1 root root   0 Jan 16 11:12 .hidden\ndrwxr-xr-x 2 root root  40 Jan 16 11:12 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 使用-A显示所有的文件,不显示 . ..（时间中英文区别）",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": [
+                "-A"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 11:13 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 11:13 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 11:13 c.txt\n-rw-r--r-- 1 root root  0 Jan 16 11:13 .hidden\ndrwxr-xr-x 2 root root 40 Jan 16 11:13 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 符号链接显示（l 开头 + -> target）",
+            "setup_commands": [
+                "mkdir test_vdir_symlink",
+                "cd test_vdir_symlink",
+                "touch target_file",
+                "ln -s target_file symlink_file"
+            ],
+            "args": [
+                "symlink_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "lrwxrwxrwx 1 root root 11 Jan 16 11:30 symlink_file -> target_file\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_symlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: 硬链接显示（link count > 1）",
+            "setup_commands": [
+                "mkdir test_vdir_hardlink",
+                "cd test_vdir_hardlink",
+                "touch original_file",
+                "ln original_file hardlink1",
+                "ln original_file hardlink2"
+            ],
+            "args": [
+                "hardlink1",
+                "hardlink2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-rw-r--r-- 3 root root 0 Jan 16 11:32 hardlink1\n-rw-r--r-- 3 root root 0 Jan 16 11:32 hardlink2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_hardlink"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: -n",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": ["-n"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: -h",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": ["-h"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: --time",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": ["--time=atime"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: -t",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": ["-t"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: -r",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "touch a.txt",
+                "touch b.txt",
+                "touch c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": ["-r"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "vdir",
+            "description": "vdir: -S",
+            "setup_commands": [
+                "mkdir test_vdir_vdir_basic",
+                "cd test_vdir_vdir_basic",
+                "echo 'hello' > a.txt",
+                "echo 'hello, world' > b.txt",
+                "echo 'h' > c.txt",
+                "touch .hidden",
+                "mkdir subdir"
+            ],
+            "args": ["-S"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_vdir_vdir_basic"
+            ]
+        }
+    ]
+}

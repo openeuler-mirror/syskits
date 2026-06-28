@@ -100,15 +100,54 @@ fn cut_stdout_writer() -> Box<dyn Write> {
 // 将给定的字符列表转换为CtRange的集合。
 // 如果`complement`标志为true，则计算给定范围的补集。
 //
-// - `list`: 指定的字符列表，格式应符合CtRange的解析要求。
-//- `complement`: 一个布尔值，指示是否需要计算列表的补集。
-// - 返回值: 成功时返回CtRange的集合Vec，失败时返回错误信息String。
-fn cut_list_to_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
-    if complement {
+
+// 解析字节/字符位置范围，使用GNU兼容的错误消息
+// 对于字符和字节模式，不自动合并相邻范围以保持与GNU cut兼容的output-delimiter行为
+fn parse_position_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
+    let mut ct_ranges = Vec::new();
+
+    for item in list.split(&[',', ' ']) {
+        let range_item = std::str::FromStr::from_str(item)
+            .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
+        ct_ranges.push(range_item);
+    }
+
+    // 对于字符和字节模式，仅排序不合并，以保持与GNU cut的output-delimiter兼容性
+    ct_ranges.sort();
+
+    let result = if complement {
+        Ok(ctcore::ct_ranges::complement(&ct_ranges))
+    } else {
+        Ok(ct_ranges)
+    };
+
+    // 转换错误消息以匹配GNU格式
+    result.map_err(|err: String| {
+        if err.contains("fields and positions are numbered from 1") {
+            "byte/character positions are numbered from 1\nTry 'cut --help' for more information."
+                .to_string()
+        } else {
+            err
+        }
+    })
+}
+
+// 解析字段范围，使用GNU兼容的错误消息
+fn parse_field_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
+    let result = if complement {
         CtRange::from_list(list).map(|r| ctcore::ct_ranges::complement(&r))
     } else {
         CtRange::from_list(list)
-    }
+    };
+
+    // 转换错误消息以匹配GNU格式
+    result.map_err(|err| {
+        if err.contains("fields and positions are numbered from 1") {
+            "fields are numbered from 1\nTry 'cut --help' for more information.".to_string()
+        } else {
+            err
+        }
+    })
 }
 
 /**
@@ -134,42 +173,76 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
 
     // 遍历输入数据，按指定范围切割并输出
     let result = buf_in.for_byte_record(newline_char, |line| {
-        let mut print_delim = false;
+        // 智能合并重叠范围，但保持相邻范围分离
+        let mut merged_segments = Vec::new();
+        let mut current_start = None;
+        let mut current_end = None;
+
         for &CtRange { low, high } in ranges {
             // 范围超出当前行时跳出循环
             if low > line.len() {
-                break;
-            }
-            // 如果需要，则在字段之间打印分隔符
-            if print_delim {
-                out.write_all(out_delim)?;
-            } else if opts.out_delimiter.is_some() {
-                print_delim = true;
+                continue;
             }
 
-            // 将范围的索引从1-based转换为0-based
-            let mut start = low - 1;
-            let mut end = high.min(line.len());
+            let start = low - 1; // 转换为0索引
+            let end = high.min(line.len());
+
+            match (current_start, current_end) {
+                (None, None) => {
+                    current_start = Some(start);
+                    current_end = Some(end);
+                }
+                (Some(cur_start), Some(cur_end)) => {
+                    if start < cur_end {
+                        // 真正重叠，合并
+                        current_end = Some(cur_end.max(end));
+                    } else {
+                        // 分离或相邻，保存当前段并开始新段
+                        merged_segments.push((cur_start, cur_end));
+                        current_start = Some(start);
+                        current_end = Some(end);
+                    }
+                }
+                _ => unreachable!(),
+            }
+
+            // 将指定范围的字节写入输出
+            out.write_all(&line[start..end])?;
+        }
+
+        // 添加最后一个段
+        if let (Some(start), Some(end)) = (current_start, current_end) {
+            merged_segments.push((start, end));
+        }
+
+        // 输出各段，在分离的段之间添加分隔符
+        for (i, &(start, end)) in merged_segments.iter().enumerate() {
+            if i > 0 && opts.out_delimiter.is_some() {
+                out.write_all(out_delim)?;
+            }
+
+            let mut segment_start = start;
+            let mut segment_end = end;
 
             // 如果启用了no_split_multibyte选项，调整范围以避免分割多字节字符
             if opts.no_split_multibyte {
                 // 尝试将字节切片转换为UTF-8字符串来检查字符边界
                 if let Ok(line_str) = std::str::from_utf8(line) {
                     // 调整起始位置 - 向后移动到有效的UTF-8字符边界
-                    while start > 0 && !line_str.is_char_boundary(start) {
-                        start -= 1;
+                    while segment_start > 0 && !line_str.is_char_boundary(segment_start) {
+                        segment_start -= 1;
                     }
 
                     // 调整结束位置 - 向前移动到有效的UTF-8字符边界
-                    while end < line.len() && !line_str.is_char_boundary(end) {
-                        end += 1;
+                    while segment_end < line.len() && !line_str.is_char_boundary(segment_end) {
+                        segment_end += 1;
                     }
                 }
                 // 如果输入不是有效的UTF-8，就保持原有的字节范围
             }
 
             // 将指定范围的字节写入输出
-            out.write_all(&line[start..end])?;
+            out.write_all(&line[segment_start..segment_end])?;
         }
         // 在每行末尾写入行结束符
         out.write_all(&[newline_char])?;
@@ -829,7 +902,7 @@ fn cut_mode_param_parse<'a>(
             CutMode::Bytes(_, _) | CutMode::Characters(_, _)
             if args_match.get_flag(opt_flags::ONLY_DELIMITED) =>
                 {
-                    Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
+                    Err("suppressing non-delimited lines makes sense\n\tonly when operating on fields\nTry 'cut --help' for more information.".into())
                 }
             _ => Ok(mode),
         },
@@ -853,7 +926,7 @@ fn cut_mode_parse<'a>(
         args_match.get_one::<String>(opt_flags::CHARACTERS),
         args_match.get_one::<String>(opt_flags::FIELDS),
     ) {
-        (1, Some(byte_ranges), None, None) => cut_list_to_ranges(byte_ranges, is_complement).map(|ranges| {
+        (1, Some(byte_ranges), None, None) => parse_position_ranges(byte_ranges, is_complement).map(|ranges| {
             CutMode::Bytes(
                 ranges,
                 CutOptions {
@@ -864,7 +937,7 @@ fn cut_mode_parse<'a>(
                 },
             )
         }),
-        (1, None, Some(char_ranges), None) => cut_list_to_ranges(char_ranges, is_complement).map(|ranges| {
+        (1, None, Some(char_ranges), None) => parse_position_ranges(char_ranges, is_complement).map(|ranges| {
             CutMode::Characters(
                 ranges,
                 CutOptions {
@@ -875,7 +948,7 @@ fn cut_mode_parse<'a>(
                 },
             )
         }),
-        (1, None, None, Some(field_ranges)) => cut_list_to_ranges(field_ranges, is_complement).map(|ranges| {
+        (1, None, None, Some(field_ranges)) => parse_field_ranges(field_ranges, is_complement).map(|ranges| {
             CutMode::Fields(
                 ranges,
                 CutOptions {
@@ -921,25 +994,59 @@ fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> 
             let line_str = String::from_utf8_lossy(line);
             // 使用 graphemes 处理 Unicode 字符
             let graphemes: Vec<&str> = line_str.graphemes(true).collect();
-            // 处理每个范围
-            let mut print_delim = false;
+            // 处理每个范围 - 修复output-delimiter逻辑以与GNU coreutils兼容
+            // 需要智能合并重叠范围，但保持相邻范围分离
+            let mut merged_segments = Vec::new();
+            let mut current_start = None;
+            let mut current_end = None;
+
             for &CtRange { low, high } in ranges {
                 let start = low.saturating_sub(1);
                 let end = high.min(graphemes.len());
+
                 if start >= graphemes.len() {
-                    break;
+                    continue;
                 }
-                // 处理分隔符
-                if print_delim {
-                    out.write_all(opts.out_delimiter.unwrap_or(b"\t"))?;
-                } else if opts.out_delimiter.is_some() {
-                    print_delim = true;
+
+                match (current_start, current_end) {
+                    (None, None) => {
+                        // 第一个范围
+                        current_start = Some(start);
+                        current_end = Some(end);
+                    }
+                    (Some(cur_start), Some(cur_end)) => {
+                        if start < cur_end {
+                            // 真正重叠，合并
+                            current_end = Some(cur_end.max(end));
+                        } else {
+                            // 分离或相邻，保存当前段并开始新段
+                            merged_segments.push((cur_start, cur_end));
+                            current_start = Some(start);
+                            current_end = Some(end);
+                        }
+                    }
+                    _ => unreachable!(),
                 }
                 // 连接并写入选中的字素簇
                 let selected = graphemes[start..end].join("");
                 out.write_all(selected.as_bytes())?;
             }
-            // 写入换行符（如果不是最后一个字节）
+
+            // 添加最后一个段
+            if let (Some(start), Some(end)) = (current_start, current_end) {
+                merged_segments.push((start, end));
+            }
+
+            // 输出各段，在分离的段之间添加分隔符
+            for (i, &(start, end)) in merged_segments.iter().enumerate() {
+                if i > 0 && opts.out_delimiter.is_some() {
+                    out.write_all(opts.out_delimiter.unwrap_or(b"\t"))?;
+                }
+
+                let selected = graphemes[start..end].join("");
+                out.write_all(selected.as_bytes())?;
+            }
+            // 写入换行符（如果原本有换行符）
             if next_newline.is_some() {
                 out.write_all(b"\n")?;
             }
@@ -953,6 +1060,7 @@ fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::Tool;
     use std::ffi::OsString;
 
     #[test]
@@ -2108,6 +2216,99 @@ mod tests {
             let mode_parse = cut_mode_param_parse(&matches, mode_parse);
 
             assert!(mode_parse.is_ok());
+        }
+
+        #[test]
+        fn test_basic_functionality() {
+            // 简单测试cut功能的基本行为
+            use ctcore::Tool;
+
+            let cut = super::Cut::default();
+            assert_eq!(cut.name(), "cut");
+
+            // 测试一个简单的命令行解析
+            let args = vec![
+                std::ffi::OsString::from("cut"),
+                std::ffi::OsString::from("-c1-5"),
+            ];
+            // 如果命令解析成功就通过测试
+            let cmd = cut.command();
+            let matches = cmd.try_get_matches_from(&args);
+            assert!(matches.is_ok());
+        }
+
+        #[test]
+        fn test_parse_position_ranges_basic() {
+            // 测试基本的范围解析功能
+            let ranges = super::parse_position_ranges("1-2,3-4", false).unwrap();
+            assert_eq!(ranges.len(), 2);
+            assert_eq!(ranges[0].low, 1);
+            assert_eq!(ranges[0].high, 2);
+            assert_eq!(ranges[1].low, 3);
+            assert_eq!(ranges[1].high, 4);
+        }
+
+        #[test]
+        fn test_parse_position_ranges_overlapping() {
+            // 测试重叠范围解析 - 应该保持原始范围不合并
+            let ranges = super::parse_position_ranges("1-3,2-4", false).unwrap();
+            assert_eq!(ranges.len(), 2);
+            assert_eq!(ranges[0].low, 1);
+            assert_eq!(ranges[0].high, 3);
+            assert_eq!(ranges[1].low, 2);
+            assert_eq!(ranges[1].high, 4);
+        }
+
+        #[test]
+        fn test_parse_position_ranges_sorting() {
+            // 测试范围排序
+            let ranges = super::parse_position_ranges("3-4,1-2", false).unwrap();
+            assert_eq!(ranges.len(), 2);
+            assert_eq!(ranges[0].low, 1);
+            assert_eq!(ranges[0].high, 2);
+            assert_eq!(ranges[1].low, 3);
+            assert_eq!(ranges[1].high, 4);
+        }
+
+        #[test]
+        fn test_parse_position_ranges_complement() {
+            // 测试complement功能
+            let ranges = super::parse_position_ranges("2-3", true).unwrap();
+            assert!(ranges.len() >= 1);
+            // complement会生成补集范围，第一个范围应该是1-1
+            assert_eq!(ranges[0].low, 1);
+            assert_eq!(ranges[0].high, 1);
+        }
+
+        #[test]
+        fn test_parse_position_ranges_invalid() {
+            // 测试无效范围 - 位置从1开始编号
+            let result = super::parse_position_ranges("0-2", false);
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err();
+            assert!(
+                error_msg.contains("fields and positions are numbered from 1")
+                    || error_msg.contains("byte/character positions are numbered from 1")
+            );
+        }
+
+        #[test]
+        fn test_parse_position_ranges_single_position() {
+            // 测试单个位置
+            let ranges = super::parse_position_ranges("5", false).unwrap();
+            assert_eq!(ranges.len(), 1);
+            assert_eq!(ranges[0].low, 5);
+            assert_eq!(ranges[0].high, 5);
+        }
+
+        #[test]
+        fn test_parse_position_ranges_unbounded() {
+            // 测试无上界范围
+            let ranges = super::parse_position_ranges("3-", false).unwrap();
+            assert_eq!(ranges.len(), 1);
+            assert_eq!(ranges[0].low, 3);
+            // 无上界范围的高值可能是usize::MAX或usize::MAX-1，取决于实现
+            assert!(ranges[0].high >= usize::MAX - 1);
         }
     }
 }

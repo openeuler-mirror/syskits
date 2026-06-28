@@ -69,6 +69,7 @@ pub struct FmtConfigs {
     width: usize,
     goal: usize,
     tab_width: usize,
+    pub had_error: bool,
 }
 
 impl FmtConfigs {
@@ -116,6 +117,7 @@ impl FmtConfigs {
             width,
             goal,
             tab_width,
+            had_error: false,
         })
     }
 
@@ -194,7 +196,7 @@ impl FmtConfigs {
 /// `UResult<()>` 表示成功或失败。
 fn fmt_process_file<W: ?Sized + Write>(
     file_name: &str,
-    fmt_configs: &FmtConfigs,
+    fmt_configs: &mut FmtConfigs,
     output_stream: &mut W,
 ) -> CTResult<()> {
     let mut fp = if file_name == "-" {
@@ -204,6 +206,7 @@ fn fmt_process_file<W: ?Sized + Write>(
             Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
             Err(e) => {
                 ct_show_warning!("{}: {}", file_name.maybe_quote(), e);
+                fmt_configs.had_error = true;
                 return Ok(());
             }
         }
@@ -259,12 +262,16 @@ pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or(vec!["-".into()]);
 
-    let fmt_opts = FmtConfigs::from_matches(&matches)?;
+    let mut fmt_opts = FmtConfigs::from_matches(&matches)?;
 
     let mut ostream = BufWriter::new(stdout());
 
     for file_name in &files {
-        fmt_process_file(file_name, &fmt_opts, &mut ostream)?;
+        fmt_process_file(file_name, &mut fmt_opts, &mut ostream)?;
+    }
+
+    if fmt_opts.had_error {
+        return Err(CtSimpleError::new(1, ""));
     }
 
     Ok(())
@@ -448,6 +455,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -478,6 +486,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -508,6 +517,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -538,6 +548,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -568,6 +579,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -598,6 +610,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -628,6 +641,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -658,6 +672,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -688,6 +703,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -718,6 +734,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
 
             assert_eq!(configs, expected_configs);
@@ -749,6 +766,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -779,6 +797,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -809,6 +828,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -839,6 +859,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -869,6 +890,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -899,6 +921,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -929,6 +952,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -959,6 +983,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -998,6 +1023,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1028,6 +1054,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1058,6 +1085,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1088,6 +1116,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1118,6 +1147,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1148,6 +1178,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1178,6 +1209,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1208,6 +1240,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1238,6 +1271,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1268,6 +1302,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1298,6 +1333,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1333,6 +1369,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1368,6 +1405,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1403,6 +1441,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1433,6 +1472,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1463,6 +1503,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1493,6 +1534,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1523,6 +1565,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1553,6 +1596,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1583,6 +1627,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1613,6 +1658,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1643,6 +1689,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1673,6 +1720,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1703,6 +1751,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1733,6 +1782,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1763,6 +1813,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1793,6 +1844,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1823,6 +1875,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1853,6 +1906,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1883,6 +1937,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1913,6 +1968,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1943,6 +1999,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -1973,6 +2030,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
 
             assert_eq!(configs, expected_configs);
@@ -2004,6 +2062,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2034,6 +2093,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2064,6 +2124,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2100,6 +2161,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2136,6 +2198,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2172,6 +2235,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2208,6 +2272,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2244,6 +2309,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2280,6 +2346,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2316,6 +2383,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2352,6 +2420,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2388,6 +2457,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2424,6 +2494,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2460,6 +2531,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2490,6 +2562,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2520,6 +2593,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2550,6 +2624,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2580,6 +2655,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2610,6 +2686,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2640,6 +2717,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2670,6 +2748,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2700,6 +2779,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2730,6 +2810,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2760,6 +2841,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2790,6 +2872,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2826,6 +2909,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2862,6 +2946,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2898,6 +2983,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2934,6 +3020,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -2970,6 +3057,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3006,6 +3094,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3042,6 +3131,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3078,6 +3168,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3114,6 +3205,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3150,6 +3242,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3186,6 +3279,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3216,6 +3310,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3246,6 +3341,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3276,6 +3372,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3306,6 +3403,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3336,6 +3434,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3366,6 +3465,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3396,6 +3496,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3426,6 +3527,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3462,6 +3564,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3498,6 +3601,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3534,6 +3638,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3570,6 +3675,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3606,6 +3712,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3642,6 +3749,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3678,6 +3786,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3714,6 +3823,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3750,6 +3860,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3786,6 +3897,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3822,6 +3934,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3858,6 +3971,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3894,6 +4008,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3930,6 +4045,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -3966,6 +4082,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4002,6 +4119,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4038,6 +4156,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4074,6 +4193,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4110,6 +4230,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4146,6 +4267,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4182,6 +4304,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4218,6 +4341,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4255,6 +4379,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4292,6 +4417,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4329,6 +4455,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4365,6 +4492,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4401,6 +4529,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4437,6 +4566,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4473,6 +4603,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4509,6 +4640,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4545,6 +4677,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4581,6 +4714,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4617,6 +4751,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4654,6 +4789,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4691,6 +4827,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4728,6 +4865,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4764,6 +4902,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4800,6 +4939,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4836,6 +4976,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4872,6 +5013,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4908,6 +5050,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4944,6 +5087,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -4980,6 +5124,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5016,6 +5161,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5052,6 +5198,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5088,6 +5235,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5124,6 +5272,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5154,6 +5303,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5184,6 +5334,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5214,6 +5365,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5244,6 +5396,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5274,6 +5427,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5304,6 +5458,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5334,6 +5489,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5364,6 +5520,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5400,6 +5557,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5436,6 +5594,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5472,6 +5631,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5508,6 +5668,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5544,6 +5705,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5580,6 +5742,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5616,6 +5779,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5652,6 +5816,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5688,6 +5853,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5724,6 +5890,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5760,6 +5927,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5797,6 +5965,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5834,6 +6003,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5871,6 +6041,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5901,6 +6072,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5931,6 +6103,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5961,6 +6134,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -5991,6 +6165,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6021,6 +6196,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6051,6 +6227,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6081,6 +6258,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6111,6 +6289,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6142,6 +6321,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6173,6 +6353,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6204,6 +6385,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6234,6 +6416,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6264,6 +6447,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6294,6 +6478,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6324,6 +6509,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6354,6 +6540,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6384,6 +6571,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6414,6 +6602,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6444,6 +6633,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6474,6 +6664,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6504,6 +6695,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
 
             assert_eq!(configs, expected_configs);
@@ -6535,6 +6727,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6565,6 +6758,7 @@ mod tests {
                 width: 0,
                 goal: 0,
                 tab_width: 8,
+                had_error: false,
             };
 
             assert_eq!(configs, expected_configs);
@@ -6596,6 +6790,7 @@ mod tests {
                 width: 1,
                 goal: 1,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6626,6 +6821,7 @@ mod tests {
                 width: 10,
                 goal: 9,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6656,6 +6852,7 @@ mod tests {
                 width: 100,
                 goal: 93,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6686,6 +6883,7 @@ mod tests {
                 width: 1000,
                 goal: 930,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6716,6 +6914,7 @@ mod tests {
                 width: 0,
                 goal: 0,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6746,6 +6945,7 @@ mod tests {
                 width: 1,
                 goal: 1,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6776,6 +6976,7 @@ mod tests {
                 width: 10,
                 goal: 9,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6806,6 +7007,7 @@ mod tests {
                 width: 100,
                 goal: 93,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6836,6 +7038,7 @@ mod tests {
                 width: 1000,
                 goal: 930,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6884,6 +7087,7 @@ mod tests {
                 width: 3,
                 goal: 0,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6914,6 +7118,7 @@ mod tests {
                 width: 4,
                 goal: 1,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -6944,6 +7149,7 @@ mod tests {
                 width: 13,
                 goal: 10,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7024,6 +7230,7 @@ mod tests {
                 width: 3,
                 goal: 0,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7054,6 +7261,7 @@ mod tests {
                 width: 4,
                 goal: 1,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7084,6 +7292,7 @@ mod tests {
                 width: 13,
                 goal: 10,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7146,6 +7355,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7176,6 +7386,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 8,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7206,6 +7417,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 1,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7236,6 +7448,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 1,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7266,6 +7479,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 10,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7296,6 +7510,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 100,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7326,6 +7541,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 1000,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7356,6 +7572,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 1,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7386,6 +7603,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 1,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7416,6 +7634,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 10,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7446,6 +7665,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 100,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7476,6 +7696,7 @@ mod tests {
                 width: 75,
                 goal: 70,
                 tab_width: 1000,
+                had_error: false,
             };
             assert_eq!(configs, expected_configs);
         }
@@ -7506,6 +7727,7 @@ mod tests {
                 width: 70,
                 goal: 68,
                 tab_width: 4,
+                had_error: false,
             }
         }
 
@@ -7519,9 +7741,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = setup_fmt_configs();
+            let mut fmt_configs = setup_fmt_configs();
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             assert_eq!(
                 String::from_utf8(output_stream.into_inner()).unwrap(),
@@ -7533,9 +7755,9 @@ mod tests {
         fn test_fmt_process_file_with_error() {
             let file_name = "non_existent.txt";
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = setup_fmt_configs();
+            let mut fmt_configs = setup_fmt_configs();
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok()); // Function handles error by returning Ok(())
             assert!(output_stream.into_inner().is_empty()); // No output should be written
         }
@@ -7549,9 +7771,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = setup_fmt_configs();
+            let mut fmt_configs = setup_fmt_configs();
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             assert!(output_stream.into_inner().is_empty()); // No output for empty input
         }
@@ -7567,9 +7789,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = setup_fmt_configs();
+            let mut fmt_configs = setup_fmt_configs();
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             // Expecting certain processing result based on how fmt_break_lines is defined
             assert!(!output_stream.into_inner().is_empty());
@@ -7586,9 +7808,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = setup_fmt_configs();
+            let mut fmt_configs = setup_fmt_configs();
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             assert_eq!(
                 String::from_utf8(output_stream.into_inner()).unwrap(),
@@ -7608,9 +7830,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = setup_fmt_configs();
+            let mut fmt_configs = setup_fmt_configs();
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             // Checking that newlines are handled consistently
             assert_eq!(
@@ -7640,6 +7862,7 @@ mod tests {
                 width: width,
                 goal: width - 2, // Example adjustment
                 tab_width: 4,
+                had_error: false,
             }
         }
 
@@ -7654,9 +7877,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = get_fmt_configs(true, false, false, false, 50);
+            let mut fmt_configs = get_fmt_configs(true, false, false, false, 50);
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             // Check if output formatting corresponds to crown mode specifics
             assert_eq!(
@@ -7676,9 +7899,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = get_fmt_configs(false, true, false, false, 50);
+            let mut fmt_configs = get_fmt_configs(false, true, false, false, 50);
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             // Check for tagged formatting specifics
             assert_eq!(
@@ -7698,9 +7921,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = get_fmt_configs(false, false, true, false, 50);
+            let mut fmt_configs = get_fmt_configs(false, false, true, false, 50);
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             // Check if mail formatting is correctly applied
             assert_eq!(
@@ -7720,9 +7943,9 @@ mod tests {
             let file_name = test_file_path.to_str().unwrap();
 
             let mut output_stream = Cursor::new(Vec::new());
-            let fmt_configs = get_fmt_configs(false, false, false, false, 80); // Test with wider width
+            let mut fmt_configs = get_fmt_configs(false, false, false, false, 80); // Test with wider width
 
-            let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
+            let result = fmt_process_file(file_name, &mut fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             // Check if output lines are formatted within the specified width
             let output = String::from_utf8(output_stream.into_inner()).unwrap();

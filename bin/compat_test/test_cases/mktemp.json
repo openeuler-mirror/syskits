@@ -1,0 +1,318 @@
+{
+    "tests": [
+        {
+            "command": "mktemp",
+            "description": "mktemp: 测试创建临时文件",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $CMD_STDOUT"
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 测试创建临时目录",
+            "args": ["-d"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d $CMD_STDOUT",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf $CMD_STDOUT"
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 使用前缀和占位符创建文件",
+            "args": [
+                "compat_test.XXX"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "[[ $CMD_STDOUT == /tmp/compat_test.* ]]",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $CMD_STDOUT"
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 创建带后缀的临时文件",
+            "args": [
+                "--suffix=.txt",
+                "compat_test.XXX"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "[[ $CMD_STDOUT == *.txt ]]",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $CMD_STDOUT"
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 指定创建目录",
+            "args": [
+                "--tmpdir=/tmp/compat_test_dir",
+                "compat_test.XXX"
+            ],
+            "setup_commands": [
+                "mkdir -p /tmp/compat_test_dir"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "[[ $CMD_STDOUT == /tmp/compat_test_dir/* ]]",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $CMD_STDOUT",
+                "rm -rf /tmp/compat_test_dir"
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 只打印名字，不创建文件",
+            "args": [
+                "-u",
+                "compat_test.XXX"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 1,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 占位符不足",
+            "args": [
+                "compat_test_file"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 模板中的X少于3个的地方不替换",
+            "args": [
+                "XX_XXXX_compat_test"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "[[ $CMD_STDOUT == /tmp/XX* ]]",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $CMD_STDOUT"
+            ]
+        },
+        {
+            "command": "mktemp",
+            "description": "mktemp: 指定目录不存在",
+            "args": [
+                "--tmpdir=/tmp/compat_test_dir",
+                "compat_test.XXX"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e $CMD_STDOUT",
+                        "expected_exit": 1,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": true,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        }
+    ]
+}

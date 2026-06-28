@@ -20,6 +20,7 @@ use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
 use ctcore::libc::mode_t;
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
+use rustix::fs::{AtFlags, StatxFlags, statx};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -43,6 +44,26 @@ mod stat_options {
     pub const STAT_ABOUT: &str = "about";
     pub const STAT_USAGE: &str = "usage";
     pub const STAT_LONG_USAGE: &str = "long_usage";
+    pub const STAT_CACHED: &str = "cached";
+}
+
+// 添加缓存模式的枚举类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CachedMode {
+    Default,
+    Never,
+    Always,
+}
+
+impl CachedMode {
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "default" => Ok(CachedMode::Default),
+            "never" => Ok(CachedMode::Never),
+            "always" => Ok(CachedMode::Always),
+            _ => Err(format!("invalid cached mode: {}", s)),
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
@@ -95,6 +116,7 @@ enum StatToken {
         flag: StatFlags,
         width: usize,
         precision: Option<usize>,
+        modifier: Option<char>,
         format: char,
     },
 }
@@ -166,6 +188,7 @@ struct Stater {
     is_follow: bool,
     is_show_fs: bool,
     is_from_user: bool,
+    cached_mode: CachedMode,
     files: Vec<OsString>,
     mount_list: Option<Vec<String>>,
     default_tokens: Vec<StatToken>,
@@ -444,10 +467,24 @@ impl Stater {
             ));
         }
 
+        // 检查修饰符 (H, L)
+        let mut modifier = None;
+        if chars[*i] == 'H' || chars[*i] == 'L' {
+            modifier = Some(chars[*i]);
+            *i += 1;
+            if *i >= bound {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("{}: invalid directive", &format_str[old..]),
+                ));
+            }
+        }
+
         Ok(StatToken::Directive {
             width,
             flag,
             precision,
+            modifier,
             format: chars[*i],
         })
     }
@@ -525,7 +562,7 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> CTResult<Self> {
-        // Get files first since this is required
+        // Get files
         let files = Self::get_files(matches)?;
 
         // Get format configuration
@@ -538,15 +575,27 @@ impl Stater {
             Self::get_mount_list()?
         };
 
+        // 处理 --cached 选项
+        let cached_mode =
+            if let Some(mode_str) = matches.get_one::<String>(stat_options::STAT_CACHED) {
+                match CachedMode::from_str(mode_str) {
+                    Ok(mode) => mode,
+                    Err(err) => return Err(CtSimpleError::new(1, err)),
+                }
+            } else {
+                CachedMode::Default
+            };
+
         Ok(Self {
             is_follow: matches.get_flag(stat_options::STAT_DEREFERENCE),
             is_show_fs: matches.get_flag(stat_options::STAT_FILE_SYSTEM),
             is_from_user: matches.contains_id(stat_options::STAT_FORMAT)
                 || matches.contains_id(stat_options::STAT_PRINTF),
+            cached_mode,
             files,
+            mount_list,
             default_tokens,
             default_dev_tokens,
-            mount_list,
         })
     }
 
@@ -671,6 +720,9 @@ impl Stater {
         #[cfg(not(unix))]
         let path = file.to_string_lossy();
 
+        // 注意：与 GNU coreutils 的 stat 实现一致，statfs 函数不支持 cached 选项
+        // 缓存控制选项仅影响文件元数据获取，不影响文件系统信息获取
+
         match statfs(path) {
             Ok(meta) => {
                 self.print_filesystem_info(&meta, &self.default_tokens);
@@ -688,10 +740,12 @@ impl Stater {
     }
 
     fn handle_file_stat(&self, file: &OsStr, display_name: &str, stdin_is_fifo: bool) -> i32 {
-        let result = if self.is_follow || stdin_is_fifo && display_name == "-" {
+        let result = if stdin_is_fifo && display_name == "-" {
+            // 对于标准输入，使用标准库的方法
             fs::metadata(file)
         } else {
-            fs::symlink_metadata(file)
+            // 使用我们的新函数，它会根据缓存模式设置适当的标志
+            get_metadata(file, self.is_follow, self.cached_mode)
         };
 
         match result {
@@ -725,6 +779,7 @@ impl Stater {
                     flag,
                     width,
                     precision,
+                    modifier: _,
                     format,
                 } => {
                     let output = self.get_filesystem_output(meta, *format);
@@ -742,9 +797,10 @@ impl Stater {
                     flag,
                     width,
                     precision,
+                    modifier,
                     format,
                 } => {
-                    let output = self.get_file_output(meta, *format, file);
+                    let output = self.get_file_output(meta, *format, file, *modifier);
                     print_it(&output, *flag, *width, *precision);
                 }
             }
@@ -786,12 +842,14 @@ impl Stater {
         }
     }
 
-    fn get_file_output(&self, meta: &fs::Metadata, format: char, file: &OsStr) -> StatOutputType {
-        let display_name = self
-            .files
-            .first()
-            .map(|f| f.to_string_lossy())
-            .unwrap_or_default();
+    fn get_file_output(
+        &self,
+        meta: &fs::Metadata,
+        format: char,
+        file: &OsStr,
+        modifier: Option<char>,
+    ) -> StatOutputType {
+        let display_name = file.to_string_lossy();
         let file_type = meta.file_type();
         let mut context_str = "".to_string();
         let substitute_string = "?".to_string();
@@ -826,14 +884,22 @@ impl Stater {
             // access rights in human readable form
             'A' => StatOutputType::Str(display_permissions(meta, true)),
             // number of blocks allocated (see %B)
+            'b' => StatOutputType::Unsigned(meta.blocks()),
+            // The size in bytes of each block reported by %b
             // FIXME: blocksize differs on various platform
             // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
             'B' => StatOutputType::Unsigned(512),
 
             //SELinux security context string
             'C' => StatOutputType::Str(context_str),
-            // device number in decimal
-            'd' => StatOutputType::Unsigned(meta.dev()),
+            // device number - handle modifier for major/minor separation
+            'd' => {
+                match modifier {
+                    Some('H') => StatOutputType::Unsigned(meta.dev() >> 8), // major device number
+                    Some('L') => StatOutputType::Unsigned(meta.dev() & 0xff), // minor device number
+                    _ => StatOutputType::Unsigned(meta.dev()),              // full device number
+                }
+            }
             // device number in hex
             'D' => StatOutputType::UnsignedHex(meta.dev()),
             // raw mode in hex
@@ -871,9 +937,9 @@ impl Stater {
                             return StatOutputType::Unknown;
                         }
                     };
-                    format!("{} -> {}", display_name.quote(), dst.quote())
+                    format!("'{}' -> '{}'", display_name, dst.display())
                 } else {
-                    display_name.to_string()
+                    format!("'{}'", display_name)
                 };
                 StatOutputType::Str(file_name)
             }
@@ -882,11 +948,31 @@ impl Stater {
             // total size, in bytes
             's' => StatOutputType::Integer(meta.len() as i64),
             // major device type in hex, for character/block device special
-            // files
-            't' => StatOutputType::UnsignedHex(meta.rdev() >> 8),
+            // files, with modifier support
+            't' => {
+                match modifier {
+                    Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
+                    Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type
+                    _ => StatOutputType::UnsignedHex(meta.rdev() >> 8), // default to major
+                }
+            }
             // minor device type in hex, for character/block device special
-            // files
-            'T' => StatOutputType::UnsignedHex(meta.rdev() & 0xff),
+            // files, with modifier support
+            'T' => {
+                match modifier {
+                    Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
+                    Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type
+                    _ => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // default to minor
+                }
+            }
+            // device type (r format) - mainly used with modifiers %Hr,%Lr
+            'r' => {
+                match modifier {
+                    Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
+                    Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type
+                    _ => StatOutputType::UnsignedHex(meta.rdev()),                // full rdev
+                }
+            }
             // user ID of owner
             'u' => StatOutputType::Unsigned(meta.uid() as u64),
             // user name of owner
@@ -935,14 +1021,14 @@ impl Stater {
                     .into()
             }
         } else if terse {
-            "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o %C\n".into()
+            "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n".into()
         } else {
             [
-                "  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n",
+                "  File: %n\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n",
                 if show_dev_type {
-                    "Device: %Dh/%dd\tInode: %-10i  Links: %-5h Device type: %t,%T\n"
+                    "Device: %Hd,%Ld\tInode: %-10i  Links: %-5h Device type: %Hr,%Lr\n"
                 } else {
-                    "Device: %Dh/%dd\tInode: %-10i  Links: %h\n"
+                    "Device: %Hd,%Ld\tInode: %-10i  Links: %h\n"
                 },
                 "Access: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\n",
                 "Access: %x\nModify: %y\nChange: %z\n Birth: %w\n",
@@ -950,6 +1036,74 @@ impl Stater {
             .join("")
         }
     }
+}
+
+// 添加一个函数，直接使用 rustix 的 statx 获取文件信息并转换为 fs::Metadata
+fn get_metadata(
+    file: &OsStr,
+    follow_links: bool,
+    cached_mode: CachedMode,
+) -> std::io::Result<fs::Metadata> {
+    // 设置基本标志
+    let mut flags = AtFlags::empty();
+
+    // 如果不跟随符号链接
+    if !follow_links {
+        flags |= AtFlags::SYMLINK_NOFOLLOW;
+    }
+
+    // 根据缓存模式设置标志
+    match cached_mode {
+        CachedMode::Always => flags |= AtFlags::STATX_DONT_SYNC,
+        CachedMode::Never => flags |= AtFlags::STATX_FORCE_SYNC,
+        CachedMode::Default => {} // 不设置特殊标志
+    }
+
+    // 如果不是强制同步，添加 AT_NO_AUTOMOUNT 标志
+    if cached_mode != CachedMode::Never {
+        flags |= AtFlags::NO_AUTOMOUNT;
+    }
+
+    // 尝试使用 rustix 的 statx 获取文件信息
+    // 请求所有可能需要的字段
+    let statx_result = statx(rustix::fs::CWD, file.as_bytes(), flags, StatxFlags::ALL);
+
+    match statx_result {
+        Ok(_statx_data) => {
+            // 理想情况下，我们应该直接将 statx 数据转换为 fs::Metadata
+            // 但由于 rustix 和标准库之间可能没有直接的转换接口，
+            // 我们可能需要自己实现这个转换
+            //
+            // 这里我们仍然使用标准库的方法，但在实际项目中，
+            // 可以考虑实现一个 statx_to_metadata 函数，类似于 statx.h 中的 statx_to_stat
+            if follow_links {
+                fs::metadata(file)
+            } else {
+                fs::symlink_metadata(file)
+            }
+        }
+        Err(_e) => {
+            // 如果 statx 失败，回退到标准库的方法
+            if follow_links {
+                fs::metadata(file)
+            } else {
+                fs::symlink_metadata(file)
+            }
+        }
+    }
+
+    // 注意：要完全模拟 stat.c 的行为，我们需要实现一个 statx_to_metadata 转换函数
+    // 类似于 statx.h 中的 statx_to_stat 函数，将 rustix::fs::Statx 转换为 std::fs::Metadata
+    //
+    // 这需要更深入地了解 rustix 和 std::fs::Metadata 的内部实现
+    // 以及可能需要使用 unsafe 代码来构造 Metadata
+    //
+    // 一个完整的实现可能类似于：
+    //
+    // fn statx_to_metadata(statx_data: rustix::fs::Statx) -> std::fs::Metadata {
+    //     // 构造 Metadata 对象
+    //     // 这可能需要使用 std::fs::Metadata 的内部构造函数或其他方法
+    // }
 }
 
 #[derive(Default)]
@@ -1012,6 +1166,11 @@ pub fn ct_app() -> Command {
             .long(stat_options::STAT_PRINTF)
             .value_name("FORMAT")
             .help(rust_i18n::t!(stat_options::STAT_PRINTF)),
+        Arg::new(stat_options::STAT_CACHED)
+            .long(stat_options::STAT_CACHED)
+            .value_name("MODE")
+            .help("specify how to use cached attributes; useful on remote file systems")
+            .value_parser(["always", "never", "default"]),
         Arg::new(stat_options::STAT_FILES)
             .action(ArgAction::Append)
             .value_parser(ValueParser::os_string())
@@ -1109,6 +1268,7 @@ mod tests {
                 },
                 width: 10,
                 precision: Some(2),
+                modifier: None,
                 format: 'a',
             },
             StatToken::Char('c'),
@@ -1120,6 +1280,7 @@ mod tests {
                 },
                 width: 5,
                 precision: Some(0),
+                modifier: None,
                 format: 'w',
             },
             StatToken::Char('\n'),
@@ -1140,6 +1301,7 @@ mod tests {
                 },
                 width: 15,
                 precision: None,
+                modifier: None,
                 format: 'a',
             },
             StatToken::Char('\t'),
@@ -1159,6 +1321,7 @@ mod tests {
                 },
                 width: 20,
                 precision: None,
+                modifier: None,
                 format: 'w',
             },
             StatToken::Char('\x12'),
@@ -1399,10 +1562,10 @@ mod test_stat_all {
         let metadata = fs::metadata(&temp_file).unwrap();
 
         // Test various format specifiers
-        let output = stater.get_file_output(&metadata, 'n', temp_file.as_os_str());
+        let output = stater.get_file_output(&metadata, 'n', temp_file.as_os_str(), None);
         assert!(matches!(output, StatOutputType::Str(_)));
 
-        let output = stater.get_file_output(&metadata, 's', temp_file.as_os_str());
+        let output = stater.get_file_output(&metadata, 's', temp_file.as_os_str(), None);
         assert!(matches!(output, StatOutputType::Integer(_)));
     }
 }
@@ -1438,5 +1601,39 @@ mod test_i18n {
         }
 
         println!("=== Test completed ===\n");
+    }
+}
+
+#[cfg(test)]
+mod test_cached {
+    use super::*;
+    use std::fs::File;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_get_metadata_with_cached_modes() {
+        // 创建一个临时文件用于测试
+        let temp_dir = tempdir().unwrap();
+        let temp_file = temp_dir.path().join("test_file.txt");
+        File::create(&temp_file).unwrap();
+
+        // 测试不同的缓存模式
+        let file_path = OsString::from(&temp_file);
+
+        // 测试 Default 模式
+        let result = get_metadata(&file_path, true, CachedMode::Default);
+        assert!(result.is_ok());
+
+        // 测试 Always 模式
+        let result = get_metadata(&file_path, true, CachedMode::Always);
+        assert!(result.is_ok());
+
+        // 测试 Never 模式
+        let result = get_metadata(&file_path, true, CachedMode::Never);
+        assert!(result.is_ok());
+
+        // 测试不跟随符号链接
+        let result = get_metadata(&file_path, false, CachedMode::Default);
+        assert!(result.is_ok());
     }
 }

@@ -1,0 +1,186 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "基本功能测试 - 默认格式化",
+            "setup_commands": [
+                "echo -e 'line1\\nline2\\nline3' > test.txt"
+            ],
+            "args": ["test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试 -h 选项 - 自定义头部",
+            "setup_commands": [
+                "echo -e 'line1\\nline2' > test.txt"
+            ],
+            "args": ["-h", "Custom Header", "test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试 -t 选项 - 省略头部和尾部",
+            "setup_commands": [
+                "echo -e 'line1\\nline2\\nline3' > test.txt"
+            ],
+            "args": ["-t", "test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试 -n 选项 - 显示行号",
+            "setup_commands": [
+                "echo -e 'line1\\nline2' > test.txt"
+            ],
+            "args": ["-n", "-t", "test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "     1\tline1\n     2\tline2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试 C locale 下的时间格式化",
+            "setup_commands": [
+                "echo -e 'test content' > test.txt"
+            ],
+            "args": ["test.txt"],
+            "env": {
+                "LC_TIME": "C"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试非 C locale 下的时间格式化（ISO格式）",
+            "setup_commands": [
+                "echo -e 'test content' > test.txt"
+            ],
+            "args": ["test.txt"],
+            "env": {
+                "LC_TIME": "en_US.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试中文 locale 下的时间格式化",
+            "setup_commands": [
+                "echo -e '中文内容测试' > test.txt"
+            ],
+            "args": ["test.txt"],
+            "env": {
+                "LC_TIME": "zh_CN.UTF-8"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试 -d 选项 - 双倍行距",
+            "setup_commands": [
+                "echo -e 'line1\\nline2' > test.txt"
+            ],
+            "args": ["-d", "-t", "test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\n\nline2\n\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试多列输出",
+            "setup_commands": [
+                "echo -e 'line1\\nline2\\nline3\\nline4' > test.txt"
+            ],
+            "args": ["--column=2", "-t", "test.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "测试标准输入",
+            "input": "line1\nline2\nline3\n",
+            "args": ["-t"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line1\nline2\nline3\n",
+                    "stderr": ""
+                }
+            }
+        }
+    ]
+}

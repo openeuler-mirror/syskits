@@ -1,0 +1,655 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 基本算术运算 (+ - * / %)，多参数运算，括号优先级，边缘值测试",
+            "setup_commands": [],
+            "args": [
+                "1", "+", "2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "3\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 多参数运算，验证优先级 1 + 2 * 3",
+            "setup_commands": [],
+            "args": [
+                "1", "+", "2", "*", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "7\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 括号调整优先级 \\( 1 + 2 \\) * 3",
+            "setup_commands": [],
+            "args": [
+                "\\(", "1", "+", "2", "\\)", "*", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "9\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 算术边缘值测试 0 + -5",
+            "setup_commands": [],
+            "args": [
+                "0", "+", "-5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "-5\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 大数运算测试 1000000 * 1000000",
+            "setup_commands": [],
+            "args": [
+                "1000000", "*", "1000000"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1000000000000\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 取模运算测试 10 % 3",
+            "setup_commands": [],
+            "args": [
+                "10", "%", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 =，相等成立",
+            "setup_commands": [],
+            "args": [
+                "5", "=", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 =，不相等",
+            "setup_commands": [],
+            "args": [
+                "5", "=", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 !=，不相等成立",
+            "setup_commands": [],
+            "args": [
+                "5", "!=", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 !=，相等",
+            "setup_commands": [],
+            "args": [
+                "5", "!=", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 <，成立",
+            "setup_commands": [],
+            "args": [
+                "3", "<", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 <，不成立",
+            "setup_commands": [],
+            "args": [
+                "5", "<", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 <=，成立",
+            "setup_commands": [],
+            "args": [
+                "3", "<=", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 <=，不成立",
+            "setup_commands": [],
+            "args": [
+                "5", "<=", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 >，成立",
+            "setup_commands": [],
+            "args": [
+                "5", ">", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 >，不成立",
+            "setup_commands": [],
+            "args": [
+                "3", ">", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 >=，成立",
+            "setup_commands": [],
+            "args": [
+                "5", ">=", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 比较运算 >=，不成立",
+            "setup_commands": [],
+            "args": [
+                "3", ">=", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 布尔运算 & (and)，成立",
+            "setup_commands": [],
+            "args": [
+                "1", "<", "2", "&", "2", "<", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 布尔运算 & (and)，不成立",
+            "setup_commands": [],
+            "args": [
+                "1", "<", "2", "&", "3", "<", "2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 布尔运算 | (or)，成立",
+            "setup_commands": [],
+            "args": [
+                "1", "<", "2", "|", "3", "<", "2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 布尔运算 | (or)，不成立",
+            "setup_commands": [],
+            "args": [
+                "5", "<", "2", "|", "3", ">", "5"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 布尔运算优先级测试，and 优先于 or",
+            "setup_commands": [],
+            "args": [
+                "1", "|", "0", "&", "0"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: length 测试普通字符串",
+            "setup_commands": [],
+            "args": [
+                "length", 
+                "hello"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "5\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: length 测试空字符串",
+            "setup_commands": [],
+            "args": [
+                "length", 
+                ""
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: index 测试普通字符串",
+            "setup_commands": [],
+            "args": [
+                "index", 
+                "hello", 
+                "l"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "3\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: index 测试第一个匹配字符的位置，字符不在字符串中",
+            "setup_commands": [],
+            "args": [
+                "index", 
+                "hello", 
+                "x"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: index 测试 Unicode 字符",
+            "setup_commands": [],
+            "args": [
+                "index", 
+                "你好世界", 
+                "世"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "3\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: substr 测试普通字符串，截取子串",
+            "setup_commands": [],
+            "args": [
+                "substr", 
+                "hello", 
+                "2", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "ell\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: substr 测试从位置超过长度",
+            "setup_commands": [],
+            "args": [
+                "substr", 
+                "hello", 
+                "10", "2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: substr 测试 Unicode 字符串",
+            "setup_commands": [],
+            "args": [
+                "substr", 
+                "你好世界", 
+                "2", "2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "好世\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: length 测试特殊字符",
+            "setup_commands": [],
+            "args": [
+                "length", 
+                "!@# $%^"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "7\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: substr 测试截取空字符串",
+            "setup_commands": [],
+            "args": [
+                "substr", 
+                "", 
+                "1", "3"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 正则匹配，返回匹配长度",
+            "setup_commands": [],
+            "args": [
+                "hello123", ":", "[a-z]*"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "5\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 正则匹配，使用括号捕获子串",
+            "setup_commands": [],
+            "args": [
+                "hello123", ":", "\\([a-z]*\\)[0-9]*"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "hello\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 正则匹配，无匹配返回 0",
+            "setup_commands": [],
+            "args": [
+                "hello123", ":", "[0-9][0-9]*"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 正则匹配，空字符串匹配",
+            "setup_commands": [],
+            "args": [
+                "", ":", "\\(.*\\)"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "0\n",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 空参数，属于非法用法",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                "exit_code": 2,
+                "stdout": "",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 非法表达式，单独的操作符 +",
+            "setup_commands": [],
+            "args": ["+"],
+            "expectation": {
+                "execution": {
+                "exit_code": 2,
+                "stdout": "",
+                "stderr": ""
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr: 非法表达式，操作符缺少右操作数",
+            "setup_commands": [],
+            "args": ["1", "+"],
+            "expectation": {
+                "execution": {
+                "exit_code": 2,
+                "stdout": "",
+                "stderr": ""
+                }
+            }
+        }
+    ]
+  }

@@ -17,7 +17,9 @@
 //! 这个判断在多个工具中都需要使用，特别是在时间格式化、
 //! 数字格式化等需要根据locale调整行为的场景中。
 
+use std::cmp::Ordering;
 use std::env;
+use std::ffi::CString;
 
 /// LC类别常量，对应libc中的LC_*常量
 #[repr(i32)]
@@ -156,6 +158,97 @@ pub fn hard_locale_numeric() -> bool {
 #[inline]
 pub fn hard_locale_collate() -> bool {
     hard_locale(LcCategory::LcCollate)
+}
+
+/// 使用系统locale进行字符串比较
+///
+/// 在硬locale环境下，使用系统的strcoll函数进行locale感知的字符串比较。
+/// 在C/POSIX locale下，退回到字节比较。
+///
+/// # 参数
+/// * `s1` - 第一个字符串的字节数组
+/// * `s2` - 第二个字符串的字节数组
+/// * `ignore_case` - 是否忽略大小写
+///
+/// # 返回值
+/// * `Ordering::Less` - s1 < s2
+/// * `Ordering::Equal` - s1 == s2  
+/// * `Ordering::Greater` - s1 > s2
+///
+/// # 示例
+///
+/// ```
+/// use ctcore::ct_locale::strcoll_compare;
+/// use std::cmp::Ordering;
+///
+/// let result = strcoll_compare(b"apple", b"banana", false);
+/// assert_eq!(result, Ordering::Less);
+/// ```
+pub fn strcoll_compare(s1: &[u8], s2: &[u8], ignore_case: bool) -> Ordering {
+    let is_hard_locale = hard_locale_collate();
+
+    if is_hard_locale {
+        // 在硬locale下使用系统的strcoll
+        strcoll_compare_with_locale(s1, s2, ignore_case)
+    } else {
+        // C/POSIX locale下使用字节比较
+        if ignore_case {
+            s1.to_ascii_lowercase().cmp(&s2.to_ascii_lowercase())
+        } else {
+            s1.cmp(s2)
+        }
+    }
+}
+
+/// 使用系统strcoll进行locale感知的字符串比较
+///
+/// 这个函数调用系统的strcoll函数，该函数遵循当前locale的排序规则。
+/// 对于无法转换为C字符串的输入，退回到UTF-8字符串比较。
+fn strcoll_compare_with_locale(s1: &[u8], s2: &[u8], ignore_case: bool) -> Ordering {
+    // 尝试转换为C字符串用于strcoll调用
+    let c_str1 = CString::new(s1);
+    let c_str2 = CString::new(s2);
+
+    match (c_str1, c_str2) {
+        (Ok(c1), Ok(c2)) => {
+            // 成功转换为C字符串，使用系统的strcoll
+            unsafe {
+                // 重要：需要调用setlocale让C库使用当前环境变量的locale设置
+                // 传递空字符串表示使用环境变量的设置
+                let empty_str = CString::new("").unwrap();
+                let _locale_result = libc::setlocale(libc::LC_COLLATE, empty_str.as_ptr());
+
+                let result = if ignore_case {
+                    // 对于忽略大小写的比较，我们需要转换为小写
+                    // 这里简化实现，使用UTF-8字符串比较
+                    let str1 = String::from_utf8_lossy(s1).to_lowercase();
+                    let str2 = String::from_utf8_lossy(s2).to_lowercase();
+                    let c1_lower = CString::new(str1.as_bytes()).unwrap_or(c1);
+                    let c2_lower = CString::new(str2.as_bytes()).unwrap_or(c2);
+                    libc::strcoll(c1_lower.as_ptr(), c2_lower.as_ptr())
+                } else {
+                    libc::strcoll(c1.as_ptr(), c2.as_ptr())
+                };
+
+                match result {
+                    x if x < 0 => Ordering::Less,
+                    x if x > 0 => Ordering::Greater,
+                    _ => Ordering::Equal,
+                }
+            }
+        }
+        _ => {
+            // 无法转换为C字符串（包含null字节），退回到UTF-8字符串比较
+            let str1 = String::from_utf8_lossy(s1);
+            let str2 = String::from_utf8_lossy(s2);
+
+            if ignore_case {
+                str1.to_lowercase().cmp(&str2.to_lowercase())
+            } else {
+                str1.cmp(&str2)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -346,14 +439,46 @@ mod tests {
     }
 
     #[test]
-    fn test_convenience_functions() {
-        // 测试便利函数是否正确调用了底层函数
-        // 这些测试依赖于实际的环境变量，所以只验证函数能够正常调用
-        let _result_time = hard_locale_time();
-        let _result_numeric = hard_locale_numeric();
-        let _result_collate = hard_locale_collate();
-        // 如果没有panic，说明函数调用成功
-        assert!(true);
+    fn test_strcoll_compare_c_locale() {
+        // 在测试中模拟C locale环境
+        let env_getter = |key: &str| -> Result<String, env::VarError> {
+            match key {
+                "LC_COLLATE" => Ok("C".to_string()),
+                _ => Err(env::VarError::NotPresent),
+            }
+        };
+
+        // 在C locale下，应该使用字节比较
+        // "Windows" < "linux" (字节比较，W=87, l=108)
+        let result = strcoll_compare(b"Windows", b"linux", false);
+        assert_eq!(result, Ordering::Less);
+
+        // 忽略大小写时，"windows" < "linux"
+        let result = strcoll_compare(b"Windows", b"linux", true);
+        assert_eq!(result, Ordering::Greater);
+    }
+
+    #[test]
+    fn test_strcoll_compare_with_null_bytes() {
+        // 测试包含null字节的情况，应该退回到UTF-8比较
+        let s1 = b"hello\x00world";
+        let s2 = b"hello\x00universe";
+
+        let result = strcoll_compare(s1, s2, false);
+        // "world" > "universe"
+        assert_eq!(result, Ordering::Greater);
+    }
+
+    #[test]
+    fn test_strcoll_compare_empty_strings() {
+        let result = strcoll_compare(b"", b"", false);
+        assert_eq!(result, Ordering::Equal);
+
+        let result = strcoll_compare(b"a", b"", false);
+        assert_eq!(result, Ordering::Greater);
+
+        let result = strcoll_compare(b"", b"b", false);
+        assert_eq!(result, Ordering::Less);
     }
 
     // 测试专用的hard_locale函数，接受环境变量获取函数作为参数

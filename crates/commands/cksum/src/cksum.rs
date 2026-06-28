@@ -176,6 +176,76 @@ where
 {
     // 将文件名迭代器收集到一个向量中，方便后续处理
     let f: Vec<_> = cksum_files.collect();
+    let implicit_stdin = f.is_empty();
+    if implicit_stdin {
+        let mut stdin_buffer = BufReader::new(stdin());
+        let (sum_hex, sz) =
+        cksum_digest_read(&mut cksum_opts.digest, &mut stdin_buffer, cksum_opts.output_bits)
+            .map_err_context(|| "failed to read input".to_string())?;
+
+        let sum = match cksum_opts.output_format {
+            CksumOutputFormat::Raw => {
+                // 对于原始格式，根据算法类型转换校验和字符串为字节序列
+                let bytes = match cksum_opts.algo_name {
+                    CKSUM_ALGORITHM_OPTIONS_CRC => {
+                        sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
+                    }
+                    CKSUM_ALGORITHM_OPTIONS_SYSV | CKSUM_ALGORITHM_OPTIONS_BSD => {
+                        sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
+                    }
+                    _ => decode(sum_hex).unwrap(),
+                };
+                // 输出原始格式的校验和，然后立即返回
+                stdout().write_all(&bytes)?;
+                return Ok(());
+            }
+            CksumOutputFormat::Hexadecimal => sum_hex,
+            CksumOutputFormat::Base64 => match cksum_opts.algo_name {
+                CKSUM_ALGORITHM_OPTIONS_CRC
+                | CKSUM_ALGORITHM_OPTIONS_SYSV
+                | CKSUM_ALGORITHM_OPTIONS_BSD => sum_hex,
+                _ => ct_encoding::encode(ct_encoding::Format::Base64, &decode(sum_hex).unwrap())
+                    .unwrap(),
+            },
+        };
+
+        let bsd_width = 5;
+        // 根据算法和是否为标准输入，格式化并输出校验和结果
+        match cksum_opts.algo_name {
+            CKSUM_ALGORITHM_OPTIONS_SYSV => println!(
+                "{} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, cksum_opts.output_bits)
+            ),
+            CKSUM_ALGORITHM_OPTIONS_BSD => println!(
+                "{:0bsd_width$} {:bsd_width$}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, cksum_opts.output_bits)
+            ),
+            CKSUM_ALGORITHM_OPTIONS_CRC => println!("{sum} {sz}"),
+            CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
+                if let Some(length) = cksum_opts.length {
+                    // 输出BLAKE2b算法的校验和，可选的长度参数
+                    println!("BLAKE2b-{} (-) = {sum}", length * 8);
+                } else {
+                    println!("BLAKE2b (-) = {sum}");
+                }
+            }
+            _ => {
+                // 根据是否标记，以不同的格式输出校验和
+                if cksum_opts.untagged {
+                    println!("{sum}  -");
+                } else {
+                    println!(
+                        "{} (-) = {sum}",
+                        cksum_opts.algo_name.to_ascii_uppercase()
+                    );
+                }
+            }
+        }
+
+        return Ok(());
+    }
 
     // 检查是否以原始格式计算多个文件的校验和，这是不被支持的
     if cksum_opts.output_format == CksumOutputFormat::Raw && f.len() > 1 {
@@ -251,32 +321,21 @@ where
 
         let bsd_width = 5;
         // 根据算法和是否为标准输入，格式化并输出校验和结果
-        match (cksum_opts.algo_name, not_file) {
-            (CKSUM_ALGORITHM_OPTIONS_SYSV, true) => println!(
-                "{} {}",
-                sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits)
-            ),
-            (CKSUM_ALGORITHM_OPTIONS_SYSV, false) => println!(
+        match cksum_opts.algo_name {
+            CKSUM_ALGORITHM_OPTIONS_SYSV => println!(
                 "{} {} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, cksum_opts.output_bits),
                 filename.display()
             ),
-            (CKSUM_ALGORITHM_OPTIONS_BSD, true) => println!(
-                "{:0bsd_width$} {:bsd_width$}",
-                sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits)
-            ),
-            (CKSUM_ALGORITHM_OPTIONS_BSD, false) => println!(
+            CKSUM_ALGORITHM_OPTIONS_BSD => println!(
                 "{:0bsd_width$} {:bsd_width$} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, cksum_opts.output_bits),
                 filename.display()
             ),
-            (CKSUM_ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz} -"),
-            (CKSUM_ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
-            (CKSUM_ALGORITHM_OPTIONS_BLAKE2B, _) if !cksum_opts.untagged => {
+            CKSUM_ALGORITHM_OPTIONS_CRC => println!("{sum} {sz} {}", filename.display()),
+            CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
                     println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
@@ -426,7 +485,8 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     match matches.get_many::<String>(opt_flags::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
-        None => cksum(opts, iter::once(OsStr::new("-")))?,
+        // 如果用户没有输入任何参数，则视为隐式传入标准输入
+        None => cksum(opts, std::iter::empty())?,
     };
 
     Ok(0)

@@ -1,0 +1,318 @@
+{
+    "tests": [
+        {
+            "command": "split",
+            "description": "split: 按行拆分文件，每10行一个输出文件",
+            "args": [
+                "-l", "10",
+                "test_file_split.txt",
+                "out_"
+            ],
+            "setup_commands": [
+                "seq 1 98 > test_file_split.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls out_* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat out_*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_split.txt out_*"
+            ]
+        },
+        {
+            "command": "split",
+            "description": "split: 按行拆分文件，文件行数小于参数，应该输出一个文件",
+            "args": [
+                "-l", "100",
+                "test_file_split.txt",
+                "out_"
+            ],
+            "setup_commands": [
+                "seq 1 10 > test_file_split.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat out_*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "ls out_* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_split.txt out_*"
+            ]
+        },
+        {
+            "command": "split",
+            "description": "split: 按字节拆分文件，每5字节一个输出文件",
+            "args": [
+                "-b", "5",
+                "test_file_split.txt",
+                "out_"
+            ],
+            "setup_commands": [
+                "printf abcdefghijk > test_file_split.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls out_* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat out_*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_split.txt out_*"
+            ]
+        },
+        {
+            "command": "split",
+            "description": "split: 使用数字后缀 (-d) 并指定后缀长度 (-a 3)",
+            "args": [
+                "-l", "10",
+                "-d",
+                "-a", "3",
+                "test_file_split.txt",
+                "out_"
+            ],
+            "setup_commands": [
+                "seq 1 35 > test_file_split.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls out_* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "ls out_[0-9][0-9][0-9] | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat out_*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_split.txt out_*"
+            ]
+        },
+        {
+            "tstdin": "1\n2\n3\n4\n5\n6\n7\n8\n",
+            "command": "split",
+            "description": "split: 标准输入 -l",
+            "args": [
+                "-l", "3"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls x* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat x*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f x*"
+            ]
+        },
+        {
+            "tstdin": "abcdefghijk",
+            "command": "split",
+            "description": "split: 标准输入 -b",
+            "args": [
+                "-b", "3"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "ls x* | wc -l",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "cat x*",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f x*"
+            ]
+        },
+        {
+            "command": "split",
+            "description": "split: 输入文件不存在",
+            "args": [
+                "-l", "10",
+                "missing_file",
+                "out_"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "split",
+            "description": "split: 指定的行数为负数",
+            "args": [
+                "-l", "-10",
+                "test_file_split.txt",
+                "out_"
+            ],
+            "setup_commands": [
+                "seq 1 98 > test_file_split.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_split.txt out_*"
+            ]
+        }
+    ]
+}

@@ -729,10 +729,22 @@ impl Stater {
                 0
             }
             Err(e) => {
+                // statfs 返回的是 String 类型的错误，直接使用
+                // 尝试提取错误消息，去除可能的错误代码
+                let error_description = if e.contains("(os error ") {
+                    if let Some(pos) = e.find("(os error ") {
+                        e[..pos].trim().to_string()
+                    } else {
+                        e
+                    }
+                } else {
+                    e
+                };
+
                 ct_show_error!(
                     "cannot read file system information for {}: {}",
                     display_name.quote(),
-                    e
+                    error_description
                 );
                 1
             }
@@ -755,7 +767,44 @@ impl Stater {
                 0
             }
             Err(e) => {
-                ct_show_error!("cannot stat {}: {}", display_name.quote(), e);
+                // 提取错误描述，不包含错误代码
+                let error_description = match e.kind() {
+                    std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
+                    std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                    std::io::ErrorKind::ConnectionRefused => "Connection refused".to_string(),
+                    std::io::ErrorKind::ConnectionReset => "Connection reset".to_string(),
+                    std::io::ErrorKind::ConnectionAborted => "Connection aborted".to_string(),
+                    std::io::ErrorKind::NotConnected => "Not connected".to_string(),
+                    std::io::ErrorKind::AddrInUse => "Address in use".to_string(),
+                    std::io::ErrorKind::AddrNotAvailable => "Address not available".to_string(),
+                    std::io::ErrorKind::BrokenPipe => "Broken pipe".to_string(),
+                    std::io::ErrorKind::AlreadyExists => "File exists".to_string(),
+                    std::io::ErrorKind::WouldBlock => {
+                        "Resource temporarily unavailable".to_string()
+                    }
+                    std::io::ErrorKind::InvalidInput => "Invalid argument".to_string(),
+                    std::io::ErrorKind::InvalidData => "Invalid data".to_string(),
+                    std::io::ErrorKind::TimedOut => "Timed out".to_string(),
+                    std::io::ErrorKind::WriteZero => "Write zero".to_string(),
+                    std::io::ErrorKind::Interrupted => "Interrupted system call".to_string(),
+                    std::io::ErrorKind::Unsupported => "Operation not supported".to_string(),
+                    std::io::ErrorKind::UnexpectedEof => "Unexpected end of file".to_string(),
+                    std::io::ErrorKind::OutOfMemory => "Out of memory".to_string(),
+                    _ => {
+                        // 尝试提取错误消息，去除可能的错误代码
+                        let err_string = e.to_string();
+                        if let Some(pos) = err_string.find("(os error ") {
+                            err_string[..pos].trim().to_string()
+                        } else {
+                            err_string
+                        }
+                    }
+                };
+                ct_show_error!(
+                    "cannot statx {}: {}",
+                    display_name.quote(),
+                    error_description
+                );
                 1
             }
         }

@@ -1733,4 +1733,244 @@ mod tests {
         );
     }
 
+    #[cfg(test)]
+    mod date_parsing_tests {
+        use super::*;
+        use chrono::{Datelike, Local, TimeZone, Weekday};
+
+        #[test]
+        fn test_parse_weekday_next_friday() {
+            // 使用固定的参考时间: 2025年7月24日 (星期四)
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试 "next Friday" 应该返回 2025年8月1日
+            let result = touch_parse_date(ref_time, "next Friday");
+            assert!(
+                result.is_ok(),
+                "Failed to parse 'next Friday': {:?}",
+                result.err()
+            );
+
+            let file_time = result.unwrap();
+            let dt = Local
+                .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                .unwrap();
+
+            assert_eq!(dt.weekday(), Weekday::Fri);
+            assert_eq!(dt.year(), 2025);
+            assert_eq!(
+                dt.month(),
+                8,
+                "Expected August (month 8), got month {}",
+                dt.month()
+            );
+            assert_eq!(dt.day(), 1);
+        }
+
+        #[test]
+        fn test_parse_weekday_last_monday() {
+            // 使用固定的参考时间: 2025年7月24日 (星期四)
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试 "last Monday" 应该返回 2025年7月21日
+            let result = touch_parse_date(ref_time, "last Monday");
+            assert!(
+                result.is_ok(),
+                "Failed to parse 'last Monday': {:?}",
+                result.err()
+            );
+
+            let file_time = result.unwrap();
+            let dt = Local
+                .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                .unwrap();
+
+            assert_eq!(dt.weekday(), Weekday::Mon);
+            assert_eq!(dt.month(), 7);
+            assert_eq!(dt.day(), 21);
+            assert_eq!(dt.year(), 2025);
+        }
+
+        #[test]
+        fn test_parse_weekday_plain_wednesday() {
+            // 使用固定的参考时间: 2025年7月24日 (星期四)
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试 "Wednesday" 应该返回下个星期三 2025年7月30日
+            let result = touch_parse_date(ref_time, "Wednesday");
+            assert!(
+                result.is_ok(),
+                "Failed to parse 'Wednesday': {:?}",
+                result.err()
+            );
+
+            let file_time = result.unwrap();
+            let dt = Local
+                .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                .unwrap();
+
+            assert_eq!(dt.weekday(), Weekday::Wed);
+            assert_eq!(dt.month(), 7);
+            assert_eq!(dt.day(), 30);
+            assert_eq!(dt.year(), 2025);
+        }
+
+        #[test]
+        fn test_parse_weekday_this_saturday() {
+            // 使用固定的参考时间: 2025年7月24日 (星期四)
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试 "this Saturday" 应该返回本周六 2025年7月26日
+            let result = touch_parse_date(ref_time, "this Saturday");
+            assert!(
+                result.is_ok(),
+                "Failed to parse 'this Saturday': {:?}",
+                result.err()
+            );
+
+            let file_time = result.unwrap();
+            let dt = Local
+                .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                .unwrap();
+
+            assert_eq!(dt.weekday(), Weekday::Sat);
+            assert_eq!(dt.month(), 7);
+            assert_eq!(dt.day(), 26);
+            assert_eq!(dt.year(), 2025);
+        }
+
+        #[test]
+        fn test_parse_weekday_case_insensitive() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试大小写不敏感
+            let test_cases = vec!["FRIDAY", "Friday", "friday", "FrIdAy"];
+
+            for case in test_cases {
+                let result = touch_parse_date(ref_time, case);
+                assert!(
+                    result.is_ok(),
+                    "Failed to parse '{}': {:?}",
+                    case,
+                    result.err()
+                );
+
+                let file_time = result.unwrap();
+                let dt = Local
+                    .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                    .unwrap();
+                assert_eq!(
+                    dt.weekday(),
+                    Weekday::Fri,
+                    "Case '{}' did not parse to Friday",
+                    case
+                );
+            }
+        }
+
+        #[test]
+        fn test_parse_weekday_abbreviations() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试星期几缩写
+            let test_cases = vec![
+                ("tues", Weekday::Tue),
+                ("wednes", Weekday::Wed),
+                ("thur", Weekday::Thu),
+                ("thurs", Weekday::Thu),
+            ];
+
+            for (abbrev, expected_weekday) in test_cases {
+                let result = touch_parse_date(ref_time, abbrev);
+                assert!(
+                    result.is_ok(),
+                    "Failed to parse '{}': {:?}",
+                    abbrev,
+                    result.err()
+                );
+
+                let file_time = result.unwrap();
+                let dt = Local
+                    .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                    .unwrap();
+                assert_eq!(
+                    dt.weekday(),
+                    expected_weekday,
+                    "Abbreviation '{}' did not parse to {:?}",
+                    abbrev,
+                    expected_weekday
+                );
+            }
+        }
+
+        #[test]
+        fn test_parse_relative_time() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试相对时间表达式
+            let test_cases = vec![("tomorrow", 25), ("yesterday", 23), ("today", 24)];
+
+            for (expr, expected_day) in test_cases {
+                let result = touch_parse_date(ref_time, expr);
+                assert!(
+                    result.is_ok(),
+                    "Failed to parse '{}': {:?}",
+                    expr,
+                    result.err()
+                );
+
+                let file_time = result.unwrap();
+                let dt = Local
+                    .timestamp_opt(file_time.unix_seconds(), file_time.nanoseconds())
+                    .unwrap();
+                assert_eq!(
+                    dt.day(),
+                    expected_day,
+                    "Expression '{}' did not parse to day {}",
+                    expr,
+                    expected_day
+                );
+            }
+        }
+
+        #[test]
+        fn test_parse_existing_formats_still_work() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 确保现有的解析格式仍然有效
+            let test_cases = vec![
+                "2025-12-25",  // ISO 8601 格式
+                "@1735689600", // Unix timestamp (2025-01-01 00:00:00 UTC)
+                "1 week",      // parse_datetime crate 格式
+                "next month",  // parse_datetime crate 格式
+            ];
+
+            for case in test_cases {
+                let result = touch_parse_date(ref_time, case);
+                assert!(
+                    result.is_ok(),
+                    "Failed to parse existing format '{}': {:?}",
+                    case,
+                    result.err()
+                );
+            }
+        }
+
+        #[test]
+        fn test_parse_invalid_input() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            // 测试无效输入
+            let invalid_cases = vec!["invalid_weekday", "next invalid", "", "random text"];
+
+            for case in invalid_cases {
+                let result = touch_parse_date(ref_time, case);
+                assert!(
+                    result.is_err(),
+                    "Expected '{}' to fail parsing, but it succeeded",
+                    case
+                );
+            }
+        }
+    }
 }

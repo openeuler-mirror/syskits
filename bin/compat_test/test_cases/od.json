@@ -1,0 +1,409 @@
+{
+    "tests": [
+        {
+            "command": "od",
+            "description": "od: 测试单个普通文件的八进制输出",
+            "args": ["test_file_od"],
+            "setup_commands": [
+                "echo 'Hello World' > test_file_od"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 062510 066154 020157 067527 066162 005144\n0000014\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_od"
+            ]
+        },
+        {
+            "tstdin": "Hello World",
+            "command": "od",
+            "description": "od: 测试标准输入",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 062510 066154 020157 067527 066162 000144\n0000013\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "od: 空输入",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "ABC",
+            "command": "od",
+            "description": "od: 不显示偏移量",
+            "args": ["-A", "n"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " 041101 000103\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "0123456789abcdef",
+            "command": "od",
+            "description": "od: 十进制偏移量",
+            "args": ["-A", "d"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 030460 031462 032464 033466 034470 061141 062143 063145\n0000016\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "0123456789abcdef",
+            "command": "od",
+            "description": "od: 十六进制偏移量",
+            "args": ["-A", "x"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "000000 030460 031462 032464 033466 034470 061141 062143 063145\n000010\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "A",
+            "command": "od",
+            "description": "od: 八进制输出",
+            "args": ["-t", "o1"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 101\n0000001\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "A",
+            "command": "od",
+            "description": "od: 十六进制输出",
+            "args": ["-t", "x1"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 41\n0000001\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "\\xff",
+            "command": "od",
+            "description": "od: 无符号十进制输出",
+            "args": ["-t", "u1"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000  92 120 102 102\n0000004\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "\\xff",
+            "command": "od",
+            "description": "od: 有符号十进制输出",
+            "args": ["-t", "d1"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000   92  120  102  102\n0000004\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "ABC",
+            "command": "od",
+            "description": "od: 字符输出",
+            "args": ["-t", "c"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000   A   B   C\n0000003\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "0123456789abcdef",
+            "command": "od",
+            "description": "od: 控制每行字节数",
+            "args": ["-w8"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 030460 031462 032464 033466\n0000010 034470 061141 062143 063145\n0000020\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "od",
+            "description": "od: 多文件输入",
+            "args": ["test_file_od", "test_file_od2"],
+            "setup_commands": [
+                "echo 'Hello World' > test_file_od",
+                "echo 'Hello Rust' > test_file_od2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0000000 062510 066154 020157 067527 066162 005144 062510 066154\n0000020 020157 072522 072163 000012\n0000027\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_od test_file_od2"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "od: 单个文件不存在",
+            "args": ["missing_file_od"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "od",
+            "description": "od: 部分文件不存在",
+            "args": ["-t", "c", "test_file_od", "missing_file", "test_file_od2"],
+            "setup_commands": [
+                "echo 'hello rust' > test_file_od",
+                "echo 'hello rust' > test_file_od2"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_od test_file_od2"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "od: 非法参数",
+            "args": ["-t", "z1", "test_file_od"],
+            "setup_commands": [
+                "echo 'Hello World' > test_file_od"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_od"
+            ]
+        }
+    ]
+}

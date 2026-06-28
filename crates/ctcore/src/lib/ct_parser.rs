@@ -8,6 +8,8 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#[cfg(feature = "datetime")]
+pub mod ct_parse_datetime;
 pub mod ct_parse_glob;
 pub mod ct_parse_size;
 pub mod ct_parse_time;

@@ -1,9 +1,9 @@
 dereference: "跟踪符号链接"
 file-system: "显示文件系统状态而非文件状态"
 terse: "以简洁格式打印信息"
-ct_format: "使用指定的FORMAT替代默认格式;每次使用FORMAT后输出换行符"
+format: "使用指定的FORMAT替代默认格式;每次使用FORMAT后输出换行符"
 printf: |
-  类似于 --ct_format,但会解释反斜杠转义符,
+  类似于 --format,但会解释反斜杠转义符,
   且不强制在末尾输出换行符;
   如需换行,请在 FORMAT 中包含 \n
 

@@ -1,0 +1,204 @@
+{
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "基本功能测试 - 显示当前日期",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date | grep -E '\\w{3}\\s+\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}\\s+CST\\s+\\d{4}'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - next Friday",
+      "args": ["-d", "next Friday"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'next Friday' | grep -E 'Fri\\s+Aug\\s+1\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - last Monday", 
+      "args": ["-d", "last Monday"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'last Monday' | grep -E 'Mon\\s+Jul\\s+21\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - this Wednesday",
+      "args": ["-d", "this Wednesday"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'this Wednesday' | grep -E 'Wed\\s+Jul\\s+30\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - 纯星期几名称 Friday",
+      "args": ["-d", "Friday"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'Friday' | grep -E 'Fri\\s+Jul\\s+25\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - 大小写不敏感 FRIDAY",
+      "args": ["-d", "FRIDAY"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'FRIDAY' | grep -E 'Fri\\s+Jul\\s+25\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - 星期几缩写 tues",
+      "args": ["-d", "tues"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'tues' | grep -E 'Tue\\s+Jul\\s+29\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - 相对时间 tomorrow",
+      "args": ["-d", "tomorrow"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'tomorrow' | grep -E 'Sat\\s+Jul\\s+26'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - 相对时间 yesterday",
+      "args": ["-d", "yesterday"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d 'yesterday' | grep -E 'Thu\\s+Jul\\s+24'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "日期解析 - ISO 8601格式",
+      "args": ["-d", "2025-08-15"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "date -d '2025-08-15' | grep -E 'Fri\\s+Aug\\s+15\\s+00:00:00\\s+CST\\s+2025'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    }
+  ]
+}

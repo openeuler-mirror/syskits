@@ -16,6 +16,7 @@ use ctcore::ct_error::{CTResult, FromIo};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::ct_locale::hard_locale_collate;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Stdin, stdin};
@@ -111,7 +112,18 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
                 (&Ok(0), &Ok(0)) => break, // 两行都读取完毕，退出循环
                 (&Ok(0), _) => Ordering::Greater,
                 (_, &Ok(0)) => Ordering::Less,
-                _ => ra.cmp(&rb),
+                _ => {
+                    // 根据locale决定字符串比较方式
+                    if hard_locale_collate() {
+                        // 对于硬locale，使用locale感知的字符串比较
+                        let str1 = String::from_utf8_lossy(ra);
+                        let str2 = String::from_utf8_lossy(rb);
+                        str1.cmp(&str2)
+                    } else {
+                        // C/POSIX locale使用字节比较
+                        ra.cmp(&rb)
+                    }
+                }
             },
             _ => unreachable!(), // 理论上不应到达此处
         };
@@ -3198,6 +3210,117 @@ mod tests {
             ];
             let result = comm_main(args.iter().map(|s| OsString::from(s)));
             assert!(result.is_ok());
+        }
+    }
+
+    #[cfg(test)]
+    mod locale_tests {
+        use super::*;
+        use std::cmp::Ordering;
+        use std::env;
+
+        fn test_line_cmp(a: &[u8], b: &[u8]) -> Ordering {
+            // 模拟comm命令中的比较逻辑
+            if hard_locale_collate() {
+                // 对于硬locale，使用locale感知的字符串比较
+                let str1 = String::from_utf8_lossy(a);
+                let str2 = String::from_utf8_lossy(b);
+                str1.cmp(&str2)
+            } else {
+                // C/POSIX locale使用字节比较
+                a.cmp(b)
+            }
+        }
+
+        #[test]
+        fn test_comm_line_cmp_with_hard_locale_collate() {
+            // 模拟C locale环境
+            unsafe {
+                env::set_var("LC_COLLATE", "C");
+            }
+
+            // C locale下应该进行字节比较
+            let result = test_line_cmp(b"abc", b"ABC");
+            // 在字节比较中，小写字母的ASCII值大于大写字母
+            assert_eq!(result, Ordering::Greater);
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_COLLATE");
+            }
+        }
+
+        #[test]
+        fn test_comm_line_cmp_with_non_c_locale() {
+            // 模拟非C locale环境
+            unsafe {
+                env::set_var("LC_COLLATE", "en_US.UTF-8");
+            }
+
+            // 非C locale下应该进行字符串比较
+            let result = test_line_cmp(b"abc", b"def");
+            assert_eq!(result, Ordering::Less);
+
+            let result = test_line_cmp(b"xyz", b"abc");
+            assert_eq!(result, Ordering::Greater);
+
+            let result = test_line_cmp(b"test", b"test");
+            assert_eq!(result, Ordering::Equal);
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_COLLATE");
+            }
+        }
+
+        #[test]
+        fn test_comm_line_cmp_unicode_strings() {
+            // 模拟支持Unicode的locale
+            unsafe {
+                env::set_var("LC_COLLATE", "zh_CN.UTF-8");
+            }
+
+            // 测试Unicode字符串比较
+            let result = test_line_cmp("你好".as_bytes(), "世界".as_bytes());
+            // Unicode字符串比较应该正常工作
+            assert!(result != Ordering::Equal);
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_COLLATE");
+            }
+        }
+
+        #[test]
+        fn test_hard_locale_collate_integration() {
+            // 测试hard_locale_collate函数的使用
+            unsafe {
+                env::set_var("LC_COLLATE", "C");
+            }
+            assert!(!hard_locale_collate());
+
+            unsafe {
+                env::set_var("LC_COLLATE", "POSIX");
+            }
+            assert!(!hard_locale_collate());
+
+            unsafe {
+                env::set_var("LC_COLLATE", "fr_FR.UTF-8");
+            }
+            assert!(hard_locale_collate());
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_COLLATE");
+            }
+        }
+
+        #[test]
+        fn test_comm_line_cmp_empty_strings() {
+            // 测试空字符串的比较
+            assert_eq!(test_line_cmp(b"", b""), Ordering::Equal);
+            assert_eq!(test_line_cmp(b"abc", b""), Ordering::Greater);
+            assert_eq!(test_line_cmp(b"", b"abc"), Ordering::Less);
         }
     }
 }

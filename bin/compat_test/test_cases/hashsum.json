@@ -1,0 +1,398 @@
+{
+    "tests": [
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 单个文件计算哈希值",
+            "args": ["test_file_sha256_single"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_single"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7b200dd7bc8b28980b0b5e906b9965ddfbe4a515031b9da6fa34ed9aeef40498  test_file_sha256_single\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_single"
+            ],
+            "requires_root": false,
+            "timeout": 5
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 多个文件计算哈希值",
+            "args": [
+                "test_file_sha256_1",
+                "test_file_sha256_2"
+            ],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_1",
+                "echo -n 'Hello, rust!' > test_file_sha256_2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7b200dd7bc8b28980b0b5e906b9965ddfbe4a515031b9da6fa34ed9aeef40498  test_file_sha256_1\n8cb7c5de26b86b05cd307816b1d078cc495a14d539a2842eb069174f62440bbd  test_file_sha256_2\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_1 test_file_sha256_2"
+            ],
+            "requires_root": false,
+            "timeout": 5
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 显式标准输入",
+            "args": ["-"],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4dca0fd5f424a31b03ab807cbae77eb32bf2d089eed1cee154b3afed458de0dc  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 隐式标准输入",
+            "args": [],
+            "tstdin": "hello, world!\n",
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4dca0fd5f424a31b03ab807cbae77eb32bf2d089eed1cee154b3afed458de0dc  -\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c，验证 checksum 文件的正确性(成功)（仅有中英文差异）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_check",
+                "sha256sum test_file_sha256_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_sha256_check: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c，验证 checksum 文件的正确性（失败）",
+            "args": ["-c", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c --status成功",
+            "args": ["-c","--status", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_check",
+                "sha256sum test_file_sha256_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c --status失败",
+            "args": ["-c","--status", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c --quiet成功",
+            "args": ["-c","--quiet", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_check",
+                "sha256sum test_file_sha256_check > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_check checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c --quiet失败",
+            "args": ["-c","--quiet", "checksum.txt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > checksum.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f checksum.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 二进制模式 (-b)，文件名前应使用 * 标记",
+            "args": ["-b", "test_file_sha256_bt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_bt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7b200dd7bc8b28980b0b5e906b9965ddfbe4a515031b9da6fa34ed9aeef40498 *test_file_sha256_bt\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_bt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 文本标记",
+            "args": ["-t", "test_file_sha256_bt"],
+            "setup_commands": [
+                "echo -n 'Hello, Coreutils!' > test_file_sha256_bt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7b200dd7bc8b28980b0b5e906b9965ddfbe4a515031b9da6fa34ed9aeef40498  test_file_sha256_bt\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_sha256_bt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 文件不存在",
+            "args": ["missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 部分文件不存在",
+            "args": [
+                "sha_test_1",
+                "missing_file",
+                "sha_test_2"
+            ],
+            "setup_commands": [
+                "echo 'hello' > sha_test_1",
+                "echo 'hello' > sha_test_2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f sha_test_1 sha_test_2"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式 -c引用不存在的文件",
+            "args": ["-c", "missing_file"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 使用非法options",
+            "args": ["--bad_option", "test_sha_file"],
+            "setup_commands": [
+                "echo 'hello' > test_sha_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_sha_file"
+            ]
+        }
+    ]
+  }

@@ -17,16 +17,16 @@ use crate::opt_flags::ARG_FILES;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use crate::opt_flags::OPT_CONTEXT;
+use crate::opt_flags::OPT_DEBUG;
 use crate::opt_flags::OPT_FORCE;
 use crate::opt_flags::OPT_INTERACTIVE;
 use crate::opt_flags::OPT_NO_CLOBBER;
+use crate::opt_flags::OPT_NO_COPY;
 use crate::opt_flags::OPT_NO_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_PROGRESS;
 use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
-use crate::opt_flags::OPT_NO_COPY;
-use crate::opt_flags::OPT_DEBUG;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
 use ctcore::Tool;
@@ -872,12 +872,12 @@ fn mv_rename_with_fallback(
                     None => println!("mv: {}", message),
                 };
             }
-            
+
             // 如果目标路径存在，则删除该目录，以匹配 `fs::rename` 的行为。
             if to.exists() {
                 fs::remove_dir_all(to)?;
             }
-            
+
             // 配置目录复制选项。
             let dir_copy_opts = DirCopyOptions {
                 copy_inside: true,
@@ -944,7 +944,7 @@ fn mv_rename_with_fallback(
                     None => println!("mv: {}", message),
                 };
             }
-            
+
             // 对于非目录类型的文件，在linux系统上复制文件并保留扩展属性，其他情况下只复制文件。
             #[cfg(target_os = "linux")]
             fs::copy(from, to)
@@ -1477,9 +1477,9 @@ mod tests {
         use std::ffi::OsString;
 
         use crate::opt_flags::{
-            OPT_FORCE, OPT_INTERACTIVE, OPT_NO_CLOBBER, OPT_NO_TARGET_DIRECTORY, OPT_PROGRESS,
-            OPT_STRIP_TRAILING_SLASHES, OPT_TARGET_DIRECTORY, OPT_VERBOSE,
-            OPT_DEBUG, OPT_NO_COPY,
+            OPT_DEBUG, OPT_FORCE, OPT_INTERACTIVE, OPT_NO_CLOBBER, OPT_NO_COPY,
+            OPT_NO_TARGET_DIRECTORY, OPT_PROGRESS, OPT_STRIP_TRAILING_SLASHES,
+            OPT_TARGET_DIRECTORY, OPT_VERBOSE,
         };
         use clap::error::ErrorKind;
 

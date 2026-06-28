@@ -1735,7 +1735,6 @@ mod tests {
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
-
     }
 
     #[cfg(windows)]

@@ -45,6 +45,7 @@ mod id_flags {
     pub const ID_REAL_ID: &str = "real";
     pub const ID_ZERO: &str = "zero"; // BSD's id does not have this
     pub const ID_ARG_USERS: &str = "USER";
+    pub const ID_IGNORE: &str = "ignore"; // SVR4 compatibility flag
 }
 
 struct Ids {
@@ -375,6 +376,10 @@ pub fn ct_app() -> Command {
             .long(id_flags::ID_CONTEXT)
             .conflicts_with_all([id_flags::ID_GROUP, id_flags::ID_EFFECTIVE_USER])
             .help(CONTEXT_HELP_TEXT)
+            .action(ArgAction::SetTrue),
+        Arg::new(id_flags::ID_IGNORE)
+            .short('a')
+            .help(t!("id.clap.id_ignore"))
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_ARG_USERS)
             .action(ArgAction::Append)

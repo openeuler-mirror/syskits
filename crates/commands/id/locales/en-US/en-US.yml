@@ -2,6 +2,7 @@ id:
   clap:
     id_effective_user: Display only the effective user ID as a number.
     id_group: Display only the effective group ID as a number
+    id_ignore: Ignored, for SVR4 compatibility
   usage: id [OPTION]... [USER]...
   about: |-
     Print user and group information for each specified `USER`,

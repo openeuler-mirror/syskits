@@ -485,7 +485,7 @@ fn ln_link(src: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
     // 1. 解析源路径
     let source = resolve_source_path(src, dst, settings)?;
 
-    // 2. 处理备份和覆盖
+    // 2. 处理备份和覆盖，并检查目标文件的备份是否存在，如果存在则删除备份文件
     let backup_path = handle_backup_and_overwrite(src, dst, settings)?;
 
     // 3. 创建链接
@@ -522,6 +522,9 @@ fn handle_backup_and_overwrite(
 
     let backup_path = generate_backup_path(dst, settings)?;
     if let Some(ref backup) = backup_path {
+        if backup.exists() {
+            let _ = fs::remove_file(backup);
+        }
         rename_backup(dst, backup)?;
     }
 
@@ -545,7 +548,7 @@ fn rename_backup(dst: &Path, backup: &Path) -> CTResult<()> {
 }
 
 /// 处理覆盖模式。
-fn handle_overwrite_mode(dst: &Path, src: &Path, settings: &LnSettings) -> CTResult<()> {
+fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTResult<()> {
     match settings.overwrite {
         OverwriteMode::NoClobber => Ok(()),
         OverwriteMode::Interactive => {
@@ -556,10 +559,9 @@ fn handle_overwrite_mode(dst: &Path, src: &Path, settings: &LnSettings) -> CTRes
             Ok(())
         }
         OverwriteMode::Force => {
-            if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
-                return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+             if dst.exists() {
+                let _ = fs::remove_file(dst);
             }
-            let _ = fs::remove_file(dst);
             Ok(())
         }
     }

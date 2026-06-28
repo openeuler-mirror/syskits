@@ -45,16 +45,25 @@ pub(super) fn splice_write_fast_using_splice<R: CatFdReadable, S: AsRawFd + AsFd
                 if n == 0 {
                     return Ok(false);
                 }
-                if splice_exact(&pipe_rd, splice_write_fd, n).is_err() {
+                if let Err(err) = splice_exact(&pipe_rd, splice_write_fd, n) {
                     // 如果第一个splice操作成功将数据复制到中间管道，但第二个splice操作（向stdout复制数据）因某种原因失败，
                     // 我们可以通过常规读/写方式将已存在于中间管道的数据复制到stdout进行恢复。
-                    // 随后告知调用者回退。
+                    // 随后告知调用者是“回退”还是直接报错。
                     splice_copy_exact(pipe_rd.as_raw_fd(), splice_write_fd, n)?;
-                    return Ok(true);
+                    if is_splice_unsupported(err) {
+                        return Ok(true);
+                    }
+                    return Err(err.into());
                 }
             }
-            Err(_) => {
-                return Ok(true);
+            Err(err) => {
+                if is_splice_retryable(err) {
+                    continue;
+                }
+                if is_splice_unsupported(err) {
+                    return Ok(true);
+                }
+                return Err(err.into());
             }
         }
     }
@@ -86,6 +95,21 @@ fn splice_copy_exact(
         left -= read_len;
     }
     Ok(())
+}
+
+/// 判断给定的 splice 错误是否可以重试（例如被中断）。
+fn is_splice_retryable(err: Errno) -> bool {
+    matches!(err, Errno::EINTR)
+}
+
+/// 判断给定的 splice 错误是否表示"该场景不支持 splice"。
+fn is_splice_unsupported(err: Errno) -> bool {
+    // 注意: EOPNOTSUPP 和 ENOTSUP 在某些平台上是相同的值，
+    // 所以我们只匹配 EOPNOTSUPP 来避免不可达模式警告
+    matches!(
+        err,
+        Errno::EINVAL | Errno::EOPNOTSUPP | Errno::ENOSYS
+    )
 }
 #[cfg(test)]
 mod tests {

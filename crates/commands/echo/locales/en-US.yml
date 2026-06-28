@@ -3,6 +3,8 @@ echo:
     no_newline: do not output the trailing newline
     enable_backslash_escape: enable interpretation of backslash escapes
     disable_backslash_escape: disable interpretation of backslash escapes (default)
+    help: display this help and exit
+    version: output version information and exit
   usage: echo [OPTIONS]... [STRING]...
   about: Display a line of text
   after_help: |-

@@ -3,6 +3,8 @@ echo:
     no_newline: 不输出末尾的换行符
     enable_backslash_escape: 启用对反斜杠转义的解释
     disable_backslash_escape: 禁用对反斜杠转义的解释（默认）
+    help: 显示此帮助信息并退出
+    version: 输出版本信息并退出
   usage: echo [选项]... [字符串]...
   about: '显示一行文本'
   after_help: |-

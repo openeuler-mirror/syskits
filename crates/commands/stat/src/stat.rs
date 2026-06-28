@@ -803,7 +803,7 @@ impl Stater {
                     ct_show_warning!("failed to get security context of: {}", file.quote());
                     substitute_string
                 }
-    
+
                 Ok(None) => substitute_string,
                 Ok(Some(context)) => {
                     let context = context.as_bytes();
@@ -831,9 +831,7 @@ impl Stater {
             'B' => StatOutputType::Unsigned(512),
 
             //SELinux security context string
-            'C' => {
-                StatOutputType::Str(context_str)
-            }
+            'C' => StatOutputType::Str(context_str),
             // device number in decimal
             'd' => StatOutputType::Unsigned(meta.dev()),
             // device number in hex
@@ -1071,7 +1069,6 @@ mod tests {
 
     #[test]
     fn test_scanners() {
-
         assert_eq!(Some(('a', 3)), "141zxc".scan_char(8));
         assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
         assert_eq!(Some(('\r', 1)), "dqzxc".scan_char(16)); // spell-checker:disable-line

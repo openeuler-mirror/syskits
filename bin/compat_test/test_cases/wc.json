@@ -1,0 +1,243 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: 基本统计文件行数、字数和字符数",
+            "setup_commands": [
+                "echo 'line1: hello, world!\nline2: this is a test.\nline3: wc command test.' > test_wc.txt"
+            ],
+            "args": [
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " 3 12 68 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: 多文件输入（仅有中英文差异）",
+            "setup_commands": [
+                "echo 'line1: hello, world!\nline2: this is a test.\nline3: wc command test.' > test_wc1.txt",
+                "echo 'line1: hello, world!\nline2: this are a test.\nline3: hi!\nhey!' > test_wc2.txt"
+            ],
+            "args": [
+                "test_wc1.txt",
+                "test_wc2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " 3  12  68 test_wc1.txt\n  4  11  61 test_wc2.txt\n  7  23 129 total\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc1.txt test_wc2.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: 部分文件不存在",
+            "setup_commands": [
+                "echo 'line1: hello, world!\nline2: this is a test.\nline3: wc command test.' > test_wc1.txt",
+                "echo 'line1: hello, world!\nline2: this are a test.\nline3: hi!\nhey!' > test_wc2.txt"
+            ],
+            "args": [
+                "test_wc1.txt",
+                "missing.txt",
+                "test_wc2.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "  3  12  68 test_wc1.txt\n  4  11  61 test_wc2.txt\n  7  23 129 total\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc1.txt test_wc2.txt"
+            ]
+        },
+        {
+            "tstdin": "hello world\nthis is a wc command test\n",
+            "command": "wc",
+            "description": "wc: 标准输入",
+            "setup_commands": [
+            ],
+            "args": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "      2       8      38\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: 空文件",
+            "setup_commands": [
+                "touch test_wc.txt"
+            ],
+            "args": [
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "0 0 0 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -l",
+            "setup_commands": [
+                "echo 'line1: hello\nline2: no change line.' > test_wc.txt"
+            ],
+            "args": [
+                "-l",
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "2 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -w",
+            "setup_commands": [
+                "echo '这是一个测试' > test_wc.txt"
+            ],
+            "args": [
+                "-w",
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "1 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -c",
+            "setup_commands": [
+                "echo '这是一个测试' > test_wc.txt"
+            ],
+            "args": [
+                "-c",
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "19 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -m",
+            "setup_commands": [
+                "echo '这是一个测试 also with English' > test_wc.txt"
+            ],
+            "args": [
+                "-m",
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "25 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -wl组合测试",
+            "setup_commands": [
+                "echo '这是一个测试 also with English\nline2: \n' > test_wc.txt"
+            ],
+            "args": [
+                "-wl",
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " 3  5 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "wc",
+            "description": "wc: -lw交换参数位置",
+            "setup_commands": [
+                "echo '这是一个测试 also with English\nline2: \n' > test_wc.txt"
+            ],
+            "args": [
+                "-lw",
+                "test_wc.txt"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": " 3  5 test_wc.txt\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_wc.txt"
+            ]
+        }
+    ]
+}

@@ -31,6 +31,9 @@ rust_i18n::i18n!("locales", fallback = "zh-CN");
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
+#[cfg(unix)]
+use nix::libc;
+
 /// Linux splice support
 #[cfg(target_os = "linux")]
 mod splice;
@@ -344,6 +347,42 @@ fn cat_path(
         CatInputType::StdIn => {
             // 处理标准输入
             let stdin = io::stdin();
+
+            // 检查 stdin 是否重定向到与输出文件相同的文件
+            if let Some(out_info) = out_info {
+                // 尝试从 stdin 获取文件信息进行比较
+                if let Ok(stdin_info) = CtFileInformation::from_file(&stdin) {
+                    if stdin_info == *out_info {
+                        // 实现类似 GNU cat 的位置检测逻辑
+                        use std::os::unix::io::AsRawFd;
+
+                        let input_fd = stdin.as_raw_fd();
+                        let stdout_fd = std::io::stdout().as_raw_fd();
+
+                        // 获取输入文件当前位置
+                        let input_pos = unsafe { libc::lseek(input_fd, 0, libc::SEEK_CUR) };
+
+                        if input_pos >= 0 {
+                            // 获取输出文件标志来确定 seek 模式
+                            let out_flags = unsafe { libc::fcntl(stdout_fd, libc::F_GETFL) };
+                            let whence = if out_flags >= 0 && (out_flags & libc::O_APPEND) != 0 {
+                                libc::SEEK_END
+                            } else {
+                                libc::SEEK_CUR
+                            };
+
+                            // 获取输出文件位置
+                            let output_pos = unsafe { libc::lseek(stdout_fd, 0, whence) };
+
+                            // 只有当输入位置 < 输出位置时才报告错误
+                            if input_pos < output_pos {
+                                return Err(CatError::OutputIsInput);
+                            }
+                        }
+                    }
+                }
+            }
+
             let mut handle = CatInputHandle {
                 reader: stdin,
                 is_interactive: std::io::stdin().is_terminal(),
@@ -366,12 +405,35 @@ fn cat_path(
             // 处理普通文件输入
             let file = File::open(input_path)?;
 
-            // 如果提供了输出信息且尝试将输出重定向到输入，返回错误
+            // 如果提供了输出信息且尝试将输出重定向到输入，进行位置检测
             if let Some(out_info) = out_info {
-                if out_info.file_size() != 0
-                    && CtFileInformation::from_file(&file).ok().as_ref() == Some(out_info)
-                {
-                    return Err(CatError::OutputIsInput);
+                if CtFileInformation::from_file(&file).ok().as_ref() == Some(out_info) {
+                    // 实现类似 GNU cat 的位置检测逻辑
+                    use std::os::unix::io::AsRawFd;
+
+                    let input_fd = file.as_raw_fd();
+                    let stdout_fd = std::io::stdout().as_raw_fd();
+
+                    // 获取输入文件当前位置
+                    let input_pos = unsafe { libc::lseek(input_fd, 0, libc::SEEK_CUR) };
+
+                    if input_pos >= 0 {
+                        // 获取输出文件标志来确定 seek 模式
+                        let out_flags = unsafe { libc::fcntl(stdout_fd, libc::F_GETFL) };
+                        let whence = if out_flags >= 0 && (out_flags & libc::O_APPEND) != 0 {
+                            libc::SEEK_END
+                        } else {
+                            libc::SEEK_CUR
+                        };
+
+                        // 获取输出文件位置
+                        let output_pos = unsafe { libc::lseek(stdout_fd, 0, whence) };
+
+                        // 只有当输入位置 < 输出位置时才报告错误
+                        if input_pos < output_pos {
+                            return Err(CatError::OutputIsInput);
+                        }
+                    }
                 }
             }
 
@@ -412,8 +474,18 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
             &mut output_state,
             output_info.as_ref(),
         ) {
-            // 如果处理某个文件时发生错误，将错误信息收集到error_msg中。
-            error_msg.push(format!("{}: {}", file_path.maybe_quote(), err));
+            // 特殊处理 OutputIsInput 错误，与 GNU coreutils 行为一致
+            match err {
+                CatError::OutputIsInput => {
+                    // 直接输出错误到 stderr，不使用 format!，与 GNU cat 输出格式一致
+                    eprintln!("{}: input file is output file", file_path.maybe_quote());
+                    error_msg.push(String::new()); // 标记有错误但不重复输出
+                }
+                _ => {
+                    // 其他错误正常处理
+                    error_msg.push(format!("{}: {}", file_path.maybe_quote(), err));
+                }
+            }
         }
     }
 
@@ -426,14 +498,22 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
     if error_msg.is_empty() {
         Ok(())
     } else {
-        // 如果有错误信息，将它们格式化后作为错误返回。
-        // 错误信息将以 "cat: 文件路径: 错误信息" 的形式呈现。
-        let line_joiner = format!("\n{}: ", ctcore::ct_util_name());
+        // 过滤掉空的错误信息（来自 OutputIsInput 的占位符）
+        let non_empty_errors: Vec<String> =
+            error_msg.into_iter().filter(|s| !s.is_empty()).collect();
 
-        Err(ctcore::ct_error::CtSimpleError::new(
-            error_msg.len() as i32,
-            error_msg.join(&line_joiner),
-        ))
+        if non_empty_errors.is_empty() {
+            // 只有 OutputIsInput 错误，返回失败但不输出额外错误信息
+            Err(ctcore::ct_error::CtSimpleError::new(1, String::new()))
+        } else {
+            // 如果有其他错误信息，将它们格式化后作为错误返回。
+            // 错误信息将以 "cat: 文件路径: 错误信息" 的形式呈现。
+            let line_joiner = format!("\n{}: ", ctcore::ct_util_name());
+            Err(ctcore::ct_error::CtSimpleError::new(
+                non_empty_errors.len() as i32,
+                non_empty_errors.join(&line_joiner),
+            ))
+        }
     }
 }
 

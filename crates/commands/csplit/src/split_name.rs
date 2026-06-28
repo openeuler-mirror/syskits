@@ -14,7 +14,7 @@ use ctcore::ct_format::{Format, FormatError, num_format::UnsignedInt};
 use crate::csplit_error::CsplitError;
 
 /// Computes the filename of a split, taking into consideration a possible user-defined suffix
-/// ct_format.
+/// format.
 pub struct SplitName {
     prefix: Vec<u8>,
     format: Format<UnsignedInt>,
@@ -23,8 +23,8 @@ pub struct SplitName {
 impl SplitName {
     /// Creates a new SplitName with the given user-defined options:
     /// - `prefix_opt` specifies a prefix for all splits.
-    /// - `format_opt` specifies a custom ct_format for the suffix part of the filename, using the
-    ///   `sprintf` ct_format notation.
+    /// - `format_opt` specifies a custom format for the suffix part of the filename, using the
+    ///   `sprintf` format notation.
     /// - `n_digits_opt` defines the width of the split number.
     ///
     /// # Caveats

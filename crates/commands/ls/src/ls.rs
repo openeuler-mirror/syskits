@@ -832,16 +832,16 @@ impl LsConfig {
         // -og 应该同时隐藏所有者和组。此外，它们不会
         // 如果使用了 -l 或 --format=long 选项，它们不会被重置。因此，这些选项应该只显示
         // 组：-gl 或"-g --format=long" 。最后，它们也不会重置
-        // 切换到不同的ct_format选项时，它们也不会重置：
+        // 切换到不同的format选项时，它们也不会重置：
         // -ogCl 或 "-og --format=vertical --format=long".
         //
-        // -1 也有类似的问题：如果ct_format是长格式，它什么也不做。这
+        // -1 也有类似的问题：如果format是长格式，它什么也不做。这
         // 这实际上使它与 --format=singe-column 选项不同、
         // 它始终适用。
         //
         // 这里的想法是不要让这些选项与其他
         // 选项，而是手动决定它们的索引是否大于
-        // 其他 format 选项。如果是，我们就设置相应的ct_format。
+        // 其他 format 选项。如果是，我们就设置相应的format。
         if format != LsFormat::Long {
             let idx = opt
                 .and_then(|opt| options.indices_of(opt).map(|x| x.max().unwrap()))
@@ -1973,7 +1973,7 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
         //
         // 正确的 GNU 处理方式是，如果引用了符号链接 DNE，则不显示。
         // 只显示基本目录，显示子目录，并打印?
-        // 以长格式ct_format
+        // 以长格式format
         if path_data.get_metadata(&mut out).is_none() {
             continue;
         }
@@ -3031,7 +3031,7 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
 // GNU 格式化大小的方式有一些特殊之处：
 // 1.如果且仅当大小小于 10 时，才给出一位小数。
 // 2. 将大小向上舍入。
-// 人可读的ct_format使用幂来表示1024，但不显示 "i"。
+// 人可读的format使用幂来表示1024，但不显示 "i"。
 // 通常用来表示 Kibi、Mebi 等。
 // Kibi 和 Kilo 的表示方法不同（分别为 "k "和 "K）
 fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {

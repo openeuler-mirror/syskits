@@ -48,7 +48,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::fmt;
 use std::path::is_separator;
 
-/// The ct_format to use for suffixes in the filename for each output chunk.
+/// The format to use for suffixes in the filename for each output chunk.
 #[derive(Clone, Copy)]
 pub enum FilenameSuffixType {
     /// Lowercase ASCII alphabetic characters.

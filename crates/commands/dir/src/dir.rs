@@ -1551,7 +1551,6 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--format=long"];
             let matches = command.try_get_matches_from(args);
             assert!(matches.is_ok());
-            // assert!(matches.unwrap().args_present(flags::CT_FORMAT));
             assert!(matches.unwrap().contains_id(ls_flags::LS_FORMAT));
         }
 

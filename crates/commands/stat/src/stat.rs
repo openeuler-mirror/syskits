@@ -88,7 +88,7 @@ enum StatPadding {
 /// ct_stat::pad_and_print("1", false, 5, Padding::Zero) == "00001";
 /// ```
 /// currently only supports '0' & ' ' as the padding character
-/// because the ct_format specification of print! does not support general
+/// because the format specification of print! does not support general
 /// fill characters.
 fn pad_and_print(result: &str, left: bool, width: usize, padding: StatPadding) {
     match (left, padding) {
@@ -497,7 +497,7 @@ impl Stater {
     ) -> StatToken {
         *i += 1;
         if *i >= bound {
-            ct_show_warning!("backslash at end of ct_format");
+            ct_show_warning!("backslash at end of format");
             return StatToken::Char('\\');
         }
         match chars[*i] {
@@ -1058,7 +1058,7 @@ impl Stater {
     }
 
     fn default_format(show_fs: bool, terse: bool, show_dev_type: bool) -> String {
-        // SELinux related ct_format is *ignored*
+        // SELinux related format is *ignored*
 
         if show_fs {
             if terse {

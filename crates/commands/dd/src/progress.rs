@@ -138,7 +138,7 @@ impl ProgUpdate {
     /// assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0.0 B/s\n");
     /// ```
     fn write_prog_line(&self, w: &mut impl Write, rewrite: bool) -> CTResult<()> {
-        // The total number of bytes written as a string, in SI and IEC ct_format.
+        // The total number of bytes written as a string, in SI and IEC format.
         let btotal = self.write_stat.bytes_total;
         let btotal_metric = to_magnitude_and_suffix(btotal, SuffixType::Si);
         let btotal_bin = to_magnitude_and_suffix(btotal, SuffixType::Iec);
@@ -314,7 +314,7 @@ impl ReadStat {
         self.reads_complete == 0 && self.reads_partial == 0
     }
 
-    /// Write the counts in the ct_format required by `dd`.
+    /// Write the counts in the format required by `dd`.
     ///
     /// # Errors
     ///
@@ -371,7 +371,7 @@ impl WriteStat {
         }
     }
 
-    /// Write the counts in the ct_format required by `dd`.
+    /// Write the counts in the format required by `dd`.
     ///
     /// # Errors
     ///

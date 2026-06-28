@@ -330,7 +330,7 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
 
-    // 将命令行选项解析为适用于应用程序逻辑的 ct_format。
+    // 将命令行选项解析为适用于应用程序逻辑的 format。
     let flags = MkTempFlags::from(&matches);
 
     if env::var("POSIXLY_CORRECT").is_ok() {

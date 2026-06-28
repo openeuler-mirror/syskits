@@ -3,13 +3,13 @@ df:
     df_opt_help: Print help information.
     df_opt_all: include dummy file systems
     df_opt_total: produce a grand total
-    df_opt_human_readable_binary: print sizes in human readable ct_format (e.g., 1K 234M 2G)
+    df_opt_human_readable_binary: print sizes in human readable format (e.g., 1K 234M 2G)
     df_opt_human_readable_decimal: likewise, but use powers of 1000 not 1024
     df_opt_inodes: list inode information instead of block usage
     df_opt_kilo: like --block-size=1K
     df_opt_local: limit listing to local file systems
     df_opt_no_sync: do not invoke sync before getting usage info (default)
-    df_opt_portability: use the POSIX output ct_format
+    df_opt_portability: use the POSIX output format
     df_opt_sync: invoke sync before getting usage info (non-windows only)
     df_opt_print_type: print file system type
   usage: df [OPTION]... [FILE]...

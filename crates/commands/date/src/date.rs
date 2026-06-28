@@ -445,7 +445,7 @@ fn date_args_init() -> Vec<Arg> {
     args
 }
 
-/// Return the appropriate ct_format string for the given settings.
+/// Return the appropriate format string for the given settings.
 fn make_format_string(date_settings: &DateSettings) -> &str {
     // 在 Rust 中，ref 关键字用于在模式匹配中创建一个绑定（binding），这个绑定是对原始匹配值的引用（reference）。在这个上下文中，
     // ref fmt 表示在匹配 DateFormat::Iso8601 枚举值时，不是将整个 fmt 值复制给 fmt 变量，而是创建一个指向 fmt 内部数据的引用。

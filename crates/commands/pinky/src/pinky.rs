@@ -361,7 +361,7 @@ impl PinkyFlags {
         if self.is_include_fullname {
             print!(" {:<19}", "Name");
         }
-        print!(" {:<9}", "TTY");
+        print!(" {:<9}", " TTY"); // 注意：包含前导空格，总宽度9
         if self.is_include_idle {
             print!(" {:<6}", "Idle");
         }

@@ -25,6 +25,8 @@ use crate::opt_flags::OPT_PROGRESS;
 use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
+use crate::opt_flags::OPT_NO_COPY;
+use crate::opt_flags::OPT_DEBUG;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
 use ctcore::Tool;
@@ -110,6 +112,14 @@ pub struct MvOpts {
     /// 是否设置目标文件的 SELinux 安全上下文为默认类型
     /// '-Z, --context'
     pub set_context: bool,
+
+    /// 启用调试模式，解释文件是如何被复制的，同时隐含启用 -v (详细) 选项
+    /// '--debug'
+    pub debug: bool,
+
+    /// 如果重命名失败，不执行复制操作
+    /// '--no-copy'
+    pub no_copy: bool,
 }
 
 /// 表示遇到目标位置已存在文件时的可能行为。
@@ -134,6 +144,8 @@ mod opt_flags {
     pub const OPT_PROGRESS: &str = "progress";
     pub const ARG_FILES: &str = "files";
     pub const OPT_CONTEXT: &str = "context";
+    pub const OPT_DEBUG: &str = "debug";
+    pub const OPT_NO_COPY: &str = "no-copy";
 }
 
 pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -186,10 +198,12 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
         update: ct_update_mode,
         target_dir: target_directory,
         no_target_dir: args_match.get_flag(OPT_NO_TARGET_DIRECTORY),
-        verbose: args_match.get_flag(OPT_VERBOSE),
+        verbose: args_match.get_flag(OPT_VERBOSE) || args_match.get_flag(OPT_DEBUG), // debug implies verbose
         strip_slashes: args_match.get_flag(OPT_STRIP_TRAILING_SLASHES),
         progress_bar: args_match.get_flag(OPT_PROGRESS),
         set_context: args_match.get_flag(OPT_CONTEXT),
+        debug: args_match.get_flag(OPT_DEBUG),
+        no_copy: args_match.get_flag(OPT_NO_COPY),
     };
 
     mv(&arg_files[..], &opts)
@@ -285,6 +299,14 @@ fn mv_args_init() -> Vec<Arg> {
             .short('Z')
             .long(OPT_CONTEXT)
             .help(t!("mv.clap.opt_context"))
+            .action(ArgAction::SetTrue),
+        Arg::new(OPT_DEBUG)
+            .long(OPT_DEBUG)
+            .help(t!("mv.clap.opt_debug"))
+            .action(ArgAction::SetTrue),
+        Arg::new(OPT_NO_COPY)
+            .long(OPT_NO_COPY)
+            .help(t!("mv.clap.opt_no_copy"))
             .action(ArgAction::SetTrue),
         Arg::new(ARG_FILES)
             .action(ArgAction::Append)
@@ -691,7 +713,7 @@ fn mv_rename(
         backup_path = ct_backup_control::get_backup_path(options.backup, to_path, &options.suffix);
         if let Some(ref backup_path) = backup_path {
             // 如果存在备份路径，则将目标文件重命名为备份路径
-            mv_rename_with_fallback(to_path, backup_path, multi_progress)?;
+            mv_rename_with_fallback(to_path, backup_path, options, multi_progress)?;
         }
     }
 
@@ -708,7 +730,7 @@ fn mv_rename(
     }
 
     // 执行重命名操作
-    mv_rename_with_fallback(from_path, to_path, multi_progress)?;
+    mv_rename_with_fallback(from_path, to_path, options, multi_progress)?;
 
     // 如果设置了详细模式，输出重命名信息
     if options.verbose {
@@ -779,6 +801,7 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
 /// # 参数
 /// - `from`: 指定原始路径。
 /// - `to`: 指定目标路径。
+/// - `options`: 移动操作的选项，包括调试和禁止复制选项。
 /// - `multi_progress`: 可选，用于多进度条更新的 `MultiProgress` 实例，可用于显示复制进度。
 ///
 /// # 返回值
@@ -786,23 +809,75 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
 fn mv_rename_with_fallback(
     from: &Path,
     to: &Path,
+    options: &MvOpts,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
     // 尝试直接重命名，如果失败则尝试备份方法。
-    if fs::rename(from, to).is_err() {
+    if let Err(rename_error) = fs::rename(from, to) {
+        // 如果启用了调试模式，说明重命名失败的原因
+        if options.debug {
+            let message = format!(
+                "rename failed: {} ({}), attempting copy and remove",
+                from.quote(),
+                rename_error
+            );
+            match multi_progress {
+                Some(pb) => pb.suspend(|| {
+                    println!("mv: {}", message);
+                }),
+                None => println!("mv: {}", message),
+            };
+        }
+
+        // 如果启用了 no_copy 选项，在重命名失败时直接返回错误
+        if options.no_copy {
+            let error_message = if options.debug {
+                format!(
+                    "rename failed and --no-copy specified: {} to {}",
+                    from.quote(),
+                    to.quote()
+                )
+            } else {
+                format!("rename failed: {}", rename_error)
+            };
+            return Err(io::Error::new(io::ErrorKind::Other, error_message));
+        }
+
         // 获取原始路径的元数据，不跟随符号链接。
         let symlink_metadata = from.symlink_metadata()?;
         let file_type = symlink_metadata.file_type();
 
         // 根据文件类型执行相应的备份策略。
         if file_type.is_symlink() {
+            // 如果启用了调试模式，说明正在处理符号链接
+            if options.debug {
+                let message = format!("copying symlink {} to {}", from.quote(), to.quote());
+                match multi_progress {
+                    Some(pb) => pb.suspend(|| {
+                        println!("mv: {}", message);
+                    }),
+                    None => println!("mv: {}", message),
+                };
+            }
             // 对符号链接执行特定的重命名策略。
             mv_rename_symlink_fallback(from, to)?;
         } else if file_type.is_dir() {
+            // 如果启用了调试模式，说明正在处理目录
+            if options.debug {
+                let message = format!("copying directory {} to {}", from.quote(), to.quote());
+                match multi_progress {
+                    Some(pb) => pb.suspend(|| {
+                        println!("mv: {}", message);
+                    }),
+                    None => println!("mv: {}", message),
+                };
+            }
+            
             // 如果目标路径存在，则删除该目录，以匹配 `fs::rename` 的行为。
             if to.exists() {
                 fs::remove_dir_all(to)?;
             }
+            
             // 配置目录复制选项。
             let dir_copy_opts = DirCopyOptions {
                 copy_inside: true,
@@ -859,6 +934,17 @@ fn mv_rename_with_fallback(
                 };
             }
         } else {
+            // 如果启用了调试模式，说明正在处理常规文件
+            if options.debug {
+                let message = format!("copying file {} to {}", from.quote(), to.quote());
+                match multi_progress {
+                    Some(pb) => pb.suspend(|| {
+                        println!("mv: {}", message);
+                    }),
+                    None => println!("mv: {}", message),
+                };
+            }
+            
             // 对于非目录类型的文件，在linux系统上复制文件并保留扩展属性，其他情况下只复制文件。
             #[cfg(target_os = "linux")]
             fs::copy(from, to)
@@ -1715,6 +1801,8 @@ mod tests {
                 strip_slashes,
                 progress_bar: false,
                 set_context: false,
+                debug: false,
+                no_copy: false,
             }
         }
 

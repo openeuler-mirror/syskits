@@ -14,6 +14,7 @@ extern crate rust_i18n;
 mod error;
 
 use crate::opt_flags::ARG_FILES;
+use ctcore::ct_error::CTIoError;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "zh-CN");
 use crate::opt_flags::OPT_CONTEXT;
@@ -499,13 +500,22 @@ fn mv_handle_two_paths(
         // 如果设置了no_target_dir且源是目录，则尝试重命名。
         if mv_options.no_target_dir {
             if source_is_directory {
-                mv_rename(source_path, target_path, mv_options, None).map_err_context(|| {
-                    format!(
-                        "cannot move {} to {}",
-                        source_path.quote(),
-                        target_path.quote()
-                    )
-                })
+                match mv_rename(source_path, target_path, mv_options, None) {
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        let msg = format!(
+                            "cannot move {} to {}",
+                            source_path.quote(),
+                            target_path.quote()
+                        );
+                        if err_str.contains(&msg) {
+                            Err(e.map_err_context(|| "".to_string()))
+                        } else {
+                            Err(e.map_err_context(|| msg))
+                        }
+                    },
+                    Ok(()) => Ok(()),
+                }
             } else {
                 Err(MvError::DirectoryToNonDirectory(target_path.quote().to_string()).into())
             }
@@ -695,16 +705,20 @@ fn move_files_into_dir(
         match mv_rename(source_path, &targetpath, mv_opts, multi_progress.as_ref()) {
             Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
             Err(err) => {
-                let err = err.map_err_context(|| {
-                    format!(
-                        "cannot move {} to {}",
-                        source_path.quote(),
-                        targetpath.quote()
-                    )
-                });
+                let err_str = err.to_string();
+                let msg = format!(
+                    "cannot move {} to {}",
+                    source_path.quote(),
+                    targetpath.quote()
+                );
+                let final_err = if err_str.contains(&msg) {
+                    CTIoError::new(err.kind(), err_str)
+                } else {
+                    err.map_err_context(|| msg)
+                };
                 match multi_progress {
-                    Some(ref pb) => pb.suspend(|| ct_show!(err)),
-                    None => ct_show!(err),
+                    Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                    None => ct_show!(final_err),
                 };
             }
             Ok(()) => (),

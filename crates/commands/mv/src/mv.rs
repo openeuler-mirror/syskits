@@ -253,6 +253,7 @@ fn mv_args_init() -> Vec<Arg> {
             .long(OPT_INTERACTIVE)
             .help(t!("mv.clap.opt_interactive"))
             .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
+            .overrides_with(OPT_INTERACTIVE)
             .action(ArgAction::SetTrue),
         Arg::new(OPT_NO_CLOBBER)
             .short('n')

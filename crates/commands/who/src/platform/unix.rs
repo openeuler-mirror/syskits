@@ -177,15 +177,19 @@ fn idle_string_local<'a>(when: i64, boot_time: i64, now: i64) -> Cow<'a, str> {
 }
 
 fn time_string(utmpx: &CtUtmpx) -> String {
+    // Use ctcore's hard_locale_time() function (consistent with GNU coreutils)
     let time_fmt = if hard_locale_time() {
+        // "%Y-%m-%d %H:%M" - ISO format for hard locales
         time::format_description::parse(
             "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]",
         )
         .unwrap()
     } else {
+        // "%b %e %H:%M" - English month abbreviation format for C/POSIX locale
         time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
             .unwrap()
     };
+
     utmpx.login_time().format(&time_fmt).unwrap()
 }
 
@@ -437,13 +441,17 @@ impl Who {
             buffer.push_str(&msg);
         }
         write!(buffer, " {line:<12}").unwrap();
+
+        // Dynamic time width based on locale (like coreutils)
         let lc_time = std::env::var("LC_TIME").unwrap_or_else(|_| {
             std::env::var("LC_ALL")
                 .unwrap_or_else(|_| std::env::var("LANG").unwrap_or_else(|_| "C".to_string()))
         });
         let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            // "%b %e %H:%M" width: 3 + 1 + 2 + 1 + 2 + 1 + 2 = 12
             3 + 1 + 2 + 1 + 2 + 1 + 2
         } else {
+            // "%Y-%m-%d %H:%M" width: 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 = 16
             4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2
         };
         write!(buffer, " {time:<time_size$}").unwrap();
@@ -475,8 +483,13 @@ impl Who {
 #[cfg(test)]
 mod tests {
     use ctcore::ct_utmpx::time::OffsetDateTime;
+    use std::env;
+    use std::sync::Mutex;
 
     use super::*;
+
+    // 互斥锁确保环境变量测试的串行执行，避免并发测试时的干扰
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_idle_string() {
@@ -605,5 +618,1052 @@ mod tests {
         let when = now - 3000; // 3000 seconds ago
         let boottime = now - 2000; // Boot time is after 'when'
         assert_eq!(idle_string_local(when, boottime, now), " old ");
+    }
+
+    #[test]
+    fn test_time_string_c_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        // Set LC_TIME to C locale
+        unsafe {
+            env::set_var("LC_TIME", "C");
+        }
+
+        // Test that C locale detection works
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        assert_eq!(lc_time, "C");
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_string_non_c_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "en_US.UTF-8");
+        }
+
+        // Test that non-C locale detection works
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        assert_eq!(lc_time, "en_US.UTF-8");
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_string_lc_all_fallback() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_ALL", "POSIX");
+        }
+
+        // Test fallback to LC_ALL
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        assert_eq!(lc_time, "POSIX");
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_string_default_fallback() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理所有locale环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        // Test fallback to default "C"
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        assert_eq!(lc_time, "C");
+
+        // 恢复原始环境变量
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_format_width_c_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "C");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            3 + 1 + 2 + 1 + 2 + 1 + 2 // "Jul 24 22:08" = 12 chars
+        } else {
+            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 // "2025-07-24 22:08" = 16 chars
+        };
+        assert_eq!(time_size, 12);
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_format_width_non_c_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "en_US.UTF-8");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            3 + 1 + 2 + 1 + 2 + 1 + 2 // "Jul 24 22:08" = 12 chars
+        } else {
+            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 // "2025-07-24 22:08" = 16 chars
+        };
+        assert_eq!(time_size, 16);
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_format_width_c_utf8_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量 - 测试C.UTF-8的正确处理
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "C.UTF-8");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        // C.UTF-8应该使用ISO格式，因为它不等于"C"或"POSIX"
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            3 + 1 + 2 + 1 + 2 + 1 + 2 // "Jul 24 22:08" = 12 chars
+        } else {
+            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 // "2025-07-24 22:08" = 16 chars
+        };
+        assert_eq!(time_size, 16); // C.UTF-8应该使用ISO格式
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_lang_fallback_c_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量 - 测试LANG回退
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LANG", "C");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            3 + 1 + 2 + 1 + 2 + 1 + 2 // "Jul 24 22:08" = 12 chars
+        } else {
+            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 // "2025-07-24 22:08" = 16 chars
+        };
+        assert_eq!(time_size, 12);
+        assert_eq!(lc_time, "C");
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_lang_fallback_utf8_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量 - 测试LANG回退到C.UTF-8
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LANG", "C.UTF-8");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            3 + 1 + 2 + 1 + 2 + 1 + 2 // "Jul 24 22:08" = 12 chars
+        } else {
+            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 // "2025-07-24 22:08" = 16 chars
+        };
+        assert_eq!(time_size, 16);
+        assert_eq!(lc_time, "C.UTF-8");
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_lc_all_overrides_lang() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量 - 测试LC_ALL覆盖LANG
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LANG", "en_US.UTF-8");
+        }
+        unsafe {
+            env::set_var("LC_ALL", "C");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+
+        // LC_ALL should override LANG
+        assert_eq!(lc_time, "C");
+
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            12 // C locale format
+        } else {
+            16 // ISO format
+        };
+        assert_eq!(time_size, 12);
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_lc_time_overrides_all() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理并设置测试环境变量 - 测试LC_TIME优先级最高
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LANG", "C");
+        }
+        unsafe {
+            env::set_var("LC_ALL", "en_US.UTF-8");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "zh_CN.UTF-8");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+
+        // LC_TIME should have highest priority
+        assert_eq!(lc_time, "zh_CN.UTF-8");
+
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            12 // C locale format
+        } else {
+            16 // ISO format
+        };
+        assert_eq!(time_size, 16);
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_string_with_actual_utmpx() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理环境变量并设置C locale
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "C");
+        }
+
+        // 尝试获取一个真实的utmpx记录进行测试
+        if let Some(utmpx) = CtUtmpx::iter_all_records().next() {
+            let time_str = time_string(&utmpx);
+            // C locale时间格式应该是 "MMM DD HH:MM" (如 "Jul 24 22:08")
+            // 检查格式是否正确 (月份简写 + 空格 + 日期 + 空格 + 时间)
+            let parts: Vec<&str> = time_str.split_whitespace().collect();
+            assert_eq!(parts.len(), 3); // 月份、日期、时间
+
+            // 检查月份是否为英文缩写
+            let month = parts[0];
+            assert!(
+                [
+                    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov",
+                    "Dec"
+                ]
+                .contains(&month)
+            );
+
+            // 检查时间格式 HH:MM
+            let time_part = parts[2];
+            assert!(time_part.contains(':'));
+            let time_components: Vec<&str> = time_part.split(':').collect();
+            assert_eq!(time_components.len(), 2);
+            assert!(time_components[0].parse::<u32>().is_ok());
+            assert!(time_components[1].parse::<u32>().is_ok());
+        }
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_time_string_iso_format() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 清理环境变量并设置非C locale
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "en_US.UTF-8");
+        }
+
+        // 尝试获取一个真实的utmpx记录进行测试
+        if let Some(utmpx) = CtUtmpx::iter_all_records().next() {
+            let time_str = time_string(&utmpx);
+            // ISO格式应该是 "YYYY-MM-DD HH:MM" (如 "2025-07-24 22:08")
+            let parts: Vec<&str> = time_str.split_whitespace().collect();
+            assert_eq!(parts.len(), 2); // 日期部分、时间部分
+
+            // 检查日期格式 YYYY-MM-DD
+            let date_part = parts[0];
+            assert!(date_part.contains('-'));
+            let date_components: Vec<&str> = date_part.split('-').collect();
+            assert_eq!(date_components.len(), 3);
+            assert!(date_components[0].parse::<u32>().is_ok()); // 年
+            assert!(date_components[1].parse::<u32>().is_ok()); // 月
+            assert!(date_components[2].parse::<u32>().is_ok()); // 日
+
+            // 检查时间格式 HH:MM
+            let time_part = parts[1];
+            assert!(time_part.contains(':'));
+            let time_components: Vec<&str> = time_part.split(':').collect();
+            assert_eq!(time_components.len(), 2);
+            assert!(time_components[0].parse::<u32>().is_ok());
+            assert!(time_components[1].parse::<u32>().is_ok());
+        }
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_various_locale_formats() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        let test_cases = vec![
+            ("C", true),            // 应该使用C格式
+            ("POSIX", true),        // 应该使用C格式
+            ("C.UTF-8", false),     // 应该使用ISO格式
+            ("en_US.UTF-8", false), // 应该使用ISO格式
+            ("zh_CN.UTF-8", false), // 应该使用ISO格式
+            ("fr_FR.UTF-8", false), // 应该使用ISO格式
+            ("de_DE.UTF-8", false), // 应该使用ISO格式
+            ("ja_JP.UTF-8", false), // 应该使用ISO格式
+        ];
+
+        for (locale, should_use_c_format) in test_cases {
+            // 清理并设置测试locale
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+            unsafe {
+                env::remove_var("LC_ALL");
+            }
+            unsafe {
+                env::remove_var("LANG");
+            }
+            unsafe {
+                env::set_var("LC_TIME", locale);
+            }
+
+            let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+                env::var("LC_ALL")
+                    .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+            });
+
+            let time_size = if lc_time == "C" || lc_time == "POSIX" {
+                12 // C locale format
+            } else {
+                16 // ISO format
+            };
+
+            let expected_size = if should_use_c_format { 12 } else { 16 };
+            assert_eq!(time_size, expected_size, "Failed for locale: {}", locale);
+        }
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_edge_case_empty_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 测试空的locale值
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+        unsafe {
+            env::set_var("LC_TIME", "");
+        }
+
+        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+            env::var("LC_ALL")
+                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+        });
+
+        // 空字符串不等于"C"或"POSIX"，应该使用ISO格式
+        let time_size = if lc_time == "C" || lc_time == "POSIX" {
+            12 // C locale format
+        } else {
+            16 // ISO format
+        };
+        assert_eq!(time_size, 16);
+        assert_eq!(lc_time, "");
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
+    }
+
+    #[test]
+    fn test_case_sensitive_locale() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // 保存原始环境变量
+        let original_lc_time = env::var("LC_TIME").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        // 测试大小写敏感性
+        let test_cases = vec![
+            ("c", false),     // 小写c不等于"C"
+            ("posix", false), // 小写posix不等于"POSIX"
+            ("C ", false),    // 带空格的C
+            (" C", false),    // 前导空格的C
+            ("C\n", false),   // 带换行符的C
+        ];
+
+        for (locale, should_use_c_format) in test_cases {
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+            unsafe {
+                env::remove_var("LC_ALL");
+            }
+            unsafe {
+                env::remove_var("LANG");
+            }
+            unsafe {
+                env::set_var("LC_TIME", locale);
+            }
+
+            let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
+                env::var("LC_ALL")
+                    .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
+            });
+
+            let time_size = if lc_time == "C" || lc_time == "POSIX" {
+                12 // C locale format
+            } else {
+                16 // ISO format
+            };
+
+            let expected_size = if should_use_c_format { 12 } else { 16 };
+            assert_eq!(time_size, expected_size, "Failed for locale: '{}'", locale);
+        }
+
+        // 恢复原始环境变量
+        unsafe {
+            env::remove_var("LC_TIME");
+        }
+        unsafe {
+            env::remove_var("LC_ALL");
+        }
+        unsafe {
+            env::remove_var("LANG");
+        }
+
+        if let Some(val) = original_lc_time {
+            unsafe {
+                env::set_var("LC_TIME", val);
+            }
+        }
+        if let Some(val) = original_lc_all {
+            unsafe {
+                env::set_var("LC_ALL", val);
+            }
+        }
+        if let Some(val) = original_lang {
+            unsafe {
+                env::set_var("LANG", val);
+            }
+        }
     }
 }

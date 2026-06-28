@@ -48,6 +48,7 @@ use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
+use ctcore::libc;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
@@ -881,6 +882,17 @@ fn mv_rename_with_fallback(
 ) -> io::Result<()> {
     // 尝试直接重命名，如果失败则尝试备份方法。
     if let Err(rename_error) = fs::rename(from, to) {
+        #[cfg(unix)]
+        const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(windows)]
+        const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
+
+        let is_cross_device = matches!(rename_error.raw_os_error(), Some(EXDEV));
+
+        // 如果不是跨设备错误，直接返回
+        if !is_cross_device {
+            return Err(rename_error);
+        }
         // 如果启用了调试模式，说明重命名失败的原因
         if options.debug {
             let message = format!(

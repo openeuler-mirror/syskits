@@ -267,7 +267,7 @@ impl Display for PtxError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::DumbFormat => {
-                write!(f, "There is no dumb ct_format with GNU extensions disabled")
+                write!(f, "There is no dumb format with GNU extensions disabled")
             }
             Self::NotImplemented(s) => write!(f, "{s} not implemented yet"),
             Self::ParseError(e) => e.fmt(f),
@@ -835,10 +835,10 @@ mod ptx_options {
     pub static PTX_TRADITIONAL: &str = "traditional";
     pub static PTX_FLAG_TRUNCATION: &str = "flag-truncation";
     pub static PTX_MACRO_NAME: &str = "macro-name";
-    pub static PTX_FORMAT_ROFF: &str = "ct_format=roff";
+    pub static PTX_FORMAT_ROFF: &str = "format=roff";
     pub static PTX_RIGHT_SIDE_REFS: &str = "right-side-refs";
     pub static PTX_SENTENCE_REGEXP: &str = "sentence-regexp";
-    pub static PTX_FORMAT_TEX: &str = "ct_format=tex";
+    pub static PTX_FORMAT_TEX: &str = "format=tex";
     pub static PTX_WORD_REGEXP: &str = "word-regexp";
     pub static PTX_BREAK_FILE: &str = "break-file";
     pub static PTX_IGNORE_CASE: &str = "ignore-case";

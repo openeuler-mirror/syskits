@@ -32,7 +32,7 @@ use crate::number::PreciseNumber;
 const SEQ_SEPARATOR: &str = "separator";
 const SEQ_TERMINATOR: &str = "terminator";
 const SEQ_EQUAL_WIDTH: &str = "equal-width";
-const SEQ_FORMAT: &str = "ct_format";
+const SEQ_FORMAT: &str = "format";
 
 const SEQ_NUMBERS: &str = "numbers";
 

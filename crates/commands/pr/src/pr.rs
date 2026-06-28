@@ -22,6 +22,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_locale::hard_locale_time;
 use itertools::Itertools;
 use quick_error::ResultExt;
 use quick_error::quick_error;
@@ -40,7 +41,14 @@ const PR_DEFAULT_COLUMN_WIDTH: usize = 72;
 const PR_DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const PR_DEFAULT_COLUMN_SEPARATOR: &char = &PR_TAB;
 const PR_FF: u8 = 0x0C_u8;
-const PR_DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
+// 根据locale选择时间格式
+fn get_pr_date_time_format() -> &'static str {
+    if hard_locale_time() {
+        "%Y-%m-%d %H:%M" // ISO格式用于非C locale
+    } else {
+        "%b %d %H:%M %Y" // 英文月份缩写格式用于C/POSIX locale
+    }
+}
 
 mod pr_flags {
     pub const PR_HEADER: &str = "header";
@@ -793,7 +801,7 @@ fn parse_start_end_page(
 fn parse_last_modified_time(paths: &[&str], is_merge_mode: bool) -> String {
     if is_merge_mode || paths[0].eq(PR_FILE_STDIN) {
         let date_time = Local::now();
-        date_time.format(PR_DATE_TIME_FORMAT).to_string()
+        date_time.format(get_pr_date_time_format()).to_string()
     } else {
         pr_file_last_modified_time(paths.first().unwrap())
     }
@@ -1345,7 +1353,7 @@ fn pr_file_last_modified_time(path: &str) -> String {
             i.modified()
                 .map(|x| {
                     let date_time: DateTime<Local> = x.into();
-                    date_time.format(PR_DATE_TIME_FORMAT).to_string()
+                    date_time.format(get_pr_date_time_format()).to_string()
                 })
                 .unwrap_or_default()
         })
@@ -4073,6 +4081,79 @@ mod tests {
             let result = parse_start_end_page(&matches, args).unwrap();
             assert_eq!(result.0, 7); // start_page 来自 --pages
             assert_eq!(result.1, Some(15)); // end_page 来自 --pages
+        }
+    }
+
+    #[cfg(test)]
+    mod locale_tests {
+        use super::*;
+        use std::env;
+
+        #[test]
+        fn test_get_pr_date_time_format_c_locale() {
+            // 模拟C locale环境
+            unsafe {
+                env::set_var("LC_TIME", "C");
+            }
+
+            // C locale应该使用英文格式
+            assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+        }
+
+        #[test]
+        fn test_get_pr_date_time_format_non_c_locale() {
+            // 模拟非C locale环境
+            unsafe {
+                env::set_var("LC_TIME", "zh_CN.UTF-8");
+            }
+
+            // 非C locale应该使用ISO格式
+            assert_eq!(get_pr_date_time_format(), "%Y-%m-%d %H:%M");
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+        }
+
+        #[test]
+        fn test_get_pr_date_time_format_posix_locale() {
+            // 模拟POSIX locale环境
+            unsafe {
+                env::set_var("LC_TIME", "POSIX");
+            }
+
+            // POSIX locale应该使用英文格式
+            assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
+        }
+
+        #[test]
+        fn test_hard_locale_time_integration() {
+            // 测试hard_locale_time函数的使用
+            unsafe {
+                env::set_var("LC_TIME", "C");
+            }
+            assert!(!hard_locale_time());
+
+            unsafe {
+                env::set_var("LC_TIME", "en_US.UTF-8");
+            }
+            assert!(hard_locale_time());
+
+            // 清理环境变量
+            unsafe {
+                env::remove_var("LC_TIME");
+            }
         }
     }
 }

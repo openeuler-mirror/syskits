@@ -331,6 +331,25 @@
       "cleanup_commands": [
         "rm -rf multi_blank.txt"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "cat",
+      "description": "测试cat读取不存在的文件时与coreutils行为一致",
+      "setup_commands": [],
+      "args": [
+        "nonexistent_file_that_does_not_exist.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": []
+      },
+      "cleanup_commands": [],
+      "requires_root": false
     }
   ]
 }

@@ -862,7 +862,6 @@ fn mv_rename_with_fallback(
             // 对符号链接执行特定的重命名策略。
             mv_rename_symlink_fallback(from, to)?;
         } else if file_type.is_dir() {
-
             if rename_error.kind() == io::ErrorKind::NotADirectory {
                 let message = format!(
                     "cannot move {} to {}: {}",

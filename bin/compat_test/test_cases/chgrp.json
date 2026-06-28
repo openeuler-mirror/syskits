@@ -190,6 +190,135 @@
             "groupdel chgrp_test_group4"
         ],
         "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试目标 group 不存在",
+        "args": ["nonexistent_group", "test_file"],
+        "setup_commands": [
+            "touch test_file",
+            "chgrp root test_file"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' test_file",
+                "expected_exit": 0,
+                "expected_stdout": "root\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试符号链接行为",
+        "args": ["chgrp_test_group_symlink", "link.txt"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_symlink",
+            "touch target.txt",
+            "ln -s target.txt link.txt",
+            "chgrp root target.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' target.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group_symlink\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -f link.txt target.txt",
+            "groupdel chgrp_test_group_symlink"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试递归修改目录时遇到符号链接",
+        "args": ["-R", "chgrp_test_group_recursive_symlink", "test_dir"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_recursive_symlink",
+            "mkdir -p test_dir/subdir",
+            "touch test_dir/file1.txt",
+            "touch test_dir/subdir/file2.txt",
+            "ln -s .. test_dir/link_to_parent",
+            "chgrp root test_dir test_dir/file1.txt test_dir/subdir test_dir/subdir/file2.txt"
+        ],
+        "expectation": {
+            "execution": {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": ""
+            },
+            "verifications": [
+            {
+                "command": "stat -c '%G' test_dir",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group_recursive_symlink\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' test_dir/file1.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group_recursive_symlink\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' test_dir/subdir",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group_recursive_symlink\n",
+                "expected_stderr": null
+            },
+            {
+                "command": "stat -c '%G' test_dir/subdir/file2.txt",
+                "expected_exit": 0,
+                "expected_stdout": "chgrp_test_group_recursive_symlink\n",
+                "expected_stderr": null
+            }
+            ],
+            "ignore_fields": {
+            "ignore_exit_code": false,
+            "ignore_stdout": false,
+            "ignore_stderr": false,
+            "ignore_function": false
+            }
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir",
+            "groupdel chgrp_test_group_recursive_symlink"
+        ],
+        "requires_root": true,
+        "timeout": 30
     }
   ]
 }

@@ -37,6 +37,7 @@ rust_i18n::i18n!("locales", fallback = "zh-CN");
 use ctcore::Tool;
 use ctcore::ct_entries::{CtPasswd, Locate};
 use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::S_IWGRP;
 use std::ffi::OsString;
@@ -205,11 +206,29 @@ fn pinky_idle_string(when: i64) -> String {
     })
 }
 
-/// 格式化登录时间为 "%b %e %H:%M" 格式
+/// 格式化登录时间，根据locale决定格式
+/// hard_locale为true时使用 "%Y-%m-%d %H:%M"，否则使用 "%b %e %H:%M"
 fn time_string(ut: &CtUtmpx) -> String {
-    const TIME_FORMAT: &str = "[month repr:short] [day padding:space] [hour]:[minute]";
-    let format = time::format_description::parse(TIME_FORMAT).unwrap();
-    ut.login_time().format(&format).unwrap()
+    if hard_locale_time() {
+        // 使用ISO格式，包含年份
+        const TIME_FORMAT: &str = "[year]-[month]-[day] [hour]:[minute]";
+        let format = time::format_description::parse(TIME_FORMAT).unwrap();
+        ut.login_time().format(&format).unwrap()
+    } else {
+        // 使用传统格式，不包含年份
+        const TIME_FORMAT: &str = "[month repr:short] [day padding:space] [hour]:[minute]";
+        let format = time::format_description::parse(TIME_FORMAT).unwrap();
+        ut.login_time().format(&format).unwrap()
+    }
+}
+
+/// 获取时间字符串的显示宽度
+fn time_format_width() -> usize {
+    if hard_locale_time() {
+        16 // "2024-12-25 15:30" = 16 characters
+    } else {
+        12 // "Dec 25 15:30" = 12 characters  
+    }
 }
 
 /// 从 GECOS 字段提取用户全名
@@ -286,7 +305,7 @@ impl PinkyFlags {
     }
 
     fn print_user_info(&self, ut: &CtUtmpx) {
-        print!("{1:<8.0$}", ct_utmpx::UT_NAMESIZE, ut.user());
+        print!("{:<8}", ut.user());
     }
 
     fn print_fullname(&self, ut: &CtUtmpx) {
@@ -296,12 +315,12 @@ impl PinkyFlags {
         let fullname = CtPasswd::locate(ut.user().as_ref())
             .ok()
             .and_then(|pw| gecos_to_fullname(&pw))
-            .unwrap_or_else(|| "        ???".to_string());
-        print!(" {:<19.19}", fullname);
+            .unwrap_or_else(|| "???".to_string());
+        print!(" {:<19}", fullname);
     }
 
     fn print_tty_info(&self, ut: &CtUtmpx, mesg: char) {
-        print!(" {}{:<8.*}", mesg, ct_utmpx::UT_LINESIZE, ut.tty_device());
+        print!(" {}{:<8}", mesg, ut.tty_device());
     }
 
     fn print_idle_time(&self, last_change: i64) {
@@ -331,34 +350,24 @@ impl PinkyFlags {
         Ok(())
     }
 
-    /// 打印列标题
+    /// 打印列标题，使用固定格式匹配coreutils
     fn print_heading(&self) {
         if !self.is_include_heading {
             return;
         }
 
-        let mut columns = vec![("Login", 8)];
+        // 使用与coreutils相同的固定格式
+        print!("{:<8}", "Login");
         if self.is_include_fullname {
-            columns.push(("Name", 19));
+            print!(" {:<19}", "Name");
         }
-        columns.push(("TTY", 9));
+        print!(" {:<9}", "TTY");
         if self.is_include_idle {
-            columns.push(("Idle", 6));
+            print!(" {:<6}", "Idle");
         }
-        columns.push(("When", 16));
+        print!(" {:<width$}", "When", width = time_format_width());
         if self.is_include_where {
-            columns.push(("Where", 0));
-        }
-
-        for (i, (title, width)) in columns.iter().enumerate() {
-            if i > 0 {
-                print!(" ");
-            }
-            if *width > 0 {
-                print!("{:<width$}", title, width = width);
-            } else {
-                print!("{}", title);
-            }
+            print!(" Where");
         }
         println!();
     }

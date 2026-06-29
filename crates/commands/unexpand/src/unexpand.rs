@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::error::Error;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::fmt;
 use std::fs::File;
@@ -28,7 +28,7 @@ use unicode_width::UnicodeWidthChar;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::{ct_crash_if_err, ct_show};
+use ctcore::ct_show;
 use std::ffi::OsString;
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
@@ -36,8 +36,12 @@ const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
 #[derive(Debug, PartialEq)]
 enum UnexpandParseError {
     InvalidCharacter(String),
+    SpecifierNotAtStartOfNumber(String, String),
+    SpecifierOnlyAllowedWithLastValue(String),
+    SpecifierMutuallyExclusive,
     TabSizeCannotBeZero,
-    TabSizeTooLarge,
+    TabStopTooLarge(String),
+    TabStopValueTooLarge,
     TabSizesMustBeAscending,
 }
 
@@ -51,44 +55,132 @@ impl fmt::Display for UnexpandParseError {
             Self::InvalidCharacter(s) => {
                 write!(f, "tab size contains invalid character(s): {}", s.quote())
             }
+            Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
+                f,
+                "{} specifier not at start of number: {}",
+                specifier.quote(),
+                s.quote()
+            ),
+            Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
+                f,
+                "{} specifier only allowed with the last value",
+                specifier.quote()
+            ),
+            Self::SpecifierMutuallyExclusive => {
+                write!(f, "'/' specifier is mutually exclusive with '+'")
+            }
             Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
-            Self::TabSizeTooLarge => write!(f, "tab stop value is too large"),
+            Self::TabStopTooLarge(s) => write!(f, "tab stop is too large {}", s.quote()),
+            Self::TabStopValueTooLarge => write!(f, "tab stop value is too large"),
             Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
         }
     }
 }
 
-fn unexpand_tabstops_parse(s: &str) -> Result<Vec<usize>, UnexpandParseError> {
-    let words = s.split(',');
+#[derive(PartialEq, Debug, Clone, Copy)]
+enum RemainingMode {
+    None,
+    Slash,
+    Plus,
+}
 
-    let mut nums = Vec::new();
+/// 判断字符是否为空格或逗号。
+fn is_space_or_comma(c: char) -> bool {
+    c == ' ' || c == ','
+}
 
-    for word in words {
-        match word.parse::<usize>() {
-            Ok(num) => nums.push(num),
-            Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => return Err(UnexpandParseError::TabSizeTooLarge),
-                _ => {
-                    return Err(UnexpandParseError::InvalidCharacter(
-                        word.trim_start_matches(char::is_numeric).to_string(),
-                    ));
+fn unexpand_tabstops_parse(
+    s: &str,
+    from_short_tabs: bool,
+) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
+    let str = s.trim_start_matches(is_space_or_comma);
+    if str.is_empty() {
+        return Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
+    }
+
+    let mut numbers = vec![];
+    let mut remaining_mode = RemainingMode::None;
+    let mut specifier_used = false;
+
+    for word in str.split(is_space_or_comma) {
+        if word.is_empty() {
+            continue;
+        }
+        let bytes = word.as_bytes();
+        for index in 0..bytes.len() {
+            match bytes[index] {
+                b'+' => {
+                    if remaining_mode == RemainingMode::Slash {
+                        return Err(UnexpandParseError::SpecifierMutuallyExclusive);
+                    }
+                    remaining_mode = RemainingMode::Plus;
                 }
-            },
+                b'/' => {
+                    if remaining_mode == RemainingMode::Plus {
+                        return Err(UnexpandParseError::SpecifierMutuallyExclusive);
+                    }
+                    remaining_mode = RemainingMode::Slash;
+                }
+                _ => {
+                    let s = from_utf8(&bytes[index..]).unwrap_or_default();
+                    match s.parse::<usize>() {
+                        Ok(num) => {
+                            if num == 0 {
+                                return Err(UnexpandParseError::TabSizeCannotBeZero);
+                            }
+                            if let Some(last) = numbers.last() {
+                                if *last >= num {
+                                    return Err(UnexpandParseError::TabSizesMustBeAscending);
+                                }
+                            }
+                            if specifier_used {
+                                let specifier = match remaining_mode {
+                                    RemainingMode::Slash => "/",
+                                    RemainingMode::Plus => "+",
+                                    RemainingMode::None => "",
+                                };
+                                return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                                    specifier.to_string(),
+                                ));
+                            } else if remaining_mode != RemainingMode::None {
+                                specifier_used = true;
+                            }
+                            numbers.push(num);
+                            break;
+                        }
+                        Err(e) => {
+                            if *e.kind() == IntErrorKind::PosOverflow {
+                                return Err(if from_short_tabs {
+                                    UnexpandParseError::TabStopValueTooLarge
+                                } else {
+                                    UnexpandParseError::TabStopTooLarge(s.to_string())
+                                });
+                            }
+
+                            let s = s.trim_start_matches(char::is_numeric);
+                            if s.starts_with('/') || s.starts_with('+') {
+                                return Err(UnexpandParseError::SpecifierNotAtStartOfNumber(
+                                    s[0..1].to_string(),
+                                    s.to_string(),
+                                ));
+                            }
+                            return Err(UnexpandParseError::InvalidCharacter(s.to_string()));
+                        }
+                    }
+                }
+            }
         }
     }
 
-    if nums.iter().any(|&n| n == 0) {
-        return Err(UnexpandParseError::TabSizeCannotBeZero);
+    if numbers.is_empty() {
+        numbers = vec![UNEXPAND_DEFAULT_TABSTOP];
     }
 
-    if let (false, _) = nums
-        .iter()
-        .fold((true, 0), |(acc, last), &n| (acc && last < n, n))
-    {
-        return Err(UnexpandParseError::TabSizesMustBeAscending);
+    if numbers.len() < 2 {
+        remaining_mode = RemainingMode::None;
     }
 
-    Ok(nums)
+    Ok((remaining_mode, numbers))
 }
 
 mod unexpand_flags {
@@ -97,18 +189,20 @@ mod unexpand_flags {
     pub const FIRST_ONLY: &str = "first-only";
     pub const TABS: &str = "tabs";
     pub const NO_UTF8: &str = "no-utf8";
+    pub const SHORT_TABS: &str = "short-tabs";
 }
 
 struct UnexpandFlags {
     files: Vec<String>,
     tabstops: Vec<usize>,
+    remaining_mode: RemainingMode,
     is_a_flag: bool,
     is_u_flag: bool,
 }
 
 impl UnexpandFlags {
     fn new(matches: &clap::ArgMatches) -> Result<Self, UnexpandParseError> {
-        let tabstops = Self::parse_tabstops(matches)?;
+        let (remaining_mode, tabstops) = Self::parse_tabstops(matches)?;
 
         let is_a_flag = Self::parse_a_flag(matches);
         let is_u_flag = Self::parse_u_flag(matches);
@@ -117,6 +211,7 @@ impl UnexpandFlags {
         Ok(Self {
             files,
             tabstops,
+            remaining_mode,
             is_a_flag,
             is_u_flag,
         })
@@ -139,14 +234,15 @@ impl UnexpandFlags {
             && !matches.get_flag(unexpand_flags::FIRST_ONLY)
     }
 
-    fn parse_tabstops(matches: &ArgMatches) -> Result<Vec<usize>, UnexpandParseError> {
-        let tabstops = if let Some(s) = matches.get_many::<String>(unexpand_flags::TABS) {
-            unexpand_tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?
-        } else {
-            vec![UNEXPAND_DEFAULT_TABSTOP]
-        };
-
-        Ok(tabstops)
+    fn parse_tabstops(
+        matches: &ArgMatches,
+    ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
+        let from_short_tabs = matches.get_flag(unexpand_flags::SHORT_TABS);
+        if let Some(s) = matches.get_many::<String>(unexpand_flags::TABS) {
+            let input = s.map(|s| s.as_str()).collect::<Vec<_>>().join(",");
+            return unexpand_tabstops_parse(&input, from_short_tabs);
+        }
+        Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]))
     }
 }
 
@@ -181,6 +277,9 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 
     if is_has_shortcuts && !is_all_arg_provided {
         processed_args_string.push("--first-only".into());
+    }
+    if is_has_shortcuts {
+        processed_args_string.push("--short-tabs".into());
     }
 
     processed_args_string
@@ -229,6 +328,10 @@ pub fn ct_app() -> Command {
             .long(unexpand_flags::NO_UTF8)
             .help(t!("unexpand.clap.no_utf8"))
             .action(ArgAction::SetTrue),
+        Arg::new(unexpand_flags::SHORT_TABS)
+            .long(unexpand_flags::SHORT_TABS)
+            .hide(true)
+            .action(ArgAction::SetTrue),
     ];
 
     Command::new(utility_name)
@@ -255,6 +358,7 @@ fn unexpand_open(path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     }
 }
 
+#[cfg(test)]
 fn unexpand_next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
     match tabstops.len() {
         1 => Some(tabstops[0] - col % tabstops[0]),
@@ -266,6 +370,7 @@ fn unexpand_next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
     }
 }
 
+#[cfg(test)]
 fn unexpand_write_tabs<W: Write>(
     out: &mut W,
     tabstops: &[usize],
@@ -296,6 +401,73 @@ fn unexpand_write_tabs<W: Write>(
     }
 }
 
+fn unexpand_next_tab_column(
+    tabstops: &[usize],
+    remaining_mode: RemainingMode,
+    col: usize,
+    tab_index: &mut usize,
+) -> (usize, bool) {
+    let total = tabstops.len();
+
+    if total == 0 {
+        return (
+            col + (UNEXPAND_DEFAULT_TABSTOP - col % UNEXPAND_DEFAULT_TABSTOP),
+            false,
+        );
+    }
+
+    match remaining_mode {
+        RemainingMode::None => {
+            if total == 1 {
+                let size = tabstops[0];
+                return (col + (size - col % size), false);
+            }
+            while *tab_index < total {
+                let tab = tabstops[*tab_index];
+                if col < tab {
+                    return (tab, false);
+                }
+                *tab_index += 1;
+            }
+            (0, true)
+        }
+        RemainingMode::Slash => {
+            if total == 1 {
+                let size = tabstops[0];
+                return (col + (size - col % size), false);
+            }
+            let last_index = total - 1;
+            while *tab_index < last_index {
+                let tab = tabstops[*tab_index];
+                if col < tab {
+                    return (tab, false);
+                }
+                *tab_index += 1;
+            }
+            let size = tabstops[last_index];
+            (col + (size - col % size), false)
+        }
+        RemainingMode::Plus => {
+            if total == 1 {
+                let size = tabstops[0];
+                return (col + (size - col % size), false);
+            }
+            let last_index = total - 1;
+            while *tab_index < last_index {
+                let tab = tabstops[*tab_index];
+                if col < tab {
+                    return (tab, false);
+                }
+                *tab_index += 1;
+            }
+            let step = tabstops[last_index];
+            let end_tab = tabstops[last_index - 1];
+            let offset = col.saturating_sub(end_tab);
+            (col + (step - (offset % step)), false)
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum UnexpandCharType {
     Backspace,
@@ -309,47 +481,62 @@ fn unexpand_next_char_info(
     buf: &[u8],
     byte: usize,
 ) -> (UnexpandCharType, usize, usize) {
-    let (c_type, c_width, n_bytes) = if is_u_flag {
-        let n_bytes = char::from(buf[byte]).len_utf8();
+    if !is_u_flag {
+        let c_type = match buf[byte] {
+            0x20 => UnexpandCharType::Space,
+            0x09 => UnexpandCharType::Tab,
+            0x08 => UnexpandCharType::Backspace,
+            _ => UnexpandCharType::Other,
+        };
+        return (c_type, 1, 1);
+    }
 
-        if byte + n_bytes > buf.len() {
-            // 确保因无效的UTF-8编码导致不会超出缓冲区范围。
-            (UnexpandCharType::Other, 1, 1)
-        } else if let Ok(t) = from_utf8(&buf[byte..byte + n_bytes]) {
-            // 既然我们认为它是UTF-8编码，接下来确定它属于哪种字符类型。
-            match t.chars().next() {
-                Some(' ') => (UnexpandCharType::Space, 0, 1),
-                Some('\t') => (UnexpandCharType::Tab, 0, 1),
-                Some('\x08') => (UnexpandCharType::Backspace, 0, 1),
-                Some(c) => (
-                    UnexpandCharType::Other,
-                    UnicodeWidthChar::width(c).unwrap_or(0),
-                    n_bytes,
-                ),
-                None => {
-                    //  有一个无效的字符不知何故绕过了utf8_validation_iterator???
-                    (UnexpandCharType::Other, 1, 1)
+    let slice = &buf[byte..];
+    let (ch, n_bytes) = match from_utf8(slice) {
+        Ok(s) => match s.chars().next() {
+            Some(ch) => (ch, ch.len_utf8()),
+            None => return (UnexpandCharType::Other, 1, 1),
+        },
+        Err(e) => {
+            let valid = e.valid_up_to();
+            if valid > 0 {
+                let prefix = from_utf8(&slice[..valid]).unwrap_or_default();
+                if let Some(ch) = prefix.chars().next() {
+                    (ch, ch.len_utf8())
+                } else {
+                    return (UnexpandCharType::Other, 1, 1);
                 }
+            } else {
+                return (UnexpandCharType::Other, 1, 1);
             }
-        } else {
-            // 否则，它被认为是无效的
-            (UnexpandCharType::Other, 1, 1) // 假设：非UTF-8字符的显示宽度为1
         }
-    } else {
-        (
-            match buf[byte] {
-                // 在严格的ASCII模式下，始终占用精确的1字节
-                0x20 => UnexpandCharType::Space,
-                0x09 => UnexpandCharType::Tab,
-                0x08 => UnexpandCharType::Backspace,
-                _ => UnexpandCharType::Other,
-            },
-            1,
-            1,
-        )
     };
 
+    let c_type = if ch == '\t' {
+        UnexpandCharType::Tab
+    } else if ch == '\x08' {
+        UnexpandCharType::Backspace
+    } else if is_blank_char(ch) {
+        UnexpandCharType::Space
+    } else {
+        UnexpandCharType::Other
+    };
+    let c_width = if matches!(c_type, UnexpandCharType::Tab | UnexpandCharType::Backspace) {
+        0
+    } else {
+        UnicodeWidthChar::width(ch).unwrap_or(0)
+    };
     (c_type, c_width, n_bytes)
+}
+
+fn is_blank_char(ch: char) -> bool {
+    if ch == ' ' {
+        return true;
+    }
+    if ch == '\n' || ch == '\r' {
+        return false;
+    }
+    ch.is_whitespace()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -357,94 +544,118 @@ fn unexpand_line<W: Write>(
     buf: &mut Vec<u8>,
     output: &mut W,
     flags: &UnexpandFlags,
-    lastcol: usize,
-    ts: &[usize],
+    tabstops: &[usize],
+    remaining_mode: RemainingMode,
 ) -> std::io::Result<()> {
-    let mut byte = 0; // 缓冲区中的偏移量
-    let mut col = 0; // 当前列
-    let mut s_col = 0; // 当前跨度的起始列，即已打印的宽度
-    let mut is_init = true; // 我们是否在行的开始？
-    let mut pctype = UnexpandCharType::Other;
+    let mut byte = 0;
+    let mut column: usize = 0;
+    let mut tab_index: usize = 0;
+    let mut one_blank_before_tab_stop = false;
+    let mut prev_blank = true;
+    let mut pending: Vec<Vec<u8>> = Vec::new();
+    let convert_entire_line = flags.is_a_flag;
+    let mut convert = true;
 
     while byte < buf.len() {
-        // 当我们有有限的列数时，永远不要转换超过最后一列
-        if lastcol > 0 && col >= lastcol {
-            unexpand_write_tabs(
-                output,
-                ts,
-                s_col,
-                col,
-                pctype == UnexpandCharType::Tab,
-                is_init,
-                true,
-            );
-            output.write_all(&buf[byte..])?;
-            s_col = col;
-            break;
-        }
-
-        // 计算下一个字符的大小，如果它是UTF-8编码的
         let (c_type, c_width, n_bytes) = unexpand_next_char_info(flags.is_u_flag, buf, byte);
+        let mut emit_tab = false;
 
-        // 现在确定这个字符占用了多少列，并可能将其打印出来
-        let tabs_buffered = is_init || flags.is_a_flag;
-        match c_type {
-            UnexpandCharType::Space | UnexpandCharType::Tab => {
-                // 计算下一行列，但只有在不缓冲空间或制表符字符时才写入它们
-                col += if c_type == UnexpandCharType::Space {
-                    1
-                } else {
-                    unexpand_next_tabstop(ts, col).unwrap_or(1)
-                };
+        if convert {
+            let blank = matches!(c_type, UnexpandCharType::Space | UnexpandCharType::Tab);
+            if blank {
+                let (next_tab_column, last_tab) =
+                    unexpand_next_tab_column(tabstops, remaining_mode, column, &mut tab_index);
+                if last_tab {
+                    convert = false;
+                }
+                if convert {
+                    if next_tab_column < column {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "input line is too long",
+                        ));
+                    }
+                    if c_type == UnexpandCharType::Tab {
+                        column = next_tab_column;
+                        if !pending.is_empty() {
+                            pending[0] = vec![b'\t'];
+                        }
+                    } else {
+                        let next_column = column.saturating_add(c_width);
+                        if next_column < column {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "input line is too long",
+                            ));
+                        }
+                        column = next_column;
 
-                if !tabs_buffered {
-                    output.write_all(&buf[byte..byte + n_bytes])?;
-                    s_col = col; // 现在已经打印到这一列了
+                        if !(prev_blank && column == next_tab_column) {
+                            if column == next_tab_column {
+                                one_blank_before_tab_stop = true;
+                            }
+                            pending.push(buf[byte..byte + n_bytes].to_vec());
+                            prev_blank = true;
+                            byte += n_bytes;
+                            continue;
+                        }
+
+                        emit_tab = true;
+                        if !pending.is_empty() {
+                            pending[0] = vec![b'\t'];
+                        }
+                    }
+
+                    pending.truncate(if one_blank_before_tab_stop { 1 } else { 0 });
+                }
+            } else if c_type == UnexpandCharType::Backspace {
+                column = column.saturating_sub(1);
+                tab_index = tab_index.saturating_sub(1);
+            } else {
+                let orig = column;
+                column = column.saturating_add(c_width);
+                if column < orig {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "input line is too long",
+                    ));
                 }
             }
-            UnexpandCharType::Other | UnexpandCharType::Backspace => {
-                // always
-                unexpand_write_tabs(
-                    output,
-                    ts,
-                    s_col,
-                    col,
-                    pctype == UnexpandCharType::Tab,
-                    is_init,
-                    flags.is_a_flag,
-                );
-                is_init = false; // 不再位于行的开头
-                col = if c_type == UnexpandCharType::Other {
-                    // 使用计算出的宽度
-                    col + c_width
-                } else if col > 0 {
-                    // 退格情况，但仅当列数大于0时
-                    col - 1
-                } else {
-                    0
-                };
-                output.write_all(&buf[byte..byte + n_bytes])?;
-                s_col = col; // 我们现在已打印到这一列
+
+            if !pending.is_empty() {
+                if pending.len() > 1 && one_blank_before_tab_stop {
+                    pending[0] = vec![b'\t'];
+                }
+                for blank in &pending {
+                    output.write_all(blank)?;
+                }
+                pending.clear();
+                one_blank_before_tab_stop = false;
             }
+
+            prev_blank = matches!(c_type, UnexpandCharType::Space | UnexpandCharType::Tab);
+            convert = convert && (convert_entire_line || prev_blank);
         }
 
-        byte += n_bytes; // 移动到下一个字符
-        pctype = c_type; // 保存上一个类型
+        if emit_tab {
+            output.write_all(b"\t")?;
+        } else {
+            output.write_all(&buf[byte..byte + n_bytes])?;
+        }
+        byte += n_bytes;
     }
 
-    // 写入任何剩余的内容
-    unexpand_write_tabs(
-        output,
-        ts,
-        s_col,
-        col,
-        pctype == UnexpandCharType::Tab,
-        is_init,
-        true,
-    );
-    output.flush()?;
-    buf.truncate(0); // 清空缓冲区
+    if !pending.is_empty() {
+        if pending.len() > 1 && one_blank_before_tab_stop {
+            pending[0] = vec![b'\t'];
+        }
+        for blank in &pending {
+            output.write_all(blank)?;
+        }
+    }
 
+    output.flush()?;
+    buf.truncate(0);
     Ok(())
 }
 
@@ -459,9 +670,11 @@ fn unexpand_exe<W: Write>(
     flags: &UnexpandFlags,
     mut output: &mut W,
 ) -> Result<(), Box<dyn CTError>> {
-    let ts = &flags.tabstops[..];
+    let tabstops = &flags.tabstops[..];
+    let remaining_mode = flags.remaining_mode;
     let mut data_buf = Vec::new();
-    let last_col = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
+    let mut is_first_file = true;
+    let mut first_file_has_bom = false;
 
     for file in &flags.files {
         let mut fh = match unexpand_open(file) {
@@ -471,13 +684,31 @@ fn unexpand_exe<W: Write>(
                 continue;
             }
         };
+        let mut is_first_chunk = true;
 
         while match fh.read_until(b'\n', &mut data_buf) {
             Ok(size) => size > 0,
             Err(_) => !data_buf.is_empty(),
         } {
-            unexpand_line(&mut data_buf, &mut output, flags, last_col, ts)?;
+            if is_first_chunk {
+                if data_buf.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                    if is_first_file && !first_file_has_bom {
+                        output.write_all(&[0xEF, 0xBB, 0xBF])?;
+                        first_file_has_bom = true;
+                    }
+                    data_buf.drain(0..3);
+                }
+                is_first_chunk = false;
+            }
+
+            if data_buf.is_empty() {
+                data_buf.clear();
+                continue;
+            }
+
+            unexpand_line(&mut data_buf, &mut output, flags, tabstops, remaining_mode)?;
         }
+        is_first_file = false;
     }
     Ok(())
 }
@@ -538,6 +769,7 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![file.path().to_str().unwrap().to_string()],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
@@ -564,6 +796,7 @@ mod tests {
                     file2_path.to_str().unwrap().to_string(),
                 ],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
@@ -583,6 +816,7 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![file.path().to_str().unwrap().to_string()],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: true,
             };
@@ -602,6 +836,7 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![file.path().to_str().unwrap().to_string()],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
@@ -618,6 +853,7 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
@@ -643,11 +879,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[4]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[4], RemainingMode::None).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
                 "\t\tHello".to_string()
@@ -661,11 +898,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: true,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
                 "Hello\tWorld".to_string()
@@ -679,11 +917,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: true,
                 is_u_flag: true,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
                 "Hello 世界".to_string()
@@ -697,11 +936,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: true,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[8]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None).unwrap();
             // println!("{:?}", output);
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
@@ -716,11 +956,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: true,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 5, &[8]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None).unwrap();
             assert_eq!(output.into_inner(), b"Hello\tWorld");
         }
 
@@ -731,11 +972,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: true,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[], RemainingMode::None).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
                 "Hello World".to_string()
@@ -749,11 +991,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![4],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[4]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[4], RemainingMode::None).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
                 "   Hello".to_string()
@@ -767,11 +1010,12 @@ mod tests {
             let flags = UnexpandFlags {
                 files: vec![],
                 tabstops: vec![4, 8],
+                remaining_mode: RemainingMode::None,
                 is_a_flag: false,
                 is_u_flag: false,
             };
 
-            unexpand_line(&mut buf, &mut output, &flags, 0, &[4, 8]).unwrap();
+            unexpand_line(&mut buf, &mut output, &flags, &[4, 8], RemainingMode::None).unwrap();
             assert_eq!(
                 String::from_utf8(output.into_inner()).unwrap(),
                 "\t   Hello".to_string()
@@ -788,8 +1032,8 @@ mod tests {
             let buf = "Hello, 世界!".as_bytes();
             let (ctype, cwidth, nbytes) = unexpand_next_char_info(true, buf, 7);
             assert_eq!(ctype, UnexpandCharType::Other);
-            assert_eq!(cwidth, 1); // "世"的字符宽度
-            assert_eq!(nbytes, 1); // "世"的UTF-8字节数
+            assert_eq!(cwidth, 2); // "世"的字符宽度
+            assert_eq!(nbytes, 3); // "世"的UTF-8字节数
         }
 
         #[test]
@@ -1050,6 +1294,7 @@ mod tests {
                 "--tabs=12".to_string(),
                 "file1".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1068,6 +1313,7 @@ mod tests {
                 "--tabs=16".to_string(),
                 "file1".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1080,6 +1326,7 @@ mod tests {
                 "--tabs=8".to_string(),
                 "--all".to_string(),
                 "file1".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1092,6 +1339,7 @@ mod tests {
                 "--tabs=8".to_string(),
                 "-a".to_string(),
                 "file1".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1119,6 +1367,7 @@ mod tests {
                 "--some-flag".to_string(),
                 "file1".to_string(),
                 "--tabs=12".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1137,6 +1386,7 @@ mod tests {
                 "file1".to_string(),
                 "--tabs=4".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1151,6 +1401,7 @@ mod tests {
                 "--tabs=12".to_string(),
                 "file1".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1163,6 +1414,7 @@ mod tests {
                 "--tabs=8".to_string(),
                 "--tabs=12".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1182,6 +1434,7 @@ mod tests {
                 "--tabs=8".to_string(),
                 "file1".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1199,6 +1452,7 @@ mod tests {
                 "--no-utf8".to_string(),
                 "file1".to_string(),
                 "--first-only".to_string(),
+                "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
@@ -1246,6 +1500,7 @@ mod tests {
             let matches = app.get_matches_from(vec!["unexpand"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![UNEXPAND_DEFAULT_TABSTOP]);
+            assert_eq!(flags.remaining_mode, RemainingMode::None);
             assert_eq!(flags.files, vec!["-".to_string()]);
             assert_eq!(flags.is_a_flag, false);
             assert_eq!(flags.is_u_flag, true);
@@ -1257,6 +1512,7 @@ mod tests {
             let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8,12"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8, 12]);
+            assert_eq!(flags.remaining_mode, RemainingMode::None);
         }
 
         #[test]
@@ -1331,7 +1587,12 @@ mod tests {
                 app.get_matches_from(vec!["unexpand", "--tabs", "4,999999999999999999999,12"]);
             let result = UnexpandFlags::new(&matches);
             assert!(result.is_err());
-            assert_eq!(result.err(), Some(UnexpandParseError::TabSizeTooLarge));
+            assert_eq!(
+                result.err(),
+                Some(UnexpandParseError::TabStopTooLarge(
+                    "999999999999999999999".to_string()
+                ))
+            );
         }
     }
     #[test]
@@ -1417,110 +1678,111 @@ mod tests {
         #[test]
         fn test_unexpand_tabstops_parse_valid_input() {
             let input = "1,2,3,4,5";
-            let expected = Ok(vec![1, 2, 3, 4, 5]);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_invalid_character() {
             let input = "1,2,x,4,5";
             let expected = Err(UnexpandParseError::InvalidCharacter("x".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_zero_value() {
             let input = "1,2,0,4,5";
             let expected = Err(UnexpandParseError::TabSizeCannotBeZero);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_non_ascending_values() {
             let input = "1,3,2,4,5";
             let expected = Err(UnexpandParseError::TabSizesMustBeAscending);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_too_large_value() {
             let input = "1,2,99999999999999999999999999,4,5";
-            let expected = Err(UnexpandParseError::TabSizeTooLarge);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Err(UnexpandParseError::TabStopTooLarge(
+                "99999999999999999999999999".to_string(),
+            ));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_empty_input() {
             let input = "";
-            let expected: Result<Vec<usize>, UnexpandParseError> =
-                Err(UnexpandParseError::InvalidCharacter("".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_single_value() {
             let input = "5";
-            let expected = Ok(vec![5]);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_trailing_comma() {
             let input = "1,2,3,4,5,";
-            let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_leading_comma() {
             let input = ",1,2,3,4,5";
-            let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_multiple_commas() {
             let input = "1,,2,3,4,5";
-            let expected = Err(UnexpandParseError::InvalidCharacter("".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_spaces_in_values() {
             let input = "1, 2,3, 4,5";
-            let expected = Err(UnexpandParseError::InvalidCharacter(" 2".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_spaces_around_commas() {
             let input = "1 ,2 ,3 ,4 ,5";
-            let expected = Ok(vec![1, 2, 3, 4, 5]);
-            assert_eq!(
-                unexpand_tabstops_parse(&input.trim().replace(" ", "")),
-                expected
-            );
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_mixed_invalid_characters() {
             let input = "1,2,3,a4,5";
             let expected = Err(UnexpandParseError::InvalidCharacter("a4".to_string()));
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_with_leading_zeros() {
             let input = "01,02,03,04,05";
-            let expected = Ok(vec![1, 2, 3, 4, 5]);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 
         #[test]
         fn test_unexpand_tabstops_parse_large_numbers() {
             let input = "1,1000000000,2000000000,3000000000,4000000000";
-            let expected = Ok(vec![1, 1000000000, 2000000000, 3000000000, 4000000000]);
-            assert_eq!(unexpand_tabstops_parse(input), expected);
+            let expected = Ok((
+                RemainingMode::None,
+                vec![1, 1000000000, 2000000000, 3000000000, 4000000000],
+            ));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
     }
 
@@ -1545,7 +1807,7 @@ mod tests {
 
         #[test]
         fn test_tab_size_too_large_display() {
-            let error = UnexpandParseError::TabSizeTooLarge;
+            let error = UnexpandParseError::TabStopValueTooLarge;
             assert_eq!(format!("{}", error), "tab stop value is too large");
         }
 

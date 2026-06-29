@@ -1,0 +1,671 @@
+{
+    "tests": [
+        {
+            "command": "kill",
+            "description": "无参数调用 - 应失败并提示缺少进程 ID (退出码1)",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "仅指定信号但无进程 ID - 应失败",
+            "args": [
+                "-TERM"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l 列出所有信号名称",
+            "args": [
+                "-l"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "--list 列出所有信号名称",
+            "args": [
+                "--list"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-t 显示信号表格 (util-linux 不支持,应失败)",
+            "args": [
+                "-t"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "--table 显示信号表格 (util-linux 不支持,应失败)",
+            "args": [
+                "--table"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-L 显示信号列表 (util-linux 支持)",
+            "args": [
+                "-L"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l HUP - 显示 HUP 信号的编号",
+            "args": [
+                "-l",
+                "HUP"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l TERM - 显示 TERM 信号的编号",
+            "args": [
+                "-l",
+                "TERM"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "15\n",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l 15 - 显示信号 15 的名称",
+            "args": [
+                "-l",
+                "15"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "TERM\n",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l 1 - 显示信号 1 的名称",
+            "args": [
+                "-l",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "HUP\n",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l HUP TERM - 显示多个信号的编号",
+            "args": [
+                "-l",
+                "HUP",
+                "TERM"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^1$'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^15$'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l INVALID - 无效的信号名称应失败",
+            "args": [
+                "-l",
+                "INVALID"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l -1 - 负数信号应失败",
+            "args": [
+                "-l",
+                "-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l -1 0 - 包含无效信号的列表应失败",
+            "args": [
+                "-l",
+                "-1",
+                "0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l INVALID TERM - 包含无效信号的列表应失败",
+            "args": [
+                "-l",
+                "INVALID",
+                "TERM"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-t TERM HUP - 显示指定信号的表格",
+            "args": [
+                "-t",
+                "TERM",
+                "HUP"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l -l - 重复的 -l 选项应失败",
+            "args": [
+                "-l",
+                "-l"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l -t - 冲突的选项应失败",
+            "args": [
+                "-l",
+                "-t"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l -s 1 - 冲突的选项应失败",
+            "args": [
+                "-l",
+                "-s",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-t -s 1 - 冲突的选项应失败",
+            "args": [
+                "-t",
+                "-s",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-0 $$ - 发送信号 0 到当前进程 (测试进程存在)",
+            "args": [
+                "-0",
+                "$$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-s0 $$ - 使用 -s 选项发送信号 0",
+            "args": [
+                "-s0",
+                "$$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-n0 $$ - 使用 -n 选项发送信号 0 (bash 兼容)",
+            "args": [
+                "-n0",
+                "$$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-CONT $$ - 使用过时语法发送 CONT 信号",
+            "args": [
+                "-CONT",
+                "$$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-Cont $$ - 信号名称大小写混合",
+            "args": [
+                "-Cont",
+                "$$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-cont $$ - 小写信号名称应失败",
+            "args": [
+                "-cont",
+                "$$"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-0 -1 - 发送信号到进程组",
+            "args": [
+                "-0",
+                "-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-0 no_pid - 无效的进程 ID 应失败",
+            "args": [
+                "-0",
+                "no_pid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stderr": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l 143 - 验证信号编号转换 (TERM=15, 15+128=143)",
+            "args": [
+                "-l",
+                "143"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "TERM\n",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "-l 271 - 验证 ksh 风格信号编号 (TERM=15, 15+256=271)",
+            "args": [
+                "-l",
+                "271"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "TERM\n",
+                    "stderr": ""
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        },
+        {
+            "command": "kill",
+            "description": "验证 -l 143 271 输出相同的信号名称",
+            "args": [
+                "-l",
+                "143",
+                "271"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(echo \"$CMD_STDOUT\" | uniq | wc -l) -eq 1",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '^TERM$'",
+                        "expected_exit": 0
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "env": {
+                "SYSKITS_KILL_MODE": "util-linux"
+            }
+        }
+    ]
+}

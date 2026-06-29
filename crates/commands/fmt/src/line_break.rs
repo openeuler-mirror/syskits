@@ -712,7 +712,7 @@ mod tests {
             let w_info = create_word_info(Some(3), 15);
             let pos_n = 18; // 较高的 pos_n 值
             let width = fmt_args.compute_width(&w_info, pos_n, false);
-            let expected_width = 15 + ((3 + pos_n) / 4 + 1) * 4 - pos_n;
+            let expected_width = 15 + (pos_n.div_ceil(4) + 1) * 4 - pos_n;
             assert_eq!(
                 width, expected_width,
                 "Width should be calculated correctly for high pos_n values"
@@ -856,7 +856,7 @@ mod tests {
             };
 
             let word_info = create_word_info("hello", 0, 5, false, false, false);
-            let words = vec![word_info];
+            let words = [word_info];
             fmt_break_simple(words.iter(), &mut fmt_args).unwrap();
             let output = str::from_utf8(&output_stream).unwrap();
             assert_eq!(
@@ -894,7 +894,7 @@ mod tests {
 
             let word_info1 = create_word_info("hello", 0, 5, false, false, false);
             let word_info2 = create_word_info("world", 0, 5, false, false, false);
-            let words = vec![word_info1, word_info2];
+            let words = [word_info1, word_info2];
             fmt_break_simple(words.iter(), &mut fmt_args).unwrap();
             let output = str::from_utf8(&output_stream).unwrap();
             assert_eq!(
@@ -1089,7 +1089,7 @@ mod tests {
             };
 
             let word = create_word_info("hello", false, false, true);
-            let words = vec![word];
+            let words = [word];
             fmt_break_knuth_plass(words.iter(), &mut fmt_args).unwrap();
             assert_eq!(
                 str::from_utf8(&output_stream).unwrap(),
@@ -1128,7 +1128,7 @@ mod tests {
 
             let word1 = create_word_info("hello", false, false, true);
             let word2 = create_word_info("world", true, true, false);
-            let words = vec![word1, word2];
+            let words = [word1, word2];
             fmt_break_knuth_plass(words.iter(), &mut fmt_args).unwrap();
             assert_eq!(
                 str::from_utf8(&output_stream).unwrap(),
@@ -1170,7 +1170,7 @@ mod tests {
                 out_stream: &mut output_stream,
             };
 
-            let words = vec![];
+            let words = [];
             let result = fmt_find_kp_breakpoints(words.iter(), &fmt_args);
             assert!(
                 result.is_empty(),
@@ -1215,7 +1215,7 @@ mod tests {
                 out_stream: &mut output_stream,
             };
 
-            let words = vec![word_info];
+            let words = [word_info];
             let result = fmt_find_kp_breakpoints(words.iter(), &fmt_args);
             assert_eq!(result.len(), 0, "There should be exactly one break point");
         }
@@ -1267,7 +1267,7 @@ mod tests {
                 out_stream: &mut output_stream,
             };
 
-            let words = vec![word_info1, word_info2];
+            let words = [word_info1, word_info2];
             let result = fmt_find_kp_breakpoints(words.iter(), &fmt_args);
             assert_eq!(result.len(), 1, "There should be two break points");
             assert_eq!(
@@ -1366,11 +1366,11 @@ mod tests {
 
             assert_eq!(result.prev, 1);
             assert_eq!(result.linebreak, Some(&w));
-            assert_eq!(result.is_break_before, false);
+            assert!(!result.is_break_before);
             assert_eq!(result.demerits, 0);
             assert_eq!(result.prev_rat, -1.0);
             assert_eq!(result.length, 4);
-            assert_eq!(result.is_fresh, true);
+            assert!(result.is_fresh);
         }
 
         #[test]
@@ -1435,7 +1435,7 @@ mod tests {
                     is_new_line: false
                 })
             );
-            assert_eq!(result0.is_break_before, false);
+            assert!(!result0.is_break_before);
             assert_eq!(result0.demerits, 0);
             assert_eq!(result0.prev_rat, -1.0);
             assert_eq!(result0.length, 4);
@@ -1549,7 +1549,7 @@ mod tests {
             let mut output = Cursor::new(Vec::new());
             let result = fmt_write_newline("    ", &mut output);
 
-            assert_eq!(result.is_ok(), true);
+            assert!(result.is_ok());
             assert_eq!(output.get_ref(), b"\n    ");
         }
     }

@@ -392,7 +392,7 @@ fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result
 
         // 在第二个及其后的字段前打印分隔符
         if n > 1 {
-            print!("{}", delimiter);
+            print!("{delimiter}");
         }
 
         if is_field_selected {
@@ -402,7 +402,7 @@ fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result
             );
         } else {
             // 打印未选择的字段，不进行转换
-            print!("{}", field);
+            print!("{field}");
         }
     }
 
@@ -438,7 +438,7 @@ fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -
             );
         } else {
             // 打印未选择的字段，不进行转换
-            print!("{}{}", prefix, field);
+            print!("{prefix}{field}");
         }
     }
 
@@ -736,7 +736,7 @@ mod tests {
                 Some((NumfmtRawSuffix::M, false)),
                 &NumfmtUnit::Si,
             );
-            println!("{:?}", inf_result);
+            println!("{inf_result:?}");
             assert_eq!(inf_result.unwrap(), f64::INFINITY);
         }
 
@@ -1204,7 +1204,7 @@ mod tests {
                 NumfmtRoundMethod::Nearest,
                 2,
             );
-            println!("{:?}", result);
+            println!("{result:?}");
             assert_eq!(result.unwrap(), "0.00");
         }
 
@@ -1244,7 +1244,7 @@ mod tests {
         fn test_invalid_rounding_method() {
             let opts = setup_transform_options();
             let result = numfmt_transform_to(123.456, &opts, NumfmtRoundMethod::Up, 2);
-            println!("{:?}", result);
+            println!("{result:?}");
             assert_eq!(result.unwrap(), "123.46");
         }
 
@@ -1257,7 +1257,7 @@ mod tests {
                 NumfmtRoundMethod::Nearest,
                 2,
             );
-            println!("{:?}", result);
+            println!("{result:?}");
             assert_eq!(result.unwrap(), "0.00");
         }
 
@@ -1297,7 +1297,7 @@ mod tests {
             let s = "123456789";
             let shell_expected_output = "124M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1309,7 +1309,7 @@ mod tests {
             let s = "123456789";
             let shell_expected_output = "124M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1330,7 +1330,7 @@ mod tests {
             let s = "123456789";
             let shell_expected_output = "124M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1342,7 +1342,7 @@ mod tests {
             let s = "1";
             let shell_expected_output = "1".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1413,7 +1413,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "102420484096".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1426,7 +1426,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "102420484096".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1439,7 +1439,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "102420484096".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1500,7 +1500,7 @@ mod tests {
             let s = "102420484096K";
             let shell_expected_output = "102420484096000".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1523,7 +1523,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1535,7 +1535,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1561,7 +1561,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1574,7 +1574,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1586,7 +1586,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103Gf".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1598,7 +1598,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1611,7 +1611,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1631,7 +1631,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+103G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1651,7 +1651,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+103G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1670,7 +1670,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+103G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1690,7 +1690,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+103G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1710,7 +1710,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+      103G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1729,7 +1729,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+000000103G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1749,7 +1749,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "+102.4204840960G-".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1762,7 +1762,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1774,7 +1774,7 @@ mod tests {
             let s = "102420484096";
             let shell_expected_output = "103G".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1785,7 +1785,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "102M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1796,7 +1796,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "103M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1807,7 +1807,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "102M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1818,7 +1818,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "102M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1830,7 +1830,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "103M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1842,7 +1842,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "103M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1853,7 +1853,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "103M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1864,7 +1864,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "103M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1875,7 +1875,7 @@ mod tests {
             let s = "102420484.096";
             let shell_expected_output = "103M".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_ok());
             assert_eq!(output.unwrap(), shell_expected_output);
         }
@@ -1885,7 +1885,7 @@ mod tests {
             let s = ""; // 非法输入
             let shell_expected_output = "invalid number: ''".to_string();
             let output = numfmt_format_string(s, &config, Some(1));
-            println!("{:?}", output);
+            println!("{output:?}");
             assert!(output.is_err());
             assert_eq!(output.unwrap_err(), shell_expected_output);
         }
@@ -2352,15 +2352,18 @@ mod tests {
         #[test]
         fn test_numfmt_round_with_precision() {
             // Test case 1: Round down with precision 0
-            let result1 = numfmt_round_with_precision(3.14159, NumfmtRoundMethod::Down, 0);
+            let result1 =
+                numfmt_round_with_precision(std::f64::consts::PI, NumfmtRoundMethod::Down, 0);
             assert_eq!(result1, 3.0);
 
             // Test case 2: Round up with precision 2
-            let result2 = numfmt_round_with_precision(3.14159, NumfmtRoundMethod::Up, 2);
+            let result2 =
+                numfmt_round_with_precision(std::f64::consts::PI, NumfmtRoundMethod::Up, 2);
             assert_eq!(result2, 3.15);
 
             // Test case 3: Round to nearest with precision 1
-            let result3 = numfmt_round_with_precision(3.14159, NumfmtRoundMethod::Nearest, 1);
+            let result3 =
+                numfmt_round_with_precision(std::f64::consts::PI, NumfmtRoundMethod::Nearest, 1);
             assert_eq!(result3, 3.1);
         }
         #[test]

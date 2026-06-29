@@ -1,0 +1,290 @@
+{
+  "tests": [
+    {
+      "command": "sync",
+      "description": "无参数调用 - 同步所有文件系统",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "同步单个文件 (fsync)",
+      "args": ["test_file"],
+      "setup_commands": [
+        "touch test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "-f 选项 - 同步文件系统",
+      "args": ["-f", "test_file"],
+      "setup_commands": [
+        "touch test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "--file-system 长选项 - 同步文件系统",
+      "args": ["--file-system", "test_file"],
+      "setup_commands": [
+        "touch test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "-d 选项 - 仅同步数据 (fdatasync)",
+      "args": ["-d", "test_file"],
+      "setup_commands": [
+        "touch test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "--data 长选项 - 仅同步数据",
+      "args": ["--data", "test_file"],
+      "setup_commands": [
+        "touch test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "-d 选项无参数 - 应失败",
+      "args": ["-d"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": null,
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stdout": true,
+          "ignore_stderr": true
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "--data 选项无参数 - 应失败",
+      "args": ["--data"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": null,
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stdout": true,
+          "ignore_stderr": true
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "-d 和 -f 互斥 - 应失败",
+      "args": ["--data", "--file-system"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": null,
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stdout": true,
+          "ignore_stderr": true
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "同步不存在的文件 - 应失败",
+      "args": ["nonexistent_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stderr": true
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "多文件 - 包含不存在的文件",
+      "args": ["test_file", "nonexistent_file"],
+      "setup_commands": [
+        "touch test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stderr": true
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "同步目录",
+      "args": ["test_dir"],
+      "setup_commands": [
+        "mkdir -p test_dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf test_dir"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "-f 选项无文件参数 - 应成功（等效于 sync）",
+      "args": ["-f"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "--file-system 选项无文件参数 - 应成功",
+      "args": ["--file-system"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "同步多个文件",
+      "args": ["test_file1", "test_file2"],
+      "setup_commands": [
+        "touch test_file1",
+        "touch test_file2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file1 test_file2"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "-d 选项同步多个文件",
+      "args": ["-d", "test_file1", "test_file2"],
+      "setup_commands": [
+        "touch test_file1",
+        "touch test_file2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file1 test_file2"
+      ]
+    },
+    {
+      "command": "sync",
+      "description": "同步只写文件",
+      "args": ["test_file"],
+      "setup_commands": [
+        "touch test_file",
+        "chmod 0200 test_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "chmod 0644 test_file",
+        "rm -f test_file"
+      ]
+    }
+  ]
+}

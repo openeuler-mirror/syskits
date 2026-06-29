@@ -137,12 +137,19 @@ impl CommandExecutor {
             eprintln!("DEBUG: 执行主命令");
         }
 
+        let timeout = test_case.timeout.or_else(|| {
+            if self.config.default_timeout == 0 {
+                None
+            } else {
+                Some(self.config.default_timeout)
+            }
+        });
         let actual = self.execute_syskits(
             &test_case.tstdin,
             &test_case.command,
             &test_case.args,
             &mut sandbox,
-            test_case.timeout,
+            timeout,
         )?;
         // 执行验证命令
         if self.config.debug {
@@ -189,12 +196,19 @@ impl CommandExecutor {
         if self.config.debug {
             eprintln!("DEBUG: 执行coreutils主命令");
         }
+        let timeout = test_case.timeout.or_else(|| {
+            if self.config.default_timeout == 0 {
+                None
+            } else {
+                Some(self.config.default_timeout)
+            }
+        });
         let expected = self.execute_coreutils(
             &test_case.tstdin,
             &test_case.command,
             &test_case.args,
             &mut coreutils_sandbox,
-            test_case.timeout,
+            timeout,
         )?;
 
         // 执行验证命令

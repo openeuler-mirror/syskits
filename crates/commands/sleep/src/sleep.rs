@@ -14,11 +14,11 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::thread;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::time::Duration;
 
 use clap::{Arg, ArgAction, Command, crate_version};
-use fundu::{DurationParser, ParseError, SaturatingInto};
+use fundu::{DurationParser, SaturatingInto};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
@@ -83,29 +83,10 @@ fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
         .iter()
         .filter_map(|input| match dur_parser.parse(input.trim()) {
             Ok(duration) => Some(duration),
-            Err(parse_error) => {
+            Err(_parse_error) => {
                 arg_error = true;
-
-                let reason = match parse_error {
-                    ParseError::Empty => {
-                        if input.is_empty() {
-                            "Input was empty".to_string()
-                        } else {
-                            "Found only whitespace in input".to_string()
-                        }
-                    }
-                    ParseError::TimeUnit(pos, description)
-                    | ParseError::Syntax(pos, description) => {
-                        format!("{} at position {}", description, pos.saturating_add(1))
-                    }
-                    ParseError::PositiveExponentOverflow | ParseError::NegativeExponentOverflow => {
-                        "Exponent was out of bounds".to_string()
-                    }
-                    ParseError::NegativeNumber => "Number was negative".to_string(),
-                    error => error.to_string(),
-                };
-                ct_show_error!("invalid time interval '{}': {}", input, reason);
-
+                // 简化错误消息,只显示 "invalid time interval 'X'" 以匹配 coreutils
+                ct_show_error!("invalid time interval '{}'", input);
                 None
             }
         })

@@ -40,6 +40,15 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
 ];
 
+// 信号别名映射 (别名 -> 信号编号)
+// IOT = ABRT(6), IO = POLL(29), CLD = CHLD(17)
+#[cfg(target_os = "linux")]
+pub static SIGNAL_ALIASES: &[(&str, usize)] = &[
+    ("IOT", 6),  // SIGIOT = SIGABRT
+    ("IO", 29),  // SIGIO = SIGPOLL
+    ("CLD", 17), // SIGCLD = SIGCHLD
+];
+
 /*
 
 苹果开发者文档中关于signal(3)的页面
@@ -216,24 +225,88 @@ No    Name         Default Action       Description
      SIGRTMAX     ((int)_sysconf(_SC_SIGRT_MAX)) last realtime signal
 */
 
+/// 解析实时信号名称 (RTMIN, RTMAX, RTMIN+N, RTMAX-N)
+#[cfg(target_os = "linux")]
+pub fn parse_rt_signal(name: &str) -> Option<usize> {
+    use std::sync::OnceLock;
+
+    // 缓存 RTMIN 和 RTMAX 的值
+    static RT_RANGE: OnceLock<(i32, i32)> = OnceLock::new();
+    let (rtmin, rtmax) = RT_RANGE.get_or_init(|| (libc::SIGRTMIN(), libc::SIGRTMAX()));
+
+    if name == "RTMIN" {
+        return Some(*rtmin as usize);
+    }
+    if name == "RTMAX" {
+        return Some(*rtmax as usize);
+    }
+
+    // 解析 RTMIN+N
+    if let Some(offset_str) = name.strip_prefix("RTMIN+") {
+        if let Ok(offset) = offset_str.parse::<i32>() {
+            let sig = rtmin + offset;
+            if sig <= *rtmax {
+                return Some(sig as usize);
+            }
+        }
+    }
+
+    // 解析 RTMAX-N
+    if let Some(offset_str) = name.strip_prefix("RTMAX-") {
+        if let Ok(offset) = offset_str.parse::<i32>() {
+            let sig = rtmax - offset;
+            if sig >= *rtmin {
+                return Some(sig as usize);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn parse_rt_signal(_name: &str) -> Option<usize> {
+    None
+}
+
 pub fn get_ct_signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
+    // 先尝试解析数字
     if let Ok(value) = signal_name_or_value.parse() {
         if ct_signal(value) {
             return Some(value);
-        } else {
-            return None;
         }
+        // 对于超出范围的数字,可能是实时信号
+        #[cfg(target_os = "linux")]
+        {
+            use std::sync::OnceLock;
+            static RT_RANGE: OnceLock<(i32, i32)> = OnceLock::new();
+            let (rtmin, rtmax) = RT_RANGE.get_or_init(|| (libc::SIGRTMIN(), libc::SIGRTMAX()));
+            if value >= *rtmin as usize && value <= *rtmax as usize {
+                return Some(value);
+            }
+        }
+        return None;
     }
+
     let ct_signal_name = signal_name_or_value.trim_start_matches("SIG");
 
-    let mut position = None;
+    // 查找标准信号
     for (index, &ct_signal) in ALL_SIGNALS.iter().enumerate() {
         if ct_signal == ct_signal_name {
-            position = Some(index);
-            break;
+            return Some(index);
         }
     }
-    position
+
+    // 查找信号别名
+    #[cfg(target_os = "linux")]
+    for &(alias, num) in SIGNAL_ALIASES {
+        if alias == ct_signal_name {
+            return Some(num);
+        }
+    }
+
+    // 尝试解析实时信号
+    parse_rt_signal(ct_signal_name)
 }
 
 pub fn ct_signal(num: usize) -> bool {
@@ -271,10 +344,7 @@ fn signal_by_value() {
         let value_as_string = value_index.to_string();
         match get_ct_signal_by_name_or_value(&value_as_string) {
             Some(found_value) => assert_eq!(found_value, value_index),
-            None => panic!(
-                "Expected to find signal with index {}, but got None",
-                value_index
-            ),
+            None => panic!("Expected to find signal with index {value_index}, but got None"),
         };
     }
 }
@@ -284,10 +354,7 @@ fn signal_by_short_name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         match get_ct_signal_by_name_or_value(signal) {
             Some(found_value) => assert_eq!(found_value, value),
-            None => panic!(
-                "Expected to find value for signal {:?}, but got None",
-                signal
-            ),
+            None => panic!("Expected to find value for signal {signal:?}, but got None"),
         };
     }
 }
@@ -296,7 +363,7 @@ fn signal_by_short_name() {
 fn signal_by_long_name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         // 根据信号生成长名称
-        let long_signal_name = format!("SIG{}", signal);
+        let long_signal_name = format!("SIG{signal}");
 
         // 调用 signal_by_name_or_value 获取 Option 类型的值
         let result = get_ct_signal_by_name_or_value(&long_signal_name);
@@ -307,15 +374,13 @@ fn signal_by_long_name() {
                 // 断言找到的值与当前循环变量 value 相等
                 assert_eq!(
                     found_value, value,
-                    "Signal {} did not return expected value.",
-                    signal
+                    "Signal {signal} did not return expected value."
                 );
             }
             None => {
                 // 如果没找到对应值，则输出错误信息，而不是 panic
                 println!(
-                    "Failed to find a value for the signal with long name: {}",
-                    long_signal_name
+                    "Failed to find a value for the signal with long name: {long_signal_name}"
                 );
             }
         }
@@ -336,17 +401,13 @@ fn test_signal_name_by_value() {
                 // 解引用信号引用并与预期信号进行比较
                 assert_eq!(
                     found_signal_name, *signal_ref,
-                    "For value {}, expected signal name was {:?}",
-                    value_index, signal_ref
+                    "For value {value_index}, expected signal name was {signal_ref:?}"
                 );
             }
             // 当未找到信号名称
             None => {
                 // 输出错误信息，而非 panic，表明测试失败
-                println!(
-                    "Test failed: Could not find signal name for value: {}",
-                    value_index
-                );
+                println!("Test failed: Could not find signal name for value: {value_index}");
                 // 可以选择在此处返回或继续执行其他测试
                 return;
             }

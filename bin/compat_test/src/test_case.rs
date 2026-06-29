@@ -237,8 +237,8 @@ impl TestCaseManager {
 
     /// 加载指定命令的所有测试用例
     pub fn load_test_cases(&self, command: &str) -> Result<Vec<TestCase>> {
-        let path = self.test_cases_dir.join(format!("{}.json", command));
-        println!("Looking for test cases at: {:?}", path);
+        let path = self.test_cases_dir.join(format!("{command}.json"));
+        println!("Looking for test cases at: {path:?}");
 
         if !path.exists() {
             println!("Test case file not found");
@@ -252,7 +252,7 @@ impl TestCaseManager {
         );
 
         let test_suite: TestSuite = serde_json::from_str(&content)
-            .map_err(|e| TestError::TestCaseError(format!("Failed to parse test cases: {}", e)))?;
+            .map_err(|e| TestError::TestCaseError(format!("Failed to parse test cases: {e}")))?;
 
         println!("Loaded {} test cases", test_suite.tests.len());
         Ok(test_suite.tests)
@@ -260,12 +260,12 @@ impl TestCaseManager {
 
     /// 保存指定命令的测试用例
     pub fn save_test_cases(&self, command: &str, test_cases: &[TestCase]) -> Result<()> {
-        let path = self.test_cases_dir.join(format!("{}.json", command));
+        let path = self.test_cases_dir.join(format!("{command}.json"));
         let test_suite = TestSuite {
             tests: test_cases.to_vec(),
         };
         let content = serde_json::to_string_pretty(&test_suite).map_err(|e| {
-            TestError::TestCaseError(format!("Failed to serialize test cases: {}", e))
+            TestError::TestCaseError(format!("Failed to serialize test cases: {e}"))
         })?;
 
         fs::write(path, content)?;
@@ -318,8 +318,7 @@ impl From<&FunctionalVerification> for CommandResult {
 }
 
 fn decode_hex_field(field: &str, value: &str) -> Result<Vec<u8>> {
-    hex::decode(value)
-        .map_err(|e| TestError::TestCaseError(format!("Invalid hex in {}: {}", field, e)))
+    hex::decode(value).map_err(|e| TestError::TestCaseError(format!("Invalid hex in {field}: {e}")))
 }
 
 fn normalize_hex_field(field: &str, value: &str) -> Result<String> {
@@ -364,7 +363,7 @@ impl TestCase {
             return self
                 .args
                 .iter()
-                .map(|hex_str| format!("0x{}", hex_str))
+                .map(|hex_str| format!("0x{hex_str}"))
                 .collect();
         }
         self.args.clone()
@@ -960,6 +959,6 @@ mod tests {
     #[test]
     fn test_use_patterns_default() {
         // 验证 TestExpectation 的 use_patterns 默认值
-        assert_eq!(default_use_patterns(), false);
+        assert!(!default_use_patterns());
     }
 }

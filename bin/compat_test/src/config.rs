@@ -312,15 +312,15 @@ mod tests {
 
     #[test]
     fn test_default_functions() {
-        assert_eq!(default_show_diff(), true);
+        assert!(default_show_diff());
         assert_eq!(default_timeout(), 30);
-        assert_eq!(default_cleanup(), true);
-        assert_eq!(default_show_progress(), true);
-        assert_eq!(default_verbose(), false);
-        assert_eq!(default_debug(), false);
+        assert!(default_cleanup());
+        assert!(default_show_progress());
+        assert!(!default_verbose());
+        assert!(!default_debug());
         assert_eq!(default_report_format(), "text");
         assert_eq!(default_report_dir(), Path::new("test_reports"));
-        assert_eq!(default_true(), true);
+        assert!(default_true());
     }
 
     #[test]
@@ -388,22 +388,22 @@ mod tests {
         assert_eq!(config.test.default_commands.as_ref().unwrap()[2], "rm");
 
         // 验证 TestEnvConfig
-        assert_eq!(config.test.env.show_diff, false);
+        assert!(!config.test.env.show_diff);
         assert_eq!(config.test.env.default_timeout, 60);
-        assert_eq!(config.test.env.cleanup, false);
-        assert_eq!(config.test.env.show_progress, false);
-        assert_eq!(config.test.env.verbose, true);
-        assert_eq!(config.test.env.debug, true);
+        assert!(!config.test.env.cleanup);
+        assert!(!config.test.env.show_progress);
+        assert!(config.test.env.verbose);
+        assert!(config.test.env.debug);
         assert_eq!(config.test.env.report_format, "json");
         assert_eq!(config.test.env.report_dir, Path::new("custom_reports"));
 
         // 验证 DetailConfig
-        assert_eq!(config.test.env.detail.show_command, false);
-        assert_eq!(config.test.env.detail.show_description, false);
-        assert_eq!(config.test.env.detail.show_env_vars, false);
-        assert_eq!(config.test.env.detail.show_resource_limits, false);
-        assert_eq!(config.test.env.detail.show_file_changes, false);
-        assert_eq!(config.test.env.detail.show_full_output, false);
-        assert_eq!(config.test.env.detail.show_tags, false);
+        assert!(!config.test.env.detail.show_command);
+        assert!(!config.test.env.detail.show_description);
+        assert!(!config.test.env.detail.show_env_vars);
+        assert!(!config.test.env.detail.show_resource_limits);
+        assert!(!config.test.env.detail.show_file_changes);
+        assert!(!config.test.env.detail.show_full_output);
+        assert!(!config.test.env.detail.show_tags);
     }
 }

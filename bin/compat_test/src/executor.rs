@@ -111,7 +111,7 @@ impl CommandExecutor {
             if !result.differences.is_empty() {
                 eprintln!("DEBUG: 差异:");
                 for diff in &result.differences {
-                    eprintln!("DEBUG:   {}", diff);
+                    eprintln!("DEBUG:   {diff}");
                 }
             }
         }
@@ -139,12 +139,10 @@ impl CommandExecutor {
             eprintln!("DEBUG: 执行主命令");
         }
 
-        let timeout = test_case.timeout.or_else(|| {
-            if self.config.default_timeout == 0 {
-                None
-            } else {
-                Some(self.config.default_timeout)
-            }
+        let timeout = test_case.timeout.or(if self.config.default_timeout == 0 {
+            None
+        } else {
+            Some(self.config.default_timeout)
         });
         let use_bytes = test_case.byte_mode;
         let actual = if use_bytes {
@@ -229,12 +227,10 @@ impl CommandExecutor {
         if self.config.debug {
             eprintln!("DEBUG: 执行coreutils主命令");
         }
-        let timeout = test_case.timeout.or_else(|| {
-            if self.config.default_timeout == 0 {
-                None
-            } else {
-                Some(self.config.default_timeout)
-            }
+        let timeout = test_case.timeout.or(if self.config.default_timeout == 0 {
+            None
+        } else {
+            Some(self.config.default_timeout)
         });
         let use_bytes = test_case.byte_mode;
         let expected = if use_bytes {
@@ -561,43 +557,43 @@ fn compare_results(
     let mut passed = true;
 
     // 比较主命令结果
-    if !test_case.expectation.ignore_fields.ignore_stdout {
-        if test_case.expectation.execution.stdout.is_some() {
-            if test_case.byte_mode {
-                if expected.stdout != actual.stdout {
-                    differences.push(format!(
-                        "Main command stdout hex differs:\nExpected:\n{}\nActual:\n{}",
-                        expected.stdout, actual.stdout
-                    ));
-                    passed = false;
-                }
-            } else if expected.stdout != actual.stdout {
+    if !test_case.expectation.ignore_fields.ignore_stdout
+        && test_case.expectation.execution.stdout.is_some()
+    {
+        if test_case.byte_mode {
+            if expected.stdout != actual.stdout {
                 differences.push(format!(
-                    "Main command stdout differs:\nExpected:\n{}\nActual:\n{}",
+                    "Main command stdout hex differs:\nExpected:\n{}\nActual:\n{}",
                     expected.stdout, actual.stdout
                 ));
                 passed = false;
             }
+        } else if expected.stdout != actual.stdout {
+            differences.push(format!(
+                "Main command stdout differs:\nExpected:\n{}\nActual:\n{}",
+                expected.stdout, actual.stdout
+            ));
+            passed = false;
         }
     }
 
-    if !test_case.expectation.ignore_fields.ignore_stderr {
-        if test_case.expectation.execution.stderr.is_some() {
-            if test_case.byte_mode {
-                if expected.stderr != actual.stderr {
-                    differences.push(format!(
-                        "Main command stderr hex differs:\nExpected:\n{}\nActual:\n{}",
-                        expected.stderr, actual.stderr
-                    ));
-                    passed = false;
-                }
-            } else if expected.stderr != actual.stderr {
+    if !test_case.expectation.ignore_fields.ignore_stderr
+        && test_case.expectation.execution.stderr.is_some()
+    {
+        if test_case.byte_mode {
+            if expected.stderr != actual.stderr {
                 differences.push(format!(
-                    "Main command stderr differs:\nExpected:\n{}\nActual:\n{}",
+                    "Main command stderr hex differs:\nExpected:\n{}\nActual:\n{}",
                     expected.stderr, actual.stderr
                 ));
                 passed = false;
             }
+        } else if expected.stderr != actual.stderr {
+            differences.push(format!(
+                "Main command stderr differs:\nExpected:\n{}\nActual:\n{}",
+                expected.stderr, actual.stderr
+            ));
+            passed = false;
         }
     }
 
@@ -1751,19 +1747,16 @@ mod tests {
         // 测试错误的Display实现
 
         let error = TestError::ExecutionError("exec failed".to_string());
-        assert_eq!(
-            format!("{}", error),
-            "Failed to execute command: exec failed"
-        );
+        assert_eq!(format!("{error}"), "Failed to execute command: exec failed");
 
         let error = TestError::TestCaseError("case error".to_string());
-        assert_eq!(format!("{}", error), "Failed to read test case: case error");
+        assert_eq!(format!("{error}"), "Failed to read test case: case error");
 
         let error = TestError::SerializationError("ser error".to_string());
-        assert_eq!(format!("{}", error), "Serialization error: ser error");
+        assert_eq!(format!("{error}"), "Serialization error: ser error");
 
         let error = TestError::Other("other".to_string());
-        assert_eq!(format!("{}", error), "other");
+        assert_eq!(format!("{error}"), "other");
     }
 
     // 测试SyskitsMode枚举
@@ -2202,7 +2195,7 @@ mod tests {
         // 只验证函数不会崩溃
         match result {
             Ok(_) => (),
-            Err(e) => println!("Error during execution: {}", e),
+            Err(e) => println!("Error during execution: {e}"),
         }
     }
 
@@ -2244,7 +2237,7 @@ mod tests {
         // 只验证函数不会崩溃
         match result {
             Ok(_) => (),
-            Err(e) => println!("Error during coreutils execution: {}", e),
+            Err(e) => println!("Error during coreutils execution: {e}"),
         }
     }
 
@@ -2293,12 +2286,12 @@ mod tests {
         // 只验证函数不会崩溃
         match result_single {
             Ok(_) => (),
-            Err(e) => println!("Error during single mode execution: {}", e),
+            Err(e) => println!("Error during single mode execution: {e}"),
         }
 
         match result_multiple {
             Ok(_) => (),
-            Err(e) => println!("Error during multiple mode execution: {}", e),
+            Err(e) => println!("Error during multiple mode execution: {e}"),
         }
     }
 
@@ -2352,12 +2345,12 @@ mod tests {
         // 只验证函数不会崩溃
         match result_with_coreutils {
             Ok(_) => (),
-            Err(e) => println!("Error during coreutils execution (with path): {}", e),
+            Err(e) => println!("Error during coreutils execution (with path): {e}"),
         }
 
         match result_without_coreutils {
             Ok(_) => (),
-            Err(e) => println!("Error during coreutils execution (without path): {}", e),
+            Err(e) => println!("Error during coreutils execution (without path): {e}"),
         }
     }
 }

@@ -379,7 +379,7 @@ fn format_float_non_finite(f: f64, case: Case) -> String {
 fn format_float_decimal(f: f64, precision: usize, force_decimal: ForceDecimal) -> String {
     match (precision, force_decimal) {
         (0, ForceDecimal::Yes) => format!("{f:.0}."),
-        _ => format!("{f:.*}", precision),
+        _ => format!("{f:.precision$}"),
     }
 }
 
@@ -419,10 +419,7 @@ fn format_float_scientific(
 
     let exp_char = if Case::Lowercase == case { 'e' } else { 'E' };
 
-    format!(
-        "{normalized:.*}{additional_dot}{exp_char}{exponent:+03}",
-        precision
-    )
+    format!("{normalized:.precision$}{additional_dot}{exp_char}{exponent:+03}")
 }
 
 // 该函数负责将浮点数格式化为最短格式。这种格式是十进制和科学记数法的混合体，
@@ -467,7 +464,7 @@ fn format_float_shortest(
             _ => "",
         };
 
-        let mut normalized = format!("{normalized:.*}", precision);
+        let mut normalized = format!("{normalized:.precision$}");
 
         if ForceDecimal::No == force_decimal {
             strip_fractional_zeroes_and_dot(&mut normalized);
@@ -483,7 +480,7 @@ fn format_float_shortest(
         let decimal_places = (precision as i32 - exponent) as usize;
         let mut formatted = match (decimal_places, force_decimal) {
             (0, ForceDecimal::Yes) => format!("{f:.0}."),
-            _ => format!("{f:.*}", decimal_places),
+            _ => format!("{f:.decimal_places$}"),
         };
 
         if ForceDecimal::No == force_decimal {
@@ -1550,7 +1547,7 @@ mod test {
     #[test]
     fn test_strip_fractional_zeroes_and_dot_no_input() {
         let mut s = String::new();
-        let _ = strip_fractional_zeroes_and_dot(&mut s);
+        strip_fractional_zeroes_and_dot(&mut s);
         assert_eq!(s, "");
         // }
     }

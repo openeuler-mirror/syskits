@@ -271,7 +271,7 @@ mod tests {
     fn test_get_locale_name_default() {
         let env_getter = make_env_getter(HashMap::new());
         assert_eq!(
-            get_locale_name_with_env(LcCategory::LcTime, &env_getter),
+            get_locale_name_with_env(LcCategory::LcTime, env_getter),
             "C"
         );
     }
@@ -282,7 +282,7 @@ mod tests {
         env_vars.insert("LANG", "en_US.UTF-8");
         let env_getter = make_env_getter(env_vars);
         assert_eq!(
-            get_locale_name_with_env(LcCategory::LcTime, &env_getter),
+            get_locale_name_with_env(LcCategory::LcTime, env_getter),
             "en_US.UTF-8"
         );
     }
@@ -294,7 +294,7 @@ mod tests {
         env_vars.insert("LC_TIME", "zh_CN.UTF-8");
         let env_getter = make_env_getter(env_vars);
         assert_eq!(
-            get_locale_name_with_env(LcCategory::LcTime, &env_getter),
+            get_locale_name_with_env(LcCategory::LcTime, env_getter),
             "zh_CN.UTF-8"
         );
     }
@@ -307,7 +307,7 @@ mod tests {
         env_vars.insert("LC_ALL", "fr_FR.UTF-8");
         let env_getter = make_env_getter(env_vars);
         assert_eq!(
-            get_locale_name_with_env(LcCategory::LcTime, &env_getter),
+            get_locale_name_with_env(LcCategory::LcTime, env_getter),
             "fr_FR.UTF-8"
         );
     }
@@ -318,14 +318,14 @@ mod tests {
         let mut env_vars = HashMap::new();
         env_vars.insert("LC_TIME", "C");
         let env_getter = make_env_getter(env_vars);
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "C");
 
         // 模拟POSIX locale
         let mut env_vars = HashMap::new();
         env_vars.insert("LC_TIME", "POSIX");
         let env_getter = make_env_getter(env_vars);
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "POSIX");
     }
 
@@ -335,14 +335,14 @@ mod tests {
         let mut env_vars = HashMap::new();
         env_vars.insert("LC_TIME", "en_US.UTF-8");
         let env_getter = make_env_getter(env_vars);
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "en_US.UTF-8");
 
         // 测试中文locale
         let mut env_vars = HashMap::new();
         env_vars.insert("LC_TIME", "zh_CN.UTF-8");
         let env_getter = make_env_getter(env_vars);
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "zh_CN.UTF-8");
     }
 
@@ -360,7 +360,7 @@ mod tests {
             }
         };
         assert_eq!(
-            get_locale_name_with_env(LcCategory::LcTime, &env_getter),
+            get_locale_name_with_env(LcCategory::LcTime, env_getter),
             "en_US.UTF-8"
         );
     }
@@ -374,10 +374,10 @@ mod tests {
                 _ => Err(env::VarError::NotPresent),
             }
         };
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "C");
         // 模拟hard_locale逻辑
-        assert!(!hard_locale_for_test(LcCategory::LcTime, &env_getter));
+        assert!(!hard_locale_for_test(LcCategory::LcTime, env_getter));
     }
 
     #[test]
@@ -389,10 +389,10 @@ mod tests {
                 _ => Err(env::VarError::NotPresent),
             }
         };
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "POSIX");
         // 模拟hard_locale逻辑
-        assert!(!hard_locale_for_test(LcCategory::LcTime, &env_getter));
+        assert!(!hard_locale_for_test(LcCategory::LcTime, env_getter));
     }
 
     #[test]
@@ -404,10 +404,10 @@ mod tests {
                 _ => Err(env::VarError::NotPresent),
             }
         };
-        let locale_name = get_locale_name_with_env(LcCategory::LcTime, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcTime, env_getter);
         assert_eq!(locale_name, "en_US.UTF-8");
         // 模拟hard_locale逻辑
-        assert!(hard_locale_for_test(LcCategory::LcTime, &env_getter));
+        assert!(hard_locale_for_test(LcCategory::LcTime, env_getter));
     }
 
     #[test]
@@ -419,9 +419,9 @@ mod tests {
                 _ => Err(env::VarError::NotPresent),
             }
         };
-        let locale_name = get_locale_name_with_env(LcCategory::LcNumeric, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcNumeric, env_getter);
         assert_eq!(locale_name, "zh_CN.UTF-8");
-        assert!(hard_locale_for_test(LcCategory::LcNumeric, &env_getter));
+        assert!(hard_locale_for_test(LcCategory::LcNumeric, env_getter));
     }
 
     #[test]
@@ -433,21 +433,14 @@ mod tests {
                 _ => Err(env::VarError::NotPresent),
             }
         };
-        let locale_name = get_locale_name_with_env(LcCategory::LcCollate, &env_getter);
+        let locale_name = get_locale_name_with_env(LcCategory::LcCollate, env_getter);
         assert_eq!(locale_name, "fr_FR.UTF-8");
-        assert!(hard_locale_for_test(LcCategory::LcCollate, &env_getter));
+        assert!(hard_locale_for_test(LcCategory::LcCollate, env_getter));
     }
 
     #[test]
     fn test_strcoll_compare_c_locale() {
         // 在测试中模拟C locale环境
-        let env_getter = |key: &str| -> Result<String, env::VarError> {
-            match key {
-                "LC_COLLATE" => Ok("C".to_string()),
-                _ => Err(env::VarError::NotPresent),
-            }
-        };
-
         // 在C locale下，应该使用字节比较
         // "Windows" < "linux" (字节比较，W=87, l=108)
         let result = strcoll_compare(b"Windows", b"linux", false);

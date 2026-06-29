@@ -603,7 +603,7 @@ mod tests {
             234, 143, 22, 61, 179, 134, 130, 146, 94, 68, 145, 197, 229, 141, 75, 179, 80, 110,
             248, 193, 78, 183, 138, 134, 233, 8, 197, 98, 74, 103, 32, 15,
         ];
-        println!("{:?}", output);
+        println!("{output:?}");
         assert_eq!(output, expected_hash);
 
         // Test reset
@@ -614,7 +614,7 @@ mod tests {
             175, 19, 73, 185, 245, 249, 161, 166, 160, 64, 77, 234, 54, 220, 201, 73, 155, 203, 37,
             201, 173, 193, 18, 183, 204, 154, 147, 202, 228, 31, 50, 98,
         ];
-        println!("{:?}", output);
+        println!("{output:?}");
         assert_eq!(output, expected_hash);
     }
 
@@ -631,7 +631,7 @@ mod tests {
             9, 59, 28, 206, 204, 195, 3, 217, 198, 29, 10, 100, 82, 104,
         ];
 
-        println!("{:?}", output);
+        println!("{output:?}");
         assert_eq!(output, expected_hash);
 
         // 测试 reset
@@ -642,7 +642,7 @@ mod tests {
             26, 178, 29, 131, 85, 207, 161, 127, 142, 97, 25, 72, 49, 232, 26, 143, 34, 190, 200,
             199, 40, 254, 251, 116, 126, 208, 53, 235, 80, 130, 170, 43,
         ];
-        println!("{:?}", output);
+        println!("{output:?}");
         assert_eq!(output, expected_hash);
     }
 
@@ -740,28 +740,28 @@ mod tests {
         bsd.hash_update(&[0x61, 0x62, 0x63]);
         let mut result = [0u8; 2];
         bsd.hash_finalize(&mut result);
-        println!("{:?}", result);
+        println!("{result:?}");
         assert_eq!(result, [172, 64]);
 
         let mut bsd = BSD::new();
         bsd.hash_update(&[0x31, 0x32, 0x33]);
         let mut result = [0u8; 2];
         bsd.hash_finalize(&mut result);
-        println!("{:?}", result);
+        println!("{result:?}");
         assert_eq!(result, [88, 64]);
 
         let mut bsd = BSD::new();
         bsd.hash_update(&[]);
         let mut result = [0u8; 2];
         bsd.hash_finalize(&mut result);
-        println!("{:?}", result);
+        println!("{result:?}");
         assert_eq!(result, [0x0, 0x0]);
 
         let mut bsd = BSD::new();
         bsd.hash_update(&[0xff, 0xfe, 0xfd]);
         let mut result = [0u8; 2];
         bsd.hash_finalize(&mut result);
-        println!("{:?}", result);
+        println!("{result:?}");
         assert_eq!(result, [187, 193]);
     }
 
@@ -795,7 +795,7 @@ mod tests {
         bsd.reset();
         let mut result = [0u8; 2];
         bsd.hash_finalize(&mut result);
-        println!("{:?}", result);
+        println!("{result:?}");
         assert_eq!(result, [0x0, 0x0]);
     }
 
@@ -852,14 +852,14 @@ mod tests {
     #[test]
     fn test_new() {
         let algo = Shake256::new();
-        println!("test_new:{:?}", algo);
+        println!("test_new:{algo:?}");
     }
     #[test]
     fn test_hash_update() {
         let mut algo = Shake256::new();
         let input = b"hello world";
         algo.hash_update(input);
-        println!("test_hash_update:{:?}", input);
+        println!("test_hash_update:{input:?}");
     }
     #[test]
     fn test_hash_finalize() {
@@ -868,7 +868,7 @@ mod tests {
         algo.hash_update(input);
         let mut output = [0u8; 32];
         algo.hash_finalize(&mut output);
-        println!("test_hash_update:{:?}", input);
+        println!("test_hash_update:{input:?}");
     }
     #[test]
     fn test_reset() {
@@ -876,7 +876,7 @@ mod tests {
         let input = b"hello world";
         algo.hash_update(input);
         algo.reset();
-        println!("test_reset:{:?}", input);
+        println!("test_reset:{input:?}");
         let _expected_value = [
             26, 178, 29, 131, 85, 207, 161, 127, 142, 97, 25, 72, 49, 232, 26, 143, 34, 190, 200,
             199, 40, 254, 251, 116, 126, 208, 53, 235, 80, 130, 170, 43,

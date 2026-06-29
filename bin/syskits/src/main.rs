@@ -114,14 +114,8 @@ impl SysKits {
     fn show_help(binary_name: &str) {
         // 预分配字符串缓冲区
         let mut output = String::with_capacity(1024);
-        output.push_str(&format!(
-            "{} {CT_VERSION} (multi-call binary)\n",
-            binary_name
-        ));
-        output.push_str(&format!(
-            "Usage: {} [function [arguments...]]\n",
-            binary_name
-        ));
+        output.push_str(&format!("{binary_name} {CT_VERSION} (multi-call binary)\n"));
+        output.push_str(&format!("Usage: {binary_name} [function [arguments...]]\n"));
         output.push_str("Currently defined functions:\n\n");
 
         let mut utils: Vec<&str> = ALL_COMMANDS.to_vec();
@@ -134,7 +128,7 @@ impl SysKits {
             &textwrap::fill(&display_list, width),
             "    ",
         ));
-        println!("{}", output);
+        println!("{output}");
     }
 }
 
@@ -170,7 +164,7 @@ impl CommandHandler {
             "manpage" => self.handle_manpage(),       // 处理man页面生成
             "-h" | "--help" => self.handle_help(),    // 处理帮助请求
             "-v" | "--version" => self.handle_version(), // 处理版本请求
-            "--list" => self.handle_list(),          // 处理工具列表请求
+            "--list" => self.handle_list(),           // 处理工具列表请求
             _ => self.handle_utility(util_str),       // 处理普通工具
         }
     }
@@ -186,7 +180,7 @@ impl CommandHandler {
 
     /// 处理版本请求
     fn handle_version(&self) -> ! {
-        println!("{}", CT_VERSION);
+        println!("{CT_VERSION}");
         process::exit(0);
     }
 
@@ -194,7 +188,7 @@ impl CommandHandler {
         let mut utils: Vec<_> = ALL_COMMANDS.to_vec();
         utils.sort();
         for util in utils {
-            println!("{}", util);
+            println!("{util}");
         }
         process::exit(0);
     }
@@ -344,7 +338,7 @@ fn execute_tool(tool: Box<dyn Tool>, args: &[OsString]) -> i32 {
     match result {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),
         Err(err) => {
-            let s_err = format!("{}", err);
+            let s_err = format!("{err}");
             if !s_err.is_empty() {
                 ctcore::ct_show_error!("{}", s_err);
             }
@@ -378,6 +372,29 @@ fn execute_path(ct_args: &mut impl Iterator<Item = OsString>) -> PathBuf {
             std::process::exit(1);
         }
     }
+}
+
+/// 主函数
+fn main() {
+    ctcore::ct_panic::ct_mute_set_panic_hook();
+
+    let mut args = ctcore::ct_os_args();
+    let execute_path = execute_path(&mut args);
+    let execute_as_util = match execute_name(&execute_path) {
+        Some(name) => name,
+        None => {
+            SysKits::show_help("<unknown binary name>");
+            process::exit(0);
+        }
+    };
+
+    // 创建执行上下文
+    let context = ExecutionContext::new(
+        execute_as_util.to_string(),
+        args.collect(), // 将迭代器收集到Vec中
+    );
+
+    SysKits::run(context);
 }
 
 #[cfg(test)]
@@ -505,27 +522,4 @@ mod tests {
         SysKits::show_help("syskits");
         // 在实际测试中，你可能需要重构代码以使其可测试
     }
-}
-
-/// 主函数
-fn main() {
-    ctcore::ct_panic::ct_mute_set_panic_hook();
-
-    let mut args = ctcore::ct_os_args();
-    let execute_path = execute_path(&mut args);
-    let execute_as_util = match execute_name(&execute_path) {
-        Some(name) => name,
-        None => {
-            SysKits::show_help("<unknown binary name>");
-            process::exit(0);
-        }
-    };
-
-    // 创建执行上下文
-    let context = ExecutionContext::new(
-        execute_as_util.to_string(),
-        args.collect(), // 将迭代器收集到Vec中
-    );
-
-    SysKits::run(context);
 }

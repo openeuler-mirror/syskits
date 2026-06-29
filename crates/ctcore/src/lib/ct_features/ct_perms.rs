@@ -223,8 +223,8 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
             Some(".") | Some("..") => true,
             Some(path_str) => {
                 (path_str.ends_with(MAIN_SEPARATOR_STR))
-                    || (path_str.ends_with(&format!("{}.", MAIN_SEPARATOR_STR)))
-                    || (path_str.ends_with(&format!("{}..", MAIN_SEPARATOR_STR)))
+                    || (path_str.ends_with(&format!("{MAIN_SEPARATOR_STR}.")))
+                    || (path_str.ends_with(&format!("{MAIN_SEPARATOR_STR}..")))
             }
         };
 
@@ -733,12 +733,12 @@ mod tests {
         let non_existent_path = Path::new("non_existent");
         let result5 = check_root(non_existent_path, true);
         // 根据实际情况判断此处应抛出错误还是返回特定值
-        assert_eq!(result5, false);
+        assert!(!result5);
 
         // Test case 6: Invalid path (non-existent), would_traverse_symlink is false
         let result6 = check_root(non_existent_path, false);
         // 同上，根据实际情况进行断言
-        assert_eq!(result6, false);
+        assert!(!result6);
 
         // Test case 7: Handling symbolic links (if applicable)
         // 如果函数应该处理符号链接，请添加相应的测试用例
@@ -760,7 +760,7 @@ mod tests {
 
         // Verify ownership change
         let metadata = fs::metadata(test_path);
-        assert_eq!(metadata.expect("REASON").clone().uid(), uid as u32);
+        assert_eq!(metadata.expect("REASON").clone().uid(), uid);
         //assert_eq!(metadata.expect("REASON").clone().gid(), gid as u32);
 
         // Clean up test data

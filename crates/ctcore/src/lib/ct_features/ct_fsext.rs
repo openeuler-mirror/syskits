@@ -827,7 +827,7 @@ mod tests {
         #[cfg(target_os = "linux")]
         {
             // Arrange
-            let _expected = vec![CtMountInfo::new(
+            let _expected = [CtMountInfo::new(
                 CT_LINUX_MOUNTINFO,
                 &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
                     .split_ascii_whitespace()

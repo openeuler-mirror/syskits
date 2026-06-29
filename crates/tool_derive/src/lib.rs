@@ -357,7 +357,7 @@ fn collect_tools(
                         if let Some(module_name) = path.file_name().and_then(|n| n.to_str()) {
                             let lib_rs_path = path.join("src").join("lib.rs");
                             let module_name_rs_path =
-                                path.join("src").join(format!("{}.rs", module_name));
+                                path.join("src").join(format!("{module_name}.rs"));
                             let mut found_tools_in_module = false;
 
                             if lib_rs_path.exists() {
@@ -518,8 +518,7 @@ fn generate_tools_code(
         let cmd_name_literal = proc_macro2::Literal::string(&tool.cmd_name);
 
         let cfg_attr = syn::parse_str::<proc_macro2::TokenStream>(&format!(
-            "#[cfg(feature = \"{}\")]",
-            feature_name // 使用根据模块类型确定的特性名
+            "#[cfg(feature = \"{feature_name}\")]"
         ))
         .unwrap();
 

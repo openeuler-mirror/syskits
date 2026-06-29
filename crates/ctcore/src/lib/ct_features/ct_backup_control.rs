@@ -681,16 +681,16 @@ mod tests {
     fn test_invalid_argument_display() {
         let error = CtBackupError::InvalidArgument("arg".to_string(), "origin".to_string());
         let expected = "invalid argument 'arg' for 'origin'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'";
-        print!("{}", error);
-        print!("{}", expected);
-        assert_eq!(expected, format!("{}", error));
+        print!("{error}");
+        print!("{expected}");
+        assert_eq!(expected, format!("{error}"));
     }
 
     #[test]
     fn test_ambiguous_argument_display() {
         let error = CtBackupError::AmbiguousArgument("arg".to_string(), "origin".to_string());
         let expected = "ambiguous argument 'arg' for 'origin'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'";
-        assert_eq!(expected, format!("{}", error));
+        assert_eq!(expected, format!("{error}"));
     }
 
     #[test]

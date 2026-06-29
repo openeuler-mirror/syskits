@@ -784,38 +784,41 @@ mod tests {
             always_quote: false,
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "shell-escape");
+        assert_eq!(format!("{style}"), "shell-escape");
 
         let style = CtQuotingStyle::Shell {
             escape: false,
             always_quote: true,
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "shell-always-quote");
+        assert_eq!(format!("{style}"), "shell-always-quote");
 
         let style = CtQuotingStyle::Shell {
             escape: false,
             always_quote: false,
             show_control: true,
         };
-        assert_eq!(format!("{}", style), "shell-show-control");
+        assert_eq!(format!("{style}"), "shell-show-control");
 
         let style = CtQuotingStyle::C {
             quotes: CtQuotes::Double,
         };
-        assert_eq!(format!("{}", style), "C");
+        assert_eq!(format!("{style}"), "C");
 
         let style = CtQuotingStyle::Literal {
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "literal");
+        assert_eq!(format!("{style}"), "literal");
     }
 
     #[test]
     fn test_quotes_display() {
-        assert_eq!(format!("{}", CtQuotes::None), "None");
-        assert_eq!(format!("{}", CtQuotes::Single), "Single");
-        assert_eq!(format!("{}", CtQuotes::Double), "Double");
+        let none = CtQuotes::None;
+        let single = CtQuotes::Single;
+        let double = CtQuotes::Double;
+        assert_eq!(format!("{none}"), "None");
+        assert_eq!(format!("{single}"), "Single");
+        assert_eq!(format!("{double}"), "Double");
     }
 
     #[test]

@@ -64,10 +64,71 @@ impl Display for ExtendedBigDecimal {
         match self {
             Self::BigDecimal(x) => {
                 let (n, p) = x.as_bigint_and_exponent();
-                if p == 0 {
-                    write!(f, "{}.0", n)
+                let mut s = if p > 0 {
+                    let s_n = n.to_string();
+                    let scale = p as usize;
+                    let (sign, digits) = if let Some(stripped) = s_n.strip_prefix('-') {
+                        ("-", stripped)
+                    } else {
+                        ("", s_n.as_str())
+                    };
+                    let len_digits = digits.len();
+                    if len_digits > scale {
+                        let split = len_digits - scale;
+                        format!("{}{}.{}", sign, &digits[..split], &digits[split..])
+                    } else {
+                        let zeros = "0".repeat(scale - len_digits);
+                        format!("{}0.{}{}", sign, zeros, digits)
+                    }
                 } else {
-                    x.fmt(f)
+                    let mut s = n.to_string();
+                    let zeros = (-p) as usize;
+                    for _ in 0..zeros {
+                        s.push('0');
+                    }
+                    s
+                };
+
+                if let Some(req_prec) = f.precision() {
+                    let parts: Vec<&str> = s.split('.').collect();
+                    let int_part = parts[0];
+                    let frac_part = if parts.len() > 1 { parts[1] } else { "" };
+
+                    if req_prec == 0 {
+                        s = int_part.to_string();
+                    } else {
+                        let mut frac = frac_part.to_string();
+                        if frac.len() < req_prec {
+                            frac.push_str(&"0".repeat(req_prec - frac.len()));
+                        } else {
+                            frac.truncate(req_prec);
+                        }
+                        s = format!("{}.{}", int_part, frac);
+                    }
+                }
+
+                let width = f.width().unwrap_or(0);
+                let s_len = s.chars().count();
+                if width > s_len {
+                    let diff = width - s_len;
+                    if f.sign_aware_zero_pad() {
+                        if let Some(stripped) = s.strip_prefix('-') {
+                            write!(f, "-")?;
+                            for _ in 0..diff {
+                                write!(f, "0")?;
+                            }
+                            write!(f, "{}", stripped)
+                        } else {
+                            for _ in 0..diff {
+                                write!(f, "0")?;
+                            }
+                            write!(f, "{}", s)
+                        }
+                    } else {
+                        write!(f, "{:>width$}", s, width = width)
+                    }
+                } else {
+                    f.write_str(&s)
                 }
             }
             Self::Infinity => {

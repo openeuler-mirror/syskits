@@ -3,9 +3,529 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "tac: 空输入 (basic-0)",
+      "setup_commands": [
+        "touch empty.txt"
+      ],
+      "args": [
+        "empty.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f empty.txt"
+      ]
+    },
+    {
+      "tstdin": "a",
+      "command": "tac",
+      "description": "tac: 单字符无换行符 (basic-a)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "\n",
+      "command": "tac",
+      "description": "tac: 仅换行符 (basic-b)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a\n",
+      "command": "tac",
+      "description": "tac: 单行带换行符 (basic-c)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a\nb",
+      "command": "tac",
+      "description": "tac: 两行末尾无换行符 (basic-d)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a\nb\n",
+      "command": "tac",
+      "description": "tac: 两行带换行符 (basic-e)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "1234567\n8\n",
+      "command": "tac",
+      "description": "tac: 不同长度行测试1 (basic-f)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "12345678\n9\n",
+      "command": "tac",
+      "description": "tac: 不同长度行测试2 (basic-g)",
+      "setup_commands": [],
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 空分隔符-空输入 (nul-0)",
+      "setup_commands": [
+        "touch nul0.txt"
+      ],
+      "args": [
+        "-s",
+        "",
+        "nul0.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f nul0.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 空分隔符-单字符 (nul-a)",
+      "setup_commands": [
+        "printf 'a' > nula.txt"
+      ],
+      "args": [
+        "-s",
+        "",
+        "nula.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f nula.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -b 选项测试 (opt-b)",
+      "setup_commands": [
+        "printf '\\na\\nb\\nc' > optb.txt"
+      ],
+      "args": [
+        "-b",
+        "optb.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f optb.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -s 自定义分隔符冒号 (opt-s)",
+      "setup_commands": [
+        "printf 'a:b:c:' > opts.txt"
+      ],
+      "args": [
+        "-s",
+        ":",
+        "opts.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f opts.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -s 和 -b 组合 (opt-sb)",
+      "setup_commands": [
+        "printf ':a:b:c' > optsb.txt"
+      ],
+      "args": [
+        "-s",
+        ":",
+        "-b",
+        "optsb.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f optsb.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -r 正则表达式分隔符 (opt-r)",
+      "setup_commands": [
+        "printf '1._2.__3.___4._' > optr.txt"
+      ],
+      "args": [
+        "-r",
+        "-s",
+        "\\\\._+",
+        "optr.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f optr.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -r 正则表达式分隔符2 (opt-r2)",
+      "setup_commands": [
+        "printf 'a.___b.__1._2.__3.___4._' > optr2.txt"
+      ],
+      "args": [
+        "-r",
+        "-s",
+        "\\\\._+",
+        "optr2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f optr2.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -b -r 组合 (opt-br)",
+      "setup_commands": [
+        "printf '._1._2.__3.___4' > optbr.txt"
+      ],
+      "args": [
+        "-b",
+        "-r",
+        "-s",
+        "\\\\._+",
+        "optbr.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f optbr.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: -b -r 组合2 (opt-br2)",
+      "setup_commands": [
+        "printf '.__x.___y.____z._1._2.__3.___4' > optbr2.txt"
+      ],
+      "args": [
+        "-b",
+        "-r",
+        "-s",
+        "\\\\._+",
+        "optbr2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f optbr2.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 多文件输入测试1 (segfault)",
+      "setup_commands": [
+        "printf 'a\\n' > seg1.txt",
+        "printf 'b\\n' > seg2.txt"
+      ],
+      "args": [
+        "-r",
+        "seg1.txt",
+        "seg2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f seg1.txt seg2.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "tac: 多文件输入测试2 (segfault2)",
+      "setup_commands": [
+        "printf 'a\\nb\\n' > seg3.txt",
+        "printf '1\\n2\\n' > seg4.txt"
+      ],
+      "args": [
+        "-r",
+        "seg3.txt",
+        "seg4.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f seg3.txt seg4.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "tac: 基本功能，按行倒序输出",
       "setup_commands": [
-        "echo -e 'Hello\nWorld\nThis is a test' > test1.txt"
+        "echo -e 'Hello\\nWorld\\nThis is a test' > test1.txt"
       ],
       "args": [
         "test1.txt"
@@ -13,7 +533,7 @@
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "This is a test\nWorld\nHello\n",
+          "stdout": "This is a test\\nWorld\\nHello\\n",
           "stderr": ""
         },
         "verifications": [],
@@ -43,7 +563,7 @@
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "line1 File1\nline1 File2\n",
+          "stdout": "line1 File1\\nline1 File2\\n",
           "stderr": ""
         },
         "verifications": [],
@@ -59,7 +579,7 @@
       ]
     },
     {
-      "tstdin": "Line1\nLine2\nLine3\n",
+      "tstdin": "Line1\\nLine2\\nLine3\\n",
       "command": "tac",
       "description": "tac: 从标准输入读取内容倒序输出",
       "setup_commands": [],
@@ -67,7 +587,7 @@
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "Line3\nLine2\nLine1\n",
+          "stdout": "Line3\\nLine2\\nLine1\\n",
           "stderr": ""
         },
         "verifications": [],
@@ -95,7 +615,7 @@
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "f,e,d,c,b,a\n",
+          "stdout": "f,e,d,c,b,a\\n",
           "stderr": ""
         },
         "verifications": [],

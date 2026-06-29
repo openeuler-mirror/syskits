@@ -13,7 +13,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::{Tool, ct_crash_if_err};
@@ -21,6 +21,8 @@ use regex::Regex;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader};
+#[cfg(test)]
+use std::sync::Mutex;
 use std::{
     fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
@@ -33,6 +35,36 @@ mod split_name;
 
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
+
+#[cfg(test)]
+static CSPLIT_TEST_LOCK: Mutex<()> = Mutex::new(());
+#[cfg(test)]
+thread_local! {
+    static CSPLIT_TEST_LOCK_HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+struct CsplitTestLockGuard {
+    _guard: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for CsplitTestLockGuard {
+    fn drop(&mut self) {
+        CSPLIT_TEST_LOCK_HELD.with(|held| held.set(false));
+    }
+}
+
+#[cfg(test)]
+fn acquire_test_lock() -> Option<CsplitTestLockGuard> {
+    let already_held = CSPLIT_TEST_LOCK_HELD.with(|held| held.get());
+    if already_held {
+        return None;
+    }
+    let guard = CSPLIT_TEST_LOCK.lock().expect("csplit test lock poisoned");
+    CSPLIT_TEST_LOCK_HELD.with(|held| held.set(true));
+    Some(CsplitTestLockGuard { _guard: guard })
+}
 
 mod opt_flags {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -108,6 +140,8 @@ pub fn csplit<T>(
 where
     T: BufRead,
 {
+    #[cfg(test)]
+    let _lock = acquire_test_lock();
     // 初始化输入迭代器和拆分写入器
     let mut input_iter = InputSplitter::new(input_info.lines().enumerate());
     let mut split_writer = SplitWriter::new(csplit_opts);
@@ -145,6 +179,8 @@ fn do_csplit<I>(
 where
     I: Iterator<Item = (usize, io::Result<String>)>,
 {
+    #[cfg(test)]
+    let _lock = acquire_test_lock();
     // 遍历拆分模式并对输入进行拆分
     for p in csplit_patterns {
         let pattern_as_str = p.to_string();
@@ -595,7 +631,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 处理标准输入
         let stdin = io::stdin();
         csplit(&csplit_opts, patterns, stdin.lock()).map_err(|err| {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
             1 // 错误时返回状态码 1
         })?;
     } else {
@@ -612,7 +648,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         }
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
             1 // 错误时返回状态码 2
         })?;
     }
@@ -715,26 +751,28 @@ impl Tool for Csplit {
 }
 
 #[cfg(test)]
+#[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
     use std::path::Path;
 
     /// Removes a temporary file and handles any error during removal
     fn remove_tem_file(name: String) {
+        let _lock = crate::acquire_test_lock();
         let file_path = std::path::Path::new(&name);
         match std::fs::remove_file(file_path) {
             Ok(()) => {
                 // File successfully removed
             }
             Err(e) => {
-                eprintln!("File remove fail: {}", e);
+                eprintln!("File remove fail: {e}");
             }
         }
     }
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Csplit::default();
+        let tool = Csplit;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "csplit");
@@ -2086,13 +2124,13 @@ mod tests {
 
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path = Path::new("custom_aprefix01");
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             assert!(result.is_ok());
@@ -2217,13 +2255,13 @@ mod tests {
             let file_path = Path::new("custom_prefix_2024-04-17_00");
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("custom_prefix_2024-04-17_01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             assert!(result.is_ok());
@@ -2260,13 +2298,13 @@ mod tests {
 
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("user_&*^#28340#!@#()01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             assert!(result.is_ok());
@@ -2303,13 +2341,13 @@ mod tests {
 
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("user_&*^#28332340#!@#()01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             assert!(result.is_ok());
@@ -2795,12 +2833,12 @@ mod tests {
 
         #[test]
         fn test_ct_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
-                    assert_eq!(output.usage(), false);
+                    assert!(!output.usage());
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
@@ -2810,12 +2848,12 @@ mod tests {
 
         #[test]
         fn test_ct_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
-                    assert_eq!(output.usage(), false);
+                    assert!(!output.usage());
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
@@ -2825,8 +2863,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -2840,8 +2878,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -2854,6 +2892,7 @@ mod tests {
         }
 
         fn remove_tem_file(name: String) {
+            let _lock = crate::acquire_test_lock();
             let file_path = Path::new(&name);
             match fs::remove_file(file_path) {
                 Ok(()) => {
@@ -2890,7 +2929,7 @@ mod tests {
                 "-b",
                 "%0d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
@@ -2930,7 +2969,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -2968,7 +3007,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3006,7 +3045,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3044,7 +3083,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3082,7 +3121,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3120,7 +3159,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3158,7 +3197,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3196,7 +3235,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3234,7 +3273,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -3271,7 +3310,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3309,7 +3348,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3347,7 +3386,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3385,7 +3424,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3423,7 +3462,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3461,7 +3500,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3499,7 +3538,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3538,7 +3577,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -3575,7 +3614,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3613,7 +3652,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3651,7 +3690,7 @@ mod tests {
                 "-b",
                 "%01d", // Example format string
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3682,8 +3721,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3714,8 +3753,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3746,8 +3785,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3778,8 +3817,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3810,8 +3849,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3842,8 +3881,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3874,8 +3913,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3906,8 +3945,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -3938,8 +3977,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -3969,8 +4008,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4001,8 +4040,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4033,8 +4072,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4065,8 +4104,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4097,8 +4136,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4129,8 +4168,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4161,8 +4200,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4193,8 +4232,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4225,8 +4264,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4257,8 +4296,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4289,8 +4328,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4321,8 +4360,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4360,19 +4399,19 @@ mod tests {
                 "--prefix",
                 "custom_prefixx", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("custom_prefixx00");
 
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("custom_prefixx01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4410,18 +4449,18 @@ mod tests {
                 "--prefix",
                 "001", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("00100");
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("00101");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4459,18 +4498,18 @@ mod tests {
                 "--prefix",
                 "2024-04-13_", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("2024-04-13_00");
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("2024-04-13_01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4508,18 +4547,18 @@ mod tests {
                 "--prefix",
                 "custom_prefix_1234_", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("custom_prefix_1234_00");
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("custom_prefix_1234_01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4557,18 +4596,18 @@ mod tests {
                 "--prefix",
                 "custom_prefix_2024-04-18_", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("custom_prefix_2024-04-18_00");
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("custom_prefix_2024-04-18_01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4606,19 +4645,19 @@ mod tests {
                 "--prefix",
                 "useraa_&*^#28340#!@#()", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("useraa_&*^#28340#!@#()00");
 
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("useraa_&*^#28340#!@#()01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4656,19 +4695,19 @@ mod tests {
                 "-f",
                 "auser_&*^#28340#!@#()", // Example prefix
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             let file_path = Path::new("auser_&*^#28340#!@#()00");
 
             match fs::remove_file(file_path) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             let file_path2 = Path::new("auser_&*^#28340#!@#()01");
             match fs::remove_file(file_path2) {
                 Ok(()) => println!("文件删除成功"),
-                Err(e) => eprintln!("删除文件时出错: {}", e),
+                Err(e) => eprintln!("删除文件时出错: {e}"),
             }
 
             match result {
@@ -4699,8 +4738,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -4730,8 +4769,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -4762,13 +4801,13 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--suppress-matched",
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -4799,14 +4838,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--suppress-matched",
                 "--keep-files",
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -4837,14 +4876,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--keep-files",
                 "--suppress-matched",
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -4875,7 +4914,7 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
@@ -4883,7 +4922,7 @@ mod tests {
                 "--keep-files",
                 "--suppress-matched",
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -4914,8 +4953,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4946,8 +4985,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx1".to_string());
             remove_tem_file("xx0".to_string());
             match result {
@@ -4978,8 +5017,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -5010,8 +5049,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx001".to_string());
             remove_tem_file("xx000".to_string());
             match result {
@@ -5042,8 +5081,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx001".to_string());
             remove_tem_file("xx000".to_string());
             match result {
@@ -5074,8 +5113,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -5106,8 +5145,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -5138,8 +5177,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -5170,19 +5209,19 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--quite",
                 "--silent",
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
                 Err(_output) => {
-                    println!("");
+                    println!();
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
@@ -5208,8 +5247,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -5240,13 +5279,13 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--elide-empty-files",
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
             remove_tem_file("xx01".to_string());
             remove_tem_file("xx00".to_string());
             match result {
@@ -5271,7 +5310,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "'//'",
@@ -5279,11 +5318,11 @@ mod tests {
                 "path/to/test_file.txt",
             ];
 
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(_output) => {
-                    println!("");
+                    println!();
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
@@ -5311,11 +5350,11 @@ mod tests {
                 "--pattern",
                 "pattern2", // Two example patterns
             ];
-            let result = csplit_main(args.iter().map(|s| OsString::from(s)));
+            let result = csplit_main(args.iter().map(OsString::from));
 
             match result {
                 Err(_output) => {
-                    println!("");
+                    println!();
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
@@ -5822,6 +5861,7 @@ mod tests {
         use tempfile::Builder;
 
         fn remove_tem_file(name: String) {
+            let _lock = crate::acquire_test_lock();
             let file_path = Path::new(&name);
             match fs::remove_file(file_path) {
                 Ok(()) => {
@@ -5851,9 +5891,9 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -5883,7 +5923,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -5909,9 +5949,9 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%1d"];
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%1d"];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -5941,7 +5981,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -5967,8 +6007,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -5998,7 +6038,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -6024,8 +6064,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6055,7 +6095,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx001".to_string());
@@ -6081,8 +6121,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01x"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6112,7 +6152,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6138,8 +6178,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01x"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6169,7 +6209,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6195,8 +6235,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02x"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6226,7 +6266,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx01".to_string());
@@ -6252,8 +6292,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03x"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03x"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6283,7 +6323,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx000".to_string());
@@ -6309,8 +6349,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0o"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6340,7 +6380,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6366,8 +6406,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01o"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6397,7 +6437,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6423,8 +6463,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02o"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6454,7 +6494,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -6480,8 +6520,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03o"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03o"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6511,7 +6551,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx000".to_string());
@@ -6537,8 +6577,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6568,7 +6608,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6594,8 +6634,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6625,7 +6665,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6651,8 +6691,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6682,7 +6722,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6708,8 +6748,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6739,7 +6779,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6765,8 +6805,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6796,7 +6836,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6822,8 +6862,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6853,7 +6893,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6879,8 +6919,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6910,7 +6950,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6936,8 +6976,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -6967,7 +7007,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -6993,8 +7033,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7024,7 +7064,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7050,8 +7090,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7081,7 +7121,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7107,8 +7147,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7138,7 +7178,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7164,8 +7204,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7195,7 +7235,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7221,8 +7261,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7252,7 +7292,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7278,8 +7318,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7309,7 +7349,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7335,8 +7375,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7366,7 +7406,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7392,8 +7432,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7423,7 +7463,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7449,8 +7489,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7480,7 +7520,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7506,8 +7546,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7537,7 +7577,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7563,8 +7603,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7594,7 +7634,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7620,8 +7660,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7651,7 +7691,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7677,8 +7717,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7708,7 +7748,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7734,8 +7774,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7765,7 +7805,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7791,8 +7831,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7822,7 +7862,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7848,8 +7888,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7879,7 +7919,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7905,8 +7945,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7936,7 +7976,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -7962,8 +8002,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -7993,7 +8033,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -8019,8 +8059,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8050,7 +8090,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -8076,8 +8116,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8107,7 +8147,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -8133,8 +8173,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8164,7 +8204,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -8197,7 +8237,7 @@ mod tests {
                 "--prefix",
                 "custom_prefix", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8227,7 +8267,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("custom_prefix00".to_string());
@@ -8260,7 +8300,7 @@ mod tests {
                 "--prefix",
                 "001111", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8290,7 +8330,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("00111100".to_string());
@@ -8323,7 +8363,7 @@ mod tests {
                 "--prefix",
                 "2024-04-18_", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8353,7 +8393,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("2024-04-18_00".to_string());
@@ -8386,7 +8426,7 @@ mod tests {
                 "--prefix",
                 "custom_prefix_13234_", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8416,7 +8456,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("custom_prefix_13234_00".to_string());
@@ -8450,7 +8490,7 @@ mod tests {
                 "custom_prefix_2024-04-25_", // Example prefix
             ];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8480,7 +8520,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("custom_prefix_2024-04-25_00".to_string());
@@ -8514,7 +8554,7 @@ mod tests {
                 "auser_&*^#28340#!@#()", // Example prefix
             ];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8544,7 +8584,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("auser_&*^#28340#!@#()00".to_string());
@@ -8578,7 +8618,7 @@ mod tests {
                 "cuser_&*^#28340#!@#()", // Example prefix
             ];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8608,7 +8648,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("cuser_&*^#28340#!@#()00".to_string());
@@ -8634,8 +8674,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8665,7 +8705,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -8690,8 +8730,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8721,7 +8761,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -8747,13 +8787,13 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--suppress-matched",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8783,7 +8823,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -8809,14 +8849,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--suppress-matched",
                 "--keep-files",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8846,7 +8886,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -8872,14 +8912,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--keep-files",
                 "--suppress-matched",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8909,7 +8949,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -8935,8 +8975,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -8966,7 +9006,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx0".to_string());
@@ -8994,8 +9034,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9025,7 +9065,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9051,8 +9091,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9082,7 +9122,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9108,8 +9148,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9139,7 +9179,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9165,8 +9205,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9196,7 +9236,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx000".to_string());
@@ -9222,8 +9262,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9253,7 +9293,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9279,8 +9319,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9310,7 +9350,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9336,8 +9376,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9367,7 +9407,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9393,8 +9433,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9424,7 +9464,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9450,13 +9490,13 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--elide-empty-files",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9486,7 +9526,7 @@ mod tests {
             }
 
             let result = csplit(&options, patterns, BufReader::new(binding)).map_err(|err| {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             });
 
             remove_tem_file("xx00".to_string());
@@ -9521,9 +9561,9 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%0d"];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9582,9 +9622,9 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%1d"];
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%1d"];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9643,8 +9683,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%02d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9702,8 +9742,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%03d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9761,8 +9801,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9820,8 +9860,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9879,8 +9919,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9938,8 +9978,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -9997,8 +10037,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10056,8 +10096,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10115,8 +10155,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10174,8 +10214,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10233,8 +10273,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10292,8 +10332,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10351,8 +10391,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10411,8 +10451,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10470,8 +10510,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10529,8 +10569,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10588,8 +10628,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10647,8 +10687,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10706,8 +10746,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10765,8 +10805,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10824,8 +10864,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10883,8 +10923,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -10942,8 +10982,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11001,8 +11041,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11060,8 +11100,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11119,8 +11159,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11178,8 +11218,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11237,8 +11277,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11296,8 +11336,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11355,8 +11395,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11414,8 +11454,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11473,8 +11513,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11532,8 +11572,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11591,8 +11631,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11650,8 +11690,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11709,8 +11749,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11768,8 +11808,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11827,8 +11867,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11886,8 +11926,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -11945,8 +11985,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-b", "%01d"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12011,7 +12051,7 @@ mod tests {
                 "--prefix",
                 "custom_prefix", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12076,7 +12116,7 @@ mod tests {
                 "--prefix",
                 "001111", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12141,7 +12181,7 @@ mod tests {
                 "--prefix",
                 "2024-04-18_", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12207,7 +12247,7 @@ mod tests {
                 "--prefix",
                 "custom_prefix_13234_", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12272,7 +12312,7 @@ mod tests {
                 "--prefix",
                 "custom_prefix_2024-04-25_", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12338,7 +12378,7 @@ mod tests {
                 "auser_&*^#28340#!@#()", // Example prefix
             ];
 
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12403,7 +12443,7 @@ mod tests {
                 "-f",
                 "cuser_&*^#28340#!@#()", // Example prefix
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12461,8 +12501,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-k"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12519,8 +12559,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--keep-files"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12578,13 +12618,13 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--suppress-matched",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12642,14 +12682,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--suppress-matched",
                 "--keep-files",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12707,14 +12747,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--keep-files",
                 "--suppress-matched",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12772,8 +12812,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=0"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12831,8 +12871,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=1"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12890,8 +12930,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=2"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -12949,8 +12989,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--digits=3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -13008,8 +13048,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-n", "3"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -13067,8 +13107,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-s"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -13126,8 +13166,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--quiet"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -13185,8 +13225,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "--silent"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -13244,8 +13284,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "/bbbb/", "-z"];
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");
@@ -13303,13 +13343,13 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "/bbbb/",
                 "--elide-empty-files",
             ];
-            let matches = ct_app().try_get_matches_from(args.iter().map(|s| OsString::from(s)));
+            let matches = ct_app().try_get_matches_from(args.iter().map(OsString::from));
 
             // get the file to split
             let binding = matches.expect("REASON");

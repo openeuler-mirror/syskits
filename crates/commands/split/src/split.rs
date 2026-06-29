@@ -17,7 +17,7 @@ mod strategy;
 
 use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
 use ctcore::Tool;
@@ -590,10 +590,9 @@ impl SpliceSettings {
         new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
         if platform::paths_refer_to_same_file(&self.input, file_name) {
-            return Err(io::Error::new(
-                ErrorKind::Other,
-                format!("'{file_name}' would overwrite input; aborting"),
-            ));
+            return Err(io::Error::other(format!(
+                "'{file_name}' would overwrite input; aborting"
+            )));
         }
 
         platform::instantiate_current_writer(&self.filter, file_name, new)
@@ -702,10 +701,9 @@ where
         Ok(number_bytes)
     } else if splice_input == "-" {
         // 如果输入源是标准输入，且未读取到所有内容，说明输入流可能是一个无限的流
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("{}: cannot determine input size", splice_input),
-        ));
+        return Err(io::Error::other(format!(
+            "{splice_input}: cannot determine input size"
+        )));
     } else {
         // 如果文件大小超过了读取限制，尝试从文件元数据中获取文件大小
         let input_metadata = metadata(splice_input)?;
@@ -720,10 +718,9 @@ where
                 Ok(file_end)
             } else {
                 // 如果无法确定文件大小，返回错误
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("{}: cannot determine file size", splice_input),
-                ));
+                return Err(io::Error::other(format!(
+                    "{splice_input}: cannot determine file size"
+                )));
             }
         }
     }
@@ -813,9 +810,10 @@ impl Write for SpliceByteChunkWriter<'_> {
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
 
                 // 根据文件名生成器获取下一个文件名，并创建该文件
-                let file_name = self.filename_iterator.next().ok_or_else(|| {
-                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let file_name = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", file_name.quote());
                 }
@@ -937,7 +935,7 @@ impl Write for SpliceLineChunkWriter<'_> {
                 let filename = self
                     .filename_iterator
                     .next()
-                    .ok_or_else(|| std::io::Error::new(ErrorKind::Other, "输出文件后缀用尽"))?;
+                    .ok_or_else(|| std::io::Error::other("输出文件后缀用尽"))?;
 
                 // 开启详细日志时，打印创建文件信息
                 if self.settings.verbose {
@@ -1077,9 +1075,10 @@ impl Write for SplitLineBytesChunkWriter<'_> {
             // 当前分块已满，分配新分块并初始化对应写入器
             if self.num_bytes_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -1217,7 +1216,7 @@ impl SplitManageOutFiles for OutFiles {
         // 创建文件名迭代器，用于生成每个分割文件的名称。
         let mut file_iterator: FilenameIterator<'_> =
             FilenameIterator::new(&split_settings.prefix, &split_settings.suffix)
-                .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+                .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut output_files: Self = Self::new();
         for _ in 0..number_files {
             // 获取下一个文件名。如果文件名序列耗尽，则视为错误。
@@ -1821,8 +1820,8 @@ mod tests {
 
         #[test]
         fn test_handle_options_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 2);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
 
@@ -1832,8 +1831,8 @@ mod tests {
 
         #[test]
         fn test_handle_options_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 2);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
 
@@ -1843,8 +1842,8 @@ mod tests {
 
         #[test]
         fn test_handle_options_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 2);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
 
@@ -1854,8 +1853,8 @@ mod tests {
 
         #[test]
         fn test_handle_options_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 2);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
 
@@ -1875,8 +1874,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-b"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-b"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -1896,8 +1895,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
 
@@ -1918,8 +1917,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10K"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10K"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -1940,8 +1939,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10M"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10M"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -1962,8 +1961,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10G"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10G"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -1984,8 +1983,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10T"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10T"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2006,8 +2005,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10P"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10P"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2028,8 +2027,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10E"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10E"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2050,8 +2049,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10Z"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10Z"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2072,8 +2071,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10Y"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10Y"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2094,8 +2093,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10R"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10R"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2116,8 +2115,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--bytes", "10Q"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--bytes", "10Q"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2138,8 +2137,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-C"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-C"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2159,8 +2158,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10K"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10K"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2181,8 +2180,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10M"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10M"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2203,8 +2202,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10G"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10G"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2225,8 +2224,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10T"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10T"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2247,8 +2246,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10P"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10P"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2269,8 +2268,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10E"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10E"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2291,8 +2290,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10Z"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10Z"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2313,8 +2312,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10Y"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10Y"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2335,8 +2334,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10R"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10R"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2357,8 +2356,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--line-bytes", "10Q"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--line-bytes", "10Q"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2379,8 +2378,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--lines"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--lines"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2401,8 +2400,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-l"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-l"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2423,8 +2422,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--lines", "10"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--lines", "10"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2446,8 +2445,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--lines", "100"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--lines", "100"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2469,8 +2468,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--lines", "1000"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--lines", "1000"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2492,8 +2491,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--number"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--number"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2514,8 +2513,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-n"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-n"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2536,8 +2535,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--number", "10"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--number", "10"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2559,8 +2558,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--number", "100"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--number", "100"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2582,8 +2581,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--number", "1000"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--number", "1000"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2605,8 +2604,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--additional-suffix"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--additional-suffix"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2627,13 +2626,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
                 "10",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2655,13 +2654,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
                 "100",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2683,13 +2682,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
                 "1000",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2711,8 +2710,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--filter"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--filter"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2733,8 +2732,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--filter", "ls"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--filter", "ls"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2756,8 +2755,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--filter", "cat"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--filter", "cat"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2779,8 +2778,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--filter", "tail"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--filter", "tail"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2802,7 +2801,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -2810,7 +2809,7 @@ mod tests {
                 "--additional-suffix",
                 ".txt",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2834,7 +2833,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -2842,7 +2841,7 @@ mod tests {
                 "--additional-suffix",
                 ".txt",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2866,7 +2865,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -2874,7 +2873,7 @@ mod tests {
                 "--additional-suffix",
                 ".txt",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2898,7 +2897,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -2906,7 +2905,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2930,7 +2929,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -2938,7 +2937,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2962,7 +2961,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -2970,7 +2969,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -2994,7 +2993,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
@@ -3002,7 +3001,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3026,7 +3025,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
@@ -3034,7 +3033,7 @@ mod tests {
                 "--filter",
                 "cat",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3058,7 +3057,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
@@ -3066,7 +3065,7 @@ mod tests {
                 "--filter",
                 "cd",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3090,7 +3089,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--additional-suffix",
@@ -3098,7 +3097,7 @@ mod tests {
                 "--filter",
                 "tail",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3122,7 +3121,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--number",
@@ -3132,7 +3131,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 8);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3158,8 +3157,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-e"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-e"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3180,8 +3179,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--elide-empty-files"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--elide-empty-files"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3202,8 +3201,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-d"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-d"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3225,8 +3224,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--numeric-suffixes"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--numeric-suffixes"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3248,8 +3247,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--numeric-suffixes", "2"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--numeric-suffixes", "2"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3271,8 +3270,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--numeric-suffixes", "3"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--numeric-suffixes", "3"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3294,8 +3293,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-x"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-x"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3317,8 +3316,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--hex-suffixes"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--hex-suffixes"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3340,8 +3339,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--hex-suffixes", "2"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--hex-suffixes", "2"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3363,8 +3362,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--hex-suffixes", "3"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--hex-suffixes", "3"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3386,8 +3385,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-a"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-a"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3409,8 +3408,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--suffix-length"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--suffix-length"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3432,8 +3431,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--suffix-length", "2"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--suffix-length", "2"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3455,8 +3454,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--suffix-length", "3"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--suffix-length", "3"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3478,8 +3477,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--verbose"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--verbose"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 3);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3501,13 +3500,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--verbose",
                 "--suffix-length",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3530,14 +3529,14 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--verbose",
                 "--suffix-length",
                 "2",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 5);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3560,14 +3559,14 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "--verbose",
                 "--suffix-length",
                 "3",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 5);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3590,8 +3589,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-a", "--verbose"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-a", "--verbose"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3614,14 +3613,14 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "-a",
                 "--verbose",
                 "--suffix-length",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 5);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3645,7 +3644,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "-a",
@@ -3653,7 +3652,7 @@ mod tests {
                 "--suffix-length",
                 "2",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3677,7 +3676,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename,
                 "-a",
@@ -3685,7 +3684,7 @@ mod tests {
                 "--suffix-length",
                 "3",
             ];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 6);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3709,8 +3708,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "-t", "'\0'"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "-t", "'\0'"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3733,8 +3732,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--separator", "'\0'"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--separator", "'\0'"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3757,8 +3756,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--separator", "'\n'"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--separator", "'\n'"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3781,8 +3780,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--separator", "'\r'"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--separator", "'\r'"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -3805,8 +3804,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename, "--separator", "'\t'"];
-            let (args, obs_lines) = split_handle_obsolete(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename, "--separator", "'\t'"];
+            let (args, obs_lines) = split_handle_obsolete(args.iter().map(OsString::from));
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], OsString::from(ctcore::ct_util_name()));
             assert_eq!(args[1], OsString::from(filename));
@@ -5467,31 +5466,31 @@ mod tests {
 
         #[test]
         fn test_ct_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = split_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5508,9 +5507,9 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-b", "5"];
+            let args = [ctcore::ct_util_name(), filename1, "-b", "5"];
 
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5549,8 +5548,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5589,8 +5588,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "100"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "100"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5629,8 +5628,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "1000"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "1000"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5669,8 +5668,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10K"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10K"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5709,8 +5708,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10M"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10M"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5749,8 +5748,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10G"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10G"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5789,8 +5788,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10T"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10T"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5829,8 +5828,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10P"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10P"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5869,8 +5868,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10E"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10E"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5909,8 +5908,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10Z"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10Z"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5949,8 +5948,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10Y"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10Y"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -5989,8 +5988,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10R"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10R"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6029,8 +6028,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--bytes", "10Q"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--bytes", "10Q"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6069,8 +6068,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-C", "5"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-C", "5"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6109,8 +6108,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--line-bytes", "10"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--line-bytes", "10"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6149,8 +6148,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--line-bytes", "100"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--line-bytes", "100"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6189,8 +6188,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--line-bytes", "1000"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--line-bytes", "1000"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6229,8 +6228,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-l", "5"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-l", "5"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6269,8 +6268,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--lines", "10"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--lines", "10"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6309,8 +6308,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--lines", "100"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--lines", "100"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6349,8 +6348,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--lines", "1000"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--lines", "1000"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6389,8 +6388,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-n", "5"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-n", "5"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6429,8 +6428,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--number", "10"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--number", "10"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6469,8 +6468,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--number", "100"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--number", "100"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6509,8 +6508,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--number", "1000"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--number", "1000"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6549,13 +6548,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--additional-suffix",
                 "10",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6594,13 +6593,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--additional-suffix",
                 "100",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6639,13 +6638,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--additional-suffix",
                 "1000",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6684,8 +6683,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--filter", "ls"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--filter", "ls"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6724,8 +6723,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--filter", "cat"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--filter", "cat"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6764,8 +6763,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--filter", "cd"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--filter", "cd"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6804,8 +6803,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--filter", "tail"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--filter", "tail"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6844,7 +6843,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--number",
@@ -6852,7 +6851,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6891,7 +6890,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "-n",
@@ -6900,7 +6899,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -6917,7 +6916,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--number",
@@ -6925,7 +6924,7 @@ mod tests {
                 "--additional-suffix",
                 ".txt",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -6964,7 +6963,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--filter",
@@ -6972,7 +6971,7 @@ mod tests {
                 "--additional-suffix",
                 ".txt",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7011,7 +7010,7 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--number",
@@ -7021,7 +7020,7 @@ mod tests {
                 "--filter",
                 "ls",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7060,8 +7059,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--elide-empty-files"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--elide-empty-files"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7100,8 +7099,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-e"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-e"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7140,8 +7139,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-d", "txt"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-d", "txt"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7180,8 +7179,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--numeric-suffixes=11"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--numeric-suffixes=11"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7220,13 +7219,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "-d",
                 "--numeric-suffixes=11",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7266,8 +7265,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-x", "111"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-x", "111"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7306,8 +7305,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--hex-suffixes=11"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--hex-suffixes=11"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7346,8 +7345,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-d", "--hex-suffixes=11"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-d", "--hex-suffixes=11"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7386,8 +7385,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-a", "11"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-a", "11"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7426,8 +7425,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--suffix-length=11"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--suffix-length=11"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7466,13 +7465,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "-d",
                 "--suffix-length=11",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7511,8 +7510,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--verbose"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--verbose"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7551,8 +7550,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-a", "111", "--verbose"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-a", "111", "--verbose"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7591,13 +7590,13 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "--suffix-length=11",
                 "--verbose",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7636,14 +7635,14 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 filename1,
                 "-d",
                 "--suffix-length=11",
                 "--verbose",
             ];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7682,8 +7681,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-t", "\0"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-t", "\0"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7722,8 +7721,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\0"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "\0"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7762,8 +7761,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\n"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "\n"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7802,8 +7801,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\r"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "\r"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7842,8 +7841,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "\t"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "\t"];
+            let result = split_main(args.iter().map(OsString::from));
 
             // 获取当前目录
             let current_dir = std::env::current_dir().unwrap();
@@ -7882,8 +7881,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "-t", "'\0'"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "-t", "'\0'"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
@@ -7901,8 +7900,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "'\0'"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "'\0'"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
@@ -7920,8 +7919,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "'\n'"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "'\n'"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
@@ -7939,8 +7938,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "'\r'"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "'\r'"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
@@ -7958,8 +7957,8 @@ mod tests {
             File::create(&test_file_1).unwrap();
             let filename1 = test_file_1.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), filename1, "--separator", "'\t'"];
-            let result = split_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), filename1, "--separator", "'\t'"];
+            let result = split_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
@@ -10166,7 +10165,7 @@ mod tests {
                 ),
             ));
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
@@ -10180,14 +10179,14 @@ mod tests {
                 ),
             ));
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
         fn test_strategy_multiple_ways_requires_usage() {
             let error = SpliceSettingsError::Strategy(StrategyError::MultipleWays);
 
-            assert_eq!(error.splice_requires_usage(), true);
+            assert!(error.splice_requires_usage());
         }
 
         #[test]
@@ -10196,7 +10195,7 @@ mod tests {
                 "Suffix contains a directory separator, which is not allowed".to_string(),
             ));
 
-            assert_eq!(error.splice_requires_usage(), true);
+            assert!(error.splice_requires_usage());
         }
 
         #[test]
@@ -10205,14 +10204,14 @@ mod tests {
                 "Invalid suffix length parameter".to_string(),
             ));
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
         fn test_suffix_too_small_does_not_require_usage() {
             let error = SpliceSettingsError::Suffix(FilenameSuffixError::TooSmall(20));
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
@@ -10221,21 +10220,21 @@ mod tests {
                 "Multi-character (Invalid) separator".to_string(),
             );
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
         fn test_multiple_separator_characters_does_not_require_usage() {
             let error = SpliceSettingsError::MultipleSeparatorCharacters;
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
         fn test_filter_with_kth_chunk_number_does_not_require_usage() {
             let error = SpliceSettingsError::FilterWithKthChunkNumber;
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[test]
@@ -10243,7 +10242,7 @@ mod tests {
             let error =
                 SpliceSettingsError::InvalidIOBlockSize("Invalid IO block size".to_string());
 
-            assert_eq!(error.splice_requires_usage(), false);
+            assert!(!error.splice_requires_usage());
         }
 
         #[cfg(windows)]
@@ -10256,66 +10255,57 @@ mod tests {
 
         #[test]
         fn test_should_extract_obs_lines_h() {
-            assert_eq!(split_should_extract_obs_lines("-h", &false, &false), true);
+            assert!(split_should_extract_obs_lines("-h", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_help() {
-            assert_eq!(
-                split_should_extract_obs_lines("--help", &false, &false),
-                false
-            );
+            assert!(!split_should_extract_obs_lines("--help", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_a() {
-            assert_eq!(split_should_extract_obs_lines("-a", &false, &false), false);
+            assert!(!split_should_extract_obs_lines("-a", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_b() {
-            assert_eq!(split_should_extract_obs_lines("-b", &false, &false), false);
+            assert!(!split_should_extract_obs_lines("-b", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_c() {
-            assert_eq!(split_should_extract_obs_lines("-C", &false, &false), false);
+            assert!(!split_should_extract_obs_lines("-C", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_l() {
-            assert_eq!(split_should_extract_obs_lines("-l", &false, &false), false);
+            assert!(!split_should_extract_obs_lines("-l", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_n() {
-            assert_eq!(split_should_extract_obs_lines("-n", &false, &false), false);
+            assert!(!split_should_extract_obs_lines("-n", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_t() {
-            assert_eq!(split_should_extract_obs_lines("-t", &false, &false), false);
+            assert!(!split_should_extract_obs_lines("-t", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_abc() {
-            assert_eq!(
-                split_should_extract_obs_lines("-abc", &false, &false),
-                false
-            );
+            assert!(!split_should_extract_obs_lines("-abc", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_hvalue() {
-            assert_eq!(
-                split_should_extract_obs_lines("-hvalue", &false, &false),
-                true
-            );
+            assert!(split_should_extract_obs_lines("-hvalue", &false, &false));
         }
 
         #[test]
         fn test_should_extract_obs_lines_hv() {
-            assert_eq!(split_should_extract_obs_lines("-hv", &false, &false), true);
+            assert!(split_should_extract_obs_lines("-hv", &false, &false));
         }
 
         use super::splice_handle_extract_obs_lines;
@@ -13331,7 +13321,7 @@ mod tests {
 
         #[test]
         fn test_tool_implementation() {
-            let tool = Split::default();
+            let tool = Split;
 
             // 测试 name 方法
             assert_eq!(tool.name(), "split");

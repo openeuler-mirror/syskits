@@ -17,6 +17,7 @@
 use crate::miller_rabin::{self, is_prime};
 use crate::rho::find_divisor;
 use crate::table;
+use num_prime::nt_funcs::factorize64;
 use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::fmt;
@@ -148,8 +149,17 @@ fn _factor(num: u64, f: Factors) -> Factors {
         Pseudoprime => {
             // 使用 Pollard's Rho 算法找因子
             let divisor = find_divisor(num);
-            let f = _factor(divisor, f);
-            _factor(num / divisor, f)
+            if divisor == num {
+                // Pollard Rho 没有找到因子，使用确定性的快速分解作为回退
+                let mut r = f;
+                for (prime, exp) in factorize64(num) {
+                    r.add(prime, exp as Exponent);
+                }
+                r
+            } else {
+                let f = _factor(divisor, f);
+                _factor(num / divisor, f)
+            }
         }
     }
 }
@@ -161,16 +171,14 @@ pub fn factor(mut n: u64) -> Factors {
 
     let mut factors = Factors::one();
 
-    if n == 0 {
-        // 特殊处理0的情况
-        // 0不是素数，所以不能使用push方法
-        // 创建一个特殊的Factors对象表示0
-        let mut decomp = Decomposition::one();
-        decomp.0.push((0, 1));
-        return Factors(RefCell::new(decomp));
+    if n < 2 {
+        return factors;
     }
 
-    if n < 2 {
+    if n <= u32::MAX as u64 {
+        for (prime, exp) in factorize64(n) {
+            factors.add(prime, exp as Exponent);
+        }
         return factors;
     }
 
@@ -360,7 +368,7 @@ mod tests {
     #[test]
     fn test_factor_small_numbers() {
         // 测试小数字的因式分解
-        assert_eq!(factor(0).product(), 0);
+        assert_eq!(format!("{}", factor(0)), "");
         assert_eq!(factor(1).product(), 1);
 
         let f2 = factor(2);

@@ -485,8 +485,8 @@ impl IsolatedSandbox {
 
         // 启动命令
         if let Some(content) = stdin_content {
-            if !content.is_empty() {
-                if let Some(stdin) = child.stdin.as_mut() {
+            if let Some(stdin) = child.stdin.as_mut() {
+                if !content.is_empty() {
                     if let Err(e) = stdin.write_all(content.as_bytes()) {
                         self.debug_fmt(format_args!("Failed to write to stdin: {}", e));
                         return Ok(CommandResult {
@@ -496,6 +496,8 @@ impl IsolatedSandbox {
                         });
                     }
                 }
+                // Always close stdin so the child can observe EOF.
+                drop(child.stdin.take());
             }
         }
 

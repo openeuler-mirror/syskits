@@ -1,0 +1,60 @@
+{
+    "tests": [
+        {
+            "command": "runcon",
+            "description": "runcon: 以指定context运行命令",
+            "args": ["system_u:object_r:tmp_t:s0-s0:c0.c1023", "./check_context.sh"],
+            "setup_commands": [
+                "echo -e '#!/bin/bash\nid -Z' > check_context.sh",
+                "chmod +x check_context.sh"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "system_u:object_r:tmp_t:s0-s0:c0.c1023\n",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f check_context.sh"
+            ],
+            "requires_root": true
+        },
+        {
+            "command": "runcon",
+            "description": "runcon: 以非法的context运行命令",
+            "args": ["invalid_u:invalid_r:invalid_t:s0-s0:c0.c1023", "./check_context.sh"],
+            "setup_commands": [
+                "echo -e '#!/bin/bash\nid -Z' > check_context.sh",
+                "chmod +x check_context.sh"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f check_context.sh"
+            ],
+            "requires_root": true
+        }
+    ]
+}

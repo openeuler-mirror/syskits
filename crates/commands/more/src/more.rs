@@ -31,17 +31,18 @@ extern crate rust_i18n;
 ///
 use std::{
     fs::File,
-    io::{BufReader, Read, Stdout, Write, stdin, stdout},
+    io::{BufReader, IsTerminal, Read, Stdout, Write, stdin, stdout},
     panic::set_hook,
     path::Path,
 };
 
+use regex::Regex;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, value_parser};
 use crossterm::event::KeyEventKind;
 use crossterm::{
-    cursor::{MoveTo, MoveUp},
+    cursor::MoveTo,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
     style::Attribute,
@@ -52,6 +53,7 @@ use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::{ct_display::Quotable, ct_show};
 
 use std::ffi::OsString;
+use std::io::ErrorKind;
 use sys_locale::get_locale;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -62,6 +64,7 @@ pub mod more_options {
     pub const MORE_SILENT: &str = "silent";
     pub const MORE_LOGICAL: &str = "logical";
     pub const MORE_NO_PAUSE: &str = "no-pause";
+    pub const MORE_EXIT_ON_EOF: &str = "exit-on-eof";
     pub const MORE_PRINT_OVER: &str = "print-over";
     pub const MORE_CLEAN_PRINT: &str = "clean-print";
     pub const MORE_SQUEEZE: &str = "squeeze";
@@ -77,6 +80,12 @@ pub mod more_options {
 struct MoreOptions {
     /// 是否清屏后显示
     is_clean_print: bool,
+    /// 是否按逻辑行计数
+    is_logical: bool,
+    /// 是否在换页符后不暂停
+    is_no_pause: bool,
+    /// 是否在文件末尾退出
+    is_exit_on_eof: bool,
     /// 从第几行开始显示
     from_line: usize,
     /// 每页显示的行数
@@ -89,6 +98,10 @@ struct MoreOptions {
     is_silent: bool,
     /// 是否压缩空行
     is_squeeze: bool,
+    /// 是否允许交互输入（stdin 为 tty）
+    is_interactive: bool,
+    /// 标准输出是否为 tty
+    is_tty_output: bool,
 }
 
 impl MoreOptions {
@@ -115,12 +128,17 @@ impl MoreOptions {
             .map(|s| s.to_owned());
         Self {
             is_clean_print: matches.get_flag(more_options::MORE_CLEAN_PRINT),
+            is_logical: matches.get_flag(more_options::MORE_LOGICAL),
+            is_no_pause: matches.get_flag(more_options::MORE_NO_PAUSE),
+            is_exit_on_eof: matches.get_flag(more_options::MORE_EXIT_ON_EOF),
             from_line,
             lines,
             pattern,
             is_print_over: matches.get_flag(more_options::MORE_PRINT_OVER),
             is_silent: matches.get_flag(more_options::MORE_SILENT),
             is_squeeze: matches.get_flag(more_options::MORE_SQUEEZE),
+            is_interactive: true,
+            is_tty_output: true,
         }
     }
 }
@@ -139,12 +157,30 @@ pub fn more_main(args: impl ctcore::Args) -> CTResult<()> {
     setup_panic_handler();
 
     // 解析命令行参数
-    let matches = parse_arguments(args)?;
+    let normalized_args = normalize_more_args(args);
+    let matches = parse_arguments(normalized_args.into_iter())?;
     let mut options = MoreOptions::new(&matches);
+    let stdin_is_tty = stdin().is_terminal();
+    let stdout_is_tty = stdout().is_terminal();
+    options.is_interactive = stdin_is_tty;
+    options.is_tty_output = stdout_is_tty;
+    let files: Vec<String> = matches
+        .get_many::<String>(more_options::MORE_FILES)
+        .map(|values| values.cloned().collect())
+        .unwrap_or_default();
+    let has_files = !files.is_empty();
+
+    if stdin_is_tty && !has_files {
+        return Err(CTsageError::new(1, "bad usage"));
+    }
+
+    if !stdout_is_tty {
+        return more_noninteractive(&files);
+    }
 
     // 处理输入
-    if let Some(files) = matches.get_many::<String>(more_options::MORE_FILES) {
-        process_files(files, &mut options)
+    if has_files {
+        process_files(files.iter(), &mut options)
     } else {
         process_stdin(&mut options)
     }
@@ -175,6 +211,98 @@ fn parse_arguments(args: impl ctcore::Args) -> CTResult<ArgMatches> {
     ct_app().try_get_matches_from(args).map_err(Into::into)
 }
 
+/// 将 more 特殊语法转换为标准参数
+///
+/// - `-<number>` -> `--lines <number>`
+/// - `+<number>` -> `--from-line <number>`
+/// - `+/pattern` -> `--pattern pattern`
+fn normalize_more_args(args: impl ctcore::Args) -> Vec<OsString> {
+    let mut normalized = Vec::new();
+    for (index, arg) in args.enumerate() {
+        if index == 0 {
+            normalized.push(arg);
+            continue;
+        }
+
+        let arg_lossy = arg.to_string_lossy();
+        if let Some(rest) = arg_lossy.strip_prefix('-') {
+            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                normalized.push(OsString::from(format!("--{}", more_options::MORE_LINES)));
+                normalized.push(OsString::from(rest.to_string()));
+                continue;
+            }
+        }
+
+        if let Some(rest) = arg_lossy.strip_prefix("+/") {
+            normalized.push(OsString::from(format!("--{}", more_options::MORE_PATTERN)));
+            normalized.push(OsString::from(rest.to_string()));
+            continue;
+        }
+
+        if let Some(rest) = arg_lossy.strip_prefix('+') {
+            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                normalized.push(OsString::from(format!(
+                    "--{}",
+                    more_options::MORE_FROM_LINE
+                )));
+                normalized.push(OsString::from(rest.to_string()));
+                continue;
+            }
+        }
+
+        normalized.push(arg);
+    }
+    normalized
+}
+
+/// 非交互模式输出（stdout 不是终端）
+///
+/// 行为与 util-linux more 一致：
+/// - 若 stdin 非终端，则先输出 stdin 内容
+/// - 对每个文件输出文件头与文件内容（不修改内容）
+/// - 目录输出 "*** <path>: directory ***" 到 stdout（前后空行）
+/// - 打开失败输出 "more: cannot open <path>: <reason>" 到 stderr
+fn more_noninteractive(files: &[String]) -> CTResult<()> {
+    let mut out = stdout();
+    let stdin_is_tty = stdin().is_terminal();
+
+    if !stdin_is_tty {
+        let mut stdin_buf = Vec::new();
+        stdin().read_to_end(&mut stdin_buf)?;
+        if !stdin_buf.is_empty() {
+            out.write_all(&stdin_buf)?;
+        }
+    }
+
+    for file in files {
+        output_noninteractive_file(file, &mut out)?;
+    }
+
+    out.flush()?;
+    Ok(())
+}
+
+fn output_noninteractive_file(file: &str, out: &mut Stdout) -> CTResult<()> {
+    let path = Path::new(file);
+    if path.is_dir() {
+        write!(out, "\n*** {file}: directory ***\n\n")?;
+        return Ok(());
+    }
+
+    let opened_file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("more: cannot open {file}: {}", os_error_message(&err));
+            return Ok(());
+        }
+    };
+
+    write!(out, "::::::::::::::\n{file}\n::::::::::::::\n")?;
+    let mut reader = BufReader::new(opened_file);
+    std::io::copy(&mut reader, out)?;
+    Ok(())
+}
+
 /// 处理文件输入
 /// ///
 /// 读取并显示多个文件的内容。
@@ -189,7 +317,11 @@ fn process_files<'a>(
     files: impl Iterator<Item = &'a String>,
     options: &mut MoreOptions,
 ) -> CTResult<()> {
-    let mut stdout = setup_term();
+    let mut stdout = if options.is_interactive {
+        setup_term()
+    } else {
+        stdout()
+    };
     let files: Vec<_> = files.collect();
     let length = files.len();
     let mut files_iter = files.into_iter().peekable();
@@ -210,7 +342,9 @@ fn process_files<'a>(
         buff.clear();
     }
 
-    reset_term(&mut stdout);
+    if options.is_interactive {
+        reset_term(&mut stdout);
+    }
     Ok(())
 }
 
@@ -251,7 +385,10 @@ fn process_single_file(
 
     // 读取文件
     let opened_file = File::open(file).map_err(|why| {
-        CtSimpleError::new(0, format!("cannot open {}: {}", file.quote(), why.kind()))
+        CtSimpleError::new(
+            0,
+            format!("cannot open {}: {}", file.quote(), os_error_message(&why)),
+        )
     })?;
 
     let mut reader = BufReader::new(opened_file);
@@ -282,14 +419,32 @@ fn process_stdin(options: &mut MoreOptions) -> CTResult<()> {
     stdin().read_to_string(&mut buff)?;
 
     if buff.is_empty() {
-        return Err(CTsageError::new(1, "bad usage"));
+        return Ok(());
     }
 
-    let mut stdout = setup_term();
+    let mut stdout = if options.is_interactive {
+        setup_term()
+    } else {
+        stdout()
+    };
     more_exec(&buff, &mut stdout, false, None, None, options)?;
-    reset_term(&mut stdout);
+    if options.is_interactive {
+        reset_term(&mut stdout);
+    }
 
     Ok(())
+}
+
+fn os_error_message(err: &std::io::Error) -> String {
+    match err.kind() {
+        ErrorKind::NotFound => "No such file or directory".to_string(),
+        ErrorKind::PermissionDenied => "Permission denied".to_string(),
+        ErrorKind::AlreadyExists => "File exists".to_string(),
+        ErrorKind::IsADirectory => "Is a directory".to_string(),
+        ErrorKind::NotADirectory => "Not a directory".to_string(),
+        ErrorKind::InvalidInput => "Invalid argument".to_string(),
+        _ => err.to_string(),
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -304,10 +459,25 @@ pub fn ct_app() -> Command {
             .long(more_options::MORE_SILENT)
             .help(t!("more.clap.more_silent"))
             .action(ArgAction::SetTrue),
+        Arg::new(more_options::MORE_LOGICAL)
+            .short('f')
+            .long(more_options::MORE_LOGICAL)
+            .help(t!("more.clap.more_logical"))
+            .action(ArgAction::SetTrue),
+        Arg::new(more_options::MORE_NO_PAUSE)
+            .short('l')
+            .long(more_options::MORE_NO_PAUSE)
+            .help(t!("more.clap.more_no_pause"))
+            .action(ArgAction::SetTrue),
         Arg::new(more_options::MORE_CLEAN_PRINT)
             .short('p')
             .long(more_options::MORE_CLEAN_PRINT)
             .help(t!("more.clap.more_clean_print"))
+            .action(ArgAction::SetTrue),
+        Arg::new(more_options::MORE_EXIT_ON_EOF)
+            .short('e')
+            .long(more_options::MORE_EXIT_ON_EOF)
+            .help(t!("more.clap.more_exit_on_eof"))
             .action(ArgAction::SetTrue),
         Arg::new(more_options::MORE_SQUEEZE)
             .short('s')
@@ -356,8 +526,6 @@ pub fn ct_app() -> Command {
         .override_usage(t!("more.usage"))
         .version(crate_version!())
         .infer_long_args(true)
-        .disable_help_flag(true)
-        .disable_version_flag(true)
         .args(args)
 }
 
@@ -423,7 +591,11 @@ fn more_exec(
     }
 
     // 处理文本内容
-    let lines = break_buff(buff, usize::from(cols));
+    let lines = if options.is_logical {
+        buff.lines().map(|line| line.to_string()).collect()
+    } else {
+        break_buff(buff, usize::from(cols))
+    };
     let mut pager = Pager::new(rows, lines, next_file, options);
 
     // 处理模式匹配
@@ -462,12 +634,22 @@ fn get_terminal_size(options: &MoreOptions) -> CTResult<(u16, u16)> {
 /// 返回 `CTResult<()>`，表示搜索是否成功
 fn handle_pattern_search(pager: &mut Pager, stdout: &mut Stdout) -> CTResult<()> {
     if let Some(pattern) = &pager.options.pattern {
-        match search_pattern_in_file(&pager.lines, &Some(pattern.clone())) {
-            Some(number) => pager.upper_mark = number,
-            None => {
+        match Regex::new(pattern) {
+            Ok(re) => match search_pattern_in_file(&pager.lines, &re) {
+                Some(number) => {
+                    pager.upper_mark = number;
+                    if pager.options.is_tty_output && number > 0 {
+                        stdout.write_all("\n...skipping\n".as_bytes())?;
+                    }
+                }
+                None => {
+                    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                    stdout.write_all("\rPattern not found\n".as_bytes())?;
+                }
+            },
+            Err(err) => {
                 execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
-                stdout.write_all("\rPattern not found\n".as_bytes())?;
-                pager.content_rows -= 1;
+                stdout.write_all(format!("\r{}\n", err).as_bytes())?;
             }
         }
     }
@@ -536,6 +718,12 @@ struct Pager<'a> {
     line_squeezed: usize,
     /// 命令选项
     options: &'a mut MoreOptions,
+    /// 最近一次搜索模式
+    last_search: Option<String>,
+    /// 最近一次搜索方向
+    last_search_forward: bool,
+    /// 滚动步长（Ctrl-D/U）
+    scroll_len: usize,
 }
 
 impl<'a> Pager<'a> {
@@ -546,6 +734,7 @@ impl<'a> Pager<'a> {
         options: &'a mut MoreOptions,
     ) -> Self {
         let line_count = lines.len();
+        let scroll_len = (rows.saturating_sub(1) as usize / 2).max(1);
         Self {
             upper_mark: options.from_line,
             content_rows: rows.saturating_sub(1),
@@ -556,6 +745,9 @@ impl<'a> Pager<'a> {
             squeeze: options.is_squeeze,
             line_squeezed: 0,
             options,
+            last_search: None,
+            last_search_forward: true,
+            scroll_len,
         }
     }
 
@@ -610,6 +802,34 @@ impl<'a> Pager<'a> {
         self.upper_mark = self.upper_mark.saturating_sub(1);
     }
 
+    fn prev_page(&mut self) {
+        self.page_up();
+    }
+
+    fn next_page(&mut self) {
+        self.page_down();
+    }
+
+    fn half_page_down(&mut self) {
+        let step = self.scroll_len.max(1);
+        self.upper_mark = self.upper_mark.saturating_add(step);
+    }
+
+    fn half_page_up(&mut self) {
+        let step = self.scroll_len.max(1);
+        self.upper_mark = self.upper_mark.saturating_sub(step);
+    }
+
+    fn go_top(&mut self) {
+        self.upper_mark = 0;
+    }
+
+    fn go_bottom(&mut self) {
+        if self.line_count > 0 {
+            self.upper_mark = self.line_count.saturating_sub(self.content_rows as usize);
+        }
+    }
+
     /// 绘制文本内容
     ///
     /// 将当前页的文本内容绘制到终端。主要功能包括:
@@ -633,7 +853,16 @@ impl<'a> Pager<'a> {
     /// - 更新 line_squeezed 计数器记录被压缩的空行数
     /// - 可能更新 upper_mark 以跳过压缩的空行
     fn draw(&mut self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
+        if !self.options.is_interactive {
+            self.draw_all_lines(stdout);
+            stdout.flush().unwrap();
+            return;
+        }
         self.draw_lines(stdout);
+        if self.should_close() && self.options.is_exit_on_eof {
+            stdout.flush().unwrap();
+            return;
+        }
         let lower_mark = self
             .line_count
             .min(self.upper_mark.saturating_add(self.content_rows.into()));
@@ -643,7 +872,9 @@ impl<'a> Pager<'a> {
 
     fn draw_lines(&mut self, stdout: &mut std::io::Stdout) {
         // 清除当前行,为新内容做准备
-        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        if self.options.is_interactive {
+            execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        }
 
         // 初始化状态变量，重置压缩的空行计数
         self.line_squeezed = 0;
@@ -694,8 +925,40 @@ impl<'a> Pager<'a> {
 
         // 将收集的行写入终端,每行前加上回车符
         for line in displayed_lines {
-            stdout.write_all(format!("\r{line}\n").as_bytes()).unwrap();
+            stdout.write_all(format!("{line}\n").as_bytes()).unwrap();
         }
+    }
+
+    fn draw_all_lines(&mut self, stdout: &mut std::io::Stdout) {
+        self.line_squeezed = 0;
+        let mut previous_line_blank = false;
+        let mut displayed_lines = Vec::new();
+
+        for line in self.lines.iter().skip(self.upper_mark) {
+            if self.squeeze {
+                let is_current_blank = line.is_empty();
+                match (is_current_blank, previous_line_blank) {
+                    (true, true) => {
+                        self.line_squeezed += 1;
+                    }
+                    (true, false) => {
+                        previous_line_blank = true;
+                        displayed_lines.push(line);
+                    }
+                    (false, _) => {
+                        previous_line_blank = false;
+                        displayed_lines.push(line);
+                    }
+                }
+            } else {
+                displayed_lines.push(line);
+            }
+        }
+
+        for line in displayed_lines {
+            stdout.write_all(format!("{line}\n").as_bytes()).unwrap();
+        }
+        self.upper_mark = self.line_count;
     }
 
     /// 绘制提示信息
@@ -725,6 +988,7 @@ impl<'a> Pager<'a> {
     /// - 使用反向显示突出提示信息
     /// - 在提示结束后重置显示属性
     fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: Option<char>) {
+        let _ = execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine));
         // 构建状态信息(显示进度百分比或下一个文件名)
         let status_text = self.build_status_text(lower_mark);
 
@@ -735,15 +999,23 @@ impl<'a> Pager<'a> {
         self.write_prompt(stdout, &prompt_text);
     }
 
+    fn draw_prompt_with_bell(&self, stdout: &mut Stdout, lower_mark: usize) {
+        let _ = execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine));
+        let status_text = self.build_status_text(lower_mark);
+        let status = format!("--More--({status_text}){MORE_BELL}");
+        self.write_prompt(stdout, &status);
+    }
+
     fn build_status_text(&self, lower_mark: usize) -> String {
-        if lower_mark == self.line_count {
-            // 如果到达文件末尾
-            // 显示下一个文件名(如果有)
-            format!("Next file: {}", self.next_file.unwrap_or_default())
+        if let Some(name) = self.next_file {
+            format!("Next file: {name}")
+        } else if lower_mark >= self.line_count {
+            "END".to_string()
+        } else if self.line_count == 0 {
+            "END".to_string()
         } else {
-            // 计算并显示当前进度百分比
             let percentage = (lower_mark as f64 / self.line_count as f64 * 100.0).round() as u16;
-            format!("{}%", percentage)
+            format!("{percentage}%")
         }
     }
 
@@ -752,20 +1024,12 @@ impl<'a> Pager<'a> {
         let status = format!("--More--({status_inner})");
 
         match (self.silent, wrong_key) {
-            (true, Some(key)) => {
-                // 静默模式下显示错误按键的帮助信息
-                format!(
-                    "{status} [Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"
-                )
-            }
+            (true, Some(_)) => format!("{status}[Press 'h' for instructions.]"),
             (true, None) => {
                 // 静默模式下显示基本操作提示
                 format!("{status}[Press space to continue, 'q' to quit.]")
             }
-            (false, Some(_)) => {
-                // 非静默模式下错误按键只显示响铃
-                format!("{status}{MORE_BELL}")
-            }
+            (false, Some(_)) => format!("{status}{MORE_BELL}"),
             (false, None) => {
                 // 非静默模式下只显示状态
                 status
@@ -798,14 +1062,39 @@ impl<'a> Pager<'a> {
 ///
 /// # 返回值
 /// 返回找到模式的行号，如果未找到则返回 None
-fn search_pattern_in_file(lines: &[String], pattern: &Option<String>) -> Option<usize> {
-    let pattern = pattern.clone().unwrap_or_default();
-    if lines.is_empty() || pattern.is_empty() {
+fn search_pattern_in_file(lines: &[String], pattern: &Regex) -> Option<usize> {
+    if lines.is_empty() || pattern.as_str().is_empty() {
         return None;
     }
     for (line_number, line) in lines.iter().enumerate() {
-        if line.contains(pattern.as_str()) {
+        if pattern.is_match(line) {
             return Some(line_number);
+        }
+    }
+    None
+}
+
+fn search_pattern_from(
+    lines: &[String],
+    pattern: &Regex,
+    start: usize,
+    forward: bool,
+) -> Option<usize> {
+    if lines.is_empty() || pattern.as_str().is_empty() {
+        return None;
+    }
+    if forward {
+        for (idx, line) in lines.iter().enumerate().skip(start) {
+            if pattern.is_match(line) {
+                return Some(idx);
+            }
+        }
+    } else {
+        let start_idx = start.min(lines.len().saturating_sub(1));
+        for (idx, line) in lines.iter().take(start_idx + 1).enumerate().rev() {
+            if pattern.is_match(line) {
+                return Some(idx);
+            }
         }
     }
     None
@@ -820,10 +1109,11 @@ fn search_pattern_in_file(lines: &[String], pattern: &Option<String>) -> Option<
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功
 fn paging_add_back_message(options: &MoreOptions, stdout: &mut std::io::Stdout) -> CTResult<()> {
-    if options.lines.is_some() {
-        execute!(stdout, MoveUp(1))?;
-        stdout.write_all("\n\r...back 1 page\n".as_bytes())?;
+    if options.is_no_pause {
+        return Ok(());
     }
+    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+    stdout.write_all("...back 1 page\n".as_bytes())?;
     Ok(())
 }
 
@@ -901,6 +1191,9 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
 /// # 返回值
 /// 返回 `CTResult<bool>`，表示是否继续处理
 fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CTResult<bool> {
+    let lower_mark = pager
+        .line_count
+        .min(pager.upper_mark.saturating_add(pager.content_rows.into()));
     match key {
         KeyEvent {
             code: KeyCode::Char('q'),
@@ -921,9 +1214,31 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
             ..
         } => {
             if pager.should_close() {
-                return Ok(false);
+                if pager.options.is_exit_on_eof {
+                    return Ok(false);
+                }
+                pager.draw_prompt_with_bell(stdout, lower_mark);
+                stdout.flush().unwrap();
+                return Ok(true);
             }
             pager.page_down();
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('f'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            if pager.should_close() {
+                if pager.options.is_exit_on_eof {
+                    return Ok(false);
+                }
+                pager.draw_prompt_with_bell(stdout, lower_mark);
+                stdout.flush().unwrap();
+                return Ok(true);
+            }
+            pager.next_page();
+            pager.draw(stdout, None);
         }
         KeyEvent {
             code: KeyCode::Up | KeyCode::PageUp,
@@ -932,6 +1247,32 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
         } => {
             pager.page_up();
             paging_add_back_message(pager.options, stdout)?;
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('d'),
+            modifiers: KeyModifiers::CONTROL,
+            ..
+        } => {
+            if pager.should_close() {
+                if pager.options.is_exit_on_eof {
+                    return Ok(false);
+                }
+                pager.draw_prompt_with_bell(stdout, lower_mark);
+                stdout.flush().unwrap();
+                return Ok(true);
+            }
+            pager.half_page_down();
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('u'),
+            modifiers: KeyModifiers::CONTROL,
+            ..
+        } => {
+            pager.half_page_up();
+            paging_add_back_message(pager.options, stdout)?;
+            pager.draw(stdout, None);
         }
         KeyEvent {
             code: KeyCode::Char('j'),
@@ -939,15 +1280,109 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
             ..
         } => {
             if pager.should_close() {
-                return Ok(false);
+                if pager.options.is_exit_on_eof {
+                    return Ok(false);
+                }
+                pager.draw_prompt_with_bell(stdout, lower_mark);
+                stdout.flush().unwrap();
+                return Ok(true);
             }
             pager.next_line();
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            if pager.should_close() {
+                if pager.options.is_exit_on_eof {
+                    return Ok(false);
+                }
+                pager.draw_prompt_with_bell(stdout, lower_mark);
+                stdout.flush().unwrap();
+                return Ok(true);
+            }
+            pager.next_line();
+            pager.draw(stdout, None);
         }
         KeyEvent {
             code: KeyCode::Char('k'),
             modifiers: KeyModifiers::NONE,
             ..
-        } => pager.prev_line(),
+        } => {
+            pager.prev_line();
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('b'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            pager.prev_page();
+            paging_add_back_message(pager.options, stdout)?;
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('g'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            pager.go_top();
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('G'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            pager.go_bottom();
+            pager.draw(stdout, None);
+        }
+        KeyEvent {
+            code: KeyCode::Char('/'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            if pager.options.is_interactive {
+                if let Some(pattern) = read_search_pattern(stdout)? {
+                    apply_search_pattern(pager, stdout, &pattern, true)?;
+                    pager.draw(stdout, None);
+                } else {
+                    pager.draw(stdout, None);
+                }
+            }
+        }
+        KeyEvent {
+            code: KeyCode::Char('n'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            if let Some(pattern) = pager.last_search.clone() {
+                let forward = pager.last_search_forward;
+                apply_search_pattern(pager, stdout, &pattern, forward)?;
+                pager.draw(stdout, None);
+            } else {
+                execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                stdout.write_all("\rNo previous regular expression\n".as_bytes())?;
+            }
+        }
+        KeyEvent {
+            code: KeyCode::Char('N'),
+            modifiers: KeyModifiers::NONE,
+            ..
+        } => {
+            if let Some(pattern) = pager.last_search.clone() {
+                let forward = !pager.last_search_forward;
+                let original = pager.last_search_forward;
+                apply_search_pattern(pager, stdout, &pattern, forward)?;
+                pager.last_search_forward = original;
+                pager.draw(stdout, None);
+            } else {
+                execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                stdout.write_all("\rNo previous regular expression\n".as_bytes())?;
+            }
+        }
         KeyEvent {
             code: KeyCode::Char(k),
             ..
@@ -956,6 +1391,100 @@ fn handle_key_event(pager: &mut Pager, stdout: &mut Stdout, key: KeyEvent) -> CT
     }
 
     Ok(true)
+}
+
+fn read_search_pattern(stdout: &mut Stdout) -> CTResult<Option<String>> {
+    stdout.write_all(b"\r/")?;
+    stdout.flush()?;
+
+    let mut input = String::new();
+    loop {
+        match event::read()? {
+            Event::Key(KeyEvent {
+                code: KeyCode::Esc, ..
+            }) => {
+                execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                stdout.flush()?;
+                return Ok(None);
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Enter,
+                ..
+            }) => break,
+            Event::Key(KeyEvent {
+                code: KeyCode::Backspace,
+                ..
+            }) => {
+                input.pop();
+                execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                stdout.write_all(format!("\r/{}", input).as_bytes())?;
+                stdout.flush()?;
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(ch),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => {
+                input.push(ch);
+                stdout.write_all(ch.to_string().as_bytes())?;
+                stdout.flush()?;
+            }
+            _ => {}
+        }
+    }
+
+    let pattern = input.trim_end().to_string();
+    Ok(Some(pattern))
+}
+
+fn apply_search_pattern(
+    pager: &mut Pager,
+    stdout: &mut Stdout,
+    pattern: &str,
+    forward: bool,
+) -> CTResult<()> {
+    if pattern.is_empty() {
+        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+        stdout.write_all("\rPattern not found\n".as_bytes())?;
+        return Ok(());
+    }
+
+    let re = match Regex::new(pattern) {
+        Ok(re) => re,
+        Err(err) => {
+            execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+            stdout.write_all(format!("\r{}\n", err).as_bytes())?;
+            return Ok(());
+        }
+    };
+
+    pager.options.pattern = Some(pattern.to_string());
+    pager.last_search = Some(pattern.to_string());
+    pager.last_search_forward = forward;
+
+    let start = if forward {
+        pager.upper_mark.saturating_add(1)
+    } else {
+        pager.upper_mark.saturating_sub(1)
+    };
+
+    let found = search_pattern_from(&pager.lines, &re, start, forward);
+
+    match found {
+        Some(number) => {
+            let distance = number.saturating_sub(pager.upper_mark);
+            pager.upper_mark = number;
+            if pager.options.is_tty_output && distance > 2 {
+                stdout.write_all(b"\n...skipping\n")?;
+            }
+        }
+        None => {
+            execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+            stdout.write_all("\rPattern not found\n".as_bytes())?;
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Default)]
@@ -1027,14 +1556,14 @@ mod tests {
     #[test]
     fn test_search_pattern_empty_lines() {
         let lines = vec![];
-        let pattern = Some(String::from("pattern"));
+        let pattern = Regex::new("pattern").unwrap();
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 
     #[test]
     fn test_search_pattern_empty_pattern() {
         let lines = vec![String::from("line1"), String::from("line2")];
-        let pattern = None;
+        let pattern = Regex::new("").unwrap();
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 
@@ -1056,7 +1585,7 @@ mod tests {
             String::from("line2"),
             String::from("other_pattern"),
         ];
-        let pattern = Some(String::from("pattern"));
+        let pattern = Regex::new("pattern").unwrap();
         assert_eq!(2, search_pattern_in_file(&lines, &pattern).unwrap());
         assert_eq!(2, search_pattern_in_file(&lines2, &pattern).unwrap());
         assert_eq!(2, search_pattern_in_file(&lines3, &pattern).unwrap());
@@ -1069,7 +1598,7 @@ mod tests {
             String::from("line2"),
             String::from("something"),
         ];
-        let pattern = Some(String::from("pattern"));
+        let pattern = Regex::new("pattern").unwrap();
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 
@@ -1129,6 +1658,8 @@ mod tests {
                 is_print_over: true, // 设置为 true 避免交互
                 is_silent: true,
                 is_squeeze: false,
+                is_interactive: false,
+                is_tty_output: false,
             };
 
             // 测试单文件显示
@@ -1190,12 +1721,17 @@ mod tests {
         let content = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n";
         let mut options = MoreOptions {
             is_clean_print: true,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
             from_line: 0,
             lines: Some(2), // 每页显示2行
             pattern: None,
             is_print_over: false,
             is_silent: true,
             is_squeeze: false,
+            is_interactive: false,
+            is_tty_output: false,
         };
 
         let lines = break_buff(content, 80);
@@ -1231,6 +1767,8 @@ mod tests {
             is_print_over: false,
             is_silent: true,
             is_squeeze: false,
+            is_interactive: false,
+            is_tty_output: false,
         };
 
         let lines = break_buff(content, 80);
@@ -1268,6 +1806,8 @@ mod tests {
             is_print_over: false,
             is_silent: true,
             is_squeeze: false,
+            is_interactive: false,
+            is_tty_output: false,
         };
 
         let lines = break_buff(content, 80);

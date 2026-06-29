@@ -15,7 +15,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
@@ -42,6 +42,12 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
         .get_many::<String>(SYNC_ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
+
+    // Check for conflicting options - must match coreutils error message
+    if is_has_data && is_file_system {
+        let err_message = "cannot specify both --data and --file-system";
+        return Err(CtSimpleError::new(1, err_message));
+    }
 
     if is_has_data && files.is_empty() {
         let err_message = "--data needs at least one argument";
@@ -72,13 +78,11 @@ pub fn ct_app() -> Command {
         Arg::new(sync_flags::SYNC_FILE_SYSTEM)
             .short('f')
             .long(sync_flags::SYNC_FILE_SYSTEM)
-            .conflicts_with(sync_flags::SYNC_DATA)
             .help(t!("sync.clap.sync_file_system"))
             .action(ArgAction::SetTrue),
         Arg::new(sync_flags::SYNC_DATA)
             .short('d')
             .long(sync_flags::SYNC_DATA)
-            .conflicts_with(sync_flags::SYNC_FILE_SYSTEM)
             .help(t!("sync.clap.sync_data"))
             .action(ArgAction::SetTrue),
         Arg::new(SYNC_ARG_FILES)

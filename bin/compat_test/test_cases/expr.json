@@ -3121,6 +3121,1735 @@
                 "umask": null,
                 "resource_limits": null
             }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l1",
+            "args": [
+                "length",
+                "abcdef"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l1",
+            "args": [
+                "length",
+                "abcdef"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l2",
+            "args": [
+                "length",
+                "αbcdef"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l2",
+            "args": [
+                "length",
+                "αbcdef"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l3",
+            "args": [
+                "length",
+                "abcδef"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l3",
+            "args": [
+                "length",
+                "abcδef"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l4",
+            "args": [
+                "length",
+                "fedcbα"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l4",
+            "args": [
+                "length",
+                "fedcbα"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l5",
+            "args": [
+                "6c656e677468",
+                "b1616161"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l5",
+            "args": [
+                "6c656e677468",
+                "b1616161"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l6",
+            "args": [
+                "6c656e677468",
+                "616161ce"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l6",
+            "args": [
+                "6c656e677468",
+                "616161ce"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-l7",
+            "args": [
+                "length",
+                "ἔκφρασις"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "8\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-l7",
+            "args": [
+                "length",
+                "ἔκφρασις"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "17\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i1",
+            "args": [
+                "index",
+                "abcdef",
+                "fb"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-i1",
+            "args": [
+                "index",
+                "abcdef",
+                "fb"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i2",
+            "args": [
+                "index",
+                "αbcδef",
+                "b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-i2",
+            "args": [
+                "index",
+                "αbcδef",
+                "b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i3",
+            "args": [
+                "index",
+                "αbcδef",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-i3",
+            "args": [
+                "index",
+                "αbcδef",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "8\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i4",
+            "args": [
+                "index",
+                "αbcδef",
+                "δ"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-i4",
+            "args": [
+                "index",
+                "αbcδef",
+                "δ"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i5",
+            "args": [
+                "696e646578",
+                "ce6263ceb46566",
+                "ceb4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-i5",
+            "args": [
+                "696e646578",
+                "ce6263ceb46566",
+                "ceb4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "310a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i6",
+            "args": [
+                "696e646578",
+                "ceb16263ceb46566",
+                "b4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "300a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-i6",
+            "args": [
+                "696e646578",
+                "ceb16263ceb46566",
+                "b4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "360a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-i7",
+            "args": [
+                "696e646578",
+                "ceb16263b46566",
+                "b4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s1",
+            "args": [
+                "substr",
+                "abcdef",
+                "2",
+                "3"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "bcd\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s1",
+            "args": [
+                "substr",
+                "abcdef",
+                "2",
+                "3"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "bcd\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s2",
+            "args": [
+                "substr",
+                "αbcδef",
+                "1",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "α\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s2",
+            "args": [
+                "737562737472",
+                "ceb16263ceb46566",
+                "31",
+                "31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ce0a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s3",
+            "args": [
+                "substr",
+                "αbcδef",
+                "3",
+                "2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "cδ\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s3",
+            "args": [
+                "substr",
+                "αbcδef",
+                "3",
+                "2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "bc\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s4",
+            "args": [
+                "substr",
+                "αbcδef",
+                "4",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "δ\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s4",
+            "args": [
+                "substr",
+                "αbcδef",
+                "4",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s5",
+            "args": [
+                "substr",
+                "αbcδef",
+                "4",
+                "2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "δe\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s5",
+            "args": [
+                "737562737472",
+                "ceb16263ceb46566",
+                "34",
+                "32"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "63ce0a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s6",
+            "args": [
+                "substr",
+                "αbcδef",
+                "6",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "f\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s6",
+            "args": [
+                "737562737472",
+                "ceb16263ceb46566",
+                "36",
+                "31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "b40a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s7",
+            "args": [
+                "substr",
+                "αbcδef",
+                "7",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s7",
+            "args": [
+                "substr",
+                "αbcδef",
+                "7",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "e\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-s8",
+            "args": [
+                "737562737472",
+                "ceb16263b46566",
+                "33",
+                "33"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "63b4650a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-s8",
+            "args": [
+                "737562737472",
+                "ceb16263b46566",
+                "33",
+                "33"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6263b40a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m1",
+            "args": [
+                "match",
+                "abcdef",
+                "ab"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m1",
+            "args": [
+                "match",
+                "abcdef",
+                "ab"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m2",
+            "args": [
+                "match",
+                "abcdef",
+                "\\(ab\\)"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ab\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m2",
+            "args": [
+                "match",
+                "abcdef",
+                "\\(ab\\)"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ab\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m3",
+            "args": [
+                "match",
+                "αbcδef",
+                ".bc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m3",
+            "args": [
+                "match",
+                "αbcδef",
+                ".bc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m4",
+            "args": [
+                "match",
+                "αbcδef",
+                "..bc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m4",
+            "args": [
+                "match",
+                "αbcδef",
+                "..bc"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m5",
+            "args": [
+                "match",
+                "αbcδef",
+                "\\(.b\\)c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "αb\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m5",
+            "args": [
+                "match",
+                "αbcδef",
+                "\\(.b\\)c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m6",
+            "byteMode": true,
+            "args": [
+                "6d61746368",
+                "ce6263ceb46566",
+                "5c282e5c29"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m6",
+            "byteMode": true,
+            "args": [
+                "6d61746368",
+                "ce6263ceb46566",
+                "5c282e5c29"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ce0a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:mb-m7",
+            "args": [
+                "match",
+                "αbcδe",
+                "\\([α]\\)"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "α\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "LANGUAGE": "C.UTF-8"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "expr",
+            "description": "expr-multibyte.pl:st-m7",
+            "byteMode": true,
+            "args": [
+                "6d61746368",
+                "ceb16263ceb465",
+                "5c285bceb15d5c29"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ce0a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "LANGUAGE": "C"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
         }
     ]
 }

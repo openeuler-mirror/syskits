@@ -35,7 +35,7 @@ pub enum SeqError {
 impl CTError for SeqError {
     fn code(&self) -> i32 {
         match self {
-            Self::NoArguments => 2,
+            Self::NoArguments => 1,
             Self::ParseError(_, _) | Self::ZeroIncrement(_) => 1,
             Self::IoError(_) => 3,
         }
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn test_error_codes() {
-        assert_eq!(SeqError::NoArguments.code(), 2);
+        assert_eq!(SeqError::NoArguments.code(), 1);
         assert_eq!(
             SeqError::ParseError("123".into(), ParseNumberError::Float).code(),
             1

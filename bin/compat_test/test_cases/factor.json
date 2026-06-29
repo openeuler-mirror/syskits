@@ -3,13 +3,19 @@
         {
             "tstdin": "",
             "command": "factor",
-            "description": "基本功能测试 - 单个数字",
-            "setup_commands": [],
-            "args": ["12"],
+            "description": "coreutils: 9",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "9"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "12: 2 2 3",
+                    "stdout": "9: 3 3\n",
                     "stderr": ""
                 },
                 "verifications": []
@@ -19,13 +25,968 @@
         {
             "tstdin": "",
             "command": "factor",
-            "description": "多个数字测试",
-            "setup_commands": [],
-            "args": ["12", "15", "16"],
+            "description": "coreutils: 7",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "7"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "12: 2 2 3\n15: 3 5\n16: 2 2 2 2",
+                    "stdout": "7: 7\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: +7",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "+7"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7: 7\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: 4294967291",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967291"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967291: 4294967291\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: 4294967292",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967292"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967292: 2 2 3 3 7 11 31 151 331\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: 4294967293",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967293"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967293: 9241 464773\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: a",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966201"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966201: 12197 352133\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: b",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966339"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966339: 13187 325697\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: c",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966631"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966631: 13729 312839\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: d",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966457"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966457: 14891 288427\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: e",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966759"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966759: 21649 198391\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: f",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966573"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966573: 23071 186163\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: g",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967101"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967101: 23603 181967\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: h",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966519"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966519: 34583 124193\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: i",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966561"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966561: 36067 119083\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: j",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966901"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966901: 37747 113783\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: k",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966691"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966691: 39241 109451\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: l",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966969"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966969: 44201 97169\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: m",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967099"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967099: 44483 96553\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: n",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966271"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966271: 44617 96263\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: o",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966789"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966789: 50411 85199\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: p",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966189"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966189: 53197 80737\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: q",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967213"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967213: 57139 75167\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: s",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294967071"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294967071: 65521 65551\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: t",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966194"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966194: 2 3 3 3 3 3 3 3 53 97 191\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: u",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966272"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966272: 2 2 2 2 2 2 2 2 2 2 3 23 89 683\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: v",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966400"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966400: 2 2 2 2 2 2 2 5 5 1342177\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: w",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966464"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966464: 2 2 2 2 2 2 3 3 3 2485513\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: x",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966896"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966896: 2 2 2 2 3 3 3 11 607 1489\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: y",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "4294966998"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294966998: 2 3 7 3917 26107\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: invalid option -1",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "factor: invalid option -- '1'\nTry 'factor --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: invalid then valid",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "a",
+                "4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "4: 2 2\n",
+                    "stderr": "factor: 'a' is not a valid positive integer\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2012-a",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "465658903"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "465658903: 15259 30517\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2012-b",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "2242724851"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2242724851: 33487 66973\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2012-c",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "6635692801"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6635692801: 57601 115201\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2012-d",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "17709149503"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "17709149503: 94099 188197\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2012-e",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "17754345703"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "17754345703: 94219 188437\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2016-a",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "158909489063877810457"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "158909489063877810457: 3401347 3861211 12099721\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2016-b",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "222087527029934481871"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "222087527029934481871: 15601 26449 111427 4830277\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: bug-2016-c",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "12847291069740315094892340035"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12847291069740315094892340035: 5 4073 18899 522591721 63874247821\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: 2^128",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "340282366920938463463374607431768211456"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "340282366920938463463374607431768211456: 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: 2^256",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "115792089237316195423570985008687907853269984665640564039457584007913129639936: 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: +2^127+1",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "+170141183460469231731687303715884105729"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "170141183460469231731687303715884105729: 3 56713727820156410577229101238628035243\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: -h exponents",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "-h",
+                "3000"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3000: 2^3 3 5^3\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "factor",
+            "description": "coreutils: --exponents",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "3000",
+                "--exponents"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3000: 2^3 3 5^3\n",
                     "stderr": ""
                 },
                 "verifications": []
@@ -35,13 +996,17 @@
         {
             "tstdin": "20\n25\n",
             "command": "factor",
-            "description": "标准输入测试",
-            "setup_commands": [],
+            "description": "stdin: 20 and 25",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
             "args": [],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "20: 2 2 5\n25: 5 5",
+                    "stdout": "20: 2 2 5\n25: 5 5\n",
                     "stderr": ""
                 },
                 "verifications": []
@@ -51,13 +1016,21 @@
         {
             "tstdin": "",
             "command": "factor",
-            "description": "大数测试",
-            "setup_commands": [],
-            "args": ["123456789"],
+            "description": "multiple numbers",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "12",
+                "15",
+                "16"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "123456789: 3 3 3607 3803",
+                    "stdout": "12: 2 2 3\n15: 3 5\n16: 2 2 2 2\n",
                     "stderr": ""
                 },
                 "verifications": []
@@ -67,13 +1040,19 @@
         {
             "tstdin": "",
             "command": "factor",
-            "description": "质数测试",
-            "setup_commands": [],
-            "args": ["17"],
+            "description": "edge: 1",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "1"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "17: 17",
+                    "stdout": "1:\n",
                     "stderr": ""
                 },
                 "verifications": []
@@ -83,13 +1062,19 @@
         {
             "tstdin": "",
             "command": "factor",
-            "description": "1的测试",
-            "setup_commands": [],
-            "args": ["1"],
+            "description": "edge: 0",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "0"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "1:",
+                    "stdout": "0:\n",
                     "stderr": ""
                 },
                 "verifications": []
@@ -99,50 +1084,24 @@
         {
             "tstdin": "",
             "command": "factor",
-            "description": "0的测试",
-            "setup_commands": [],
-            "args": ["0"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "0:",
-                    "stderr": ""
-                },
-                "verifications": []
-            },
-            "cleanup_commands": []
-        },
-        {
-            "tstdin": "",
-            "command": "factor",
-            "description": "负数测试",
-            "setup_commands": [],
-            "args": ["-12"],
+            "description": "invalid token",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": [
+                "abc"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "factor: invalid option -- '1'\nTry 'factor --help' for more information."
-                },
-                "verifications": []
-            },
-            "cleanup_commands": []
-        },
-        {
-            "tstdin": "",
-            "command": "factor",
-            "description": "非数字输入测试",
-            "setup_commands": [],
-            "args": ["abc"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "factor: 'abc' is not a valid positive integer"
+                    "stderr": "factor: 'abc' is not a valid positive integer\n"
                 },
                 "verifications": []
             },
             "cleanup_commands": []
         }
     ]
-} 
+}

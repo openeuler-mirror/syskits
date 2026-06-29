@@ -2,6 +2,7 @@ factor:
   clap:
     exponents: Print factors in the form p^e
     help: Print help information.
+    version: Print version information.
   usage: factor [OPTION]... [NUMBER]...
   about: |-
     Print the prime factors of the given NUMBER(s).

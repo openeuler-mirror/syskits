@@ -16,14 +16,21 @@ use crate::CommandResult;
 use crate::test_case::{FileType, TestCase, TestFile};
 use crate::{Result, TestError};
 use hex;
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
+use nix::pty::{Winsize, openpty};
 use nix::sys::resource::{self, Resource};
 use nix::sys::signal::{self};
+use nix::unistd::{dup, setsid};
+use nix::{errno::Errno, libc};
 use rand::Rng;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, File, Permissions};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
+use std::os::unix::process::CommandExt;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -419,21 +426,21 @@ impl IsolatedSandbox {
                 self.umask = new_umask;
                 Ok(CommandResult::default())
             } else {
+                Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("umask: invalid mode: {}\n", mode),
+                    exit_code: 1,
+                })
+            }
+        } else {
+            // 显示当前umask
             Ok(CommandResult {
-                stdout: String::new(),
-                stderr: format!("umask: invalid mode: {}\n", mode),
-                exit_code: 1,
+                stdout: format!("{:03o}\n", self.umask),
+                stderr: String::new(),
+                exit_code: 0,
             })
         }
-    } else {
-        // 显示当前umask
-        Ok(CommandResult {
-            stdout: format!("{:03o}\n", self.umask),
-            stderr: String::new(),
-            exit_code: 0,
-        })
     }
-}
 
     /// 输出调试信息
     fn debug(&self, msg: &str) {
@@ -460,14 +467,21 @@ impl IsolatedSandbox {
     ) -> Result<CommandResult> {
         let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let stdin_bytes = stdin_content.map(|s| s.as_bytes());
-        self.execute_command_bytes(
-            cmd,
-            &os_args,
-            stdin_bytes,
-            is_record_result,
-            timeout,
-            false,
-        )
+        self.execute_command_bytes(cmd, &os_args, stdin_bytes, is_record_result, timeout, false)
+    }
+
+    /// 执行命令（字符串参数，伪终端模式）
+    pub fn execute_command_tty(
+        &mut self,
+        cmd: &str,
+        args: &[String],
+        stdin_content: Option<&str>,
+        is_record_result: bool,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        let stdin_bytes = stdin_content.map(|s| s.as_bytes());
+        self.execute_command_bytes_tty(cmd, &os_args, stdin_bytes, is_record_result, timeout, false)
     }
 
     /// 执行命令（原始字节参数）
@@ -633,6 +647,208 @@ impl IsolatedSandbox {
             if !output_hex && result.stdout.contains('\0') {
                 self.debug("Warning: Found null bytes when setting CMD_STDOUT");
                 // Replace null bytes with visible characters to avoid environment variable issues
+                let safe_stdout = result.stdout.replace('\0', "\\0");
+                self.add_env("CMD_STDOUT", &safe_stdout);
+            } else {
+                self.add_env("CMD_STDOUT", &result.stdout);
+            }
+
+            self.add_env("CMD_STDERR", &result.stderr);
+        }
+
+        self.update_status(&result);
+        Ok(result)
+    }
+
+    /// 执行命令（伪终端模式）
+    pub fn execute_command_bytes_tty(
+        &mut self,
+        cmd: &str,
+        args: &[OsString],
+        stdin_content: Option<&[u8]>,
+        is_record_result: bool,
+        timeout: Option<u64>,
+        output_hex: bool,
+    ) -> Result<CommandResult> {
+        self.debug_fmt(format_args!("Executing command (tty): {} {:?}", cmd, args));
+        self.debug_fmt(format_args!(
+            "Current working directory: {:?}",
+            self.current_dir
+        ));
+
+        let encode_if_hex = |value: &str| {
+            if output_hex {
+                hex::encode(value.as_bytes())
+            } else {
+                value.to_string()
+            }
+        };
+
+        let winsize = Winsize {
+            ws_row: 200,
+            ws_col: 80,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        let pty = openpty(Some(&winsize), None)
+            .map_err(|e| TestError::ExecutionError(format!("Failed to create pty: {}", e)))?;
+        let master = pty.master;
+        let master_fd = master.as_raw_fd();
+        let mut flags = OFlag::from_bits_truncate(fcntl(master_fd, FcntlArg::F_GETFL).unwrap_or(0));
+        flags.insert(OFlag::O_NONBLOCK);
+        let _ = fcntl(master_fd, FcntlArg::F_SETFL(flags));
+
+        let slave_fd = pty.slave.into_raw_fd();
+        let stdout_fd = dup(slave_fd)
+            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {}", e)))?;
+        let stderr_fd = dup(slave_fd)
+            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {}", e)))?;
+        let slave_fd_for_ioctl = slave_fd;
+
+        let mut command = Command::new(cmd);
+        unsafe {
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::from_raw_fd(stdout_fd))
+                .stderr(Stdio::from_raw_fd(stderr_fd));
+        }
+        command
+            .args(args)
+            .current_dir(&self.current_dir)
+            .envs(&self.current_env);
+
+        unsafe {
+            command.pre_exec(move || {
+                setsid().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                let rc = libc::ioctl(slave_fd_for_ioctl, libc::TIOCSCTTY, 0);
+                if rc < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                self.debug_fmt(format_args!("Command execution failed: {}", e));
+                self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
+                let stderr = encode_if_hex(&format!("Failed to execute command: {}", e));
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr,
+                    exit_code: 127,
+                });
+            }
+        };
+
+        if let Some(mut stdin) = child.stdin.take() {
+            if let Some(content) = stdin_content {
+                if !content.is_empty() {
+                    if let Err(e) = stdin.write_all(content) {
+                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {}", e));
+                        return Ok(CommandResult {
+                            stdout: String::new(),
+                            stderr,
+                            exit_code: 1,
+                        });
+                    }
+                }
+            }
+            // Always close stdin so the child can observe EOF.
+            drop(stdin);
+        }
+
+        // Close the slave fd in the parent to allow EOF on master when the child exits.
+        unsafe {
+            libc::close(slave_fd);
+        }
+
+        let mut output = Vec::new();
+        let start = std::time::Instant::now();
+        let mut child_exited = false;
+
+        loop {
+            if let Some(timeout_secs) = timeout {
+                if start.elapsed() >= Duration::from_secs(timeout_secs) {
+                    let _ = child.kill();
+                    break;
+                }
+            }
+
+            let mut buf = [0u8; 4096];
+            let rc =
+                unsafe { libc::read(master_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            if rc == 0 {
+                break;
+            } else if rc < 0 {
+                let err = Errno::last();
+                if err == Errno::EAGAIN {
+                    if !child_exited {
+                        if let Ok(Some(_)) = child.try_wait() {
+                            child_exited = true;
+                        }
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                } else {
+                    let stderr = encode_if_hex(&format!(
+                        "Failed to read from pty: {}",
+                        std::io::Error::last_os_error()
+                    ));
+                    return Ok(CommandResult {
+                        stdout: String::new(),
+                        stderr,
+                        exit_code: 1,
+                    });
+                }
+            } else {
+                output.extend_from_slice(&buf[..rc as usize]);
+            }
+        }
+
+        let status = match child.wait() {
+            Ok(status) => status,
+            Err(e) => {
+                let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr,
+                    exit_code: 1,
+                });
+            }
+        };
+
+        let exit_code = if let Some(signal) = status.signal() {
+            128 + signal
+        } else {
+            status.code().unwrap_or(-1)
+        };
+
+        let stdout = if output_hex {
+            hex::encode(&output)
+        } else {
+            String::from_utf8_lossy(&output).into_owned()
+        };
+
+        let result = CommandResult {
+            stdout,
+            stderr: String::new(),
+            exit_code,
+        };
+
+        self.debug_fmt(format_args!("Command execution results (tty):"));
+        self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
+        self.debug_fmt(format_args!("stdout: {}", result.stdout));
+
+        if is_record_result {
+            self.debug_fmt(format_args!(
+                "Setting environment variable CMD_EXIT_CODE={}",
+                result.exit_code
+            ));
+            self.add_env("CMD_EXIT_CODE", &result.exit_code.to_string());
+
+            if !output_hex && result.stdout.contains('\0') {
+                self.debug("Warning: Found null bytes when setting CMD_STDOUT");
                 let safe_stdout = result.stdout.replace('\0', "\\0");
                 self.add_env("CMD_STDOUT", &safe_stdout);
             } else {
@@ -909,6 +1125,7 @@ mod tests {
         let mut test_case = TestCase {
             tstdin: "".to_string(),
             byte_mode: false,
+            tty: false,
             command: "test".to_string(),
             description: "Test with files".to_string(),
             args: vec![],
@@ -1099,6 +1316,7 @@ mod tests {
         let mut test_case = TestCase {
             tstdin: "".to_string(),
             byte_mode: false,
+            tty: false,
             command: "test".to_string(),
             description: "Test with environment".to_string(),
             args: vec![],

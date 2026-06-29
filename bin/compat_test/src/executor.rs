@@ -150,10 +150,28 @@ impl CommandExecutor {
         let actual = if use_bytes {
             let args_os = resolve_args_os(test_case)?;
             let stdin_bytes = resolve_stdin_bytes(test_case)?;
-            self.execute_syskits_bytes(
-                &stdin_bytes,
+            if test_case.tty {
+                self.execute_syskits_bytes_tty(
+                    &stdin_bytes,
+                    &test_case.command,
+                    &args_os,
+                    &mut sandbox,
+                    timeout,
+                )?
+            } else {
+                self.execute_syskits_bytes(
+                    &stdin_bytes,
+                    &test_case.command,
+                    &args_os,
+                    &mut sandbox,
+                    timeout,
+                )?
+            }
+        } else if test_case.tty {
+            self.execute_syskits_tty(
+                &test_case.tstdin,
                 &test_case.command,
-                &args_os,
+                &test_case.args,
                 &mut sandbox,
                 timeout,
             )?
@@ -222,10 +240,28 @@ impl CommandExecutor {
         let expected = if use_bytes {
             let args_os = resolve_args_os(test_case)?;
             let stdin_bytes = resolve_stdin_bytes(test_case)?;
-            self.execute_coreutils_bytes(
-                &stdin_bytes,
+            if test_case.tty {
+                self.execute_coreutils_bytes_tty(
+                    &stdin_bytes,
+                    &test_case.command,
+                    &args_os,
+                    &mut coreutils_sandbox,
+                    timeout,
+                )?
+            } else {
+                self.execute_coreutils_bytes(
+                    &stdin_bytes,
+                    &test_case.command,
+                    &args_os,
+                    &mut coreutils_sandbox,
+                    timeout,
+                )?
+            }
+        } else if test_case.tty {
+            self.execute_coreutils_tty(
+                &test_case.tstdin,
                 &test_case.command,
-                &args_os,
+                &test_case.args,
                 &mut coreutils_sandbox,
                 timeout,
             )?
@@ -301,6 +337,42 @@ impl CommandExecutor {
         sandbox.execute_command(&cmd, &args, Some(tstdin), true, timeout)
     }
 
+    /// 在沙箱中执行 syskits 命令（伪终端）
+    fn execute_syskits_tty(
+        &self,
+        tstdin: &str,
+        command: &str,
+        args: &[String],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        let (cmd, args) = match self.config.mode {
+            SyskitsMode::Single => {
+                let syskits_path = if self.config.syskits_path.is_absolute() {
+                    self.config.syskits_path.clone()
+                } else {
+                    std::env::current_dir()?.join(&self.config.syskits_path)
+                };
+
+                if !syskits_path.exists() {
+                    return Err(TestError::ExecutionError(format!(
+                        "Syskits binary not found at: {}",
+                        syskits_path.display()
+                    )));
+                }
+
+                let syskits_str = syskits_path.to_str().unwrap().to_string();
+                let mut modified_args = Vec::with_capacity(args.len() + 1);
+                modified_args.push(command.to_string());
+                modified_args.extend_from_slice(args);
+                (syskits_str, modified_args)
+            }
+            SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
+        };
+
+        sandbox.execute_command_tty(&cmd, &args, Some(tstdin), true, timeout)
+    }
+
     /// 在沙箱中执行 syskits 命令（原始字节参数）
     fn execute_syskits_bytes(
         &self,
@@ -337,6 +409,42 @@ impl CommandExecutor {
         sandbox.execute_command_bytes(&cmd, &args, Some(tstdin), true, timeout, true)
     }
 
+    /// 在沙箱中执行 syskits 命令（原始字节参数，伪终端）
+    fn execute_syskits_bytes_tty(
+        &self,
+        tstdin: &[u8],
+        command: &str,
+        args: &[OsString],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        let (cmd, args) = match self.config.mode {
+            SyskitsMode::Single => {
+                let syskits_path = if self.config.syskits_path.is_absolute() {
+                    self.config.syskits_path.clone()
+                } else {
+                    std::env::current_dir()?.join(&self.config.syskits_path)
+                };
+
+                if !syskits_path.exists() {
+                    return Err(TestError::ExecutionError(format!(
+                        "Syskits binary not found at: {}",
+                        syskits_path.display()
+                    )));
+                }
+
+                let syskits_str = syskits_path.to_str().unwrap().to_string();
+                let mut modified_args = Vec::with_capacity(args.len() + 1);
+                modified_args.push(OsString::from(command));
+                modified_args.extend_from_slice(args);
+                (syskits_str, modified_args)
+            }
+            SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
+        };
+
+        sandbox.execute_command_bytes_tty(&cmd, &args, Some(tstdin), true, timeout, true)
+    }
+
     /// 在沙箱中执行 GNU coreutils 命令
     fn execute_coreutils(
         &self,
@@ -358,6 +466,24 @@ impl CommandExecutor {
         sandbox.execute_command(command, args, Some(tstdin), true, timeout)
     }
 
+    /// 在沙箱中执行 GNU coreutils 命令（伪终端）
+    fn execute_coreutils_tty(
+        &self,
+        tstdin: &str,
+        command: &str,
+        args: &[String],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        if let Some(ref coreutils_path) = self.config.coreutils_path {
+            let current_path = sandbox.get_env("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
+            sandbox.add_env("PATH", &new_path);
+        }
+
+        sandbox.execute_command_tty(command, args, Some(tstdin), true, timeout)
+    }
+
     /// 在沙箱中执行 GNU coreutils 命令（原始字节参数）
     fn execute_coreutils_bytes(
         &self,
@@ -374,6 +500,24 @@ impl CommandExecutor {
         }
 
         sandbox.execute_command_bytes(command, args, Some(tstdin), true, timeout, true)
+    }
+
+    /// 在沙箱中执行 GNU coreutils 命令（原始字节参数，伪终端）
+    fn execute_coreutils_bytes_tty(
+        &self,
+        tstdin: &[u8],
+        command: &str,
+        args: &[OsString],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        if let Some(ref coreutils_path) = self.config.coreutils_path {
+            let current_path = sandbox.get_env("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
+            sandbox.add_env("PATH", &new_path);
+        }
+
+        sandbox.execute_command_bytes_tty(command, args, Some(tstdin), true, timeout, true)
     }
 }
 
@@ -539,6 +683,7 @@ mod tests {
         TestCase {
             tstdin: "".to_string(),
             byte_mode: false,
+            tty: false,
             command: "test_command".to_string(),
             description: "Test case description".to_string(),
             args: vec!["arg1".to_string(), "arg2".to_string()],
@@ -1970,6 +2115,7 @@ mod tests {
         TestCase {
             tstdin: "".to_string(),
             byte_mode: false,
+            tty: false,
             command: "echo".to_string(),
             description: "Simple echo test".to_string(),
             args: vec!["-n".to_string(), "hello".to_string()],

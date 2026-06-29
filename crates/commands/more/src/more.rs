@@ -1602,6 +1602,272 @@ mod tests {
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 
+    #[test]
+    fn test_handle_key_space_page_down() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+            "line4".to_string(),
+            "line5".to_string(),
+        ];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        let mut out = stdout();
+
+        let key = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key).unwrap();
+
+        assert_eq!(pager.upper_mark, 2);
+    }
+
+    #[test]
+    fn test_handle_key_back_page_up() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+            "line4".to_string(),
+        ];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        pager.upper_mark = 2;
+        let mut out = stdout();
+
+        let key = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key).unwrap();
+
+        assert_eq!(pager.upper_mark, 0);
+    }
+
+    #[test]
+    fn test_apply_search_pattern_found() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "foo".to_string(),
+            "line4".to_string(),
+        ];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        let mut out = stdout();
+
+        apply_search_pattern(&mut pager, &mut out, "foo", true).unwrap();
+
+        assert_eq!(pager.upper_mark, 2);
+    }
+
+    #[test]
+    fn test_apply_search_pattern_not_found() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+        ];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        let mut out = stdout();
+
+        let before_rows = pager.content_rows;
+        apply_search_pattern(&mut pager, &mut out, "missing", true).unwrap();
+
+        assert_eq!(pager.content_rows, before_rows);
+    }
+
+    #[test]
+    fn test_handle_key_enter_next_line() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec!["line1".to_string(), "line2".to_string(), "line3".to_string()];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        let mut out = stdout();
+
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key).unwrap();
+
+        assert_eq!(pager.upper_mark, 1);
+    }
+
+    #[test]
+    fn test_handle_key_half_page_down_up() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(5),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+            "line4".to_string(),
+            "line5".to_string(),
+            "line6".to_string(),
+        ];
+        let mut pager = Pager::new(5, lines, None, &mut options);
+        let mut out = stdout();
+
+        let key_down = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL);
+        handle_key_event(&mut pager, &mut out, key_down).unwrap();
+        assert_eq!(pager.upper_mark, 2);
+
+        let key_up = KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL);
+        handle_key_event(&mut pager, &mut out, key_up).unwrap();
+        assert_eq!(pager.upper_mark, 0);
+    }
+
+    #[test]
+    fn test_handle_key_go_top_bottom() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+            "line4".to_string(),
+            "line5".to_string(),
+        ];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        let mut out = stdout();
+
+        let key_bottom = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key_bottom).unwrap();
+        assert_eq!(pager.upper_mark, 3);
+
+        let key_top = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key_top).unwrap();
+        assert_eq!(pager.upper_mark, 0);
+    }
+
+    #[test]
+    fn test_handle_key_repeat_search() {
+        let mut options = MoreOptions {
+            is_clean_print: false,
+            is_logical: false,
+            is_no_pause: false,
+            is_exit_on_eof: false,
+            from_line: 0,
+            lines: Some(3),
+            pattern: None,
+            is_print_over: false,
+            is_silent: true,
+            is_squeeze: false,
+            is_interactive: true,
+            is_tty_output: true,
+        };
+
+        let lines = vec![
+            "foo".to_string(),
+            "line2".to_string(),
+            "foo".to_string(),
+            "line4".to_string(),
+        ];
+        let mut pager = Pager::new(3, lines, None, &mut options);
+        let mut out = stdout();
+
+        apply_search_pattern(&mut pager, &mut out, "foo", true).unwrap();
+        assert_eq!(pager.upper_mark, 2);
+
+        let key_prev = KeyEvent::new(KeyCode::Char('N'), KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key_prev).unwrap();
+        assert_eq!(pager.upper_mark, 0);
+
+        let key_next = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+        handle_key_event(&mut pager, &mut out, key_next).unwrap();
+        assert_eq!(pager.upper_mark, 2);
+    }
+
     /*#[test]
         fn test_more_main() {
             use std::ffi::OsString;

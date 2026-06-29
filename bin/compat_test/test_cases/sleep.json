@@ -1,0 +1,244 @@
+{
+    "tests": [
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 基本睡眠 0.001 秒",
+            "args": [
+                "0.001"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 睡眠 0 秒",
+            "args": [
+                "0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 后缀 s (秒)",
+            "args": [
+                "0.001s"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 后缀 m (分钟)",
+            "args": [
+                "0.001m"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 后缀 h (小时)",
+            "args": [
+                "0.001h"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 后缀 d (天)",
+            "args": [
+                "0.00001d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 多参数累加 - 浮点数",
+            "args": [
+                "0.001",
+                "0.002",
+                "0.003"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 多参数累加 - 混合后缀",
+            "args": [
+                "0.001s",
+                "0.001m",
+                "0.001h"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 无效输入",
+            "args": [
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 负数",
+            "args": [
+                "--",
+                "-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 大写后缀 D",
+            "args": [
+                "42D"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 无效后缀 day",
+            "args": [
+                "42d",
+                "42day"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: NaN 值",
+            "args": [
+                "nan"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 空字符串",
+            "args": [
+                ""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 缺少参数",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 多个参数其中一个无效",
+            "args": [
+                "0.001",
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 整数和浮点数混合",
+            "args": [
+                "1",
+                "0.5"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 非常小的数值",
+            "args": [
+                "0.0001"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        }
+    ]
+}

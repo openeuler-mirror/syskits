@@ -28,7 +28,7 @@ use crate::paths::TailInput;
 use crate::{Quotable, parse, platform};
 
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 /// tail_flags 模块定义了 tail 命令的所有命令行参数标志和常量。
 /// 这些常量用于构建命令行参数解析器和处理用户输入。
@@ -351,13 +351,21 @@ impl TailOptions {
             }
         }
 
+        let quiet = matches.get_flag(tail_flags::verbosity::TAIL_QUIET);
+        let verbose_flag = matches.get_flag(tail_flags::verbosity::TAIL_VERBOSE);
+
         settings.inputs = matches
             .get_many::<OsString>(tail_flags::TAIL_ARG_FILES)
             .map(|v| v.map(TailInput::from).collect())
             .unwrap_or_else(|| vec![TailInput::default()]);
 
-        settings.verbose =
-            settings.inputs.len() > 1 && !matches.get_flag(tail_flags::verbosity::TAIL_QUIET);
+        settings.verbose = if quiet {
+            false
+        } else if verbose_flag {
+            true
+        } else {
+            settings.inputs.len() > 1
+        };
 
         Ok(settings)
     }
@@ -535,10 +543,13 @@ fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOp
         return false;
     }
 
-    // 如果现代语法解析成功，只有当第一个参数以'+'开头时才尝试过时语法
-    // 因为这可能是过时语法的正数偏移量
     if modern_result.is_ok() {
-        return args[1].to_string_lossy().starts_with('+');
+        let arg1 = args[1].to_string_lossy();
+        // 仅在没有额外文件参数时才尝试过时的正数形式（如 +N）
+        if arg1.starts_with('+') {
+            return args.len() == 2;
+        }
+        return false;
     }
 
     // 如果现代语法解析失败，可能是过时语法
@@ -672,7 +683,7 @@ mod tests {
 
         fn create_args(args: &[&str]) -> impl ctcore::Args {
             let mut vec = vec![OsString::from("tail")];
-            vec.extend(args.iter().map(|s| OsString::from(s)));
+            vec.extend(args.iter().map(OsString::from));
             vec.into_iter()
         }
 

@@ -12,17 +12,18 @@
 // 在GNU/Linux系统中，nice命令的主要作用是调整程序的执行优先级，从而影响其对CPU资源的访问
 
 extern crate rust_i18n;
-use libc::{PRIO_PROCESS, c_char, c_int, execvp};
+use libc::{c_char, c_int, execvp, nice as libc_nice};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
     Tool,
-    ct_error::{CTResult, CTsageError, CtSimpleError, UClapError, set_ct_exit_code},
+    ct_display::Quotable,
+    ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code},
     ct_show_error,
 };
 use sys_locale::get_locale;
@@ -38,6 +39,63 @@ fn is_prefix_of(prefix: &str, target: &str, min_match: usize) -> bool {
     }
 
     &target[0..prefix.len()] == prefix
+}
+
+const NZERO: i32 = 20;
+const MIN_ADJUSTMENT: i64 = 1 - 2 * NZERO as i64;
+const MAX_ADJUSTMENT: i64 = 2 * NZERO as i64 - 1;
+
+fn clamp_adjustment(value: i64) -> i32 {
+    value.clamp(MIN_ADJUSTMENT, MAX_ADJUSTMENT) as i32
+}
+
+fn parse_adjustment(value: &str) -> Result<i32, Box<dyn ctcore::ct_error::CTError>> {
+    let parsed: i64 = value
+        .parse()
+        .map_err(|_| CtSimpleError::new(125, format!("invalid adjustment {}", value.quote())))?;
+    Ok(clamp_adjustment(parsed))
+}
+
+fn perm_related_errno(err: i32) -> bool {
+    err == libc::EACCES || err == libc::EPERM
+}
+
+fn get_current_niceness() -> Result<c_int, Error> {
+    nix::errno::Errno::clear();
+    let value = unsafe { libc_nice(0) };
+    let err = Error::last_os_error();
+    if value == -1 && err.raw_os_error().unwrap_or(0) != 0 {
+        return Err(err);
+    }
+    Ok(value)
+}
+
+fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
+    nix::errno::Errno::clear();
+    let value = unsafe { libc_nice(adjustment) };
+    let err = Error::last_os_error();
+    if value == -1 && err.raw_os_error().unwrap_or(0) != 0 {
+        let errno = err.raw_os_error().unwrap_or(0);
+        if perm_related_errno(errno) {
+            if writeln!(
+                std::io::stderr(),
+                "{}: cannot set niceness: {}",
+                ctcore::ct_util_name(),
+                err
+            )
+            .is_err()
+            {
+                set_ct_exit_code(125);
+                return Err(Ok(()));
+            }
+            return Ok(());
+        }
+        return Err(Err(CtSimpleError::new(
+            125,
+            format!("cannot set niceness: {}", err),
+        )));
+    }
+    Ok(())
 }
 
 /// 将传统的参数转换为标准化形式。
@@ -71,6 +129,10 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
     for str in args {
         if is_saw_command {
             vec.push(str);
+        } else if str.to_str() == Some("--") {
+            // "--" 结束选项解析，后续均视为命令参数
+            vec.push(str);
+            is_saw_command = true;
         } else if is_saw_n {
             // 如果已看到"-n"，则将当前参数与"-n"合并
             let mut new_arg: OsString = "-n".into();
@@ -142,31 +204,48 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
-    // 清除之前的错误信息，并获取当前进程的优先级
-    nix::errno::Errno::clear();
-    let mut nice_ness = match nice_getprority() {
-        Ok(value) => value,
-        Err(value) => return value,
+    let has_command = args_match.contains_id(opt_flags::COMMAND);
+    let adjustment_value = args_match.get_one::<String>(opt_flags::ADJUSTMENT);
+
+    if !has_command {
+        if let Some(value) = adjustment_value {
+            let _ = parse_adjustment(value)?;
+            ct_show_error!("a command must be given with an adjustment");
+            eprintln!("Try 'nice --help' for more information.");
+            set_ct_exit_code(125);
+            return Ok(());
+        }
+
+        match get_current_niceness() {
+            Ok(value) => {
+                println!("{value}");
+                return Ok(());
+            }
+            Err(err) => {
+                ct_show_error!("cannot get niceness: {}", err);
+                set_ct_exit_code(125);
+                return Ok(());
+            }
+        }
+    }
+
+    let adjustment = match adjustment_value {
+        Some(value) => parse_adjustment(value)?,
+        None => 10,
     };
 
-    // 解析调整优先级的值，并进行验证
-    let nice_adjustment = match nice_adjustment(&args_match, &mut nice_ness) {
-        Ok(value) => value,
-        Err(value) => return value,
-    };
-
-    // 应用优先级调整
-    nice_ness += nice_adjustment;
-
-    // 设置新的优先级，若失败则显示警告信息并返回错误码 125
-    if let Some(value) = nice_setprority(nice_ness) {
+    if let Err(value) = apply_adjustment(adjustment) {
         return value;
     }
 
     // 准备执行命令需要的参数，并执行命令
-    let cstr: Vec<CString> = args_match
+    let command_args: Vec<String> = args_match
         .get_many::<String>(opt_flags::COMMAND)
         .unwrap()
+        .map(|x| x.to_string())
+        .collect();
+    let cstr: Vec<CString> = command_args
+        .iter()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
 
@@ -177,71 +256,15 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 执行命令失败的处理
-    ct_show_error!("execvp: {}", Error::last_os_error());
-    let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
+    let exec_error = Error::last_os_error();
+    ct_show_error!("{}: {}", command_args[0].quote(), exec_error);
+    let exit_code = if exec_error.raw_os_error().unwrap_or(0) as c_int == libc::ENOENT {
         127
     } else {
         126
     };
     set_ct_exit_code(exit_code);
     Ok(())
-}
-
-fn nice_getprority() -> Result<c_int, CTResult<()>> {
-    let nice_ness = unsafe { libc::getpriority(PRIO_PROCESS, 0) };
-    if Error::last_os_error().raw_os_error().unwrap() != 0 {
-        return Err(Err(CtSimpleError::new(
-            125,
-            format!("getpriority: {}", Error::last_os_error()),
-        )));
-    }
-    Ok(nice_ness)
-}
-
-fn nice_setprority(nice_ness: c_int) -> Option<CTResult<()>> {
-    if unsafe { libc::setpriority(PRIO_PROCESS, 0, nice_ness) } == -1
-        && write!(
-            std::io::stderr(),
-            "{}: warning: setpriority: {}",
-            ctcore::ct_util_name(),
-            Error::last_os_error()
-        )
-        .is_err()
-    {
-        set_ct_exit_code(125);
-        return Some(Ok(()));
-    }
-    None
-}
-
-fn nice_adjustment(args_match: &ArgMatches, nice_ness: &mut c_int) -> Result<i32, CTResult<()>> {
-    let nice_adjustment = match args_match.get_one::<String>(opt_flags::ADJUSTMENT) {
-        Some(n_str) => {
-            if !args_match.contains_id(opt_flags::COMMAND) {
-                return Err(Err(CTsageError::new(
-                    125,
-                    "A command must be given with an adjustment.",
-                )));
-            }
-            match n_str.parse() {
-                Ok(num) => num,
-                Err(e) => {
-                    return Err(Err(CtSimpleError::new(
-                        125,
-                        format!("\"{n_str}\" is not a valid number: {e}"),
-                    )));
-                }
-            }
-        }
-        None => {
-            if !args_match.contains_id(opt_flags::COMMAND) {
-                println!("{nice_ness}");
-                return Err(Ok(()));
-            }
-            10_i32
-        }
-    };
-    Ok(nice_adjustment)
 }
 
 pub fn ct_app() -> Command {
@@ -387,38 +410,30 @@ mod tests {
                 OsString::from("command"),
             ]
         );
+
+        // 测试 "--" 结束选项解析
+        let args = vec!["nice", "--", "-1", "command"];
+        let result: Vec<OsString> =
+            standardize_nice_args(args.into_iter().map(OsString::from)).collect();
+        assert_eq!(
+            result,
+            vec![
+                OsString::from("nice"),
+                OsString::from("--"),
+                OsString::from("-1"),
+                OsString::from("command"),
+            ]
+        );
     }
 
     #[test]
-    fn test_nice_adjustment() {
-        // 创建命令行匹配对象进行测试
-        let mut nice_ness = 0;
-
-        // 测试默认情况（未指定 adjustment 但有命令）
-        let args = vec!["nice", "ls"];
-        let args_match = ct_app().try_get_matches_from(args).unwrap();
-        let result = nice_adjustment(&args_match, &mut nice_ness);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 10); // 默认为 10
-
-        // 测试指定了有效的 adjustment
-        let args = vec!["nice", "-n", "5", "ls"];
-        let args_match = ct_app().try_get_matches_from(args).unwrap();
-        let result = nice_adjustment(&args_match, &mut nice_ness);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 5);
-
-        // 测试无效的 adjustment 值
-        let args = vec!["nice", "-n", "invalid", "ls"];
-        let args_match = ct_app().try_get_matches_from(args).unwrap();
-        let result = nice_adjustment(&args_match, &mut nice_ness);
-        assert!(result.is_err());
-
-        // 测试未指定命令
-        let args = vec!["nice", "-n", "5"];
-        let args_match = ct_app().try_get_matches_from(args).unwrap();
-        let result = nice_adjustment(&args_match, &mut nice_ness);
-        assert!(result.is_err());
+    fn test_parse_adjustment() {
+        assert_eq!(parse_adjustment("5").unwrap(), 5);
+        assert_eq!(parse_adjustment("+1").unwrap(), 1);
+        assert_eq!(parse_adjustment("-1").unwrap(), -1);
+        assert_eq!(parse_adjustment("100").unwrap(), MAX_ADJUSTMENT as i32);
+        assert_eq!(parse_adjustment("-100").unwrap(), MIN_ADJUSTMENT as i32);
+        assert!(parse_adjustment("invalid").is_err());
     }
 
     // 以下测试需要使用 mock 或集成测试才能完全测试，
@@ -427,7 +442,7 @@ mod tests {
     fn test_nice_getprority_mock() {
         // 这个测试主要测试函数的结构性，
         // 真正的系统调用测试需要在集成测试中完成
-        let result = nice_getprority();
+        let result = get_current_niceness();
 
         // 在大多数系统上，应该能成功获取当前进程的优先级
         if result.is_ok() {

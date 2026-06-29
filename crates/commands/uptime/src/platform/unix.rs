@@ -37,13 +37,19 @@ pub fn print_loadavg() -> String {
 }
 
 #[cfg(unix)]
-pub fn process_utmpx() -> (Option<time_t>, usize) {
+pub fn process_utmpx(path: Option<&str>) -> (Option<time_t>, usize) {
     use ctcore::ct_utmpx::*;
 
     let mut n_users = 0;
     let mut boot_time = None;
 
-    for record in CtUtmpx::iter_all_records() {
+    let records = if let Some(p) = path {
+        CtUtmpx::iter_all_records_from(p)
+    } else {
+        CtUtmpx::iter_all_records()
+    };
+
+    for record in records {
         match record.record_type() {
             USER_PROCESS => n_users += 1,
             BOOT_TIME => {

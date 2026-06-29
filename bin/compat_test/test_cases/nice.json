@@ -2,203 +2,474 @@
     "tests": [
         {
             "command": "nice",
-            "description": "nice: 测试设置进程优先级",
-            "args": ["-n", "5", "sh", "-c", "ps o ni= -p $$"],
-            "setup_commands": [
-            ],
+            "description": "nice: no args prints current niceness",
+            "args": [],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "  5\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": false
+            }
         },
         {
             "command": "nice",
-            "description": "nice: 显式指定 nice 值（负值）",
-            "args": ["-n", "-5", "sh", "-c", "ps o ni= -p $$"],
-            "setup_commands": [
+            "description": "nice: --adjustment=1 (long option)",
+            "args": [
+                "--adjustment=1",
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": " -5\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": true
+            }
         },
         {
             "command": "nice",
-            "description": "nice: nice值为极大正数",
-            "args": ["-n", "100", "sh", "-c", "ps o ni= -p $$"],
-            "setup_commands": [
+            "description": "nice: coreutils nice.sh case 0 (args: empty, expect: 10)",
+            "args": [
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": " 19\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": true
+            }
         },
         {
             "command": "nice",
-            "description": "nice: nice值为极小负数",
-            "args": ["-n", "-100", "sh", "-c", "ps o ni= -p $$"],
-            "setup_commands": [
+            "description": "nice: coreutils nice.sh case 1 (args: -1, expect: 1)",
+            "args": [
+                "-1",
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "-20\n",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": true
+            }
         },
         {
             "command": "nice",
-            "description": "nice: 不执行命令",
-            "args": ["-n", "5"],
-            "setup_commands": [
+            "description": "nice: coreutils nice.sh case 2 (args: -12, expect: 12)",
+            "args": [
+                "-12",
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 125,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": true
+            }
         },
         {
             "command": "nice",
-            "description": "nice: 执行不存在的命令",
-            "args": ["-n", "5", "notexistcmd"],
-            "setup_commands": [
+            "description": "nice: coreutils nice.sh case 3 (args: -1:-2, expect: 2)",
+            "args": [
+                "-1",
+                "-2",
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 127,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": true
+            }
         },
         {
             "command": "nice",
-            "description": "nice: 非法的nice参数",
-            "args": ["-n", "aaa", "sh", "-c", "ps o ni= -p $$"],
-            "setup_commands": [
+            "description": "nice: coreutils nice.sh case 4 (args: -n:1, expect: 1)",
+            "args": [
+                "-n",
+                "1",
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 125,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": true
+            }
         },
         {
             "command": "nice",
-            "description": "nice: 设置优先级为小数",
-            "args": ["-n", "5.5", "sh", "-c", "ps o ni= -p $$"],
-            "setup_commands": [
+            "description": "nice: coreutils nice.sh case 5 (args: -n:1:-2, expect: 2)",
+            "args": [
+                "-n",
+                "1",
+                "-2",
+                "nice"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 125,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
                 }
-            },
-            "cleanup_commands": [
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 6 (args: -n:1:-+12, expect: 12)",
+            "args": [
+                "-n",
+                "1",
+                "-+12",
+                "nice"
             ],
-            "requires_root": false
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 7 (args: -2:-n:1, expect: 1)",
+            "args": [
+                "-2",
+                "-n",
+                "1",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 8 (args: -2:-n:12, expect: 12)",
+            "args": [
+                "-2",
+                "-n",
+                "12",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 9 (args: -+1, expect: 1)",
+            "args": [
+                "-+1",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 10 (args: -+12, expect: 12)",
+            "args": [
+                "-+12",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 11 (args: -+1:-+12, expect: 12)",
+            "args": [
+                "-+1",
+                "-+12",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 12 (args: -n:+1, expect: 1)",
+            "args": [
+                "-n",
+                "+1",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 13 (args: --1:-2, expect: 2)",
+            "args": [
+                "--1",
+                "-2",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 14 (args: --1:-2:-13, expect: 13)",
+            "args": [
+                "--1",
+                "-2",
+                "-13",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 15 (args: --1:-n:2, expect: 2)",
+            "args": [
+                "--1",
+                "-n",
+                "2",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 16 (args: --1:-n:2:-3, expect: 3)",
+            "args": [
+                "--1",
+                "-n",
+                "2",
+                "-3",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 17 (args: --1:-n:2:-13, expect: 13)",
+            "args": [
+                "--1",
+                "-n",
+                "2",
+                "-13",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 18 (args: -n:-1:-12, expect: 12)",
+            "args": [
+                "-n",
+                "-1",
+                "-12",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: coreutils nice.sh case 19 (args: --1:-12, expect: 12)",
+            "args": [
+                "--1",
+                "-12",
+                "nice"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: negative adjustment -n -1 true (stderr match coreutils)",
+            "args": [
+                "-n",
+                "-1",
+                "true"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: negative adjustment --1 true (stderr match coreutils)",
+            "args": [
+                "--1",
+                "true"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: missing command with adjustment (coreutils nice-fail.sh)",
+            "args": [
+                "-n",
+                "1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: unknown option --- (coreutils nice-fail.sh)",
+            "args": [
+                "---"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: invalid adjustment -n 1a (coreutils nice-fail.sh)",
+            "args": [
+                "-n",
+                "1a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: exit status propagation (coreutils nice-fail.sh)",
+            "args": [
+                "sh",
+                "-c",
+                "exit 2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: invalid command (directory) (coreutils nice-fail.sh)",
+            "args": [
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 126,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "nice: no such command (coreutils nice-fail.sh)",
+            "args": [
+                "no_such"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": null,
+                    "stderr": null
+                }
+            }
         }
     ]
 }

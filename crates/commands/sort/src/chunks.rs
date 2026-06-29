@@ -405,7 +405,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -442,7 +442,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -479,7 +479,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -516,7 +516,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -702,7 +702,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -739,7 +739,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -776,7 +776,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -813,7 +813,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -850,7 +850,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -887,7 +887,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -924,7 +924,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -961,7 +961,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -998,7 +998,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1035,7 +1035,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1072,7 +1072,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1109,7 +1109,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1146,7 +1146,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1183,7 +1183,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1220,7 +1220,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1257,7 +1257,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1294,7 +1294,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1331,7 +1331,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1368,7 +1368,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1405,7 +1405,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1442,7 +1442,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 3, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1479,7 +1479,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 7, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1516,7 +1516,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1553,7 +1553,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1590,7 +1590,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1627,7 +1627,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1664,7 +1664,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1701,7 +1701,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1738,7 +1738,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1775,7 +1775,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1812,7 +1812,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1849,7 +1849,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1886,7 +1886,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1923,7 +1923,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1960,7 +1960,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -1997,7 +1997,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2034,7 +2034,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2071,7 +2071,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2108,7 +2108,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2145,7 +2145,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2187,7 +2187,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2229,7 +2229,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2271,7 +2271,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2313,7 +2313,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2350,7 +2350,7 @@ mod tests {
             Ok(chunk) => {
                 assert_eq!(chunk.lines().len(), 4, "There should be three lines parsed");
             }
-            Err(e) => panic!("Expected a chunk but got an error: {:?}", e),
+            Err(e) => panic!("Expected a chunk but got an error: {e:?}"),
         }
     }
 
@@ -2477,7 +2477,7 @@ mod tests {
                 .unwrap();
 
         assert!(buffer.len() > 10); // Buffer should have resized
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], expected_data);
     }
 
@@ -2494,7 +2494,7 @@ mod tests {
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
         assert_eq!(read_bytes, data.len());
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], data);
     }
 
@@ -2515,7 +2515,7 @@ mod tests {
         let (read_bytes, should_continue) =
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert!(read_bytes > 0 && read_bytes <= buffer.len());
     }
 
@@ -3707,7 +3707,7 @@ mod tests {
 
         // 多一个换行符
         assert_eq!(read_bytes, expected_data.len());
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], expected_data);
     }
 
@@ -3724,7 +3724,7 @@ mod tests {
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
         assert_eq!(read_bytes, data.len() + 1); // includes appended newline
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(buffer[data.len()], b'\n'); // Check that newline was appended correctly
         assert_eq!(&buffer[..read_bytes - 1], data);
     }
@@ -3758,7 +3758,7 @@ mod tests {
 
         assert!(buffer.len() <= 20000);
         assert!(buffer.len() < large_data.len());
-        assert_eq!(should_continue, true);
+        assert!(should_continue);
         assert_eq!(read_bytes, 15002);
     }
 
@@ -3797,7 +3797,7 @@ mod tests {
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
         assert_eq!(read_bytes, excepted_data.len());
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], excepted_data);
     }
 
@@ -3813,7 +3813,7 @@ mod tests {
         let (read_bytes, should_continue) =
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes - 1], data); // Check buffer without the appended newline
         assert_eq!(buffer[read_bytes - 1], b'\n'); // Ensure newline was appended
     }
@@ -3824,10 +3824,7 @@ mod tests {
 
         impl Read for ErrorMockRead {
             fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-                Err(std::io::Error::new(
-                    ErrorKind::Other,
-                    "Simulated read error",
-                ))
+                Err(std::io::Error::other("Simulated read error"))
             }
         }
 
@@ -3853,7 +3850,7 @@ mod tests {
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
         assert_eq!(read_bytes, data.len());
-        assert_eq!(should_continue, true);
+        assert!(should_continue);
         assert_eq!(&buffer[..read_bytes], data);
     }
 
@@ -3881,7 +3878,7 @@ mod tests {
         .unwrap();
 
         assert!(buffer.len() <= 100);
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert!(read_bytes > initial_data.len() + continued_data.len());
     }
 
@@ -3893,8 +3890,8 @@ mod tests {
         let segment_z = b"Z".repeat(1024);
         let separator_value = b"";
         // Convert Vec<Vec<u8>> to Vec<&[u8]> to be compatible with join
-        let data_segments = vec![&segment_x[..], &segment_y[..], &segment_z[..]];
-        let expected_data_segments = vec![
+        let data_segments = [&segment_x[..], &segment_y[..], &segment_z[..]];
+        let expected_data_segments = [
             &segment_x[..],
             &segment_y[..],
             &segment_z[..],
@@ -3921,7 +3918,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert!(read_bytes >= data.len()); // Ensure all data is read
         assert_eq!(&buffer[..read_bytes], expected_data.as_slice());
     }
@@ -3940,7 +3937,7 @@ mod tests {
             chunk_read_to_buffer(&mut file, &mut next_files, &mut buffer, None, 0, b'\n').unwrap();
 
         assert_eq!(read_bytes, expected_data.len());
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], expected_data); // Ensure data matches exactly
     }
 
@@ -3977,7 +3974,7 @@ mod tests {
             read_bytes,
             initial_data.len() + expected_continued_data.len()
         );
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], complete_data.as_slice());
     }
 
@@ -3998,7 +3995,7 @@ mod tests {
 
         // Verify that the function correctly identifies '|' as the separator.
         assert_eq!(read_bytes, excepted_data.len());
-        assert_eq!(should_continue, false);
+        assert!(!should_continue);
         assert_eq!(&buffer[..read_bytes], excepted_data);
         assert_eq!(buffer[excepted_data.len() - 1], separator); // Check that last read byte is separator
     }
@@ -4032,6 +4029,6 @@ mod tests {
 
         assert_eq!(buffer.len(), max_buffer_size); // Buffer should have resized up to max_buffer_size
         assert_eq!(read_bytes, 15002);
-        assert_eq!(should_continue, false); // Should continue as not all data fits
+        assert!(!should_continue); // Should continue as not all data fits
     }
 }

@@ -825,7 +825,7 @@ mod tests {
             let mut merger = result.unwrap();
             let mut output = Vec::new();
             while merger.write_next(&settings, &mut output) {}
-            assert!(output.len() > 0, "Output should be large but is empty");
+            assert!(!output.is_empty(), "Output should be large but is empty");
         }
     }
 
@@ -907,7 +907,7 @@ mod tests {
                 &mut tmp_dir_wrapper,
             );
 
-            assert!(matches!(result, Ok(_))); // Expecting no error even if no files are provided
+            assert!(result.is_ok()); // Expecting no error even if no files are provided
         }
 
         #[test]
@@ -1072,11 +1072,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1097,11 +1097,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1122,11 +1122,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1147,11 +1147,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1172,11 +1172,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1197,11 +1197,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1222,11 +1222,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1247,11 +1247,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1272,11 +1272,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1297,11 +1297,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1322,11 +1322,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1346,11 +1346,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1371,11 +1371,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1396,11 +1396,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1421,11 +1421,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1446,11 +1446,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1471,11 +1471,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1496,11 +1496,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1521,11 +1521,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1546,11 +1546,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1571,11 +1571,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1596,11 +1596,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1621,11 +1621,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1646,11 +1646,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1671,11 +1671,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1696,11 +1696,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1721,11 +1721,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1746,11 +1746,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1771,11 +1771,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1796,11 +1796,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1822,11 +1822,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1847,11 +1847,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1872,11 +1872,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1897,11 +1897,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1922,11 +1922,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1947,11 +1947,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1972,11 +1972,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -1997,11 +1997,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2022,11 +2022,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2047,11 +2047,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2072,11 +2072,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2097,11 +2097,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2122,11 +2122,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2147,11 +2147,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2177,11 +2177,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2207,11 +2207,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2237,11 +2237,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2267,11 +2267,11 @@ mod tests {
             let dir = tempdir().unwrap();
             let file_path = dir.path().join("sort_test_file");
             let mut tmp_file = File::create(&file_path).unwrap();
-            writeln!(tmp_file, "{}", input).expect("TODO: panic message");
+            writeln!(tmp_file, "{input}").expect("TODO: panic message");
 
             let file_path2 = dir.path().join("sort_test_file2");
             let mut tmp_file2 = File::create(&file_path2).unwrap();
-            writeln!(tmp_file2, "{}", input2).expect("TODO: panic message");
+            writeln!(tmp_file2, "{input2}").expect("TODO: panic message");
 
             let mut files = vec![file_path.into_os_string(), file_path2.into_os_string()];
 
@@ -2403,13 +2403,12 @@ mod tests {
             let mut files = vec![OsString::from("/path/to/output.txt")];
             let mut tmp_dir = TmpDirWrapper::new(PathBuf::from("/some/path"));
             // Simulate failure by not setting `temp_dir`
-            match merge_replace_output_file_in_input_files(
+            if let Err(e) = merge_replace_output_file_in_input_files(
                 &mut files,
                 Some("/path/to/output.txt"),
                 &mut tmp_dir,
             ) {
-                Err(e) => assert_eq!(e.to_string(), "Temporary directory creation failed"),
-                Ok(ret) => assert_eq!(ret, ()),
+                assert_eq!(e.to_string(), "Temporary directory creation failed");
             }
         }
     }
@@ -2418,7 +2417,7 @@ mod tests {
     mod file_merger_tests {}
 
     #[cfg(test)]
-    mod tests {
+    mod merge_integration_tests {
         use std::fs::File;
         use std::io::Write;
 
@@ -2548,10 +2547,12 @@ mod tests {
 
             let result =
                 merge_replace_output_file_in_input_files(&mut files, output, &mut tmp_dir_wrapper);
-            assert!(result.is_err());
+            // The function should succeed and replace the output file with a copy
+            assert!(result.is_ok());
             assert_eq!(files.len(), 2);
             assert_eq!(files[0], file1_path.into_os_string());
-            assert_eq!(files[1], file2_path.into_os_string());
+            // files[1] should now point to a temporary copy, not the original file2_path
+            assert_ne!(files[1], file2_path.into_os_string());
         }
 
         #[test]
@@ -4003,7 +4004,7 @@ mod tests {
             inner: Cursor::new(Vec::new()),
         };
 
-        assert_eq!(input.finished_reading().unwrap(), ());
+        input.finished_reading().unwrap();
     }
 
     #[test]
@@ -4015,7 +4016,7 @@ mod tests {
 
         let read = input.as_read();
         let mut buffer = [0; 10];
-        read.read(&mut buffer).unwrap();
+        read.read_exact(&mut buffer).unwrap();
 
         assert_eq!(&buffer, data);
     }

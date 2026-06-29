@@ -673,8 +673,8 @@ mod tests {
 
     #[test]
     fn test_custom_str_cmp_large_strings() {
-        let a = std::iter::repeat('a').take(1000).collect::<String>();
-        let b = std::iter::repeat('b').take(1000).collect::<String>();
+        let a = "a".repeat(1000);
+        let b = "b".repeat(1000);
 
         let result = custom_cmp_str(&a, &b, false, false, false);
         assert_eq!(result, Ordering::Less);

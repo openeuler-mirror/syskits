@@ -1242,6 +1242,7 @@ dependencies = [
  "crossterm",
  "ctcore",
  "nix 0.28.0",
+ "regex",
  "rust-i18n",
  "sys-locale",
  "unicode-segmentation",

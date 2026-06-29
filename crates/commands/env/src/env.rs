@@ -19,7 +19,7 @@ pub mod variable_parser;
 
 use clap::builder::ValueParser;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
@@ -55,8 +55,6 @@ use ctcore::ct_show_warning;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self};
-
-const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
 #[derive(Debug, PartialEq)]
 struct EnvOptions<'a> {
@@ -280,9 +278,6 @@ struct EnvAppData {
 impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, program: &OsStr) -> Box<dyn CTError> {
         ctcore::ct_show_error!("{}: No such file or directory", program.quote());
-        if !self.had_string_argument {
-            ctcore::ct_show_error!("{}", ERROR_MSG_S_SHEBANG);
-        }
         ExitCode::new(127)
     }
 
@@ -338,14 +333,11 @@ impl EnvAppData {
                     clap::error::ErrorKind::DisplayHelp
                     | clap::error::ErrorKind::DisplayVersion => e.into(),
                     _ => {
-                        // 通过 ERROR_MSG_S_SHEBANG 扩展参数解析中的任何实际问题
-
                         let s = format!("{}", e);
                         if !s.is_empty() {
                             let s = s.trim_end();
                             ctcore::ct_show_error!("{}", s);
                         }
-                        ctcore::ct_show_error!("{}", ERROR_MSG_S_SHEBANG);
                         ctcore::ct_error::ExitCode::new(125)
                     }
                 }
@@ -449,6 +441,11 @@ impl EnvAppData {
                 }
                 return Err(exit.code().unwrap().into());
             }
+            // 处理权限拒绝错误
+            Err(ref err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                ctcore::ct_show_error!("{}: Permission denied", prog.quote());
+                return Err(126.into());
+            }
             // 处理找不到文件或输入无效的错误情况
             Err(ref err)
                 if (err.kind() == io::ErrorKind::NotFound)
@@ -456,6 +453,7 @@ impl EnvAppData {
             {
                 return Err(self.make_error_no_such_file_or_dir(prog.deref()));
             }
+
             // 处理其他未知错误
             Err(e) => {
                 ctcore::ct_show_error!("unknown error: {:?}", e);

@@ -28,6 +28,7 @@ indicatif = { workspace = true }
 rayon = { workspace = true }
 signal-hook = "0.3"
 rand = { workspace = true }
+hex = { workspace = true }
 [dev-dependencies]
 
 [[bin]]

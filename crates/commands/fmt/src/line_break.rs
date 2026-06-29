@@ -567,7 +567,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             }
         }
 
@@ -757,7 +756,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick,
-                had_error: false,
             }
         }
 
@@ -847,7 +845,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut fmt_args = FmtBreakArgs {
                 fmt_opts: &fmt_configs,
@@ -885,7 +882,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut fmt_args = FmtBreakArgs {
                 fmt_opts: &fmt_configs,
@@ -948,7 +944,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut output_stream = Vec::new();
             let mut fmt_args = FmtBreakArgs {
@@ -983,7 +978,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut output_stream = Vec::new();
             let mut fmt_args = FmtBreakArgs {
@@ -1047,7 +1041,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut fmt_args = FmtBreakArgs {
                 fmt_opts: &fmt_configs,
@@ -1085,7 +1078,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut fmt_args = FmtBreakArgs {
                 fmt_opts: &fmt_configs,
@@ -1124,7 +1116,6 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                had_error: false,
             };
             let mut fmt_args = FmtBreakArgs {
                 fmt_opts: &fmt_configs,
@@ -1168,7 +1159,6 @@ mod tests {
                 width: 50,
                 goal: 45,
                 tab_width: 4,
-                had_error: false,
             };
             let mut output_stream = Vec::new(); // 使用 Vec<u8> 作为输出流模拟
             let fmt_args = FmtBreakArgs {
@@ -1214,7 +1204,6 @@ mod tests {
                 width: 50,
                 goal: 45,
                 tab_width: 4,
-                had_error: false,
             };
             let mut output_stream = Vec::new();
             let fmt_args = FmtBreakArgs {
@@ -1267,7 +1256,6 @@ mod tests {
                 width: 10,
                 goal: 10,
                 tab_width: 4,
-                had_error: false,
             };
             let mut output_stream = Vec::new();
             let fmt_args = FmtBreakArgs {
@@ -1347,7 +1335,6 @@ mod tests {
                     width: 80,
                     goal: 0,
                     tab_width: 0,
-                    had_error: false,
                 },
                 init_len: 0,
                 indent_str: "",
@@ -1402,7 +1389,6 @@ mod tests {
                 width: 80,
                 goal: 0,
                 tab_width: 0,
-                had_error: false,
             };
 
             let fmt_args = FmtBreakArgs {

@@ -1,5 +1,7 @@
 mknod:
   clap:
+    help: 显示此帮助信息并退出
+    version: 输出版本信息并退出
     mode: 将文件权限位设置为MODE，而不是a=rw - umask
     name: 新文件的名称
     type: 新文件的类型（b、c、u或p）

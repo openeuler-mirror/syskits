@@ -1,0 +1,76 @@
+{
+    "tests": [
+        {
+            "command": "tty",
+            "description": "tty: 基本功能测试（只有中英文差异）",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "tty",
+            "description": "tty: -s 选项测试",
+            "args": ["-s"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "tty",
+            "description": "tty: 非法参数测试",
+            "args": ["--badFlag"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 2,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        }
+    ]
+}

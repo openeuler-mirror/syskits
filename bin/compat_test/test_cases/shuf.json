@@ -1,0 +1,286 @@
+{
+    "tests": [
+        {
+            "command": "shuf",
+            "description": "shuf: 基本随机打乱文件",
+            "args": ["shuf_test"],
+            "setup_commands": [
+                "echo 'a\nb\nc\nd' > shuf_test"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f shuf_test"
+            ]
+        },
+        {
+            "tstdin": "1\n2\n3\n",
+            "command": "shuf",
+            "description": "shuf: 随机打乱标准输入",
+            "args": [],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 指定输出行数",
+            "args": [
+                "-n", "4",
+                "shuf_test"
+            ],
+            "setup_commands": [
+                "echo 'a\nb\nc\nd\ne' > shuf_test"
+            ],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                "ignore_exit_code": false,
+                "ignore_stdout": false,
+                "ignore_stderr": false,
+                "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f shuf_test"
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 从整数序列随机选择",
+            "args": [
+                "-i", "1-9",
+                "-n", "5"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 重复输出",
+            "args": [
+                "-i", "1-6",
+                "-n", "5",
+                "--repeat"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 输出到指定文件",
+            "args": [
+                "shuf_test",
+                "-o", "shuf_output"
+            ],
+            "setup_commands": [
+                "echo 'a\nb\nc\nd' > shuf_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f shuf_output",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f shuf_test shuf_output"
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 空文件输入",
+            "args": [
+                "empty.txt"
+            ],
+            "setup_commands": [
+                "touch empty.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f empty.txt"
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 指定行数大于文件行数",
+            "args": [
+                "-n", "10",
+                "shuf_test"
+            ],
+            "setup_commands": [
+                "echo -e 'a\nb\nc\nd' > shuf_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\nb\nd\nc\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f shuf_test"
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 非法整数序列",
+            "args": [
+                "-i", "10-1"
+            ],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "shuf: 非法参数",
+            "args": [
+                "--bad-flag",
+                "shuf_test"
+            ],
+            "setup_commands": [
+                "echo -e 'a\nb\nc' > shuf_test"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                ],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f shuf_test"
+            ]
+        }
+    ]
+}

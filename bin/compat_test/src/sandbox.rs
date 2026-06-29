@@ -15,10 +15,12 @@
 use crate::CommandResult;
 use crate::test_case::{FileType, TestCase, TestFile};
 use crate::{Result, TestError};
+use hex;
 use nix::sys::resource::{self, Resource};
 use nix::sys::signal::{self};
 use rand::Rng;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::{self, File, Permissions};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -417,21 +419,21 @@ impl IsolatedSandbox {
                 self.umask = new_umask;
                 Ok(CommandResult::default())
             } else {
-                Ok(CommandResult {
-                    stdout: String::new(),
-                    stderr: format!("umask: invalid mode: {}\n", mode),
-                    exit_code: 1,
-                })
-            }
-        } else {
-            // 显示当前umask
             Ok(CommandResult {
-                stdout: format!("{:03o}\n", self.umask),
-                stderr: String::new(),
-                exit_code: 0,
+                stdout: String::new(),
+                stderr: format!("umask: invalid mode: {}\n", mode),
+                exit_code: 1,
             })
         }
+    } else {
+        // 显示当前umask
+        Ok(CommandResult {
+            stdout: format!("{:03o}\n", self.umask),
+            stderr: String::new(),
+            exit_code: 0,
+        })
     }
+}
 
     /// 输出调试信息
     fn debug(&self, msg: &str) {
@@ -447,7 +449,7 @@ impl IsolatedSandbox {
         }
     }
 
-    /// 执行命令
+    /// 执行命令（字符串参数）
     pub fn execute_command(
         &mut self,
         cmd: &str,
@@ -456,11 +458,41 @@ impl IsolatedSandbox {
         is_record_result: bool,
         timeout: Option<u64>,
     ) -> Result<CommandResult> {
+        let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        let stdin_bytes = stdin_content.map(|s| s.as_bytes());
+        self.execute_command_bytes(
+            cmd,
+            &os_args,
+            stdin_bytes,
+            is_record_result,
+            timeout,
+            false,
+        )
+    }
+
+    /// 执行命令（原始字节参数）
+    pub fn execute_command_bytes(
+        &mut self,
+        cmd: &str,
+        args: &[OsString],
+        stdin_content: Option<&[u8]>,
+        is_record_result: bool,
+        timeout: Option<u64>,
+        output_hex: bool,
+    ) -> Result<CommandResult> {
         self.debug_fmt(format_args!("Executing command: {} {:?}", cmd, args));
         self.debug_fmt(format_args!(
             "Current working directory: {:?}",
             self.current_dir
         ));
+
+        let encode_if_hex = |value: &str| {
+            if output_hex {
+                hex::encode(value.as_bytes())
+            } else {
+                value.to_string()
+            }
+        };
 
         let mut command = Command::new(cmd);
         command
@@ -475,9 +507,10 @@ impl IsolatedSandbox {
             Err(e) => {
                 self.debug_fmt(format_args!("Command execution failed: {}", e));
                 self.debug_fmt(format_args!("Error type: {:?}", e.kind()));
+                let stderr = encode_if_hex(&format!("Failed to execute command: {}", e));
                 return Ok(CommandResult {
                     stdout: String::new(),
-                    stderr: format!("Failed to execute command: {}", e),
+                    stderr,
                     exit_code: 127, // Common error code for command not found
                 });
             }
@@ -487,11 +520,12 @@ impl IsolatedSandbox {
         if let Some(content) = stdin_content {
             if let Some(stdin) = child.stdin.as_mut() {
                 if !content.is_empty() {
-                    if let Err(e) = stdin.write_all(content.as_bytes()) {
+                    if let Err(e) = stdin.write_all(content) {
                         self.debug_fmt(format_args!("Failed to write to stdin: {}", e));
+                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {}", e));
                         return Ok(CommandResult {
                             stdout: String::new(),
-                            stderr: format!("Failed to write to stdin: {}", e),
+                            stderr,
                             exit_code: 1,
                         });
                     }
@@ -518,9 +552,10 @@ impl IsolatedSandbox {
                     Ok(Some(_)) => break,
                     Ok(None) => thread::sleep(Duration::from_millis(100)),
                     Err(e) => {
+                        let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
                         return Ok(CommandResult {
                             stdout: String::new(),
-                            stderr: format!("Failed to wait for command: {}", e),
+                            stderr,
                             exit_code: 1,
                         });
                     }
@@ -534,9 +569,10 @@ impl IsolatedSandbox {
                 }
                 Err(e) => {
                     self.debug_fmt(format_args!("Failed to wait for command: {}", e));
+                    let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
                     return Ok(CommandResult {
                         stdout: String::new(),
-                        stderr: format!("Failed to wait for command: {}", e),
+                        stderr,
                         exit_code: 1,
                     });
                 }
@@ -549,16 +585,21 @@ impl IsolatedSandbox {
                 }
                 Err(e) => {
                     self.debug_fmt(format_args!("Failed to wait for command: {}", e));
+                    let stderr = encode_if_hex(&format!("Failed to wait for command: {}", e));
                     return Ok(CommandResult {
                         stdout: String::new(),
-                        stderr: format!("Failed to wait for command: {}", e),
+                        stderr,
                         exit_code: 1,
                     });
                 }
             };
         }
 
-        let result = CommandResult::from(output);
+        let result = if output_hex {
+            CommandResult::from_output_hex(output)
+        } else {
+            CommandResult::from(output)
+        };
 
         self.debug_fmt(format_args!("Command execution results:"));
         self.debug_fmt(format_args!("exit_code: {}", result.exit_code));
@@ -566,7 +607,7 @@ impl IsolatedSandbox {
         self.debug_fmt(format_args!("stderr: {}", result.stderr));
 
         // Check if stdout contains null bytes
-        if result.stdout.contains('\0') {
+        if !output_hex && result.stdout.contains('\0') {
             self.debug("Warning: stdout contains null bytes");
             if self.debug {
                 println!("DEBUG: stdout hex representation:");
@@ -589,7 +630,7 @@ impl IsolatedSandbox {
             self.add_env("CMD_EXIT_CODE", &result.exit_code.to_string());
 
             // Check for null bytes in stdout before setting environment variable
-            if result.stdout.contains('\0') {
+            if !output_hex && result.stdout.contains('\0') {
                 self.debug("Warning: Found null bytes when setting CMD_STDOUT");
                 // Replace null bytes with visible characters to avoid environment variable issues
                 let safe_stdout = result.stdout.replace('\0', "\\0");
@@ -867,6 +908,7 @@ mod tests {
         // 创建测试用例
         let mut test_case = TestCase {
             tstdin: "".to_string(),
+            byte_mode: false,
             command: "test".to_string(),
             description: "Test with files".to_string(),
             args: vec![],
@@ -1056,6 +1098,7 @@ mod tests {
         // 创建测试用例
         let mut test_case = TestCase {
             tstdin: "".to_string(),
+            byte_mode: false,
             command: "test".to_string(),
             description: "Test with environment".to_string(),
             args: vec![],

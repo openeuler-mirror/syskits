@@ -27,13 +27,14 @@ use std::collections::HashMap;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Output;
+use hex;
 
 /// 命令执行结果
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CommandResult {
-    /// UTF-8 格式的标准输出
+    /// 标准输出（普通模式为 UTF-8 文本，字节模式为十六进制字符串）
     pub stdout: String,
-    /// UTF-8 格式的标准错误
+    /// 标准错误（普通模式为 UTF-8 文本，字节模式为十六进制字符串）
     pub stderr: String,
     /// 退出状态码
     pub exit_code: i32,
@@ -50,6 +51,22 @@ impl From<Output> for CommandResult {
         CommandResult {
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            exit_code,
+        }
+    }
+}
+
+impl CommandResult {
+    pub fn from_output_hex(output: Output) -> Self {
+        let exit_code = if let Some(signal) = output.status.signal() {
+            128 + signal
+        } else {
+            output.status.code().unwrap_or(-1)
+        };
+
+        CommandResult {
+            stdout: hex::encode(output.stdout),
+            stderr: hex::encode(output.stderr),
             exit_code,
         }
     }
@@ -707,6 +724,7 @@ mod tests {
     fn create_test_case(command: &str, exit_code: i32, stdout: &str, stderr: &str) -> TestCase {
         TestCase {
             tstdin: "".to_string(),
+            byte_mode: false,
             command: command.to_string(),
             description: format!("Test for {}", command),
             args: vec![],

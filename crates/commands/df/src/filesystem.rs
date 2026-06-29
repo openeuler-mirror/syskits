@@ -18,6 +18,8 @@ use std::path::Path;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::FsUsage;
 #[cfg(unix)]
+use ctcore::ct_fsext::StatFs;
+#[cfg(unix)]
 use ctcore::ct_fsext::statfs;
 
 /// 文件系统的基本表示。
@@ -128,7 +130,7 @@ impl Filesystem {
 
         // 收集文件系统使用情况信息
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(_stat_path).ok()?);
+        let usage = fs_usage_from_statfs(statfs(_stat_path).ok()?);
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&_stat_path));
 
@@ -168,6 +170,51 @@ impl Filesystem {
         // TODO: 优化以避免克隆`mount_info`。
         let mount_info = (*mount_info).clone();
         Self::new(mount_info, Some(file))
+    }
+}
+
+#[cfg(unix)]
+fn fs_usage_from_statfs(statvfs: StatFs) -> FsUsage {
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    {
+        let blocksize = {
+            let frsize = statvfs.f_frsize as u64;
+            if frsize > 0 {
+                frsize
+            } else {
+                statvfs.f_bsize as u64
+            }
+        };
+        return FsUsage {
+            blocksize,
+            blocks: statvfs.f_blocks,
+            bfree: statvfs.f_bfree,
+            bavail: statvfs.f_bavail,
+            bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
+            files: statvfs.f_files,
+            ffree: statvfs.f_ffree,
+        };
+    }
+
+    #[cfg(all(target_os = "linux", not(target_pointer_width = "64")))]
+    {
+        let blocksize = {
+            let frsize = statvfs.f_frsize as u64;
+            if frsize > 0 {
+                frsize
+            } else {
+                statvfs.f_bsize as u64
+            }
+        };
+        return FsUsage {
+            blocksize,
+            blocks: statvfs.f_blocks.into(),
+            bfree: statvfs.f_bfree.into(),
+            bavail: statvfs.f_bavail.into(),
+            bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
+            files: statvfs.f_files.into(),
+            ffree: statvfs.f_ffree.into(),
+        };
     }
 }
 

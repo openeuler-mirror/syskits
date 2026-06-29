@@ -127,7 +127,14 @@ pub(crate) fn blocks_to_magnitude_and_suffix(
 
     // 如果余数为0，直接返回商和单位后缀的组合
     if rem_size == 0 {
-        format!("{blocks_quot}{blocks_suffix}")
+        if matches!(blocks_suffix_type, BlocksSuffixType::HumanReadable(_))
+            && size > 0
+            && blocks_quot < 10
+        {
+            format!("{blocks_quot}.0{blocks_suffix}")
+        } else {
+            format!("{blocks_quot}{blocks_suffix}")
+        }
     } else {
         // 计算十分位数值
         let tenths_place_size = rem_size / (blocks_bases[size] / 10);

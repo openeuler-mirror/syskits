@@ -1,4 +1,21 @@
 df:
+  header:
+    filesystem: Filesystem
+    type: Type
+    blocks: blocks
+    size: Size
+    used: Used
+    available: Available
+    avail: Avail
+    use_percent: Use%
+    inodes: Inodes
+    iused: IUsed
+    ifree: IFree
+    iuse_percent: IUse%
+    mounted_on: Mounted on
+    file: File
+    capacity: Capacity
+    blocks_format: "%{num}-%{label}"
   clap:
     df_opt_help: Print help information.
     df_opt_all: include dummy file systems

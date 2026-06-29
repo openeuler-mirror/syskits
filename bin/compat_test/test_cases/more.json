@@ -1,252 +1,406 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "基本功能测试 - 显示文件内容",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file1"
-            ],
-            "args": ["test_file1"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file1"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "设置每页显示行数",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["-2", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "从指定行开始显示",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["+3", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "显示多个文件",
-            "setup_commands": [
-                "echo 'file1 content' > file1",
-                "echo 'file2 content' > file2"
-            ],
-            "args": ["file1", "file2"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "file1 content\n\n::::::::::::::\nfile2\n::::::::::::::\nfile2 content",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f file1 file2"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "不显示提示信息",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3' > test_file"
-            ],
-            "args": ["-d", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "不显示空行",
-            "setup_commands": [
-                "echo -e 'line1\n\nline2\n\nline3' > test_file"
-            ],
-            "args": ["-s", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "显示行号",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3' > test_file"
-            ],
-            "args": ["-n", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "      1  line1\n      2  line2\n      3  line3",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "计算逻辑行而不是屏幕行",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["-f", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "在换页符后不暂停",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["-l", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "不滚动，显示文本并清理行尾",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["-c", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "不滚动，清理屏幕并显示文本",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["-p", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "不显示下划线和粗体",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["-u", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "more",
-            "description": "从匹配模式的行开始显示",
-            "setup_commands": [
-                "echo -e 'line1\nline2\nline3\nline4\nline5' > test_file"
-            ],
-            "args": ["+/line3", "test_file"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line3\nline4\nline5",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_file"
-            ]
+  "tests": [
+    {
+      "tstdin": "line1\nline2\n",
+      "command": "more",
+      "description": "stdin 非 TTY 直接输出",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "line1\nline2\n",
+          "stderr": ""
         }
-    ]
-} 
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "单文件输出包含文件头",
+      "setup_commands": [
+        "printf 'line1\\nline2\\nline3\\n' > test_file1"
+      ],
+      "args": ["test_file1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file1\n::::::::::::::\nline1\nline2\nline3\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file1"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "多文件输出保留原始换行边界",
+      "setup_commands": [
+        "printf 'A' > file1",
+        "printf 'B\\n' > file2"
+      ],
+      "args": ["file1", "file2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\nfile1\n::::::::::::::\nA::::::::::::::\nfile2\n::::::::::::::\nB\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file1 file2"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "目录参数输出提示到 stdout",
+      "setup_commands": [
+        "mkdir -p test_dir",
+        "printf 'x\\n' > file1"
+      ],
+      "args": ["test_dir", "file1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\n*** test_dir: directory ***\n\n::::::::::::::\nfile1\n::::::::::::::\nx\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf test_dir file1"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "缺失文件错误输出到 stderr",
+      "setup_commands": [
+        "rm -f missing_file"
+      ],
+      "args": ["missing_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": "more: cannot open missing_file: No such file or directory\n"
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-d 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-d", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-f 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-f", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-l 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-l", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-c 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-c", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-p 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-p", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-e 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-e", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-s 在非 TTY 下不压缩空行",
+      "setup_commands": [
+        "printf 'line1\\n\\n\\nline2\\n' > test_file"
+      ],
+      "args": ["-s", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n\n\nline2\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-u 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\n' > test_file"
+      ],
+      "args": ["-u", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-n 参数在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\nline2\\n' > test_file"
+      ],
+      "args": ["-n", "2", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\nline2\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "-<number> 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\nline2\\n' > test_file"
+      ],
+      "args": ["-2", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\nline2\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "+<number> 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\nline2\\nline3\\n' > test_file"
+      ],
+      "args": ["+3", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\nline2\nline3\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "more",
+      "description": "+/pattern 在非 TTY 下无影响",
+      "setup_commands": [
+        "printf 'line1\\nline2\\nline3\\n' > test_file"
+      ],
+      "args": ["+/line3", "test_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "::::::::::::::\ntest_file\n::::::::::::::\nline1\nline2\nline3\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file"
+      ]
+    },
+    {
+      "tstdin": "abba\nbar\nfoo\nxyzzy\n",
+      "command": "more",
+      "description": "util-linux regexp（非 TTY 适配）",
+      "args": ["+/foo"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "abba\nbar\nfoo\nxyzzy\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "a\n\n\nb\n",
+      "command": "more",
+      "description": "util-linux squeeze（非 TTY 适配）",
+      "args": ["-s"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "a\n\n\nb\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "line1\nline2\n",
+      "command": "more",
+      "description": "TTY stdin + -e（EOF 退出）",
+      "setup_commands": ["export TERM=linux"],
+      "args": ["-e"],
+      "tty": true,
+      "timeout": 5,
+      "expectation": {
+        "execution": {
+          "exit_code": 0
+        }
+      }
+    },
+    {
+      "tstdin": "line1\nline2\n",
+      "command": "more",
+      "description": "TTY stdin + -d（静默提示）",
+      "setup_commands": ["export TERM=linux"],
+      "args": ["-d"],
+      "tty": true,
+      "timeout": 5,
+      "expectation": {
+        "execution": {
+          "exit_code": 0
+        }
+      }
+    },
+    {
+      "tstdin": "abba\nbar\nfoo\nxyzzy\n",
+      "command": "more",
+      "description": "util-linux regexp（TTY）",
+      "setup_commands": ["export TERM=linux"],
+      "args": ["+/foo"],
+      "tty": true,
+      "timeout": 5,
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\n...skipping\nfoo\nxyzzy\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "a\n\n\nb\n",
+      "command": "more",
+      "description": "util-linux squeeze（TTY）",
+      "setup_commands": ["export TERM=linux"],
+      "args": ["-s"],
+      "tty": true,
+      "timeout": 5,
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "a\n\nb\n",
+          "stderr": ""
+        }
+      }
+    }
+  ]
+}

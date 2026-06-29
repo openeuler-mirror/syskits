@@ -13,7 +13,7 @@ description = "more ~ (ctutils) input perusal filter"
 repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/more"
 
 [lib]
-path = "src/more.rs"
+path = "src/lib.rs"
 
 [dependencies]
 sys-locale = { workspace = true }

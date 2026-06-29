@@ -19,6 +19,7 @@ rust-i18n = { workspace = true }
 clap = { workspace = true }
 nix = { workspace = true, features = ["signal"] }
 ctcore = { workspace = true, features = ["signals"] }
+libc = { workspace = true }
 
 [[bin]]
 name = "kill"

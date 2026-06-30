@@ -97,6 +97,7 @@ mod sort_flags {
     pub const SORT_IGNORE_CASE: &str = "ignore-case";
     pub const SORT_IGNORE_LEADING_BLANKS: &str = "ignore-leading-blanks";
     pub const SORT_IGNORE_NONPRINTING: &str = "ignore-nonprinting";
+    pub const SORT_RANDOM_SOURCE: &str = "random-source";
     pub const SORT_OUTPUT: &str = "output";
     pub const SORT_REVERSE: &str = "reverse";
     pub const SORT_STABLE: &str = "stable";
@@ -1424,6 +1425,11 @@ pub fn ct_app() -> Command {
             'R',
             "shuffle in random order",
         ),
+        Arg::new(sort_flags::SORT_RANDOM_SOURCE)
+            .long(sort_flags::SORT_RANDOM_SOURCE)
+            .help("get random bytes from FILE")
+            .value_name("FILE")
+            .value_hint(clap::ValueHint::FilePath),
         Arg::new(sort_flags::SORT_DICTIONARY_ORDER)
             .short('d')
             .long(sort_flags::SORT_DICTIONARY_ORDER)
@@ -4086,6 +4092,8 @@ mod tests {
         use std::fs::File;
         use std::io::Write;
 
+        use tempfile::tempdir;
+
         use super::*;
 
         #[cfg(unix)]
@@ -4180,28 +4188,29 @@ mod tests {
 
         #[test]
         fn test_output_new_read_only_file() {
-            // Skip this test if running as root, as root can write to read-only files
-            #[cfg(unix)]
-            if unsafe { libc::geteuid() == 0 } {
-                return;
-            }
-
-            let test_file_name = "test_read_only_file.txt";
-            let mut file = File::create(test_file_name).unwrap();
+            let temp_dir = tempdir().unwrap();
+            let test_file_path = temp_dir.path().join("test_read_only_file.txt");
+            let test_file_name = test_file_path.to_str().unwrap();
+            let mut file = File::create(&test_file_path).unwrap();
             writeln!(file, "Data").unwrap();
-            let metadata = fs::metadata(test_file_name).unwrap();
+            let metadata = fs::metadata(&test_file_path).unwrap();
             let mut permissions = metadata.permissions();
             permissions.set_readonly(true);
-            fs::set_permissions(test_file_name, permissions).unwrap();
+            fs::set_permissions(&test_file_path, permissions).unwrap();
 
             let output = SortOutput::new(Some(test_file_name));
-            assert!(output.is_ok());
+            let is_root = unsafe { libc::geteuid() == 0 };
+            if is_root {
+                assert!(output.is_ok());
+            } else {
+                assert!(output.is_err());
+            }
 
             // Cleanup
             let mut permissions = metadata.permissions();
             permissions.set_readonly(false);
-            fs::set_permissions(test_file_name, permissions).unwrap();
-            let _ = fs::remove_file(test_file_name);
+            fs::set_permissions(&test_file_path, permissions).unwrap();
+            let _ = fs::remove_file(&test_file_path);
         }
 
         #[test]
@@ -4214,37 +4223,35 @@ mod tests {
 
         #[test]
         fn test_into_write_read_only_truncation() {
-            // Skip this test if running as root, as root can write to read-only files
-            #[cfg(unix)]
-            if unsafe { libc::geteuid() == 0 } {
-                return;
-            }
-
-            let test_file_name = "test_read_only_truncation.txt";
-            let mut file = File::create(test_file_name).unwrap();
+            let temp_dir = tempdir().unwrap();
+            let test_file_path = temp_dir.path().join("test_read_only_truncation.txt");
+            let test_file_name = test_file_path.to_str().unwrap();
+            let mut file = File::create(&test_file_path).unwrap();
             writeln!(file, "Initial data").unwrap();
-            let metadata = fs::metadata(test_file_name).unwrap();
+            let metadata = fs::metadata(&test_file_path).unwrap();
             let mut permissions = metadata.permissions();
             permissions.set_readonly(true);
-            fs::set_permissions(test_file_name, permissions).unwrap();
+            fs::set_permissions(&test_file_path, permissions).unwrap();
 
-            let output = SortOutput::new(Some(test_file_name)).unwrap();
-            let result = std::panic::catch_unwind(|| {
-                output.into_write() // This should fail or skip truncation
-            });
-            assert!(result.is_ok());
-
-            // Verify file was not truncated
-            let file = File::open(test_file_name).unwrap();
-            let mut contents = String::new();
-            file.take(1024).read_to_string(&mut contents).unwrap();
-            assert!(contents.is_empty());
+            let output = SortOutput::new(Some(test_file_name));
+            let is_root = unsafe { libc::geteuid() == 0 };
+            if is_root {
+                let output = output.unwrap();
+                let _writer = output.into_write();
+                assert_eq!(fs::metadata(&test_file_path).unwrap().len(), 0);
+            } else {
+                assert!(output.is_err());
+                let mut file = File::open(&test_file_path).unwrap();
+                let mut contents = String::new();
+                file.read_to_string(&mut contents).unwrap();
+                assert!(!contents.is_empty());
+            }
 
             // Cleanup
             let mut permissions = metadata.permissions();
             permissions.set_readonly(false);
-            fs::set_permissions(test_file_name, permissions).unwrap();
-            let _ = fs::remove_file(test_file_name);
+            fs::set_permissions(&test_file_path, permissions).unwrap();
+            let _ = fs::remove_file(&test_file_path);
         }
 
         #[test]

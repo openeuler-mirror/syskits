@@ -858,7 +858,9 @@ mod tests {
                 &mut tmp_dir_wrapper,
             );
 
-            assert!(result.is_ok());
+            if let Err(err) = result {
+                panic!("{err}");
+            }
         }
 
         #[test]
@@ -886,7 +888,9 @@ mod tests {
                 &mut tmp_dir_wrapper,
             );
 
-            assert!(result.is_ok());
+            if let Err(err) = result {
+                panic!("{err}");
+            }
         }
 
         #[test]
@@ -2547,11 +2551,9 @@ mod tests {
 
             let result =
                 merge_replace_output_file_in_input_files(&mut files, output, &mut tmp_dir_wrapper);
-            // The function should succeed and replace the output file with a copy
             assert!(result.is_ok());
             assert_eq!(files.len(), 2);
             assert_eq!(files[0], file1_path.into_os_string());
-            // files[1] should now point to a temporary copy, not the original file2_path
             assert_ne!(files[1], file2_path.into_os_string());
         }
 

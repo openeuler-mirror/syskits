@@ -1549,6 +1549,642 @@
       "cleanup_commands": [
         "rm -f in x*"
       ]
+    },
+    {
+      "command": "split",
+      "description": "split --filter basic usage writes through $FILE",
+      "args": [
+        "-l",
+        "2",
+        "--filter=cat > $FILE",
+        "in",
+        "out-"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp1",
+        "printf '3\\n4\\n' > exp2",
+        "printf '5\\n' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 out-aa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 out-ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 out-ac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 out-* x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split --filter invalid with -n K/N",
+      "args": [
+        "-n",
+        "1/2",
+        "--filter=true",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split --filter with -e -n on /dev/null elides files",
+      "args": [
+        "-e",
+        "-n",
+        "10",
+        "--filter=cat > $FILE",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split --filter child command non-zero exit propagates",
+      "args": [
+        "-l",
+        "1",
+        "--filter=false",
+        "in"
+      ],
+      "setup_commands": [
+        "printf 'a\\nb\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split should not overwrite input file",
+      "args": [
+        "-C",
+        "6",
+        "xaa"
+      ],
+      "setup_commands": [
+        "seq 10 | tee exp-1 > xaa"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp-1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f exp-1 xaa x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split should not overwrite input symlink target",
+      "args": [
+        "-C",
+        "6",
+        "in2"
+      ],
+      "setup_commands": [
+        "seq 10 > xaa",
+        "ln -s xaa in2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f xaa in2 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split should not overwrite hard link input",
+      "args": [
+        "-C",
+        "6",
+        "in3"
+      ],
+      "setup_commands": [
+        "seq 10 > xaa",
+        "ln xaa in3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f xaa in3 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split: missing input file",
+      "args": [
+        "-l",
+        "10",
+        "missing_file",
+        "out_"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f out_*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split: invalid negative lines",
+      "args": [
+        "-l",
+        "-10",
+        "in",
+        "out_"
+      ],
+      "setup_commands": [
+        "seq 1 10 > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out_*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -l 0",
+      "args": [
+        "-l",
+        "0",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -b 0",
+      "args": [
+        "-b",
+        "0",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -C 0",
+      "args": [
+        "-C",
+        "0",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -n 0",
+      "args": [
+        "-n",
+        "0",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -n 1/0",
+      "args": [
+        "-n",
+        "1/0",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -n 0/1",
+      "args": [
+        "-n",
+        "0/1",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split fail: -n 2/1",
+      "args": [
+        "-n",
+        "2/1",
+        "in"
+      ],
+      "setup_commands": [
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split short numeric suffix -d",
+      "args": [
+        "-d",
+        "--lines=2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp0",
+        "printf '3\\n4\\n' > exp1",
+        "printf '5\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp0 x00",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp1 x01",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 x02",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp0 exp1 exp2 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split short hex suffix -x",
+      "args": [
+        "-x",
+        "--lines=2",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n2\\n' > exp0",
+        "printf '3\\n4\\n' > exp1",
+        "printf '5\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp0 x00",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp1 x01",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 x02",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp0 exp1 exp2 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split --io-blksize should be rejected (only ---io-blksize is valid)",
+      "args": [
+        "-n",
+        "3",
+        "--io-blksize=2",
+        "input"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f input x*"
+      ]
     }
   ]
 }

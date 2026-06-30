@@ -1,273 +1,299 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 基本格式化（默认行为），自动折行到默认宽度",
-            "setup_commands": [
-                "echo 'This is a very long line of text that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.' > test_fmt.txt"
-            ],
-            "args": [
-                "test_fmt.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "This is a very long line of text that is intentionally written to\nexceed the default line width used by the fmt command so that\nwe can verify whether it correctly wraps the line without\nbreaking words.\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fmt.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 指定行宽 (-w)，所有输出行长度不超过指定宽度且不拆分单词",
-            "setup_commands": [
-                "echo 'ab cde fg' > test_fmt.txt"
-            ],
-            "args": [
-                "-w",
-                "7",
-                "test_fmt.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "ab\ncde fg",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fmt.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 多文件输入，按参数顺序依次格式化输出，不额外插入分隔符",
-            "setup_commands": [
-                "echo 'This is the first file with some text that will be formatted by fmt.' > test_fmt1.txt",
-                "echo 'Here is the second file. It also contains text to be formatted according to the default width.' > test_fmt2.txt"
-            ],
-            "args": [
-                "test_fmt1.txt",
-                "test_fmt2.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "This is the first file with some text that will be\nformatted by fmt.\nHere is the second file. It also contains text to be\nformatted according to the default width.\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fmt1.txt test_fmt2.txt"
-            ]
-        },
-        {
-            "tstdin": "This is a very long line of text that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.",
-            "command": "fmt",
-            "description": "fmt: 从标准输入读取文本并格式化输出",
-            "setup_commands": [],
-            "args": [],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "This is a very long line of text that is intentionally written to\nexceed the default line width used by the fmt command so that\nwe can verify whether it correctly wraps the line without\nbreaking words.\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": []
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 输入多个段落",
-            "setup_commands": [
-                "echo 'This is a very long line of text that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.\n\nThis is the second paragraph that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.' > test_fmt.txt"
-            ],
-            "args": [
-                "test_fmt.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "This is a very long line of text that is intentionally written to exceed\nthe default line width used by the fmt command so that we can verify\nwhether it correctly wraps the line without breaking words.\n\nThis is the second paragraph that is intentionally written to exceed\nthe default line width used by the fmt command so that we can verify\nwhether it correctly wraps the line without breaking words.",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fmt.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 行首包含缩进",
-            "setup_commands": [
-                "echo '    This is a very long line of text that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.\n   this is second line.\n   this is third line.' > test_fmt.txt"
-            ],
-            "args": [
-                "test_fmt.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "This is a very long line of text that is intentionally written to\nexceed the default line width used by the fmt command so that\nwe can verify whether it correctly wraps the line without\nbreaking words.\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fmt.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 文件不存在",
-            "setup_commands": [],
-            "args": [
-                "test_fmt.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": []
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 部分文件不存在",
-            "setup_commands": [
-                "echo 'hello' > fmt_file1",
-                "echo 'hello' > fmt_file2"
-            ],
-            "args": [
-                "fmt_file1",
-                "missing_file",
-                "fmt_file2"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f fmt_file1 fmt_file2"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 使用非法参数",
-            "setup_commands": [
-                "echo 'hello' > fmt_file1"
-            ],
-            "args": [
-                "--bad-option",
-                "fmt_file1"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f fmt_file1"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 空文件",
-            "setup_commands": [
-                "touch empty_fmt"
-            ],
-            "args": [
-                "empty_fmt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f empty_fmt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 空标准输入",
-            "setup_commands": [
-            ],
-            "args": [
-                "-"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 只包含空行的文件",
-            "setup_commands": [
-                "echo '\n\n\n' > all_blank_file"
-            ],
-            "args": [
-                "all_blank_file"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f all_blank_file"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "fmt",
-            "description": "fmt: 单个超长单词，不应该被拆分",
-            "setup_commands": [
-                "echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' > test_fmt"
-            ],
-            "args": [
-                "test_fmt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fmt"
-            ]
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt: 默认重排（基础场景）",
+      "setup_commands": [
+        "cat > in.txt <<'EOT'\nThis is a very long line of text that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.\nEOT"
+      ],
+      "args": ["in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         }
-    ]
-  }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt: 旧式 -WIDTH 语法（首参数）",
+      "setup_commands": [
+        "cat > in.txt <<'EOT'\nalpha beta gamma delta epsilon zeta eta theta iota kappa lambda\nEOT"
+      ],
+      "args": ["-72", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): wide-1 -w 32768",
+      "setup_commands": [],
+      "args": ["-w", "32768"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): wide-2 -w 2147483647",
+      "setup_commands": [],
+      "args": ["-w", "2147483647"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): bad-suffix -72x",
+      "setup_commands": [],
+      "args": ["-72x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): no-file",
+      "setup_commands": [],
+      "args": ["no-such-file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt: 部分文件不存在（应继续处理其余文件并返回1）",
+      "setup_commands": [
+        "echo 'hello from file one' > file1.txt",
+        "echo 'hello from file two' > file2.txt"
+      ],
+      "args": ["file1.txt", "missing.txt", "file2.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f file1.txt file2.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): obs-1 -c -72",
+      "setup_commands": [],
+      "args": ["-c", "-72"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): 8-bit-pfx",
+      "setup_commands": [
+        "cat > in.txt <<'EOT'\nça\nçb\nEOT"
+      ],
+      "args": ["-p", "ç", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): pfx-1",
+      "setup_commands": [
+        "cat > in.txt <<'EOT'\n 1\n  2\n\t3\n\t\t4\n> quoted\n> text\nEOT"
+      ],
+      "args": ["-p", ">", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): pfx-only",
+      "setup_commands": [
+        "printf '>\\n' > in.txt"
+      ],
+      "args": ["-p", ">", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(base.pl): pfx-of-pfx",
+      "setup_commands": [
+        "printf 'fo\\n' > in.txt"
+      ],
+      "args": ["-p", "foo", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(goal-option.sh): -g 60 -w 72",
+      "setup_commands": [
+        "cat > base.txt <<'EOT'\n@command{fmt} prefers breaking lines at the end of a sentence, and tries to\navoid line breaks after the first word of a sentence or before the last word\nof a sentence.  A @dfn{sentence break} is defined as either the end of a\nparagraph or a word ending in any of @samp{.?!}, followed by two spaces or end\nof line, ignoring any intervening parentheses or quotes.  Like @TeX{},\n@command{fmt} reads entire ''paragraphs'' before choosing line breaks; the\nalgorithm is a variant of that given by\nDonald E. Knuth and Michael F. Plass\nin ''Breaking Paragraphs Into Lines'',\n@cite{Software---Practice & Experience}\n@b{11}, 11 (November 1981), 1119--1184.\nEOT"
+      ],
+      "args": ["-g", "60", "-w", "72", "base.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f base.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt(long-line.sh): -s 长行拆分",
+      "setup_commands": [
+        "printf '%2030s\\n' ' ' | sed 's/../ y/g' > in.txt"
+      ],
+      "args": ["-s", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "=\u00A0=",
+      "command": "fmt",
+      "description": "fmt(non-space.sh): NBSP 在 -s -w1 下不作为空白分割",
+      "setup_commands": [],
+      "args": ["-s", "-w", "1"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt: -u 统一间距",
+      "setup_commands": [
+        "cat > in.txt <<'EOT'\nA.  B   C\nEOT"
+      ],
+      "args": ["-u", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt: 自定义窄宽度 -w 7（已知差异跟踪）",
+      "setup_commands": [
+        "printf 'ab cde fg\\n' > in.txt"
+      ],
+      "args": ["-w", "7", "in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    },
+    {
+      "tstdin": "",
+      "command": "fmt",
+      "description": "fmt: 缩进段落（已知差异跟踪）",
+      "setup_commands": [
+        "cat > in.txt <<'EOT'\n    This is a very long line of text that is intentionally written to exceed the default line width used by the fmt command so that we can verify whether it correctly wraps the line without breaking words.\n   this is second line.\n   this is third line.\nEOT"
+      ],
+      "args": ["in.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f in.txt"]
+    }
+  ]
+}

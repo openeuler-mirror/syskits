@@ -1,8 +1,11 @@
 mkdir:
   clap:
-    mode: set file mode (not implemented on windows)
-    parents: make parent directories as needed
-    verbose: print a message for each printed directory
+    help: display this help and exit
+    version: output version information and exit
+    mode: set file mode (as in chmod), not a=rwx - umask
+    parents: no error if existing, make parent directories as needed
+    verbose: print a message for each created directory
   usage: mkdir [OPTION]... DIRECTORY...
-  about: Create the given DIRECTORY(ies) if they do not exist
+  about: Create the DIRECTORY(ies), if they do not already exist.
   after_help: Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
+

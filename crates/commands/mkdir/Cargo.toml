@@ -19,6 +19,7 @@ sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["fs", "mode"] }
+selinux = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

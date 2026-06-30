@@ -2185,6 +2185,346 @@
       "cleanup_commands": [
         "rm -f input x*"
       ]
+    },
+    {
+      "command": "split",
+      "description": "split -u with round robin output",
+      "args": [
+        "-u",
+        "-n",
+        "r/3",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in",
+        "printf '1\\n4\\n' > exp1",
+        "printf '2\\n5\\n' > exp2",
+        "printf '3\\n' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split --unbuffered with round robin kth chunk",
+      "args": [
+        "--unbuffered",
+        "-n",
+        "r/2/3",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1\\n2\\n3\\n4\\n5\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split empty record separator should fail",
+      "args": [
+        "-t",
+        ""
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "split",
+      "description": "split long bytes: --bytes=5",
+      "args": [
+        "--bytes=5",
+        "in",
+        "out_"
+      ],
+      "setup_commands": [
+        "printf 'abcdefghijk' > in",
+        "printf 'abcde' > exp1",
+        "printf 'fghij' > exp2",
+        "printf 'k' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 out_aa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 out_ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 out_ac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e out_ad",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 out_*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split long line-bytes: --line-bytes=1",
+      "args": [
+        "--line-bytes=1",
+        "in"
+      ],
+      "setup_commands": [
+        "printf 'a\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s in xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split long suffix-length: --suffix-length=3",
+      "args": [
+        "--lines=2",
+        "--suffix-length=3",
+        "in",
+        "p"
+      ],
+      "setup_commands": [
+        "printf '1\n2\n3\n4\n' > in",
+        "printf '1\n2\n' > exp1",
+        "printf '3\n4\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 paaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 paab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e pac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 p*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split long elide-empty-files: --elide-empty-files --number=10",
+      "args": [
+        "--elide-empty-files",
+        "--number=10",
+        "/dev/null"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa && test ! -e xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split long separator: --separator=: with --lines=2",
+      "args": [
+        "--lines=2",
+        "--separator=:",
+        "in"
+      ],
+      "setup_commands": [
+        "printf '1:2:3:4:5:' > in",
+        "printf '1:2:' > exp1",
+        "printf '3:4:' > exp2",
+        "printf '5:' > exp3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 xab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp3 xac",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 exp3 x*"
+      ]
     }
   ]
 }

@@ -11,6 +11,7 @@
 
 use std::io::Write;
 use std::{cmp, mem};
+use unicode_width::UnicodeWidthChar;
 
 use crate::FmtConfigs;
 use crate::para_split::{FmtParaWords, FmtParagraph, FmtWordInfo};
@@ -48,6 +49,11 @@ pub fn fmt_break_lines<W: ?Sized + Write>(
     fmt_opts: &FmtConfigs,
     out_stream: &mut W,
 ) -> std::io::Result<()> {
+    // 仅在非 quick/mail/split-only 场景走 coreutils 风格 DP。
+    if !fmt_opts.is_quick && !para_graph.mail_header && !fmt_opts.is_split_only {
+        return fmt_break_coreutils_paragraph(para_graph, fmt_opts, out_stream);
+    }
+
     // 缩进
     let p_indent = &para_graph.indent_str;
     let p_indent_len = para_graph.indent_len;
@@ -55,29 +61,28 @@ pub fn fmt_break_lines<W: ?Sized + Write>(
     // words
     let p_words = FmtParaWords::new(fmt_opts, para_graph);
     let mut p_word_info = p_words.words();
-
-    // 第一个单词将*always*出现在第一行 在此确保
     let Some(w_info) = p_word_info.next() else {
         return out_stream.write_all(b"\n");
     };
 
+    let init_indent_str = if fmt_opts.is_crown || fmt_opts.is_tagged {
+        para_graph.init_str.as_str()
+    } else if !para_graph.mail_header {
+        p_indent
+    } else {
+        ""
+    };
+
+    out_stream.write_all(init_indent_str.as_bytes())?;
+    out_stream.write_all(w_info.word.as_bytes())?;
+
     // 打印初始值（如果存在）并获取其长度
     let p_init_len = w_info.word_nchars
-        + if fmt_opts.is_crown || fmt_opts.is_tagged {
-            // 处理 "init"部分
-            out_stream.write_all(para_graph.init_str.as_bytes())?;
-            para_graph.init_len
-        } else if !para_graph.mail_header {
-            // 对于on-(crown, tagged) ，与正常缩进相同
-            out_stream.write_all(p_indent.as_bytes())?;
-            p_indent_len
-        } else {
-            // 除了邮件头没有缩进之外
+        + if para_graph.mail_header {
             0
+        } else {
+            init_indent_str.chars().count()
         };
-
-    // 在写入 init 之后写第一个字
-    out_stream.write_all(w_info.word.as_bytes())?;
 
     // 本段是否要求统一间距？
     let is_uniform = para_graph.mail_header || fmt_opts.is_uniform;
@@ -96,6 +101,323 @@ pub fn fmt_break_lines<W: ?Sized + Write>(
     } else {
         fmt_break_knuth_plass(p_word_info, &mut break_args)
     }
+}
+
+#[derive(Clone)]
+struct CoreWord {
+    text: String,
+    length: usize,
+    space: usize,
+    paren: bool,
+    period: bool,
+    punct: bool,
+    final_word: bool,
+}
+
+fn core_is_ws(c: char) -> bool {
+    c.is_ascii_whitespace()
+}
+
+fn core_char_width(c: char) -> usize {
+    if (c as usize) < 0xA0 {
+        1
+    } else {
+        UnicodeWidthChar::width(c).unwrap_or(1)
+    }
+}
+
+fn core_is_open(c: char) -> bool {
+    matches!(c, '(' | '[' | '\'' | '`' | '"')
+}
+
+fn core_is_close(c: char) -> bool {
+    matches!(c, ')' | ']' | '\'' | '"')
+}
+
+fn core_is_period(c: char) -> bool {
+    matches!(c, '.' | '?' | '!')
+}
+
+fn core_collect_words(para_graph: &FmtParagraph, fmt_opts: &FmtConfigs) -> (Vec<CoreWord>, bool) {
+    let mut words = Vec::new();
+    let mut tabs_seen = false;
+
+    for (line_idx, raw_line) in para_graph.lines.iter().enumerate() {
+        let (start, mut col) = if line_idx == 0 {
+            if fmt_opts.is_crown || fmt_opts.is_tagged {
+                (para_graph.init_end, para_graph.init_len)
+            } else {
+                (para_graph.indent_end, para_graph.indent_len)
+            }
+        } else {
+            (para_graph.indent_end, para_graph.indent_len)
+        };
+
+        let line = &raw_line[start..];
+        let mut idx = 0usize;
+
+        while idx < line.len() {
+            // 与 coreutils 一致：跳过词前空白
+            while idx < line.len() {
+                let c = line[idx..].chars().next().unwrap_or('\0');
+                if !core_is_ws(c) {
+                    break;
+                }
+                let before = col;
+                if c == '\t' {
+                    tabs_seen = true;
+                    col = (col / fmt_opts.tab_width + 1) * fmt_opts.tab_width;
+                } else {
+                    col += 1;
+                }
+                let _space = col - before;
+                idx += c.len_utf8();
+            }
+            if idx >= line.len() {
+                break;
+            }
+
+            let word_start = idx;
+            let mut length = 0usize;
+            while idx < line.len() {
+                let c = line[idx..].chars().next().unwrap_or('\0');
+                if core_is_ws(c) {
+                    break;
+                }
+                let w = core_char_width(c);
+                length += w;
+                col += w;
+                idx += c.len_utf8();
+            }
+            let text = &line[word_start..idx];
+
+            let mut raw_space = 0usize;
+            let mut end_of_line = true;
+            while idx < line.len() {
+                let c = line[idx..].chars().next().unwrap_or('\0');
+                if !core_is_ws(c) {
+                    end_of_line = false;
+                    break;
+                }
+                let before = col;
+                if c == '\t' {
+                    tabs_seen = true;
+                    col = (col / fmt_opts.tab_width + 1) * fmt_opts.tab_width;
+                } else {
+                    col += 1;
+                }
+                raw_space += col - before;
+                idx += c.len_utf8();
+            }
+
+            let first = text.chars().next();
+            let mut tail_chars: Vec<char> = text.chars().collect();
+            let punct = tail_chars
+                .last()
+                .copied()
+                .is_some_and(|c| c.is_ascii_punctuation());
+            while tail_chars.last().copied().is_some_and(core_is_close) {
+                tail_chars.pop();
+            }
+            let period = tail_chars.last().copied().is_some_and(core_is_period);
+
+            let final_word = period && (end_of_line || raw_space > 1);
+            let space = if end_of_line || fmt_opts.is_uniform {
+                if final_word { 2 } else { 1 }
+            } else {
+                raw_space
+            };
+
+            words.push(CoreWord {
+                text: text.to_string(),
+                length,
+                space,
+                paren: first.is_some_and(core_is_open),
+                period,
+                punct,
+                final_word,
+            });
+        }
+    }
+
+    if let Some(last) = words.last_mut() {
+        last.period = true;
+        last.final_word = true;
+    }
+
+    (words, tabs_seen)
+}
+
+fn core_base_cost(i: usize, words: &[CoreWord]) -> i64 {
+    const LINE_COST: i64 = 70 * 70;
+    const SENTENCE_BONUS: i64 = 50 * 50;
+    const NOBREAK_COST: i64 = 600 * 600;
+    const PUNCT_BONUS: i64 = 40 * 40;
+    const PAREN_BONUS: i64 = 40 * 40;
+
+    let mut cost = LINE_COST;
+    if i > 0 {
+        let prev = i - 1;
+        if words[prev].period {
+            if words[prev].final_word {
+                cost -= SENTENCE_BONUS;
+            } else {
+                cost += NOBREAK_COST;
+            }
+        } else if words[prev].punct {
+            cost -= PUNCT_BONUS;
+        } else if i > 1 && words[i - 2].final_word {
+            cost += (200_i64 * 200_i64) / (words[prev].length as i64 + 2);
+        }
+    }
+
+    if words[i].paren {
+        cost -= PAREN_BONUS;
+    } else if words[i].final_word {
+        cost += (150_i64 * 150_i64) / (words[i].length as i64 + 2);
+    }
+    cost
+}
+
+fn core_line_cost(
+    next: usize,
+    len: usize,
+    goal: usize,
+    best_line_len: &[usize],
+    next_break: &[usize],
+    words_len: usize,
+) -> i64 {
+    if next == words_len {
+        return 0;
+    }
+    let n = goal as i64 - len as i64;
+    let mut cost = (n * 10).pow(2);
+    if next_break[next] != words_len {
+        let d = len as i64 - best_line_len[next] as i64;
+        cost += ((d * 10).pow(2)) / 2;
+    }
+    cost
+}
+
+fn core_write_space<W: ?Sized + Write>(
+    space: usize,
+    mut out_col: usize,
+    tab_width: usize,
+    tabs_seen: bool,
+    out_stream: &mut W,
+) -> std::io::Result<()> {
+    let target = out_col + space;
+    if tabs_seen {
+        let mut tab_target = (out_col / tab_width + 1) * tab_width;
+        while tab_target <= target {
+            out_stream.write_all(b"\t")?;
+            out_col = tab_target;
+            tab_target = (out_col / tab_width + 1) * tab_width;
+        }
+    }
+    while out_col < target {
+        out_stream.write_all(b" ")?;
+        out_col += 1;
+    }
+    Ok(())
+}
+
+fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
+    para_graph: &FmtParagraph,
+    fmt_opts: &FmtConfigs,
+    out_stream: &mut W,
+) -> std::io::Result<()> {
+    let (words, tabs_seen) = core_collect_words(para_graph, fmt_opts);
+    let n = words.len();
+    if n == 0 {
+        return out_stream.write_all(b"\n");
+    }
+
+    let init_indent_str = if fmt_opts.is_crown || fmt_opts.is_tagged {
+        para_graph.init_str.as_str()
+    } else {
+        para_graph.indent_str.as_str()
+    };
+    let init_indent_len = if fmt_opts.is_crown || fmt_opts.is_tagged {
+        para_graph.init_len
+    } else {
+        para_graph.indent_len
+    };
+    let other_indent_str = para_graph.indent_str.as_str();
+    let other_indent_len = para_graph.indent_len;
+
+    let mut best_cost = vec![0_i64; n + 1];
+    let mut best_line_len = vec![0_usize; n + 1];
+    let mut next_break = vec![n; n];
+
+    for i in (0..n).rev() {
+        let mut best = i64::MAX / 4;
+        let mut best_j = i + 1;
+        let mut best_len_i = 0_usize;
+
+        let mut len = if i == 0 {
+            init_indent_len
+        } else {
+            other_indent_len
+        } + words[i].length;
+        let mut j = i + 1;
+
+        loop {
+            let wcost = core_line_cost(j, len, fmt_opts.goal, &best_line_len, &next_break, n)
+                + best_cost[j];
+            if wcost < best {
+                best = wcost;
+                best_j = j;
+                best_len_i = len;
+            }
+
+            if j == n {
+                break;
+            }
+
+            len += words[j - 1].space + words[j].length;
+            j += 1;
+
+            // 与 coreutils do/while(len < max_width) 对齐。
+            if len >= fmt_opts.width {
+                break;
+            }
+        }
+
+        best_cost[i] = best + core_base_cost(i, &words);
+        best_line_len[i] = best_len_i;
+        next_break[i] = best_j;
+    }
+
+    let mut start = 0usize;
+    let mut is_first_line = true;
+    while start < n {
+        let end = next_break[start];
+        if is_first_line {
+            out_stream.write_all(init_indent_str.as_bytes())?;
+        } else {
+            fmt_write_newline(other_indent_str, out_stream)?;
+        }
+
+        let mut out_col = if is_first_line {
+            init_indent_len
+        } else {
+            other_indent_len
+        };
+        for (offset, w) in words[start..end].iter().enumerate() {
+            let k = start + offset;
+            out_stream.write_all(w.text.as_bytes())?;
+            out_col += w.length;
+            if k + 1 < end {
+                core_write_space(w.space, out_col, fmt_opts.tab_width, tabs_seen, out_stream)?;
+                out_col += w.space;
+            }
+        }
+
+        start = end;
+        is_first_line = false;
+    }
+    out_stream.write_all(b"\n")
 }
 
 // break_simple 实现了一种 "贪婪 "的分行算法：打印单词，直到超过最大长度。
@@ -303,8 +625,13 @@ fn fmt_find_kp_breakpoints<'a, W: ?Sized + Write, T: Iterator<Item = &'a FmtWord
                 // 如果我们超过了最小长度，我们也可以考虑在这里断开
                 if t_len >= minlength {
                     let (new_demerits, new_ratio) = if is_last_word {
-                        // 最后一行的长度不会受到惩罚
-                        (0, 0.0)
+                        // 对最后一行应用同等长度惩罚，避免末行过短导致的断行偏差。
+                        fmt_compute_demerits(
+                            fmt_args.fmt_opts.goal as isize - t_len as isize,
+                            stretch,
+                            w.word_nchars,
+                            active.prev_rat,
+                        )
                     } else {
                         fmt_compute_demerits(
                             fmt_args.fmt_opts.goal as isize - t_len as isize,

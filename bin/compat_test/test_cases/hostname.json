@@ -1,342 +1,590 @@
 {
-    "tests": [
-        {
-          "tstdin": "",
-          "command": "hostname",
-          "description": "基本功能测试",
-          "setup_commands": [
-            ""
-          ],
-          "args": [],
-          "expectation": {
-            "execution": {
-              "exit_code": 0,
-              "stdout": "",
-              "stderr": ""
-            },
-            "verifications": [
-              {
-                "command": "",
-                "expected_exit": 0,
-                "expected_stdout": ""
-              }
-            ]
+  "tests": [
+    {
+      "command": "hostname",
+      "description": "Basic hostname with no options - display current hostname",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -s flag (short hostname)",
+      "args": ["-s"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
           },
-          "cleanup_commands": [
-            ""
-          ]
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -v '\\.'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --short flag (long form)",
+      "args": ["--short"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "设置临时主机名",
-            "setup_commands": [
-              
-            ],
-            "args": ["test-node"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "通过文件设置主机名",
-            "setup_commands": [
-              "echo 'test-node-1' > hostname.txt"
-            ],
-            "args": ["-F", "hostname.txt"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              "rm -f hostname.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "设置默认主机名",
-            "setup_commands": [
-              
-            ],
-            "args": ["-b", "default-node"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示所有别名",
-            "setup_commands": [
-              
-            ],
-            "args": ["-a"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示所有FQDN",
-            "setup_commands": [
-              
-            ],
-            "args": ["-A"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示DNS域名",
-            "setup_commands": [
-              
-            ],
-            "args": ["-d"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示完整FQDN",
-            "setup_commands": [
-              
-            ],
-            "args": ["-f"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示所有IP地址",
-            "setup_commands": [
-              
-            ],
-            "args": ["-i"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示所有IP地址",
-            "setup_commands": [
-              
-            ],
-            "args": ["-I"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示短主机名",
-            "setup_commands": [
-              
-            ],
-            "args": ["-s"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "显示NIS域名",
-            "setup_commands": [
-              
-            ],
-            "args": ["-y"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              ""
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "hostname",
-            "description": "通过文件设置NIS域名",
-            "setup_commands": [
-              "echo 'test-node-nis' > nis.txt"
-            ],
-            "args": ["-y", "-F", "nis.txt"],
-            "expectation": {
-              "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-              },
-              "verifications": [
-                {
-                  "command": "hostname -y",
-                  "expected_exit": 0,
-                  "expected_stdout": ""
-                }
-              ]
-            },
-            "cleanup_commands": [
-              "rm -f nis.txt"
-            ]
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -d flag (DNS domain name)",
+      "args": ["-d"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
         }
-    ]
-  }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --domain flag (long form)",
+      "args": ["--domain"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -f flag (FQDN)",
+      "args": ["-f"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --fqdn flag (long form)",
+      "args": ["--fqdn"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --long flag (alias for --fqdn)",
+      "args": ["--long"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -i flag (IP address)",
+      "args": ["-i"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --ip-address flag (long form)",
+      "args": ["--ip-address"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -I flag (all IP addresses)",
+      "args": ["-I"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --all-ip-addresses flag (long form)",
+      "args": ["--all-ip-addresses"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -a flag (alias names)",
+      "args": ["-a"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --alias flag (long form)",
+      "args": ["--alias"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -A flag (all FQDNs)",
+      "args": ["-A"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --all-fqdns flag (long form)",
+      "args": ["--all-fqdns"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDOUT\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -y flag (NIS domain name)",
+      "args": ["-y"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --nis flag (long form)",
+      "args": ["--nis"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --yp flag (alias for --nis)",
+      "args": ["--yp"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": null,
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --version flag",
+      "args": ["--version"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -i 'hostname'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -V flag (short version)",
+      "args": ["-V"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -i 'hostname'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --help flag",
+      "args": ["--help"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT$CMD_STDERR\" | grep -i 'usage'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -h flag (short help)",
+      "args": ["-h"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT$CMD_STDERR\" | grep -i 'usage'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -? flag (help)",
+      "args": ["-?"],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT$CMD_STDERR\" | grep -i 'usage'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test invalid option",
+      "args": ["--invalid-option"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'unrecognized\\|invalid'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test invalid short option",
+      "args": ["-x"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'invalid\\|unrecognized'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -F flag without argument",
+      "args": ["-F"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'requires\\|argument'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --file flag without argument",
+      "args": ["--file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'requires\\|argument'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test reading hostname from non-existent file",
+      "args": ["-F", "/tmp/nonexistent_hostname_file_12345"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'no such file\\|cannot open\\|not found'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test reading hostname from file with -F flag",
+      "args": ["-F", "/tmp/test_hostname_file"],
+      "setup_commands": [
+        "echo 'test-hostname-from-file' > /tmp/test_hostname_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'root\\|permission'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_hostname_file"
+      ]
+    },
+    {
+      "command": "hostname",
+      "description": "Test reading hostname from file with --file flag",
+      "args": ["--file", "/tmp/test_hostname_file2"],
+      "setup_commands": [
+        "echo 'another-test-hostname' > /tmp/test_hostname_file2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'root\\|permission'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_hostname_file2"
+      ]
+    },
+    {
+      "command": "hostname",
+      "description": "Test setting hostname without root (should fail)",
+      "args": ["newhostname"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'root\\|permission'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test multiple operands (should fail)",
+      "args": ["hostname1", "hostname2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 255,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT$CMD_STDERR\" | grep -i 'usage'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test -b flag with -F (boot mode)",
+      "args": ["-b", "-F", "/tmp/nonexistent_boot_file"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'root\\|permission'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "hostname",
+      "description": "Test --boot flag with --file (boot mode)",
+      "args": ["--boot", "--file", "/tmp/nonexistent_boot_file2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -i 'root\\|permission'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    }
+  ]
+}

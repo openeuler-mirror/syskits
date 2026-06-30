@@ -1096,6 +1096,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "rust-i18n",
+ "selinux",
  "sys-locale",
  "tempfile",
 ]
@@ -1195,6 +1196,7 @@ dependencies = [
  "clap",
  "ctcore",
  "rust-i18n",
+ "selinux",
  "sys-locale",
  "tempfile",
 ]

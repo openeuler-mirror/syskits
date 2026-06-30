@@ -1,6 +1,8 @@
 mkfifo:
   clap:
-    mode: file permissions for the fifo
+    help: display this help and exit
+    version: output version information and exit
+    mode: set file permission bits to MODE, not a=rw - umask
     se_linux_security_context: set the SELinux security context to default type
   usage: mkfifo [OPTION]... NAME...
-  about: Create a FIFO with the given name.
+  about: Create named pipes (FIFOs) with the given NAMEs.

@@ -1,6 +1,8 @@
 mkfifo:
   clap:
-    mode: FIFO的文件权限
+    help: 显示此帮助信息并退出
+    version: 输出版本信息并退出
+    mode: 设置文件权限位为 MODE,而不是 a=rw - umask
     se_linux_security_context: 将SELinux安全上下文设置为默认类型
   usage: mkfifo [选项]... 名称...
-  about: '创建具有给定名称的FIFO。'
+  about: '创建具有给定名称的命名管道(FIFO)。'

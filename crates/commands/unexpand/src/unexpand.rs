@@ -1471,22 +1471,22 @@ mod tests {
 
         #[test]
         fn test_is_digit_or_comma() {
-            assert_eq!(is_digit_or_comma('0'), true);
-            assert_eq!(is_digit_or_comma('1'), true);
-            assert_eq!(is_digit_or_comma('2'), true);
-            assert_eq!(is_digit_or_comma('3'), true);
-            assert_eq!(is_digit_or_comma('4'), true);
-            assert_eq!(is_digit_or_comma('5'), true);
-            assert_eq!(is_digit_or_comma('6'), true);
-            assert_eq!(is_digit_or_comma('7'), true);
-            assert_eq!(is_digit_or_comma('8'), true);
-            assert_eq!(is_digit_or_comma('9'), true);
-            assert_eq!(is_digit_or_comma(','), true);
-            assert_eq!(is_digit_or_comma('a'), false);
-            assert_eq!(is_digit_or_comma('A'), false);
-            assert_eq!(is_digit_or_comma('!'), false);
-            assert_eq!(is_digit_or_comma('('), false);
-            assert_eq!(is_digit_or_comma(')'), false);
+            assert!(is_digit_or_comma('0'));
+            assert!(is_digit_or_comma('1'));
+            assert!(is_digit_or_comma('2'));
+            assert!(is_digit_or_comma('3'));
+            assert!(is_digit_or_comma('4'));
+            assert!(is_digit_or_comma('5'));
+            assert!(is_digit_or_comma('6'));
+            assert!(is_digit_or_comma('7'));
+            assert!(is_digit_or_comma('8'));
+            assert!(is_digit_or_comma('9'));
+            assert!(is_digit_or_comma(','));
+            assert!(!is_digit_or_comma('a'));
+            assert!(!is_digit_or_comma('A'));
+            assert!(!is_digit_or_comma('!'));
+            assert!(!is_digit_or_comma('('));
+            assert!(!is_digit_or_comma(')'));
         }
     }
 
@@ -1502,8 +1502,8 @@ mod tests {
             assert_eq!(flags.tabstops, vec![UNEXPAND_DEFAULT_TABSTOP]);
             assert_eq!(flags.remaining_mode, RemainingMode::None);
             assert_eq!(flags.files, vec!["-".to_string()]);
-            assert_eq!(flags.is_a_flag, false);
-            assert_eq!(flags.is_u_flag, true);
+            assert!(!flags.is_a_flag);
+            assert!(flags.is_u_flag);
         }
 
         #[test]
@@ -1520,7 +1520,7 @@ mod tests {
             let app = ct_app();
             let matches = app.get_matches_from(vec!["unexpand", "--all"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
-            assert_eq!(flags.is_a_flag, true);
+            assert!(flags.is_a_flag);
         }
 
         #[test]
@@ -1528,7 +1528,7 @@ mod tests {
             let app = ct_app();
             let matches = app.get_matches_from(vec!["unexpand", "--first-only"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
-            assert_eq!(flags.is_a_flag, false);
+            assert!(!flags.is_a_flag);
         }
 
         #[test]
@@ -1536,7 +1536,7 @@ mod tests {
             let app = ct_app();
             let matches = app.get_matches_from(vec!["unexpand", "--no-utf8"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
-            assert_eq!(flags.is_u_flag, false);
+            assert!(!flags.is_u_flag);
         }
 
         #[test]
@@ -1614,54 +1614,73 @@ mod tests {
         assert_eq!(flags.is_u_flag, false);
     }
 
-    #[test]
-    fn test_unexpand_flags_new_with_tabs_and_all_but_not_first_only() {
-        let app = ct_app();
-        let matches = app.get_matches_from(vec![
-            "unexpand",
-            "--tabs",
-            "4,8",
-            "--all",
-            "--first-only",
-            "file1",
-            "file2",
-        ]);
-        let flags = UnexpandFlags::new(&matches).unwrap();
-        assert_eq!(flags.tabstops, vec![4, 8]);
-        assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
-        assert_eq!(flags.is_a_flag, false);
-    }
+        #[test]
+        fn test_unexpand_flags_new_with_combined_flags() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec![
+                "unexpand",
+                "--tabs",
+                "4,8",
+                "--all",
+                "--no-utf8",
+                "file1",
+                "file2",
+            ]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8]);
+            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert!(flags.is_a_flag);
+            assert!(!flags.is_u_flag);
+        }
 
-    #[test]
-    fn test_unexpand_flags_new_with_tabs_and_default_flags() {
-        let app = ct_app();
-        let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8"]);
-        let flags = UnexpandFlags::new(&matches).unwrap();
-        assert_eq!(flags.tabstops, vec![4, 8]);
-        assert_eq!(flags.files, vec!["-".to_string()]);
-        assert_eq!(flags.is_a_flag, true);
-        assert_eq!(flags.is_u_flag, true);
-    }
+        #[test]
+        fn test_unexpand_flags_new_with_tabs_and_all_but_not_first_only() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec![
+                "unexpand",
+                "--tabs",
+                "4,8",
+                "--all",
+                "--first-only",
+                "file1",
+                "file2",
+            ]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8]);
+            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert!(!flags.is_a_flag);
+        }
 
-    #[test]
-    fn test_unexpand_flags_new_with_all_flags() {
-        let app = ct_app();
-        let matches = app.get_matches_from(vec![
-            "unexpand",
-            "--tabs",
-            "4,8,12",
-            "--all",
-            "--first-only",
-            "--no-utf8",
-            "file1",
-            "file2",
-        ]);
-        let flags = UnexpandFlags::new(&matches).unwrap();
-        assert_eq!(flags.tabstops, vec![4, 8, 12]);
-        assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
-        assert_eq!(flags.is_a_flag, false); // Because --first-only is present
-        assert_eq!(flags.is_u_flag, false);
-    }
+        #[test]
+        fn test_unexpand_flags_new_with_tabs_and_default_flags() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8]);
+            assert_eq!(flags.files, vec!["-".to_string()]);
+            assert!(flags.is_a_flag);
+            assert!(flags.is_u_flag);
+        }
+
+        #[test]
+        fn test_unexpand_flags_new_with_all_flags() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec![
+                "unexpand",
+                "--tabs",
+                "4,8,12",
+                "--all",
+                "--first-only",
+                "--no-utf8",
+                "file1",
+                "file2",
+            ]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8, 12]);
+            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert!(!flags.is_a_flag); // Because --first-only is present
+            assert!(!flags.is_u_flag);
+        }
 
     #[test]
     fn test_unexpand_flags_new_with_default_file() {
@@ -1794,7 +1813,7 @@ mod tests {
         fn test_invalid_character_display() {
             let error = UnexpandParseError::InvalidCharacter("x".to_string());
             assert_eq!(
-                format!("{}", error),
+                format!("{error}"),
                 "tab size contains invalid character(s): 'x'"
             );
         }
@@ -1802,19 +1821,19 @@ mod tests {
         #[test]
         fn test_tab_size_cannot_be_zero_display() {
             let error = UnexpandParseError::TabSizeCannotBeZero;
-            assert_eq!(format!("{}", error), "tab size cannot be 0");
+            assert_eq!(format!("{error}"), "tab size cannot be 0");
         }
 
         #[test]
         fn test_tab_size_too_large_display() {
             let error = UnexpandParseError::TabStopValueTooLarge;
-            assert_eq!(format!("{}", error), "tab stop value is too large");
+            assert_eq!(format!("{error}"), "tab stop value is too large");
         }
 
         #[test]
         fn test_tab_sizes_must_be_ascending_display() {
             let error = UnexpandParseError::TabSizesMustBeAscending;
-            assert_eq!(format!("{}", error), "tab sizes must be ascending");
+            assert_eq!(format!("{error}"), "tab sizes must be ascending");
         }
     }
 

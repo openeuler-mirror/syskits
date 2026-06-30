@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
@@ -207,7 +207,7 @@ impl StdbufFlags {
         // 执行命令并等待完成
         let mut process = command
             .spawn()
-            .map_err_context(|| format!("failed to execute process: {}", command_name))?;
+            .map_err_context(|| format!("failed to execute process: {command_name}"))?;
 
         let status = process
             .wait()
@@ -659,9 +659,8 @@ mod tests {
                 }
 
                 // 验证缓冲设置被正确应用
-                match self.stdin {
-                    BufferType::Line => return false, // 输入流行缓冲是无效的
-                    _ => {}
+                if let BufferType::Line = self.stdin {
+                    return false; // 输入流行缓冲是无效的
                 }
 
                 // 所有检查通过
@@ -836,9 +835,9 @@ mod tests {
         let line_buffer = BufferType::Line;
         let size_buffer = BufferType::Size(1024);
 
-        assert_eq!(format!("{:?}", default_buffer), "Default");
-        assert_eq!(format!("{:?}", line_buffer), "Line");
-        assert_eq!(format!("{:?}", size_buffer), "Size(1024)");
+        assert_eq!(format!("{default_buffer:?}"), "Default");
+        assert_eq!(format!("{line_buffer:?}"), "Line");
+        assert_eq!(format!("{size_buffer:?}"), "Size(1024)");
     }
 
     // 新增测试：测试StdbufFlags的默认实现

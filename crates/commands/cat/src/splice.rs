@@ -240,7 +240,7 @@ mod tests {
         };
 
         let fd = unsafe { nix::libc::eventfd(0, nix::libc::EFD_NONBLOCK) };
-        assert!(fd >= 0, "eventfd 创建失败: {}", fd);
+        assert!(fd >= 0, "eventfd 创建失败: {fd}");
         let event_fd = unsafe { OwnedFd::from_raw_fd(fd) };
 
         let need_fallback =
@@ -251,7 +251,6 @@ mod tests {
         assert_eq!(u64::from_ne_bytes(buffer), value);
         if !need_fallback {
             // 某些内核支持直接 splice 到 eventfd，此时无需回退。
-            return;
         }
     }
 }

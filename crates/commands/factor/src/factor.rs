@@ -238,7 +238,7 @@ fn factors_print_str(
                 let factors = factorize_biguint(&x);
                 format_big_factors(&factors, is_print_exponents)
             };
-            writeln!(w, "{}:{}", x, output)?;
+            writeln!(w, "{x}:{output}")?;
         }
     }
 
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Factor::default();
+        let tool = Factor;
 
         // Test name method
         assert_eq!(tool.name(), "factor");

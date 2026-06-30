@@ -319,19 +319,21 @@ fn mount_info_lt(mount_info_1: &CtMountInfo, mount_info_2: &CtMountInfo) -> bool
         return false;
     }
 
-    let target_nearer_root = mount_info_1.mount_dir.len() > mount_info_2.mount_dir.len();
-    // 若新挂载点对应的 mount_root 更深（绑定挂载），则不替换。
-    let source_below_root = !mount_info_1.mount_root.is_empty()
+    if !mount_info_1.mount_root.is_empty()
         && !mount_info_2.mount_root.is_empty()
-        && mount_info_1.mount_root.len() < mount_info_2.mount_root.len();
-    if target_nearer_root && !source_below_root {
-        return true;
+        && mount_info_1.mount_root.len() != mount_info_2.mount_root.len()
+    {
+        return mount_info_2.mount_root.len() < mount_info_1.mount_root.len();
+    }
+
+    if mount_info_1.mount_dir.len() != mount_info_2.mount_dir.len() {
+        return mount_info_1.mount_dir.len() > mount_info_2.mount_dir.len();
     }
 
     if mount_info_1.mount_dir == mount_info_2.mount_dir
         && mount_info_1.dev_name != mount_info_2.dev_name
     {
-        return true;
+        return false;
     }
 
     false
@@ -733,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Df::default();
+        let tool = Df;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "df");
@@ -2100,13 +2102,13 @@ mod tests {
             let expected_result = Some("K");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2138,13 +2140,13 @@ mod tests {
             let expected_result = Some("k");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2176,13 +2178,13 @@ mod tests {
             let expected_result = Some("K");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2214,13 +2216,13 @@ mod tests {
             let expected_result = Some("k");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2252,13 +2254,13 @@ mod tests {
             let expected_result = Some("M");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2290,13 +2292,13 @@ mod tests {
             let expected_result = Some("m");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2328,13 +2330,13 @@ mod tests {
             let expected_result = Some("M");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2366,13 +2368,13 @@ mod tests {
             let expected_result = Some("m");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2403,13 +2405,13 @@ mod tests {
             let expected_result = Some("G");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2441,13 +2443,13 @@ mod tests {
             let expected_result = Some("g");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2479,13 +2481,13 @@ mod tests {
             let expected_result = Some("G");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2517,13 +2519,13 @@ mod tests {
             let expected_result = Some("g");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2555,13 +2557,13 @@ mod tests {
             let expected_result = Some("T");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2593,13 +2595,13 @@ mod tests {
             let expected_result = Some("t");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2631,13 +2633,13 @@ mod tests {
             let expected_result = Some("T");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2669,13 +2671,13 @@ mod tests {
             let expected_result = Some("t");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2706,13 +2708,13 @@ mod tests {
             let expected_result = Some("P");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2744,13 +2746,13 @@ mod tests {
             let expected_result = Some("p");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2782,13 +2784,13 @@ mod tests {
             let expected_result = Some("P");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2820,13 +2822,13 @@ mod tests {
             let expected_result = Some("p");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2858,13 +2860,13 @@ mod tests {
             let expected_result = Some("E");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2896,13 +2898,13 @@ mod tests {
             let expected_result = Some("e");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2934,13 +2936,13 @@ mod tests {
             let expected_result = Some("E");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -2972,13 +2974,13 @@ mod tests {
             let expected_result = Some("e");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3010,13 +3012,13 @@ mod tests {
             let expected_result = Some("Z");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3048,13 +3050,13 @@ mod tests {
             let expected_result = Some("z");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3086,13 +3088,13 @@ mod tests {
             let expected_result = Some("Z");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3124,13 +3126,13 @@ mod tests {
             let expected_result = Some("z");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3162,13 +3164,13 @@ mod tests {
             let expected_result = Some("Y");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3200,13 +3202,13 @@ mod tests {
             let expected_result = Some("y");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3238,13 +3240,13 @@ mod tests {
             let expected_result = Some("Y");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3276,13 +3278,13 @@ mod tests {
             let expected_result = Some("y");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3314,13 +3316,13 @@ mod tests {
             let expected_result = Some("K");
 
             if let Ok(_matches) = result.as_ref() {
-                if let Some(_matches) = result.as_ref().ok() {
+                if let Ok(_matches) = result.as_ref() {
                     let result = _matches.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
                     assert_eq!(expected_result, Some(result).map(|x| x.as_str()));
 
                     let result = _matches.get_one::<bool>(DF_OPT_TOTAL).unwrap();
 
-                    assert_eq!(true, *result);
+                    assert!(*result);
                 }
             }
         }
@@ -3842,11 +3844,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
             }
         }
@@ -3877,11 +3879,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
             }
         }
@@ -3919,11 +3921,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -3970,11 +3972,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4020,11 +4022,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4071,11 +4073,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4122,11 +4124,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4173,11 +4175,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4224,11 +4226,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4275,11 +4277,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4326,11 +4328,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4377,11 +4379,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4428,11 +4430,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -4479,11 +4481,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_LOCAL).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_LOCAL).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_NO_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_NO_SYNC).unwrap()));
                 }
 
                 if matches.get_one::<String>(DF_OPT_OUTPUT).is_some() {
@@ -5119,11 +5121,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_PORTABILITY).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_PORTABILITY).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_PORTABILITY).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_SYNC).unwrap()));
                 }
             }
         }
@@ -5161,11 +5163,11 @@ mod tests {
 
             if let Ok(matches) = result.as_ref() {
                 if matches.get_one::<bool>(DF_OPT_PORTABILITY).is_some() {
-                    assert_eq!(true, *matches.get_one::<bool>(DF_OPT_PORTABILITY).unwrap());
+                    assert!(*matches.get_one::<bool>(DF_OPT_PORTABILITY).unwrap());
                 }
 
                 if matches.get_one::<bool>(DF_OPT_SYNC).is_none() {
-                    assert_eq!(false, *matches.get_one::<bool>(DF_OPT_SYNC).unwrap());
+                    assert!(!(*matches.get_one::<bool>(DF_OPT_SYNC).unwrap()));
                 }
             }
         }
@@ -5368,22 +5370,22 @@ mod tests {
 
         #[test]
         fn test_df_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = df_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_df_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = df_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_df_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = df_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -5408,8 +5410,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-a"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-a"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5435,8 +5437,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--all"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--all"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5462,8 +5464,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BK"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BK"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5489,8 +5491,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bk"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bk"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5516,8 +5518,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=K"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=K"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5543,8 +5545,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=k"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=k"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5570,8 +5572,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BM"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BM"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5597,8 +5599,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bm"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bm"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5624,8 +5626,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=M"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=M"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5651,8 +5653,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=m"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=m"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5677,8 +5679,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BG"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BG"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5704,8 +5706,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bg"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bg"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5731,8 +5733,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=G"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=G"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5758,8 +5760,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=g"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=g"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5785,8 +5787,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BT"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BT"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5812,8 +5814,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bt"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bt"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5839,8 +5841,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=T"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=T"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5866,8 +5868,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=t"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=t"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5892,8 +5894,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BP"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BP"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5919,8 +5921,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bp"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bp"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5946,8 +5948,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=P"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=P"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5973,8 +5975,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=p"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=p"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6000,8 +6002,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BE"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BE"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6027,8 +6029,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Be"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Be"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6054,8 +6056,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=E"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=E"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6081,8 +6083,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=e"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=e"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6108,8 +6110,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BZ"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BZ"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6137,8 +6139,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bz"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bz"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6166,8 +6168,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=Z"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=Z"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6195,8 +6197,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=z"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=z"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6224,8 +6226,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BY"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BY"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6253,8 +6255,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-By"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-By"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6282,8 +6284,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=Y"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=Y"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6311,8 +6313,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=y"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=y"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -6340,8 +6342,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6367,8 +6369,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BK", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BK", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6394,8 +6396,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bk", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bk", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6421,8 +6423,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=K", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=K", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6448,8 +6450,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=k", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=k", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6475,8 +6477,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BM", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BM", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6502,8 +6504,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bm", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bm", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6529,8 +6531,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=M", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=M", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6556,8 +6558,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=m", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=m", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6582,8 +6584,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BG", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BG", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6609,8 +6611,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bg", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bg", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6636,8 +6638,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=G", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=G", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6663,8 +6665,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=g", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=g", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6690,8 +6692,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BT", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BT", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6717,8 +6719,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bt", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bt", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6744,8 +6746,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=T", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=T", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6771,8 +6773,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=t", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=t", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6797,8 +6799,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BP", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BP", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6824,8 +6826,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bp", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bp", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6851,8 +6853,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=P", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=P", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6878,8 +6880,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=p", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=p", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6905,8 +6907,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BE", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BE", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6932,8 +6934,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Be", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Be", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6959,8 +6961,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=E", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=E", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6986,8 +6988,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=e", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=e", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7013,8 +7015,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BZ", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BZ", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7042,8 +7044,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-Bz", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-Bz", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7071,8 +7073,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=Z", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=Z", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7100,8 +7102,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=z", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=z", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7129,8 +7131,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BY", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BY", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7158,8 +7160,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-By", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-By", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7187,8 +7189,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=Y", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=Y", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'Y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7216,8 +7218,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--block-size=y", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--block-size=y", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
@@ -7245,8 +7247,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-BK", "--total"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-BK", "--total"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7272,8 +7274,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--human-readable"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--human-readable"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7299,8 +7301,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--human-readable"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--human-readable"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7326,8 +7328,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-h"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-h"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7353,8 +7355,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-h"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-h"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7380,8 +7382,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-H"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-H"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7407,8 +7409,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--si"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--si"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7434,8 +7436,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-i"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-i"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7461,8 +7463,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--inodes"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--inodes"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7488,8 +7490,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-k"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-k"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7515,8 +7517,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-l"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-l"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7542,8 +7544,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--local"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--local"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7569,8 +7571,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-l", "--local"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-l", "--local"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7596,8 +7598,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--no-sync"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--no-sync"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7623,8 +7625,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-l", "--no-sync"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-l", "--no-sync"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7649,8 +7651,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--local", "--no-sync"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--local", "--no-sync"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7676,14 +7678,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=source",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7709,14 +7711,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=fstype",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7742,14 +7744,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=itotal",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7775,14 +7777,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=iused",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7807,14 +7809,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=iavail",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7840,14 +7842,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=ipcent",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7873,14 +7875,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=size",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7906,14 +7908,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=used",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7939,14 +7941,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=avail",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7972,14 +7974,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=pcent",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8005,14 +8007,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=file",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8038,14 +8040,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "--local",
                 "--no-sync",
                 "--output=target",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8071,8 +8073,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=source"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=source"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8098,8 +8100,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=fstype"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=fstype"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8125,8 +8127,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=itotal"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=itotal"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8152,8 +8154,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=iused"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=iused"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8179,8 +8181,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=iavail"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=iavail"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8206,8 +8208,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=ipcent"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=ipcent"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8233,8 +8235,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=size"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=size"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8260,8 +8262,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=used"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=used"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8287,8 +8289,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=avail"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=avail"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8314,8 +8316,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=pcent"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=pcent"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8341,8 +8343,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=file"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=file"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8368,8 +8370,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--output=target"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--output=target"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8395,8 +8397,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-P"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-P"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8422,8 +8424,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--portability"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--portability"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8449,8 +8451,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-P", "--portability"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-P", "--portability"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8476,8 +8478,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--sync"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--sync"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8503,8 +8505,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--portability", "--sync"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--portability", "--sync"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8530,14 +8532,14 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 df_dir,
                 "-P",
                 "--portability",
                 "--sync",
             ];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8563,8 +8565,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--type", "ext4"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--type", "ext4"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8590,8 +8592,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--print-type"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--print-type"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8617,8 +8619,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-T"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-T"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8644,8 +8646,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "-x", "ext4"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "-x", "ext4"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8671,8 +8673,8 @@ mod tests {
 
             let df_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), df_dir, "--exclude-type", "ext4"];
-            let result = df_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), df_dir, "--exclude-type", "ext4"];
+            let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8710,7 +8712,7 @@ mod tests {
             let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
             assert!(!mount_info_lt(&m1, &m2));
 
-            // ..but prefer mount root "/root" over "/".
+            // ..but prefer mount root "/" over "/root".
             let m1 = mount_info("/dev/foo", "/root", "/mnt/bar");
             let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
             assert!(mount_info_lt(&m1, &m2));
@@ -8943,11 +8945,12 @@ mod tests {
 
         #[test]
         fn test_get_all_filesystems() {
-            let mut options = DfOptions::default();
-
-            options.show_local_fs = true;
+            let options = DfOptions {
+                show_local_fs: true,
+                ..Default::default()
+            };
             let mount_infos = get_all_filesystems(&options).unwrap();
-            assert!(mount_infos.len() > 0);
+            assert!(!mount_infos.is_empty());
         }
 
         #[test]

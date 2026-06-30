@@ -18,7 +18,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -93,14 +93,14 @@ fn set_security_context(context: Option<&OsString>) -> Result<(), String> {
             // 如果提供了具体的上下文，使用它
             SecurityContext::from_c_str(&c_context, false)
                 .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("Failed to set security context: {}", e))
+                .map_err(|e| format!("Failed to set security context: {e}"))
         }
         None => {
             // 使用空字符串来触发默认安全上下文
             let empty_ctx = CString::new("").unwrap();
             SecurityContext::from_c_str(&empty_ctx, false)
                 .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("Failed to set default security context: {}", e))
+                .map_err(|e| format!("Failed to set default security context: {e}"))
         }
     }
 }
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Mkfifo::default();
+        let tool = Mkfifo;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "mkfifo");
@@ -205,17 +205,17 @@ mod tests {
 
         #[test]
         fn test_false_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = mkfifo_main(args.iter().map(|s| OsString::from(s)));
+            let result = mkfifo_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_false_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = mkfifo_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = mkfifo_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }

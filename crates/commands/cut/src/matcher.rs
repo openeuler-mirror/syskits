@@ -89,9 +89,6 @@ impl Matcher for WhitespaceMatcher {
 mod tests_matcher {
     use super::*;
 
-    use ExactMatcher;
-    use WhitespaceMatcher;
-
     #[test]
     fn test_exact_matcher_empty_input() {
         let matcher = ExactMatcher::new(":".as_bytes());

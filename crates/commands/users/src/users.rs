@@ -15,7 +15,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::ffi::OsString;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version};
 use std::path::{Path, PathBuf};
@@ -51,7 +51,7 @@ impl Tool for Users {
         match result {
             Ok(s) => {
                 if !s.is_empty() {
-                    println!("{}", s);
+                    println!("{s}");
                 }
                 Ok(())
             }
@@ -213,8 +213,8 @@ mod tests {
 
             let file_name = file_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), file_name];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "user1");
         }
@@ -227,14 +227,14 @@ mod tests {
                 let destination = "./users_main_utmp_test";
                 std::fs::copy(source, destination).unwrap();
 
-                let args = vec![ctcore::ct_util_name(), destination];
-                let result = users_main(args.iter().map(|s| OsString::from(s)));
+                let args = [ctcore::ct_util_name(), destination];
+                let result = users_main(args.iter().map(OsString::from));
 
                 assert!(result.is_ok());
 
                 fs::remove_file(destination).expect("Failed to remove file");
             } else {
-                println!("no exist {}", source);
+                println!("no exist {source}");
             }
         }
 
@@ -246,71 +246,71 @@ mod tests {
                 let destination = "./users_main_wtmp_test";
 
                 std::fs::copy(source, destination).unwrap();
-                let args = vec![ctcore::ct_util_name(), destination];
-                let result = users_main(args.iter().map(|s| OsString::from(s)));
+                let args = [ctcore::ct_util_name(), destination];
+                let result = users_main(args.iter().map(OsString::from));
                 assert!(result.is_ok());
 
                 fs::remove_file(destination).expect("Failed to remove file");
             } else {
-                println!("no exist {}", source);
+                println!("no exist {source}");
             }
         }
 
         #[test]
         fn test_users_main_argument_parsing_no_file() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_users_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = users_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_users_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = users_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_users_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_users_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_users_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_users_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_users_main_support_missing_argument() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = users_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }
@@ -345,7 +345,7 @@ mod tests {
                 // Clean up: remove the file after the test
                 fs::remove_file(destination).expect("Failed to remove file");
             } else {
-                println!("no exist {}", source);
+                println!("no exist {source}");
             }
         }
 
@@ -367,7 +367,7 @@ mod tests {
                 // Clean up: remove the file after the test
                 fs::remove_file(destination).expect("Failed to remove file");
             } else {
-                println!("no exist {}", source);
+                println!("no exist {source}");
             }
         }
 

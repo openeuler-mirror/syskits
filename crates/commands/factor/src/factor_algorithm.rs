@@ -357,11 +357,11 @@ mod tests {
         f.add(5, 2);
 
         // 测试默认格式
-        let s = format!("{}", f);
+        let s = format!("{f}");
         assert_eq!(s, " 3 5 5");
 
         // 测试替代格式（带指数）
-        let s = format!("{:#}", f);
+        let s = format!("{f:#}");
         assert_eq!(s, " 3 5^2");
     }
 

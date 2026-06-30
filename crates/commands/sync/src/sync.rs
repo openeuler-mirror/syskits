@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Sync::default();
+        let tool = Sync;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "sync");
@@ -160,74 +160,74 @@ mod tests {
 
         #[test]
         fn test_ct_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = sync_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
+            let args = [ctcore::ct_util_name(), "-V"];
 
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let result = sync_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_support_missing_argument() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_file_system_long() {
-            let args = vec![ctcore::ct_util_name(), "--file-system"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--file-system"];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_file_system_short() {
-            let args = vec![ctcore::ct_util_name(), "-f"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-f"];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ct_main_file_data_long() {
-            let args = vec![ctcore::ct_util_name(), "--data"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--data"];
+            let result = sync_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(
@@ -238,8 +238,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_file_data_short() {
-            let args = vec![ctcore::ct_util_name(), "-d"];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d"];
+            let result = sync_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             assert_eq!(
@@ -253,8 +253,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let dir_name = dir.path().to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir_name];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir_name];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -267,8 +267,8 @@ mod tests {
             writeln!(tmp_file, "a b c\nc d").unwrap();
 
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--file-system", file_name];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--file-system", file_name];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -281,8 +281,8 @@ mod tests {
             writeln!(tmp_file, "a b c\nc d").unwrap();
 
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-f", file_name];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-f", file_name];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -295,8 +295,8 @@ mod tests {
             writeln!(tmp_file, "a b c\nc d").unwrap();
 
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--data", file_name];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--data", file_name];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -309,8 +309,8 @@ mod tests {
             writeln!(tmp_file, "a b c\nc d").unwrap();
 
             let file_name = file_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-d", file_name];
-            let result = sync_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", file_name];
+            let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }

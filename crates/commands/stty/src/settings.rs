@@ -478,7 +478,7 @@ impl SpecialSetting {
             let speed = parse_baud_rate(speed)?;
             // 设置输入速度，并处理可能的错误
             nix::sys::termios::cfsetispeed(termios, speed)
-                .map_err(|e| CtSimpleError::new(1, format!("Failed to set input speed: {}", e)))?;
+                .map_err(|e| CtSimpleError::new(1, format!("Failed to set input speed: {e}")))?;
             Ok(true)
         } else {
             Ok(false)
@@ -505,7 +505,7 @@ impl SpecialSetting {
             // 解析提供的速度字符串为`Speed`枚举类型
             let speed = parse_baud_rate(speed)?;
             nix::sys::termios::cfsetospeed(termios, speed)
-                .map_err(|e| CtSimpleError::new(1, format!("Failed to set output speed: {}", e)))?;
+                .map_err(|e| CtSimpleError::new(1, format!("Failed to set output speed: {e}")))?;
 
             Ok(true)
         } else {
@@ -605,7 +605,7 @@ impl SpecialSetting {
         for (text, _, baud_rate) in BAUD_RATES {
             // 如果找到匹配的波特率，则打印当前的波特率并终止遍历
             if *baud_rate == speed {
-                println!("speed {} baud", text);
+                println!("speed {text} baud");
                 break;
             }
         }

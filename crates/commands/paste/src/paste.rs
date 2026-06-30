@@ -18,7 +18,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
@@ -542,10 +542,10 @@ mod tests {
         #[test]
         fn test_paste_main_basic() -> CTResult<()> {
             let (_temp_dir, file_path) = create_test_file("test\n");
-            let args = vec![ctcore::ct_util_name(), &file_path];
+            let args = [ctcore::ct_util_name(), &file_path];
 
             let mut output = Vec::new();
-            paste_main(&mut output, args.iter().map(|s| OsString::from(s)))?;
+            paste_main(&mut output, args.iter().map(OsString::from))?;
 
             assert_eq!(String::from_utf8_lossy(&output), "test\n");
             Ok(())
@@ -553,9 +553,9 @@ mod tests {
 
         #[test]
         fn test_paste_main_invalid_args() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-flag"];
+            let args = [ctcore::ct_util_name(), "--invalid-flag"];
             let mut output = Vec::new();
-            assert!(paste_main(&mut output, args.iter().map(|s| OsString::from(s))).is_err());
+            assert!(paste_main(&mut output, args.iter().map(OsString::from)).is_err());
         }
     }
 
@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Paste::default();
+        let tool = Paste;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "paste");

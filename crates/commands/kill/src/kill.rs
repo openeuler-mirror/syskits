@@ -324,7 +324,7 @@ fn kill_exec(
     // -p 模式: 只打印 PID,不发送信号
     if pid_only {
         for pid in &pids {
-            println!("{}", pid);
+            println!("{pid}");
         }
         return Ok(());
     }
@@ -366,7 +366,7 @@ fn kill_exec(
     if let Some(val_str) = queue_value {
         let val: i32 = val_str
             .parse()
-            .map_err(|_| CtSimpleError::new(1, format!("argument error: {}", val_str)))?;
+            .map_err(|_| CtSimpleError::new(1, format!("argument error: {val_str}")))?;
         return kill_with_sigqueue(sig, &pids, val);
     }
 
@@ -436,7 +436,7 @@ fn kill_with_sigqueue(sig: Signal, pids: &[i32], value: i32) -> CTResult<()> {
         };
         if ret != 0 {
             let err = std::io::Error::last_os_error();
-            eprintln!("kill: sigqueue failed for pid {}: {}", pid, err);
+            eprintln!("kill: sigqueue failed for pid {pid}: {err}");
         }
     }
     Ok(())
@@ -450,7 +450,7 @@ fn kill_with_sigqueue(sig: Signal, pids: &[i32], value: i32) -> CTResult<()> {
 fn check_signal_handler(pid: i32, sig: Signal, verbose: bool) -> bool {
     use std::fs;
 
-    let stat_path = format!("/proc/{}/stat", pid);
+    let stat_path = format!("/proc/{pid}/stat");
     let content = match fs::read_to_string(&stat_path) {
         Ok(c) => c,
         Err(_) => return true, // 无法读取时默认发送
@@ -479,10 +479,7 @@ fn check_signal_handler(pid: i32, sig: Signal, verbose: bool) -> bool {
     let has_handler = ((1u64 << (sig_num - 1)) & sigcgt) != 0;
 
     if verbose && !has_handler {
-        eprintln!(
-            "not signalling pid {}, it has no userspace handler for signal {}",
-            pid, sig_num
-        );
+        eprintln!("not signalling pid {pid}, it has no userspace handler for signal {sig_num}");
     }
 
     has_handler
@@ -509,7 +506,7 @@ fn kill_with_timeout(
         }
         let pid_nix = Pid::from_raw(pid);
         if signal::kill(pid_nix, sig).is_err() {
-            eprintln!("kill: failed to send signal to {}", pid);
+            eprintln!("kill: failed to send signal to {pid}");
             continue;
         }
 
@@ -583,7 +580,7 @@ fn kill_table<W: Write>(writer: &mut W) -> CTResult<()> {
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         // 格式化输出信号的索引号和名称
-        write!(writer, "{:2} {:<width$}", idx, signal, width = name_width)?;
+        write!(writer, "{idx:2} {signal:<name_width$}")?;
 
         // 每3个信号后输出一个换行符，否则输出空格分隔
         if (idx + 1) % 3 == 0 {
@@ -715,7 +712,7 @@ fn kill_print_signals_util_linux<W: Write>(writer: &mut W) -> CTResult<()> {
 
     // 输出标准信号 (1-31, 跳过0号EXIT)
     for (idx, signal) in ALL_SIGNALS.iter().enumerate().skip(1) {
-        write!(writer, "{:2}) SIG{:<9}", idx, signal)?;
+        write!(writer, "{idx:2}) SIG{signal:<9}")?;
         count += 1;
 
         if count % 5 == 0 {
@@ -739,7 +736,7 @@ fn kill_print_signals_util_linux<W: Write>(writer: &mut W) -> CTResult<()> {
         }
 
         // SIGRTMIN
-        write!(writer, "{:2}) SIGRTMIN   ", rtmin)?;
+        write!(writer, "{rtmin:2}) SIGRTMIN   ")?;
         count = 1;
 
         // SIGRTMIN+1 到 SIGRTMIN+15
@@ -748,7 +745,7 @@ fn kill_print_signals_util_linux<W: Write>(writer: &mut W) -> CTResult<()> {
             if sig_num > *rtmax {
                 break;
             }
-            write!(writer, "{:2}) SIGRTMIN+{:<2}", sig_num, i)?;
+            write!(writer, "{sig_num:2}) SIGRTMIN+{i:<2}")?;
             count += 1;
 
             if count % 5 == 0 {
@@ -773,9 +770,9 @@ fn kill_print_signals_util_linux<W: Write>(writer: &mut W) -> CTResult<()> {
             }
 
             if i == 0 {
-                write!(writer, "{:2}) SIGRTMAX   ", sig_num)?;
+                write!(writer, "{sig_num:2}) SIGRTMAX   ")?;
             } else {
-                write!(writer, "{:2}) SIGRTMAX-{:<2}", sig_num, i)?;
+                write!(writer, "{sig_num:2}) SIGRTMAX-{i:<2}")?;
             }
             count += 1;
 
@@ -959,7 +956,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Kill::default();
+        let tool = Kill;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "kill");
@@ -1141,8 +1138,7 @@ mod tests {
         fn kill_list_with_valid_signal_name_prints_signal_value() {
             let mut output = Cursor::new(Vec::new());
             let signal_name = Some("HUP".to_string());
-            let _result =
-                kill_list(&mut output, signal_name.as_ref(), KillCompatMode::Coreutils).unwrap();
+            kill_list(&mut output, signal_name.as_ref(), KillCompatMode::Coreutils).unwrap();
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert_eq!(output_str.trim(), "1"); // Assuming HUP corresponds to signal value 1
         }
@@ -1160,7 +1156,7 @@ mod tests {
         #[test]
         fn kill_list_with_no_argument_prints_all_signals() {
             let mut output = Cursor::new(Vec::new());
-            let _result = kill_list(&mut output, None, KillCompatMode::Coreutils).unwrap();
+            kill_list(&mut output, None, KillCompatMode::Coreutils).unwrap();
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             // 检查输出包含基本信号和 RT 信号
             assert!(output_str.contains("HUP"));
@@ -1183,7 +1179,7 @@ mod tests {
         fn kill_list_with_numeric_signal_value_prints_signal_name() {
             let mut output = Cursor::new(Vec::new());
             let signal_value = Some("15".to_string()); // Assuming 15 corresponds to SIGTERM
-            let _result = kill_list(
+            kill_list(
                 &mut output,
                 signal_value.as_ref(),
                 KillCompatMode::Coreutils,
@@ -1249,10 +1245,7 @@ mod tests {
             struct ErrorWriter;
             impl Write for ErrorWriter {
                 fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "write error",
-                    ))
+                    Err(std::io::Error::other("write error"))
                 }
                 fn flush(&mut self) -> std::io::Result<()> {
                     Ok(())
@@ -1386,10 +1379,7 @@ mod tests {
             struct ErrorWriter;
             impl Write for ErrorWriter {
                 fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "write error",
-                    ))
+                    Err(std::io::Error::other("write error"))
                 }
                 fn flush(&mut self) -> std::io::Result<()> {
                     Ok(())
@@ -1572,9 +1562,9 @@ mod tests {
             unsafe {
                 std::env::set_var("SYSKITS_KILL_MODE", "coreutils");
             }
-            let args = vec![ctcore::ct_util_name(), "--table"];
+            let args = [ctcore::ct_util_name(), "--table"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             unsafe {
                 std::env::remove_var("SYSKITS_KILL_MODE");
             }
@@ -1585,9 +1575,9 @@ mod tests {
 
         #[test]
         fn kill_main_with_list_flag() {
-            let args = vec![ctcore::ct_util_name(), "--list"];
+            let args = [ctcore::ct_util_name(), "--list"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("HUP")); // Assuming HUP is in the signal list
@@ -1595,10 +1585,10 @@ mod tests {
 
         #[test]
         fn kill_main_with_signal_and_pid() {
-            let args = vec![ctcore::ct_util_name(), "-s", "TERM", "1234"];
+            let args = [ctcore::ct_util_name(), "-s", "TERM", "1234"];
 
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.is_empty()); // No output expected for successful signal sending
@@ -1606,10 +1596,10 @@ mod tests {
 
         #[test]
         fn kill_main_with_invalid_signal() {
-            let args = vec![ctcore::ct_util_name(), "-s", "INVALID", "1234"];
+            let args = [ctcore::ct_util_name(), "-s", "INVALID", "1234"];
 
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
@@ -1617,18 +1607,18 @@ mod tests {
 
         #[test]
         fn kill_main_with_no_args() {
-            let args = vec![ctcore::ct_util_name()];
+            let args = [ctcore::ct_util_name()];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             // 无参数时返回错误 (默认 bash 模式退出码为 2)
             assert!(result.is_err());
         }
 
         #[test]
         fn kill_main_with_obsolete_signal() {
-            let args = vec![ctcore::ct_util_name(), "-9", "1234"];
+            let args = [ctcore::ct_util_name(), "-9", "1234"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.is_empty()); // No output expected for successful signal sending
@@ -1636,9 +1626,9 @@ mod tests {
 
         #[test]
         fn kill_main_with_multiple_pids() {
-            let args = vec![ctcore::ct_util_name(), "-s", "TERM", "1234", "5678"];
+            let args = [ctcore::ct_util_name(), "-s", "TERM", "1234", "5678"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.is_empty()); // No output expected for successful signal sending
@@ -1646,9 +1636,9 @@ mod tests {
 
         #[test]
         fn kill_main_with_invalid_pid() {
-            let args = vec![ctcore::ct_util_name(), "-s", "TERM", "invalid_pid"];
+            let args = [ctcore::ct_util_name(), "-s", "TERM", "invalid_pid"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert!(
@@ -1659,10 +1649,10 @@ mod tests {
 
         #[test]
         fn kill_main_with_default_signal() {
-            let args = vec![ctcore::ct_util_name(), "1234"];
+            let args = [ctcore::ct_util_name(), "1234"];
 
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.is_empty()); // No output expected for successful signal sending
@@ -1670,9 +1660,9 @@ mod tests {
 
         #[test]
         fn kill_main_with_help_flag() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
+            let args = [ctcore::ct_util_name(), "--help"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err()); // Expecting error due to help flag
         }
     }

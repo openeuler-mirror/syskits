@@ -167,7 +167,7 @@ mod tests {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         assert_eq!(consumed, 0);
         assert_eq!(result, Some(Ok(())));
-        assert_eq!(incomplete.is_empty(), false);
+        assert!(!incomplete.is_empty());
     }
 
     #[test]
@@ -177,7 +177,7 @@ mod tests {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         assert_eq!(consumed, 2);
         assert_eq!(result, Some(Ok(())));
-        assert_eq!(incomplete.is_empty(), false);
+        assert!(!incomplete.is_empty());
     }
 
     #[test]
@@ -187,7 +187,7 @@ mod tests {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         assert_eq!(consumed, 0);
         assert_eq!(result, Some(Err(())));
-        assert_eq!(incomplete.is_empty(), false);
+        assert!(!incomplete.is_empty());
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         assert_eq!(consumed, 0);
         assert_eq!(result, Some(Ok(())));
-        assert_eq!(incomplete.is_empty(), false);
+        assert!(!incomplete.is_empty());
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         assert_eq!(consumed, 2);
         assert_eq!(result, Some(Ok(())));
-        assert_eq!(incomplete.is_empty(), false);
+        assert!(!incomplete.is_empty());
     }
 
     #[test]
@@ -217,6 +217,6 @@ mod tests {
         let (consumed, result) = incomplete.try_complete_offsets(input);
         assert_eq!(consumed, 2);
         assert_eq!(result, Some(Ok(())));
-        assert_eq!(incomplete.is_empty(), false);
+        assert!(!incomplete.is_empty());
     }
 }

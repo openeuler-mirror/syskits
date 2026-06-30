@@ -256,7 +256,7 @@ mod tests {
                 assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
             }
             Err(err) => {
-                panic!("Error: {:#?}", err)
+                panic!("Error: {err:#?}")
             }
         }
     }
@@ -297,7 +297,7 @@ mod tests {
                 assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
             }
             Err(err) => {
-                panic!("Error: {:#?}", err)
+                panic!("Error: {err:#?}")
             }
         }
     }
@@ -338,7 +338,7 @@ mod tests {
                 assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
             }
             Err(err) => {
-                panic!("Error: {:#?}", err)
+                panic!("Error: {err:#?}")
             }
         }
     }
@@ -379,7 +379,7 @@ mod tests {
                 assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
             }
             Err(err) => {
-                panic!("Error: {:#?}", err)
+                panic!("Error: {err:#?}")
             }
         }
     }
@@ -420,7 +420,7 @@ mod tests {
                 assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
             }
             Err(err) => {
-                panic!("Error: {:#?}", err)
+                panic!("Error: {err:#?}")
             }
         }
     }
@@ -461,7 +461,7 @@ mod tests {
                 assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
             }
             Err(err) => {
-                panic!("Error: {:#?}", err)
+                panic!("Error: {err:#?}")
             }
         }
     }
@@ -900,7 +900,7 @@ mod tests {
         let result = copy_fifo_contents(&src_fifo_path, &dest_file_path);
 
         assert!(
-            matches!(result, Err(_)),
+            result.is_err(),
             "Expected an error when copying from a nonexistent FIFO"
         );
     }
@@ -1026,7 +1026,7 @@ mod tests {
         let result = copy_fifo_contents(&src_fifo_path, &dest_directory_path);
 
         assert!(
-            matches!(result, Err(_)),
+            result.is_err(),
             "Expected an error when copying to a directory instead of a file"
         );
     }

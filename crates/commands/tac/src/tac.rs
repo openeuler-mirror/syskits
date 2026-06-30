@@ -489,12 +489,13 @@ impl Tool for Tac {
 }
 
 #[cfg(test)]
+#[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Tac::default();
+        let tool = Tac;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "tac");
@@ -680,7 +681,7 @@ mod tests {
 
         #[test]
         fn test_tac_error_read_error() {
-            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "read error");
+            let io_error = std::io::Error::other("read error");
             let error = TacError::ReadError("test.txt".to_string(), io_error);
             assert_eq!(
                 error.to_string(),
@@ -691,7 +692,7 @@ mod tests {
 
         #[test]
         fn test_tac_error_write_error() {
-            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "write error");
+            let io_error = std::io::Error::other("write error");
             let error = TacError::WriteError(io_error);
             assert_eq!(error.to_string(), "failed to write to stdout: write error");
             assert_eq!(error.code(), 1);
@@ -1009,12 +1010,12 @@ mod tests {
             let mut temp_file = NamedTempFile::new().unwrap();
             temp_file.write_all(b"line1\nline2\nline3\n").unwrap();
 
-            let args = vec![
+            let args = [
                 "tac".to_string(),
                 temp_file.path().to_str().unwrap().to_string(),
             ];
             let mut output = Vec::new();
-            let result = tac_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"line3\nline2\nline1\n");
         }
@@ -1026,13 +1027,13 @@ mod tests {
             file1.write_all(b"1\n2\n").unwrap();
             file2.write_all(b"a\nb\n").unwrap();
 
-            let args = vec![
+            let args = [
                 "tac".to_string(),
                 file1.path().to_str().unwrap().to_string(),
                 file2.path().to_str().unwrap().to_string(),
             ];
             let mut output = Vec::new();
-            let result = tac_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"2\n1\nb\na\n");
         }
@@ -1042,7 +1043,7 @@ mod tests {
             let mut temp_file = NamedTempFile::new().unwrap();
             temp_file.write_all(b"1::2::3").unwrap();
 
-            let args = vec![
+            let args = [
                 "tac".to_string(),
                 "--before".to_string(),
                 "--regex".to_string(),
@@ -1051,7 +1052,7 @@ mod tests {
                 temp_file.path().to_str().unwrap().to_string(),
             ];
             let mut output = Vec::new();
-            let result = tac_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"3::2::1");
         }
@@ -1069,7 +1070,7 @@ mod tests {
                 temp_file.path().to_str().unwrap().to_string(),
             ];
             let mut output = Vec::new();
-            let result = tac_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok()); // Main should still return Ok even if file processing fails
             assert!(output.is_empty());
         }
@@ -1079,14 +1080,14 @@ mod tests {
             let mut temp_file = NamedTempFile::new().unwrap();
             temp_file.write_all(b"abc").unwrap();
 
-            let args = vec![
+            let args = [
                 "tac".to_string(),
                 "--separator".to_string(),
                 "".to_string(),
                 temp_file.path().to_str().unwrap().to_string(),
             ];
             let mut output = Vec::new();
-            let result = tac_main(&mut output, args.iter().map(|s| OsString::from(s)));
+            let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"abc");
         }

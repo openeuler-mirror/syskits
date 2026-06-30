@@ -184,7 +184,7 @@ mod tests {
             let dir = tempdir().unwrap();
             let proc_uptime_path = dir.path().join("uptime");
             let mut file = fs::File::create(&proc_uptime_path).unwrap();
-            writeln!(file, "").unwrap();
+            writeln!(file).unwrap();
 
             let result = get_uptime_by_proc(None, proc_uptime_path);
             assert_eq!(result, -1);

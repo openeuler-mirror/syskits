@@ -86,13 +86,13 @@ mod tests {
         n.to_string()
     }
     fn int_fmt2(n: u64) -> String {
-        format!("0x{:x}", n)
+        format!("0x{n:x}")
     }
     fn float_fmt1(n: f64) -> String {
         n.to_string()
     }
     fn float_fmt2(n: f64) -> String {
-        format!("{:.2}", n)
+        format!("{n:.2}")
     }
     fn mb_fmt1(b: &[u8]) -> String {
         String::from_utf8_lossy(b).to_string()
@@ -146,12 +146,12 @@ mod tests {
     fn test_format_writer_debug() {
         // 测试Debug输出格式
         let int_writer = OdFormatWriter::IntWriter(int_fmt1);
-        assert!(format!("{:?}", int_writer).starts_with("IntWriter:0x"));
+        assert!(format!("{int_writer:?}").starts_with("IntWriter:0x"));
 
         let float_writer = OdFormatWriter::FloatWriter(float_fmt1);
-        assert!(format!("{:?}", float_writer).starts_with("FloatWriter:0x"));
+        assert!(format!("{float_writer:?}").starts_with("FloatWriter:0x"));
 
         let mb_writer = OdFormatWriter::MultibyteWriter(mb_fmt1);
-        assert!(format!("{:?}", mb_writer).starts_with("MultibyteWriter:0x"));
+        assert!(format!("{mb_writer:?}").starts_with("MultibyteWriter:0x"));
     }
 }

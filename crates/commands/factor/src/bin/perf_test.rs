@@ -33,12 +33,12 @@ fn main() {
         }
     };
 
-    println!("Factoring {} using optimized algorithm...", number);
+    println!("Factoring {number} using optimized algorithm...");
 
     let start = Instant::now();
     let factors = factor(number);
     let duration = start.elapsed();
 
-    println!("Factors: {}", factors);
-    println!("Time taken: {:?}", duration);
+    println!("Factors: {factors}");
+    println!("Time taken: {duration:?}");
 }

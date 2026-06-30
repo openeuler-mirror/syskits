@@ -488,11 +488,10 @@ mod tests {
 
         for (input, expected) in test_cases {
             let result = num_integral_digits(input);
-            println!("Testing '{}': expected {}, got {}", input, expected, result);
+            println!("Testing '{input}': expected {expected}, got {result}");
             assert_eq!(
                 result, expected,
-                "Failed for input: '{}', expected: {}, got: {}",
-                input, expected, result
+                "Failed for input: '{input}', expected: {expected}, got: {result}"
             );
         }
     }
@@ -554,11 +553,8 @@ mod tests {
 
         for (input, expected) in test_cases {
             let result = num_integral_digits(input);
-            println!(
-                "Testing edge case '{}': expected {}, got {}",
-                input, expected, result
-            );
-            assert_eq!(result, expected, "Failed for edge case: '{}'", input);
+            println!("Testing edge case '{input}': expected {expected}, got {result}");
+            assert_eq!(result, expected, "Failed for edge case: '{input}'");
         }
     }
 }

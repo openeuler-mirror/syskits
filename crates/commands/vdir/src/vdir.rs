@@ -11,7 +11,7 @@
 
 extern crate rust_i18n;
 use std::ffi::OsString;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::path::Path;
 
 use clap::Command;
@@ -95,6 +95,7 @@ impl Tool for Vdir {
 }
 
 #[cfg(test)]
+#[allow(clippy::needless_borrow)]
 mod tests {
     use super::*;
     use std::ffi::OsString;
@@ -128,27 +129,27 @@ mod tests {
         #[test]
         fn test_ctmain_input_err_no_app_name_v() {
             let args = ["--version", ""];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let result = vdir_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_input_err_no_app_name_uppercase_v() {
             let args = ["-V", ""];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let result = vdir_main(args.iter().map(OsString::from));
             //println!("{}", result);
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ctmain_return() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -160,13 +161,13 @@ mod tests {
 
         #[test]
         fn test_ctmain_vdir_dir_return() {
-            let args = vec![ctcore::ct_util_name(), "./"];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "./"];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -187,13 +188,13 @@ mod tests {
             let mut file = File::create(&test_file_path).unwrap();
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), test_file_path.to_str().unwrap()];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), test_file_path.to_str().unwrap()];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     assert!(!file_vec.is_empty());
@@ -211,13 +212,13 @@ mod tests {
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-a", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-a", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -238,16 +239,16 @@ mod tests {
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-all", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-all", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
-                    println!("{:?}, {:?}", file_vec, dir_vec);
+                    println!("{file_vec:?}, {dir_vec:?}");
                     assert!(file_vec.is_empty());
                     assert!(!dir_vec.is_empty());
                     assert_eq!(1, dir_vec.len());
@@ -263,13 +264,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--block-size=1", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--block-size=1", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -288,13 +289,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--block-size=1", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--block-size=1", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -313,13 +314,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--format=long", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--format=long", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -338,13 +339,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-C", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-C", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -363,13 +364,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-l", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-l", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -388,13 +389,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-x", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-x", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -413,13 +414,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-T", "4", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-T", "4", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -438,13 +439,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--tabsize=8", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--tabsize=8", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -463,13 +464,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-m", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-m", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -488,13 +489,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-1", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-1", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -513,13 +514,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-o", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-o", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -538,13 +539,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-g", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-g", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -563,13 +564,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-n", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-n", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -588,13 +589,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--numeric-uid-gid", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--numeric-uid-gid", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -613,13 +614,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--quoting-style=literal", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--quoting-style=literal", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -638,13 +639,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-N", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-N", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -663,13 +664,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-b", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -688,13 +689,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-Q", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-Q", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -713,13 +714,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-q", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-q", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -738,13 +739,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--show-control-chars", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--show-control-chars", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -763,13 +764,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--time=access", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--time=access", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -788,13 +789,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--hide=*", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--hide=*", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -813,13 +814,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-I", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-I", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -838,13 +839,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-B", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-B", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -863,13 +864,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-c", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -888,13 +889,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-u", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -913,13 +914,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-I", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-I", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -938,13 +939,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--sort=size", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sort=size", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -963,13 +964,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-S", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-S", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -988,13 +989,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-t", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1013,13 +1014,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-X", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-X", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1038,13 +1039,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-U", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-U", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1063,13 +1064,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-L", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-L", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1088,17 +1089,17 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--dereference-command-line-symlink-to-dir",
                 &dir_name,
             ];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1117,13 +1118,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-H", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1142,13 +1143,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-G", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-G", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1168,13 +1169,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-a", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-a", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1193,13 +1194,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-A", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-A", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1218,13 +1219,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-d", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1244,13 +1245,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-k", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-k", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1269,13 +1270,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "--si", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--si", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1294,13 +1295,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-i", dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-i", dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1320,13 +1321,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-r", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-r", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);
@@ -1345,13 +1346,13 @@ mod tests {
             let test_file_path = temp_dir_path.join(file_name);
             File::create(&test_file_path).unwrap();
             let dir_name = temp_dir_path.to_str().unwrap();
-            let args = vec![ctcore::ct_util_name(), "-R", &dir_name];
-            let result = vdir_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-R", &dir_name];
+            let result = vdir_main(args.iter().map(OsString::from));
 
             // 使用模式匹配提取字段值
             match result {
                 Err(output) => {
-                    panic!("err: {}", output)
+                    panic!("err: {output}")
                 }
                 Ok((file_vec, dir_vec)) => {
                     //println!("{:?}, {:?}", file_vec, dir_vec);

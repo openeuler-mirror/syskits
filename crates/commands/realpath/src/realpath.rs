@@ -17,7 +17,7 @@ use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser, crate_version,
 };
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_fs::make_path_relative_to;
 use ctcore::{
     Tool,
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Realpath::default();
+        let tool = Realpath;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "realpath");
@@ -784,22 +784,22 @@ mod tests {
         fn test_main_basic() {
             let (_temp_dir, test_file) = setup_test_file();
             let mut output = Vec::new();
-            let args = vec![ctcore::ct_util_name(), test_file.to_str().unwrap()];
-            assert!(realpath_main(&mut output, args.iter().map(|s| OsString::from(s))).is_ok());
+            let args = [ctcore::ct_util_name(), test_file.to_str().unwrap()];
+            assert!(realpath_main(&mut output, args.iter().map(OsString::from)).is_ok());
         }
 
         #[test]
         fn test_main_invalid_args() {
             let mut output = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "--invalid-flag"];
-            assert!(realpath_main(&mut output, args.iter().map(|s| OsString::from(s))).is_err());
+            let args = [ctcore::ct_util_name(), "--invalid-flag"];
+            assert!(realpath_main(&mut output, args.iter().map(OsString::from)).is_err());
         }
 
         #[test]
         fn test_main_help() {
             let mut output = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            assert!(realpath_main(&mut output, args.iter().map(|s| OsString::from(s))).is_err());
+            let args = [ctcore::ct_util_name(), "--help"];
+            assert!(realpath_main(&mut output, args.iter().map(OsString::from)).is_err());
         }
 
         fn setup_test_file() -> (tempfile::TempDir, PathBuf) {

@@ -80,11 +80,11 @@
 //!    c. 根据模式计算increment
 //!    d. 列模式下特殊字符（\r, \b）的位置更新
 //!    e. 进入rescan循环：
-//!       如果 column + increment > width：
-//!         * 如果启用-s且有空白位置：在空白处分割
-//!         * 否则如果column != 0：输出当前行，重置状态，继续rescan
-//!       否则：添加字符到输出，column += increment
-//!    f. 记录空白字符位置（用于-s选项）
+//!    如果 column + increment > width：
+//!    * 如果启用-s且有空白位置：在空白处分割
+//!    * 否则如果column != 0：输出当前行，重置状态，继续rescan
+//!      否则：添加字符到输出，column += increment
+//!      f. 记录空白字符位置（用于-s选项）
 //! 3. 输出剩余内容
 
 extern crate rust_i18n;
@@ -453,7 +453,7 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
                         std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
                         _ => e.to_string(),
                     };
-                    eprintln!("fold: {}: {}", filename, error_msg);
+                    eprintln!("fold: {filename}: {error_msg}");
                     continue;
                 }
             }
@@ -503,7 +503,7 @@ mod tests {
     // 新增：测试 Tool trait 的基本实现
     #[test]
     fn test_tool_implementation() {
-        let tool = Fold::default();
+        let tool = Fold;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "fold");
@@ -527,7 +527,7 @@ mod tests {
         #[test]
         fn test_ctmain_version() {
             let mut writer = Vec::new();
-            let args = vec![
+            let args = [
                 OsString::from(ctcore::ct_util_name()),
                 OsString::from("--version"),
             ];
@@ -537,7 +537,7 @@ mod tests {
                     assert_eq!(output.code(), 0);
                 }
                 Ok(output) => {
-                    println!("{:?}", output);
+                    println!("{output:?}");
                 }
             }
         }
@@ -545,14 +545,14 @@ mod tests {
         #[test]
         fn test_ctmain_v() {
             let mut writer = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     assert_eq!(output.code(), 0);
                 }
                 Ok(output) => {
-                    println!("{:?}", output);
+                    println!("{output:?}");
                 }
             }
         }
@@ -560,14 +560,14 @@ mod tests {
         #[test]
         fn test_ctmain_help() {
             let mut writer = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     assert_eq!(output.code(), 0);
                 }
                 Ok(output) => {
-                    println!("{:?}", output);
+                    println!("{output:?}");
                 }
             }
         }
@@ -575,14 +575,14 @@ mod tests {
         #[test]
         fn test_ctmain_h() {
             let mut writer = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     assert_eq!(output.code(), 0);
                 }
                 Ok(output) => {
-                    println!("{:?}", output);
+                    println!("{output:?}");
                 }
             }
         }
@@ -598,8 +598,8 @@ mod tests {
                 .write_all(b"aaaaaaaaaaaaaaaaaaaaaaaaa\n")
                 .expect("Failed to write to temporary file");
             let binding = temp_file_path.to_string_lossy().into_owned();
-            let args = vec![ctcore::ct_util_name(), "-b", &binding];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b", &binding];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -617,8 +617,8 @@ mod tests {
                 .expect("Failed to write to temporary file");
             let binding = temp_file_path.to_string_lossy().into_owned();
 
-            let args = vec![ctcore::ct_util_name(), "--bytes", &binding];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--bytes", &binding];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -636,8 +636,8 @@ mod tests {
                 .expect("Failed to write to temporary file");
             let binding = temp_file_path.to_string_lossy().into_owned();
 
-            let args = vec![ctcore::ct_util_name(), "-s", &binding];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s", &binding];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -655,8 +655,8 @@ mod tests {
                 .expect("Failed to write to temporary file");
             let binding = temp_file_path.to_string_lossy().into_owned();
 
-            let args = vec![ctcore::ct_util_name(), "--spaces", &binding];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--spaces", &binding];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -674,8 +674,8 @@ mod tests {
                 .expect("Failed to write to temporary file");
             let binding = temp_file_path.to_string_lossy().into_owned();
 
-            let args = vec![ctcore::ct_util_name(), "-w", "10", &binding];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-w", "10", &binding];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -687,7 +687,7 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), content).unwrap();
 
-            let args = vec![
+            let args = [
                 "fold".to_string(),
                 "--width".to_string(),
                 "10".to_string(),
@@ -695,10 +695,7 @@ mod tests {
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(
-                &mut writer,
-                args.iter().map(|s| std::ffi::OsString::from(s)),
-            );
+            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
 
             assert!(result.is_ok());
             let output = String::from_utf8(writer).unwrap();
@@ -712,17 +709,14 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), content).unwrap();
 
-            let args = vec![
+            let args = [
                 "fold".to_string(),
                 "-c".to_string(),
                 temp_file.path().to_string_lossy().to_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(
-                &mut writer,
-                args.iter().map(|s| std::ffi::OsString::from(s)),
-            );
+            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
 
             assert!(result.is_ok());
             let output = String::from_utf8(writer).unwrap();
@@ -736,17 +730,14 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), content).unwrap();
 
-            let args = vec![
+            let args = [
                 "fold".to_string(),
                 "--characters".to_string(),
                 temp_file.path().to_string_lossy().to_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(
-                &mut writer,
-                args.iter().map(|s| std::ffi::OsString::from(s)),
-            );
+            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
 
             assert!(result.is_ok());
             let output = String::from_utf8(writer).unwrap();
@@ -762,8 +753,8 @@ mod tests {
             set_ct_exit_code(0);
 
             let mut writer = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "-b", "-c", "/etc/passwd"];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b", "-c", "/etc/passwd"];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             // 应该返回Ok()，因为我们设置了exit_code并返回Ok
             assert!(result.is_ok());
@@ -783,8 +774,8 @@ mod tests {
             set_ct_exit_code(0);
 
             let mut writer = Vec::new();
-            let args = vec![ctcore::ct_util_name(), "-c", "-b", "/etc/passwd"];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", "-b", "/etc/passwd"];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
             // 应该返回Ok()，因为我们设置了exit_code并返回Ok
             assert!(result.is_ok());
@@ -811,8 +802,8 @@ mod tests {
             let binding = temp_file_path.to_string_lossy().into_owned();
 
             // 测试字符模式 -c，设置宽度为5字符
-            let args = vec![ctcore::ct_util_name(), "-c", "-w", "5", &binding];
-            let result = fold_main(&mut writer, args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c", "-w", "5", &binding];
+            let result = fold_main(&mut writer, args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             let output = String::from_utf8(writer).unwrap();
@@ -1155,7 +1146,7 @@ mod tests {
         /// 写入临时文件的辅助函数
         fn write_temp_file(content: &str) -> NamedTempFile {
             let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-            write!(temp_file, "{}", content).expect("Failed to write to temp file");
+            write!(temp_file, "{content}").expect("Failed to write to temp file");
             temp_file
         }
 
@@ -1197,7 +1188,7 @@ mod tests {
             fold(&mut writer, &fold_flags)?;
 
             let output = String::from_utf8(writer).unwrap();
-            println!("output: {}", output);
+            println!("output: {output}");
             // 验证输出是否按照20个字符宽度正确折行
             assert!(output.contains("This is a test file"));
             assert!(output.contains("with content that sh"));

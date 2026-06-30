@@ -33,7 +33,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_entries::{CtPasswd, Locate};
 use ctcore::ct_error::{CTResult, FromIo};
@@ -316,7 +316,7 @@ impl PinkyFlags {
             .ok()
             .and_then(|pw| gecos_to_fullname(&pw))
             .unwrap_or_else(|| "???".to_string());
-        print!(" {:<19}", fullname);
+        print!(" {fullname:<19}");
     }
 
     fn print_tty_info(&self, ut: &CtUtmpx, mesg: char) {
@@ -332,7 +332,7 @@ impl PinkyFlags {
         } else {
             pinky_idle_string(last_change)
         };
-        print!(" {:<6}", idle);
+        print!(" {idle:<6}");
     }
 
     fn print_login_time(&self, ut: &CtUtmpx) {
@@ -398,7 +398,7 @@ impl PinkyFlags {
     }
 
     fn print_long_user_info(&self, username: &str) {
-        print!("Login name: {:<28}In real life: ", username);
+        print!("Login name: {username:<28}In real life: ");
 
         match CtPasswd::locate(username) {
             Ok(pw) => {
@@ -406,7 +406,7 @@ impl PinkyFlags {
                 let user_dir = pw.user_dir.unwrap_or_default();
                 let user_shell = pw.user_shell.unwrap_or_default();
 
-                println!(" {}", fullname);
+                println!(" {fullname}");
                 self.print_home_and_shell(&user_dir, &user_shell);
                 self.print_project_file(&user_dir);
                 self.print_plan_file(&user_dir);
@@ -418,8 +418,8 @@ impl PinkyFlags {
 
     fn print_home_and_shell(&self, user_dir: &str, user_shell: &str) {
         if self.is_include_home_and_shell {
-            print!("Directory: {:<29}", user_dir);
-            println!("Shell:  {}", user_shell);
+            print!("Directory: {user_dir:<29}");
+            println!("Shell:  {user_shell}");
         }
     }
 
@@ -532,8 +532,7 @@ mod tests_all {
             let width = time_format_width();
             assert!(
                 width == 12 || width == 16,
-                "time_format_width should return 12 or 16, got {}",
-                width
+                "time_format_width should return 12 or 16, got {width}"
             );
         }
     }
@@ -615,7 +614,7 @@ mod tests_tool_implementation {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Pinky::default();
+        let tool = Pinky;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "pinky");

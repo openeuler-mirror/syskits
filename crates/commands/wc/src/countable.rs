@@ -83,8 +83,8 @@ mod tests {
         let content = "Hello, Rust!\nThis is a test file.\n";
         // 创建文件并写入内容
         match base_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         // 测试 WordCountable trait 的实现
@@ -95,8 +95,8 @@ mod tests {
 
         // 删除文件
         match base_delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
 
         assert_eq!(
@@ -112,7 +112,7 @@ mod tests {
         let path = "test_buffered.txt";
         let content = "Hello, Rust!";
         let mut file = File::create(path).unwrap();
-        writeln!(file, "{}", content).unwrap();
+        writeln!(file, "{content}").unwrap();
         drop(file); // Close the file to flush the content
 
         let file = File::open(path).unwrap();
@@ -134,7 +134,7 @@ mod tests {
         let path = "test_inner_file.txt";
         let content = "Testing inner file";
         let mut file = File::create(path).unwrap();
-        writeln!(file, "{}", content).unwrap();
+        writeln!(file, "{content}").unwrap();
 
         // 测试 inner_file 是否返回了有效的引用
         assert!(
@@ -148,10 +148,10 @@ mod tests {
     #[test]
     fn test_empty_file() {
         let path = "empty_file.txt";
-        let file = File::create(&path).unwrap();
+        let file = File::create(path).unwrap();
         drop(file); // Ensure the file is empty and closed
 
-        let file = File::open(&path).unwrap();
+        let file = File::open(path).unwrap();
         let mut buffered = file.buffered();
         let mut content = String::new();
         buffered.read_to_string(&mut content).unwrap();
@@ -160,21 +160,21 @@ mod tests {
             "Content of an empty file should be empty."
         );
 
-        fs::remove_file(&path).unwrap(); // Clean up
+        fs::remove_file(path).unwrap(); // Clean up
     }
 
     #[test]
     fn test_file_no_read_permission() {
         let path = "no_read_permission_file.txt";
-        let mut file = File::create(&path).unwrap();
+        let mut file = File::create(path).unwrap();
         writeln!(file, "Some data").unwrap();
         drop(file);
 
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        let mut permissions = fs::metadata(path).unwrap().permissions();
         permissions.set_mode(0o000); // Remove all permissions
-        fs::set_permissions(&path, permissions.clone()).unwrap();
+        fs::set_permissions(path, permissions.clone()).unwrap();
 
-        let result = File::open(&path);
+        let result = File::open(path);
         assert!(
             result.is_ok(),
             "Should error when trying to open a file without read permissions."
@@ -182,28 +182,28 @@ mod tests {
 
         // Reset permissions to allow deletion
         permissions.set_mode(0o666);
-        fs::set_permissions(&path, permissions).unwrap();
-        fs::remove_file(&path).unwrap(); // Clean up
+        fs::set_permissions(path, permissions).unwrap();
+        fs::remove_file(path).unwrap(); // Clean up
     }
 
     #[test]
     fn test_large_file_handling() {
         let path = "large_file.txt";
-        let mut file = File::create(&path).unwrap();
+        let mut file = File::create(path).unwrap();
         for _ in 0..100000 {
             // Write a large amount of data
             writeln!(file, "Hello, Rust!").unwrap();
         }
         drop(file);
 
-        let file = File::open(&path).unwrap();
+        let file = File::open(path).unwrap();
         let buffered = file.buffered();
         assert!(
             buffered.get_ref().metadata().unwrap().len() > 0,
             "Large file should contain data."
         );
 
-        fs::remove_file(&path).unwrap(); // Clean up
+        fs::remove_file(path).unwrap(); // Clean up
     }
 
     #[test]

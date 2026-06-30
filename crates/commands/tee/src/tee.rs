@@ -15,7 +15,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::PossibleValue, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
@@ -461,7 +461,7 @@ mod tests {
 
             impl Write for ErrorWriter {
                 fn write(&mut self, _buf: &[u8]) -> Result<usize> {
-                    Err(io::Error::new(io::ErrorKind::Other, "write error"))
+                    Err(io::Error::other("write error"))
                 }
 
                 fn flush(&mut self) -> Result<()> {
@@ -501,7 +501,7 @@ mod tests {
                 }
 
                 fn flush(&mut self) -> Result<()> {
-                    Err(io::Error::new(io::ErrorKind::Other, "flush error"))
+                    Err(io::Error::other("flush error"))
                 }
             }
 
@@ -552,7 +552,7 @@ mod tests {
 
             impl Read for ErrorReader {
                 fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
-                    Err(io::Error::new(io::ErrorKind::Other, "read error"))
+                    Err(io::Error::other("read error"))
                 }
             }
 
@@ -693,7 +693,7 @@ mod test_basic {
         // 测试 Warn 模式
         let result = process_error(
             Some(&OutputErrorMode::Warn),
-            Error::new(ErrorKind::Other, "test error"),
+            Error::other("test error"),
             &writer,
             &mut ignored_errors,
         );
@@ -704,7 +704,7 @@ mod test_basic {
         ignored_errors = 0;
         let result = process_error(
             Some(&OutputErrorMode::Exit),
-            Error::new(ErrorKind::Other, "test error"),
+            Error::other("test error"),
             &writer,
             &mut ignored_errors,
         );

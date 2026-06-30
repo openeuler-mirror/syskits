@@ -11,7 +11,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use std::{ffi::OsString, io::Write};
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = True::default();
+        let tool = True;
 
         // Test name method
         assert_eq!(tool.name(), "true");
@@ -134,17 +134,17 @@ mod tests {
 
         #[test]
         fn test_true_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = true_main(args.iter().map(|s| OsString::from(s)));
+            let result = true_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_true_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = true_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = true_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }

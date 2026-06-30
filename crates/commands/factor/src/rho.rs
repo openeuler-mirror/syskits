@@ -196,13 +196,7 @@ mod tests {
         let primes = [3, 5, 7, 11, 13, 17, 19, 23, 29, 31];
         for &p in &primes {
             let result = find_divisor(p);
-            assert!(
-                result == p,
-                "Expected {} for prime {}, got {}",
-                p,
-                p,
-                result
-            );
+            assert!(result == p, "Expected {p} for prime {p}, got {result}");
         }
     }
 
@@ -234,16 +228,11 @@ mod tests {
             let factor = find_divisor(n);
             assert!(
                 n % factor == 0,
-                "Found factor {} is not a divisor of {}",
-                factor,
-                n
+                "Found factor {factor} is not a divisor of {n}"
             );
             assert!(
                 expected_factors.contains(&factor) || expected_factors.contains(&(n / factor)),
-                "For {}, expected one of {:?}, got {}",
-                n,
-                expected_factors,
-                factor
+                "For {n}, expected one of {expected_factors:?}, got {factor}"
             );
         }
     }
@@ -267,11 +256,9 @@ mod tests {
             let factor = find_divisor(n);
             assert!(
                 n % factor == 0 && factor != 1 && factor != n,
-                "Found factor {} is not a proper divisor of {}",
-                factor,
-                n
+                "Found factor {factor} is not a proper divisor of {n}"
             );
-            println!("For {}, found factor: {}", n, factor);
+            println!("For {n}, found factor: {factor}");
         }
     }
 
@@ -291,16 +278,11 @@ mod tests {
             if let Some(factor) = brent_pollard_rho(&m, x0, c) {
                 assert!(
                     n % factor == 0,
-                    "Found factor {} is not a divisor of {}",
-                    factor,
-                    n
+                    "Found factor {factor} is not a divisor of {n}"
                 );
             } else {
                 // 如果算法失败，这可能是由于随机性，但我们应该记录下来
-                println!(
-                    "Warning: brent_pollard_rho failed for n={}, x0={}, c={}",
-                    n, x0, c
-                );
+                println!("Warning: brent_pollard_rho failed for n={n}, x0={x0}, c={c}");
             }
         }
     }
@@ -343,9 +325,7 @@ mod tests {
         // 由于算法的随机性，我们只能检查结果是否为因子
         assert!(
             large_number % result == 0,
-            "Found factor {} is not a divisor of {}",
-            result,
-            large_number
+            "Found factor {result} is not a divisor of {large_number}"
         );
     }
 
@@ -360,11 +340,9 @@ mod tests {
             let factor = find_divisor(n);
             assert!(
                 n % factor == 0 && factor != 1 && factor != n,
-                "Found factor {} is not a proper divisor of {}",
-                factor,
-                n
+                "Found factor {factor} is not a proper divisor of {n}"
             );
-            println!("For {}, found factor: {}", n, factor);
+            println!("For {n}, found factor: {factor}");
         }
     }
 }

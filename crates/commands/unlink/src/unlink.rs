@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, Command, crate_version};
 
 use ctcore::Tool;
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Unlink::default();
+        let tool = Unlink;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "unlink");
@@ -106,14 +106,14 @@ mod tests {
         fn test_unlink_main_argument_file_parsing() {
             let regular_file_path = "test_unlink_main_argument_file_parsing";
             File::create(regular_file_path).expect("Failed to create file");
-            let args = vec![ctcore::ct_util_name(), regular_file_path];
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), regular_file_path];
+            let result = unlink_main(args.iter().map(OsString::from));
             match result {
                 Err(output) => {
                     let code = output.code();
                     let message = output.usage();
-                    println!("Error code: {}", code);
-                    println!("Error message: {}", message);
+                    println!("Error code: {code}");
+                    println!("Error message: {message}");
                 }
                 Ok(_output) => {
                     assert!(!PathBuf::from(regular_file_path).exists());
@@ -125,61 +125,61 @@ mod tests {
         fn test_unlink_main_argument_no_file_parsing() {
             let regular_file_path = "test_no_unlink_file";
 
-            let args = vec![ctcore::ct_util_name(), regular_file_path];
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), regular_file_path];
+            let result = unlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_argument_default() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = unlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let result = unlink_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
+            let args = [ctcore::ct_util_name(), "-V"];
 
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let result = unlink_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = unlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = unlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = unlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_unlink_main_support_missing_argument() {
-            let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
-            let result = unlink_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()]; // 缺少任何参数
+            let result = unlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
     }

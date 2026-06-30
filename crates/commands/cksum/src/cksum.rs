@@ -12,7 +12,7 @@
 extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
 use clap::{Arg, ArgAction, Command, crate_version, value_parser};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Cksum::default();
+        let tool = Cksum;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "cksum");
@@ -853,8 +853,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -868,8 +868,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -883,8 +883,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -898,8 +898,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -913,8 +913,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_file_arg() {
-            let args = vec![ctcore::ct_util_name(), "--file", "test.txt"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--file", "test.txt"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -928,8 +928,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_algorithm_arg() {
-            let args = vec![ctcore::ct_util_name(), "--algorithm", "SHA256"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--algorithm", "SHA256"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -943,8 +943,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_length_arg() {
-            let args = vec![ctcore::ct_util_name(), "--length", "256"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--length", "256"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -958,7 +958,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_multiple_files() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--file",
                 "file1.txt",
@@ -967,7 +967,7 @@ mod tests {
                 "--file",
                 "file3.txt",
             ];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -981,8 +981,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_invalid_algorithm() {
-            let args = vec![ctcore::ct_util_name(), "--algorithm", "invalid-algo"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--algorithm", "invalid-algo"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -996,8 +996,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_length_out_of_range() {
-            let args = vec![ctcore::ct_util_name(), "--length", "1025"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--length", "1025"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1011,8 +1011,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_length_not_multiple_of_8() {
-            let args = vec![ctcore::ct_util_name(), "--length", "29"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--length", "29"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1026,8 +1026,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_raw_and_base64_both_set() {
-            let args = vec![ctcore::ct_util_name(), "--raw", "--base64"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--raw", "--base64"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1041,8 +1041,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_empty_file_argument() {
-            let args = vec![ctcore::ct_util_name(), "--file", ""];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--file", ""];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1056,8 +1056,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_nonexistent_file() {
-            let args = vec![ctcore::ct_util_name(), "--file", "/nonexistent/file.txt"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--file", "/nonexistent/file.txt"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1071,8 +1071,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_short_form_algorithm() {
-            let args = vec![ctcore::ct_util_name(), "-a", "SHA256"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-a", "SHA256"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1086,8 +1086,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_short_form_length() {
-            let args = vec![ctcore::ct_util_name(), "-l", "256"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-l", "256"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1101,8 +1101,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_short_form_untagged() {
-            let args = vec![ctcore::ct_util_name(), "-u"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1116,8 +1116,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_short_form_tag() {
-            let args = vec![ctcore::ct_util_name(), "-t"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-t"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1131,8 +1131,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_short_form_raw() {
-            let args = vec![ctcore::ct_util_name(), "-r"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-r"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1146,8 +1146,8 @@ mod tests {
 
         #[test]
         fn test_ct_main_short_form_base64() {
-            let args = vec![ctcore::ct_util_name(), "-b"];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b"];
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {
@@ -1161,7 +1161,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_multiple_options() {
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--algorithm",
                 "SHA256",
@@ -1172,7 +1172,7 @@ mod tests {
                 "--file",
                 "test.txt",
             ];
-            let result = cksum_main(args.iter().map(|s| OsString::from(s)));
+            let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
                 Err(output) => {

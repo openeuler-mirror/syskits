@@ -13,7 +13,7 @@ extern crate rust_i18n;
 use rust_i18n::t;
 //dircolors 命令在Linux系统中主要用于控制 ls 命令显示目录和文件时使用的颜色
 use std::borrow::Borrow;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -84,14 +84,14 @@ pub fn dircolors_generate_type_output(fmt: &DircolorsOutputFmt) -> String {
     match fmt {
         DircolorsOutputFmt::Display => CT_FILE_TYPES
             .iter()
-            .map(|&(_, key, val)| format!("\x1b[{}m{}\t{}\x1b[0m", val, key, val))
+            .map(|&(_, key, val)| format!("\x1b[{val}m{key}\t{val}\x1b[0m"))
             .collect::<Vec<String>>()
             .join("\n"),
         _ => {
             // Existing logic for other formats
             CT_FILE_TYPES
                 .iter()
-                .map(|&(_, v1, v2)| format!("{}={}", v1, v2))
+                .map(|&(_, v1, v2)| format!("{v1}={v2}"))
                 .collect::<Vec<String>>()
                 .join(":")
         }
@@ -116,8 +116,7 @@ fn dircolors_generate_ls_colors(fmt: &DircolorsOutputFmt, sep: &str) -> String {
             // 遍历文件类型颜色映射，生成带颜色的扩展名展示
             for &(extension, code) in CT_FILE_COLORS {
                 let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension =
-                    format!("\x1b[{}m{}{}\t{}\x1b[0m", code, prefix, extension, code);
+                let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
                 display_parts.push(formatted_extension);
             }
             // 用换行符连接所有部分并返回
@@ -129,8 +128,8 @@ fn dircolors_generate_ls_colors(fmt: &DircolorsOutputFmt, sep: &str) -> String {
             // 格式化每个文件扩展名及其颜色代码
             for &(extension, code) in CT_FILE_COLORS {
                 let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("{}{}", prefix, extension);
-                parts.push(format!("{}={}", formatted_extension, code));
+                let formatted_extension = format!("{prefix}{extension}");
+                parts.push(format!("{formatted_extension}={code}"));
             }
             // 根据输出格式，获取前缀和后缀，并组装最终字符串
             let (prefix, suffix) = dircolors_get_colors_format_strings(fmt);
@@ -602,7 +601,7 @@ pub fn generate_dircolors_config() -> String {
     );
     config.push_str("COLORTERM ?*\n");
     for term in CT_TERMS {
-        config.push_str(&format!("TERM {}\n", term));
+        config.push_str(&format!("TERM {term}\n"));
     }
 
     config.push_str(
@@ -623,14 +622,14 @@ pub fn generate_dircolors_config() -> String {
     );
 
     for (name, _, code) in CT_FILE_TYPES {
-        config.push_str(&format!("{} {}\n", name, code));
+        config.push_str(&format!("{name} {code}\n"));
     }
 
     config.push_str("# List any file extensions like '.gz' or '.tar' that you would like ls\n");
     config.push_str("# to color below. Put the extension, a space, and the color init string.\n");
 
     for (ext, color) in CT_FILE_COLORS {
-        config.push_str(&format!("{} {}\n", ext, color));
+        config.push_str(&format!("{ext} {color}\n"));
     }
     config.push_str("# Subsequent TERM or COLORTERM entries, can be used to add / override\n");
     config.push_str("# config specific to those matching environment variables.");
@@ -661,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Dircolors::default();
+        let tool = Dircolors;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "dircolors");
@@ -692,89 +691,89 @@ mod tests {
 
         #[test]
         fn test_dircolors_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dircolors_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dircolors_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dircolors_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_dircolors_main_b() {
-            let args = vec![ctcore::ct_util_name(), "-b"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-b"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dircolors_main_sh() {
-            let args = vec![ctcore::ct_util_name(), "--sh"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--sh"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dircolors_main_c() {
-            let args = vec![ctcore::ct_util_name(), "-c"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-c"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dircolors_main_csh() {
-            let args = vec![ctcore::ct_util_name(), "--csh"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--csh"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dircolors_main_p() {
-            let args = vec![ctcore::ct_util_name(), "-p"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-p"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dircolors_main_print_database() {
-            let args = vec![ctcore::ct_util_name(), "--print-database"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--print-database"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_dircolors_main_print_ls_colors() {
-            let args = vec![ctcore::ct_util_name(), "--print-ls-colors"];
-            let result = dircolors_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--print-ls-colors"];
+            let result = dircolors_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }

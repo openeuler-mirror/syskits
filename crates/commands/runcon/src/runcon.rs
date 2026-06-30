@@ -32,7 +32,7 @@
 extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_error::{CTResult, CTsageError};
 
 use clap::{Arg, ArgAction, Command, crate_version};
@@ -737,7 +737,7 @@ mod tests {
                     Ok(_) => (),
                     Err(e) => {
                         // 允许某些预期的错误（如权限不足）
-                        println!("Expected error: {}", e);
+                        println!("Expected error: {e}");
                     }
                 }
             }
@@ -803,7 +803,7 @@ mod tests {
                 // 根据权限情况，可能成功也可能失败
                 match result {
                     Ok(_) => println!("Successfully set context"),
-                    Err(e) => println!("Expected error: {}", e),
+                    Err(e) => println!("Expected error: {e}"),
                 }
             }
         }
@@ -819,7 +819,7 @@ mod tests {
             // 修改：检查结果，但不假设特定环境
             match result {
                 Ok(_) => println!("Successfully got transition context"),
-                Err(e) => println!("Expected error: {}", e),
+                Err(e) => println!("Expected error: {e}"),
             }
             // 不再断言特定的错误类型
         }

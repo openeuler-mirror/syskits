@@ -156,21 +156,18 @@ mod tests {
     fn display_impl() {
         let err = ReadBufDecoderError::InvalidByteSequence(b"invalid_bytes");
         assert_eq!(
-            format!("{}", err),
+            format!("{err}"),
             "invalid byte sequence: [69, 6e, 76, 61, 6c, 69, 64, 5f, 62, 79, 74, 65, 73]"
         );
 
-        let io_err = io::Error::new(io::ErrorKind::Other, "test error");
+        let io_err = io::Error::other("test error");
         let err = ReadBufDecoderError::Io(io_err);
-        assert_eq!(
-            format!("{}", err),
-            "underlying bytestream error: test error"
-        );
+        assert_eq!(format!("{err}"), "underlying bytestream error: test error");
     }
 
     #[test]
     fn error_impl() {
-        let io_err = io::Error::new(io::ErrorKind::Other, "test error");
+        let io_err = io::Error::other("test error");
         let err = ReadBufDecoderError::Io(io_err);
         assert_eq!(err.source().unwrap().to_string(), "test error");
     }

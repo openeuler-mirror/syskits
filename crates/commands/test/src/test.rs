@@ -26,7 +26,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use sys_locale::get_locale;
 
 #[derive(Default)]
@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Test::default();
+        let tool = Test;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "test");
@@ -481,7 +481,7 @@ mod tests_all {
 
         for (a, b, op, expected) in test_cases {
             let result = test_integers(OsStr::new(a), OsStr::new(b), OsStr::new(op)).unwrap();
-            assert_eq!(result, expected, "Failed: {} {} {}", a, op, b);
+            assert_eq!(result, expected, "Failed: {a} {op} {b}");
         }
 
         // Test invalid integer
@@ -544,22 +544,22 @@ mod tests_all {
         std::os::unix::fs::symlink(&test_file, &test_symlink).unwrap();
 
         // Test file existence (-e)
-        assert!(path(&test_file.as_os_str(), &TestPathCondition::Exists));
+        assert!(path(test_file.as_os_str(), &TestPathCondition::Exists));
 
         // Test regular file (-f)
-        assert!(path(&test_file.as_os_str(), &TestPathCondition::Regular));
+        assert!(path(test_file.as_os_str(), &TestPathCondition::Regular));
 
         // Test directory (-d)
-        assert!(path(&test_dir.as_os_str(), &TestPathCondition::Directory));
+        assert!(path(test_dir.as_os_str(), &TestPathCondition::Directory));
 
         // Test symbolic link (-h or -L)
-        assert!(path(&test_symlink.as_os_str(), &TestPathCondition::SymLink));
+        assert!(path(test_symlink.as_os_str(), &TestPathCondition::SymLink));
 
         // Test readable (-r)
-        assert!(path(&test_file.as_os_str(), &TestPathCondition::Readable));
+        assert!(path(test_file.as_os_str(), &TestPathCondition::Readable));
 
         // Test writable (-w)
-        assert!(path(&test_file.as_os_str(), &TestPathCondition::Writable));
+        assert!(path(test_file.as_os_str(), &TestPathCondition::Writable));
 
         // Test non-existent file
         assert!(!path(
@@ -608,7 +608,7 @@ mod tests_all {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Test::default();
+        let tool = Test;
 
         // Test name method
         assert_eq!(tool.name(), "test");

@@ -33,23 +33,20 @@ fn main() {
         }
     };
 
-    println!(
-        "Finding a factor of {} using Pollard's Rho algorithm...",
-        number
-    );
+    println!("Finding a factor of {number} using Pollard's Rho algorithm...");
 
     let start = Instant::now();
     let factor = find_divisor(number);
     let duration = start.elapsed();
 
-    println!("Found factor: {}", factor);
-    println!("Time taken: {:?}", duration);
+    println!("Found factor: {factor}");
+    println!("Time taken: {duration:?}");
 
     // 验证结果
     if number % factor == 0 {
-        println!("Verification: {} is indeed a factor of {}", factor, number);
+        println!("Verification: {factor} is indeed a factor of {number}");
     } else {
-        println!("ERROR: {} is NOT a factor of {}", factor, number);
+        println!("ERROR: {factor} is NOT a factor of {number}");
         process::exit(1);
     }
 }

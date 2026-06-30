@@ -14,7 +14,7 @@ mod error;
 
 use crate::error::ChrootError;
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_entries;
@@ -301,7 +301,7 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
         // 获取当前工作目录
         let current_dir = match std::env::current_dir() {
             Ok(dir) => dir,
-            Err(e) => panic!("Failed to get current directory: {}", e),
+            Err(e) => panic!("Failed to get current directory: {e}"),
         };
 
         match std::env::set_current_dir(current_dir.clone()) {
@@ -394,7 +394,7 @@ mod tests {
     use std::ffi::OsString;
     #[test]
     fn test_tool_implementation() {
-        let tool = Chroot::default();
+        let tool = Chroot;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "chroot");
@@ -788,7 +788,7 @@ mod tests {
         #[test]
         fn test_ctmain_version() {
             let args = [ctcore::ct_util_name(), "--version"];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -796,7 +796,7 @@ mod tests {
         #[test]
         fn test_ctmain_v() {
             let args = [ctcore::ct_util_name(), "-V"];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -804,28 +804,28 @@ mod tests {
         #[test]
         fn test_ctmain_h() {
             let args = [ctcore::ct_util_name(), "-h"];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_help() {
             let args = [ctcore::ct_util_name(), "--help"];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_hh() {
             let args = [ctcore::ct_util_name(), "-hh"];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_hhh() {
             let args = [ctcore::ct_util_name(), "-hhh"];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -833,7 +833,7 @@ mod tests {
         #[test]
         fn test_ctmain_newroot_required() {
             let args = [ctcore::ct_util_name()];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -854,7 +854,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -867,7 +867,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -880,7 +880,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -895,7 +895,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -910,7 +910,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -925,7 +925,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -940,7 +940,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -963,7 +963,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
             // 清理测试环境（无需手动清理，TempDir 会在作用域结束时自动删除）
@@ -978,7 +978,7 @@ mod tests {
                 "-l",
                 "-lc",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -990,7 +990,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1002,7 +1002,7 @@ mod tests {
                 "ls",
                 "-l",
             ];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1010,7 +1010,7 @@ mod tests {
         #[test]
         fn test_ctmain_default_shell_no_command_given() {
             let args = [ctcore::ct_util_name(), &String::from("/valid/newroot/path")];
-            let result = chroot_main(args.iter().map(|s| OsString::from(s)));
+            let result = chroot_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -1034,42 +1034,42 @@ mod tests {
         #[test]
         fn test_set_groups_from_str_empty() {
             let result = chroot_set_groups_from_str("");
-            assert_eq!(result.is_ok(), true);
+            assert!(result.is_ok());
         }
 
         #[test]
         fn test_set_groups_from_str_empty_group() {
             let groups = "group1,,group3";
             let result = chroot_set_groups_from_str(groups);
-            assert_eq!(result.is_ok(), false);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_set_groups_from_str_invalid_group() {
             let groups = "a invalid_group";
             let result = chroot_set_groups_from_str(groups);
-            assert_eq!(result.is_err(), true);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_set_groups_from_str_invalid() {
             let groups = "invalid_group";
             let result = chroot_set_groups_from_str(groups);
-            assert_eq!(result.is_err(), true);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_set_groups_from_str_valid() {
             let groups = "group1,group2,group3";
             let result = chroot_set_groups_from_str(groups);
-            assert_eq!(result.is_ok(), false);
+            assert!(result.is_err());
         }
 
         #[test]
         fn test_set_groups_from_str_set_groups_failed() {
             let groups = "group1,group2,group3,group4";
             let result = chroot_set_groups_from_str(groups);
-            assert_eq!(result.is_err(), true);
+            assert!(result.is_err());
         }
 
         #[test]
@@ -1107,18 +1107,16 @@ mod tests {
             assert!(result.is_err());
         }
 
-        fn create_group(group_name: &str) -> () {
+        fn create_group(group_name: &str) {
             if group_name.is_empty() {
                 delete_group(group_name);
             }
-            ()
         }
 
-        fn delete_group(group_name: &str) -> () {
+        fn delete_group(group_name: &str) {
             if group_name.is_empty() {
                 // Delete the group
             }
-            ()
         }
 
         #[test]

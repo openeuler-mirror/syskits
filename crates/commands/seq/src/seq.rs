@@ -11,7 +11,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::{ErrorKind, Write, stdout};
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
@@ -256,9 +256,9 @@ fn seq_fast(
 
     while current <= last {
         if !is_first {
-            write!(writer, "{}", separator)?;
+            write!(writer, "{separator}")?;
         }
-        write!(writer, "{}", current)?;
+        write!(writer, "{current}")?;
 
         // Check for overflow before adding
         if let Some(next) = current.checked_add(step) {
@@ -270,7 +270,7 @@ fn seq_fast(
     }
 
     if !is_first {
-        write!(writer, "{}", terminator)?;
+        write!(writer, "{terminator}")?;
     }
     writer.flush()
 }
@@ -375,11 +375,11 @@ fn format_with_zero_padding(
             let space_count = rest.len() - trimmed.len();
             let zero_count = if space_count > 0 { space_count - 1 } else { 0 };
 
-            write!(writer, "{}", sign_char)?;
+            write!(writer, "{sign_char}")?;
             for _ in 0..zero_count {
                 write!(writer, "0")?;
             }
-            write!(writer, "{}", trimmed)?;
+            write!(writer, "{trimmed}")?;
             return Ok(());
         }
     }

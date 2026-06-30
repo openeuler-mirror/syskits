@@ -34,7 +34,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
@@ -101,11 +101,6 @@ enum LnError {
     /// 部分链接创建失败
     /// 具体错误信息已在其他地方处理
     SomeLinksFailed,
-    /// 源文件和目标文件是同一个文件
-    /// 参数:
-    /// - 源文件路径
-    /// - 目标文件路径
-    ///SameFile(PathBuf, PathBuf),
     /// 缺少目标文件路径参数
     /// 参数: 最后一个提供的参数
     MissingDestination(PathBuf),
@@ -756,7 +751,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Ln::default();
+        let tool = Ln;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "ln");

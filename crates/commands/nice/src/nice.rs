@@ -92,7 +92,7 @@ fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
         }
         return Err(Err(CtSimpleError::new(
             125,
-            format!("cannot set niceness: {}", err),
+            format!("cannot set niceness: {err}"),
         )));
     }
     Ok(())
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Nice::default();
+        let tool = Nice;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "nice");
@@ -448,7 +448,7 @@ mod tests {
         if result.is_ok() {
             let nice_ness = result.unwrap();
             // 优先级通常在-20到19之间
-            assert!(nice_ness >= -20 && nice_ness <= 19);
+            assert!((-20..=19).contains(&nice_ness));
         }
     }
 
@@ -459,17 +459,17 @@ mod tests {
 
         #[test]
         fn test_nice_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
 
-            let result = nice_main(args.iter().map(|s| OsString::from(s)));
+            let result = nice_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_nice_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = nice_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = nice_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }

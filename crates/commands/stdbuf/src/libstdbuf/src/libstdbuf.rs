@@ -65,7 +65,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
                 Ok(num) => num,
                 Err(_) => {
                     // 解析缓冲区大小失败时输出错误并退出
-                    eprintln!("failed to allocate a {} byte stdio buffer", value);
+                    eprintln!("failed to allocate a {value} byte stdio buffer");
                     std::process::exit(1);
                 }
             };
@@ -218,7 +218,7 @@ mod tests {
 
         // 模拟环境变量不存在的情况
         let mock_none: Result<String, env::VarError> = Err(env::VarError::NotPresent);
-        if let Ok(_) = mock_none {
+        if mock_none.is_ok() {
             panic!("不应该找到环境变量");
         }
     }

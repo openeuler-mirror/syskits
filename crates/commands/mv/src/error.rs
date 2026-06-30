@@ -106,6 +106,6 @@ fn test_mv_error_display() {
     ];
 
     for (error, expected) in cases.iter() {
-        assert_eq!(format!("{}", error), *expected);
+        assert_eq!(format!("{error}"), *expected);
     }
 }

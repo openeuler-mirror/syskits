@@ -529,17 +529,15 @@ impl fmt::Display for Table {
                     Alignment::Left => {
                         if is_last_col {
                             // 最后一列不添加尾随空格。
-                            write!(f, "{}", elem)?;
+                            write!(f, "{elem}")?;
                         } else {
-                            write!(
-                                f,
-                                "{}",
-                                pad_right_display_width(elem, self.widths[i])
-                            )?;
+                            let padded = pad_right_display_width(elem, self.widths[i]);
+                            write!(f, "{padded}")?;
                         }
                     }
                     Alignment::Right => {
-                        write!(f, "{}", pad_left_display_width(elem, self.widths[i]))?
+                        let padded = pad_left_display_width(elem, self.widths[i]);
+                        write!(f, "{padded}")?
                     }
                 }
 
@@ -868,7 +866,15 @@ mod tests {
         let fmt = TableRowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
-            vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
+            vec!(
+                "my_device",
+                "my_type",
+                "4.0k",
+                "1.0k",
+                "3.0k",
+                "25%",
+                "my_mount"
+            )
         );
     }
 
@@ -894,7 +900,15 @@ mod tests {
         let fmt = TableRowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
-            vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
+            vec!(
+                "my_device",
+                "my_type",
+                "4.0K",
+                "1.0K",
+                "3.0K",
+                "25%",
+                "my_mount"
+            )
         );
     }
 

@@ -26,7 +26,7 @@
 //! alignment with util-linux more explicit and testable.
 
 extern crate rust_i18n;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 pub mod command;
 pub mod more;

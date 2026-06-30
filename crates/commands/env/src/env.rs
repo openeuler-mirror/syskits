@@ -71,7 +71,7 @@ fn print_env(line_ending: CtLineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
     for (n, v) in env::vars() {
-        write!(stdout, "{}={}{}", n, v, line_ending).unwrap();
+        write!(stdout, "{n}={v}{line_ending}").unwrap();
     }
 }
 
@@ -225,15 +225,15 @@ pub fn env_parse_args_from_str(native_text: &NativeIntStr) -> CTResult<Vec<Nativ
             quoting: _,
         } => CtSimpleError::new(125, "invalid backslash at end of string in -S"),
         parse_error::EnvParseError::InvalidSequenceBackslashXInMinusS { pos: _, c } => {
-            CtSimpleError::new(125, format!("invalid sequence '\\{}' in -S", c))
+            CtSimpleError::new(125, format!("invalid sequence '\\{c}' in -S"))
         }
         parse_error::EnvParseError::MissingClosingQuote { pos: _, c: _ } => {
             CtSimpleError::new(125, "no terminating quote in -S string")
         }
         parse_error::EnvParseError::ParsingOfVariableNameFailed { pos, msg } => {
-            CtSimpleError::new(125, format!("variable name issue (at {}): {}", pos, msg,))
+            CtSimpleError::new(125, format!("variable name issue (at {pos}): {msg}"))
         }
-        _ => CtSimpleError::new(125, format!("Error: {:?}", e)),
+        _ => CtSimpleError::new(125, format!("Error: {e:?}")),
     })
 }
 
@@ -333,7 +333,7 @@ impl EnvAppData {
                     clap::error::ErrorKind::DisplayHelp
                     | clap::error::ErrorKind::DisplayVersion => e.into(),
                     _ => {
-                        let s = format!("{}", e);
+                        let s = format!("{e}");
                         if !s.is_empty() {
                             let s = s.trim_end();
                             ctcore::ct_show_error!("{}", s);
@@ -630,7 +630,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Env::default();
+        let tool = Env;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "env");
@@ -640,7 +640,7 @@ mod tests {
         assert!(command.get_name().contains("env"));
 
         // 测试 execute 方法
-        let args = vec![OsString::from("env"), OsString::from("--version")];
+        let args = [OsString::from("env"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err());
     }
     mod tests_env_main {
@@ -655,54 +655,54 @@ mod tests {
 
         #[test]
         fn test_env_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 0);
         }
 
         #[test]
         fn test_env_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 0);
         }
 
         #[test]
         fn test_env_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 0);
         }
 
         #[test]
         fn test_env_main_h() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 0);
         }
 
         #[test]
         fn test_env_main_i() {
-            let args = vec![ctcore::ct_util_name(), "-i", "arch"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-i", "arch"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_env_main_ignore_environment() {
-            let args = vec![ctcore::ct_util_name(), "--ignore-environment", "arch"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--ignore-environment", "arch"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_env_main_bad_args() {
-            let args = vec![ctcore::ct_util_name(), "--bad-arg"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--bad-arg"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -727,9 +727,9 @@ mod tests {
 
             let env_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
+            let args = [ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -754,23 +754,23 @@ mod tests {
 
             let env_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-C", env_dir, "ls"];
+            let args = [ctcore::ct_util_name(), "-C", env_dir, "ls"];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_env_main_0() {
-            let args = vec![ctcore::ct_util_name(), "-0"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-0"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_env_main_null() {
-            let args = vec![ctcore::ct_util_name(), "--null"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--null"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -795,9 +795,9 @@ mod tests {
            FVAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-f", f];
+            let args = [ctcore::ct_util_name(), "-f", f];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             match env::var("FVAR1") {
@@ -805,7 +805,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -814,7 +814,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -823,7 +823,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -832,7 +832,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -856,9 +856,9 @@ mod tests {
            ENV_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--file", filename, "ls"];
+            let args = [ctcore::ct_util_name(), "--file", filename, "ls"];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             match env::var("ENV_VAR1") {
@@ -866,7 +866,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail:{}", e)
+                    println!("env set fail:{e}")
                 }
             }
 
@@ -875,7 +875,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -884,7 +884,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -893,7 +893,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -917,9 +917,9 @@ mod tests {
            Y_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+            let args = [ctcore::ct_util_name(), "--file", unset_filename, "env"];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             match env::var("Y_UNSET_VAR1") {
@@ -927,7 +927,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -936,7 +936,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -945,7 +945,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -954,11 +954,11 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-i",
                 "env",
@@ -967,7 +967,7 @@ mod tests {
                 "env",
             ];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             match env::var("Y_UNSET_VAR1") {
@@ -975,7 +975,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -984,7 +984,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -993,7 +993,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1002,7 +1002,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -1026,9 +1026,9 @@ mod tests {
            Q_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+            let args = [ctcore::ct_util_name(), "--file", unset_filename, "env"];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             match env::var("Q_UNSET_VAR1") {
@@ -1036,7 +1036,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1045,7 +1045,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1054,7 +1054,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1063,11 +1063,11 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--ignore-environment",
                 "env",
@@ -1076,7 +1076,7 @@ mod tests {
                 "env",
             ];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
 
             match env::var("Q_UNSET_VAR1") {
@@ -1084,7 +1084,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1093,7 +1093,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1102,7 +1102,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1111,22 +1111,22 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
 
         #[test]
         fn test_env_main_debug() {
-            let args = vec![ctcore::ct_util_name(), "-v", "arch"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-v", "arch"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_env_main_debug_whole() {
-            let args = vec![ctcore::ct_util_name(), "--debug", "arch"];
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--debug", "arch"];
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1149,14 +1149,14 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--split-string=''",
                 "cat",
                 file_path,
             ];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -1179,9 +1179,9 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-S", "", "cat", file_path];
+            let args = [ctcore::ct_util_name(), "-S", "", "cat", file_path];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_err()); //error  ,与 系统命令env不一致
         }
 
@@ -1204,7 +1204,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--split-string=''",
@@ -1212,7 +1212,7 @@ mod tests {
                 file_path,
             ];
 
-            let result = env_main(args.iter().map(|s| OsString::from(s)));
+            let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }
@@ -1229,8 +1229,8 @@ mod tests {
 
         #[test]
         fn test_run_env_version() {
-            let cmd = vec![ctcore::ct_util_name(), "--version"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--version"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1242,8 +1242,8 @@ mod tests {
 
         #[test]
         fn test_run_env_v() {
-            let cmd = vec![ctcore::ct_util_name(), "-V"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-V"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1255,8 +1255,8 @@ mod tests {
 
         #[test]
         fn test_run_env_help() {
-            let cmd = vec![ctcore::ct_util_name(), "--help"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--help"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1268,8 +1268,8 @@ mod tests {
 
         #[test]
         fn test_run_env_h() {
-            let cmd = vec![ctcore::ct_util_name(), "-h"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-h"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1281,8 +1281,8 @@ mod tests {
 
         #[test]
         fn test_run_env_i() {
-            let cmd = vec![ctcore::ct_util_name(), "-i", "arch"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-i", "arch"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1292,8 +1292,8 @@ mod tests {
 
         #[test]
         fn test_run_env_ignore_environment() {
-            let cmd = vec![ctcore::ct_util_name(), "--ignore-environment", "arch"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--ignore-environment", "arch"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1303,8 +1303,8 @@ mod tests {
 
         #[test]
         fn test_run_env_bad_cmd() {
-            let cmd = vec![ctcore::ct_util_name(), "--bad-arg"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--bad-arg"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1333,9 +1333,9 @@ mod tests {
 
             let env_dir = sub_dir_path.to_str().unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
+            let cmd = [ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1364,9 +1364,9 @@ mod tests {
 
             let env_dir = sub_dir_path.to_str().unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "-C", env_dir, "ls"];
+            let cmd = [ctcore::ct_util_name(), "-C", env_dir, "ls"];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1376,8 +1376,8 @@ mod tests {
 
         #[test]
         fn test_run_env_0() {
-            let cmd = vec![ctcore::ct_util_name(), "-0"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-0"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1387,8 +1387,8 @@ mod tests {
 
         #[test]
         fn test_run_env_null() {
-            let cmd = vec![ctcore::ct_util_name(), "--null"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--null"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1417,9 +1417,9 @@ mod tests {
            FVAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "-f", f];
+            let cmd = [ctcore::ct_util_name(), "-f", f];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1431,7 +1431,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1440,7 +1440,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1449,7 +1449,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1458,7 +1458,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -1482,9 +1482,9 @@ mod tests {
            ENV_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "--file", filename, "ls"];
+            let cmd = [ctcore::ct_util_name(), "--file", filename, "ls"];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1496,7 +1496,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail:{}", e)
+                    println!("env set fail:{e}")
                 }
             }
 
@@ -1505,7 +1505,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1514,7 +1514,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1523,7 +1523,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -1547,9 +1547,9 @@ mod tests {
            QQ_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+            let cmd = [ctcore::ct_util_name(), "--file", unset_filename, "env"];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1561,7 +1561,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1570,7 +1570,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1579,7 +1579,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1588,11 +1588,11 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
-            let cmd = vec![
+            let cmd = [
                 ctcore::ct_util_name(),
                 "-i",
                 "env",
@@ -1601,7 +1601,7 @@ mod tests {
                 "env",
             ];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1613,7 +1613,7 @@ mod tests {
                     assert_ne!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1622,7 +1622,7 @@ mod tests {
                     assert_ne!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1631,7 +1631,7 @@ mod tests {
                     assert_ne!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1640,7 +1640,7 @@ mod tests {
                     assert_ne!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -1664,9 +1664,9 @@ mod tests {
            YY_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+            let cmd = [ctcore::ct_util_name(), "--file", unset_filename, "env"];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1678,7 +1678,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1687,7 +1687,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1696,7 +1696,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1705,11 +1705,11 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
-            let cmd = vec![
+            let cmd = [
                 ctcore::ct_util_name(),
                 "--ignore-environment",
                 "env",
@@ -1718,7 +1718,7 @@ mod tests {
                 "env",
             ];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1730,7 +1730,7 @@ mod tests {
                     assert_ne!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1739,7 +1739,7 @@ mod tests {
                     assert_ne!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1748,7 +1748,7 @@ mod tests {
                     assert_ne!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -1757,15 +1757,15 @@ mod tests {
                     assert_ne!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
 
         #[test]
         fn test_run_env_debug() {
-            let cmd = vec![ctcore::ct_util_name(), "-v", "arch"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-v", "arch"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1775,8 +1775,8 @@ mod tests {
 
         #[test]
         fn test_run_env_debug_whole() {
-            let cmd = vec![ctcore::ct_util_name(), "--debug", "arch"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--debug", "arch"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1803,14 +1803,14 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![
+            let cmd = [
                 ctcore::ct_util_name(),
                 "--split-string=''",
                 "cat",
                 file_path,
             ];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1837,9 +1837,9 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![ctcore::ct_util_name(), "-S", "", "cat", file_path];
+            let cmd = [ctcore::ct_util_name(), "-S", "", "cat", file_path];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1866,7 +1866,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = vec![
+            let cmd = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--split-string=''",
@@ -1874,7 +1874,7 @@ mod tests {
                 file_path,
             ];
 
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1895,8 +1895,8 @@ mod tests {
 
         #[test]
         fn test_parse_arguments_version() {
-            let cmd = vec![ctcore::ct_util_name(), "--version"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--version"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1908,8 +1908,8 @@ mod tests {
 
         #[test]
         fn test_parse_arguments_v() {
-            let cmd = vec![ctcore::ct_util_name(), "-V"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-V"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1921,8 +1921,8 @@ mod tests {
 
         #[test]
         fn test_parse_arguments_help() {
-            let cmd = vec![ctcore::ct_util_name(), "--help"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "--help"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -1934,8 +1934,8 @@ mod tests {
 
         #[test]
         fn test_parse_arguments_h() {
-            let cmd = vec![ctcore::ct_util_name(), "-h"];
-            let args = cmd.iter().map(|s| OsString::from(s));
+            let cmd = [ctcore::ct_util_name(), "-h"];
+            let args = cmd.iter().map(OsString::from);
 
             let mut env_app_data = EnvAppData::default();
 
@@ -5702,9 +5702,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
         #[test]
@@ -5740,9 +5740,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -5789,9 +5789,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -5852,9 +5852,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -5916,9 +5916,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -5970,9 +5970,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6024,9 +6024,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6078,9 +6078,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6133,9 +6133,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6197,9 +6197,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6261,9 +6261,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6304,9 +6304,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
 
@@ -6347,9 +6347,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
         #[test]
@@ -6412,9 +6412,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
         #[test]
@@ -6477,9 +6477,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
         #[test]
@@ -6542,9 +6542,9 @@ mod tests {
             assert_eq!(opts, expected_opts);
 
             let opt = OsStr::new("arch");
-            let ret = env_parse_name_value_opt(&mut opts, &opt).unwrap();
+            let ret = env_parse_name_value_opt(&mut opts, opt).unwrap();
 
-            assert_eq!(ret, true);
+            assert!(ret);
             assert_eq!(opts.sets.len(), 0);
         }
     }
@@ -7357,7 +7357,7 @@ mod tests {
         #[test]
         fn test_ct_app_version() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--version"];
+            let args = [ctcore::ct_util_name(), "--version"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
@@ -7367,7 +7367,7 @@ mod tests {
         #[test]
         fn test_ct_app_v() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-V"];
+            let args = [ctcore::ct_util_name(), "-V"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
@@ -7377,7 +7377,7 @@ mod tests {
         #[test]
         fn test_ct_app_help() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--help"];
+            let args = [ctcore::ct_util_name(), "--help"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
@@ -7387,7 +7387,7 @@ mod tests {
         #[test]
         fn test_ct_app_h() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-h"];
+            let args = [ctcore::ct_util_name(), "-h"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
@@ -7397,7 +7397,7 @@ mod tests {
         #[test]
         fn test_ct_app_i() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-i", "arch"];
+            let args = [ctcore::ct_util_name(), "-i", "arch"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
@@ -7405,7 +7405,7 @@ mod tests {
         #[test]
         fn test_ct_app_ignore_environment() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--ignore-environment", "arch"];
+            let args = [ctcore::ct_util_name(), "--ignore-environment", "arch"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
@@ -7413,7 +7413,7 @@ mod tests {
         #[test]
         fn test_ct_app_bad_args() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--bad-arg"];
+            let args = [ctcore::ct_util_name(), "--bad-arg"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
         }
@@ -7440,7 +7440,7 @@ mod tests {
 
             let env_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
+            let args = [ctcore::ct_util_name(), "--chdir", env_dir, "ls"];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7468,7 +7468,7 @@ mod tests {
 
             let env_dir = sub_dir_path.to_str().unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-C", env_dir, "ls"];
+            let args = [ctcore::ct_util_name(), "-C", env_dir, "ls"];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7477,7 +7477,7 @@ mod tests {
         #[test]
         fn test_ct_app_0() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-0"];
+            let args = [ctcore::ct_util_name(), "-0"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
@@ -7485,7 +7485,7 @@ mod tests {
         #[test]
         fn test_ct_app_null() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--null"];
+            let args = [ctcore::ct_util_name(), "--null"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
@@ -7512,7 +7512,7 @@ mod tests {
            FVAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-f", f];
+            let args = [ctcore::ct_util_name(), "-f", f];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7522,7 +7522,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7531,7 +7531,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7540,7 +7540,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7549,7 +7549,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -7574,7 +7574,7 @@ mod tests {
            ENV_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--file", filename, "ls"];
+            let args = [ctcore::ct_util_name(), "--file", filename, "ls"];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7584,7 +7584,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail:{}", e)
+                    println!("env set fail:{e}")
                 }
             }
 
@@ -7593,7 +7593,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7602,7 +7602,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7611,7 +7611,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -7636,7 +7636,7 @@ mod tests {
            QQQ_UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+            let args = [ctcore::ct_util_name(), "--file", unset_filename, "env"];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7646,7 +7646,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7655,7 +7655,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7664,7 +7664,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7673,11 +7673,11 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-i",
                 "env",
@@ -7694,7 +7694,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7703,7 +7703,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7712,7 +7712,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7721,7 +7721,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -7746,7 +7746,7 @@ mod tests {
            UNSET_VAR4=Syskit\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "--file", unset_filename, "env"];
+            let args = [ctcore::ct_util_name(), "--file", unset_filename, "env"];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7756,7 +7756,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7765,7 +7765,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7774,7 +7774,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7783,11 +7783,11 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--ignore-environment",
                 "env",
@@ -7804,7 +7804,7 @@ mod tests {
                     assert_eq!(val, "hello");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7813,7 +7813,7 @@ mod tests {
                     assert_eq!(val, "CtyunOS");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7822,7 +7822,7 @@ mod tests {
                     assert_eq!(val, "Rust");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
 
@@ -7831,7 +7831,7 @@ mod tests {
                     assert_eq!(val, "Syskit");
                 }
                 Err(e) => {
-                    println!("env set fail,{}", e)
+                    println!("env set fail,{e}")
                 }
             }
         }
@@ -7839,7 +7839,7 @@ mod tests {
         #[test]
         fn test_ct_app_debug() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "-v", "arch"];
+            let args = [ctcore::ct_util_name(), "-v", "arch"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
@@ -7847,7 +7847,7 @@ mod tests {
         #[test]
         fn test_ct_app_debug_whole() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--debug", "arch"];
+            let args = [ctcore::ct_util_name(), "--debug", "arch"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }
@@ -7872,7 +7872,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "--split-string=''",
                 "cat",
@@ -7903,7 +7903,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), "-S", "", "cat", file_path];
+            let args = [ctcore::ct_util_name(), "-S", "", "cat", file_path];
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
@@ -7929,7 +7929,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 "-S",
                 "--split-string=''",

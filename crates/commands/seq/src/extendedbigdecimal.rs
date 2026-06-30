@@ -78,7 +78,7 @@ impl Display for ExtendedBigDecimal {
                         format!("{}{}.{}", sign, &digits[..split], &digits[split..])
                     } else {
                         let zeros = "0".repeat(scale - len_digits);
-                        format!("{}0.{}{}", sign, zeros, digits)
+                        format!("{sign}0.{zeros}{digits}")
                     }
                 } else {
                     let mut s = n.to_string();
@@ -103,7 +103,7 @@ impl Display for ExtendedBigDecimal {
                         } else {
                             frac.truncate(req_prec);
                         }
-                        s = format!("{}.{}", int_part, frac);
+                        s = format!("{int_part}.{frac}");
                     }
                 }
 
@@ -117,15 +117,15 @@ impl Display for ExtendedBigDecimal {
                             for _ in 0..diff {
                                 write!(f, "0")?;
                             }
-                            write!(f, "{}", stripped)
+                            write!(f, "{stripped}")
                         } else {
                             for _ in 0..diff {
                                 write!(f, "0")?;
                             }
-                            write!(f, "{}", s)
+                            write!(f, "{s}")
                         }
                     } else {
-                        write!(f, "{:>width$}", s, width = width)
+                        write!(f, "{s:>width$}")
                     }
                 } else {
                     f.write_str(&s)
@@ -263,8 +263,7 @@ mod tests {
         let zero_str = ExtendedBigDecimal::zero().to_string();
         assert!(
             zero_str == "0" || zero_str == "0.0",
-            "zero should be displayed as '0' or '0.0', got '{}'",
-            zero_str
+            "zero should be displayed as '0' or '0.0', got '{zero_str}'"
         );
 
         assert_eq!(ExtendedBigDecimal::Infinity.to_string(), "inf");

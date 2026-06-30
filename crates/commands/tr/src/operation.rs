@@ -463,7 +463,7 @@ impl DeleteOperation {
 
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        let found = self.set.iter().any(|sequence| *sequence == current);
+        let found = self.set.contains(&current);
         if self.is_complement_flag == found {
             Some(current)
         } else {
@@ -701,7 +701,7 @@ where
         output_buf.extend(buf.iter().filter_map(|&c| translator.translate(c)));
 
         if let Err(e) = output.write_all(&output_buf) {
-            eprintln!("Error writing output: {}", e);
+            eprintln!("Error writing output: {e}");
             break;
         }
 
@@ -709,7 +709,7 @@ where
     }
 
     if let Err(e) = output.flush() {
-        eprintln!("Error flushing output: {}", e);
+        eprintln!("Error flushing output: {e}");
     }
 }
 
@@ -1158,7 +1158,7 @@ mod tests {
                 chars.push(op.translate(b'x' + i).unwrap());
             }
             // 最后几个字符应该使用set2的最后一个字符
-            assert!(chars.iter().any(|&c| c == b'U'));
+            assert!(chars.contains(&b'U'));
         }
     }
 
@@ -1455,10 +1455,10 @@ mod tests {
 
             // 验证结果
             assert_eq!(output.len(), input.len());
-            assert!(output.iter().any(|&c| c == b'A'));
-            assert!(output.iter().any(|&c| c == b'E'));
-            assert!(!output.iter().any(|&c| c == b'a'));
-            assert!(!output.iter().any(|&c| c == b'e'));
+            assert!(output.contains(&b'A'));
+            assert!(output.contains(&b'E'));
+            assert!(!output.contains(&b'a'));
+            assert!(!output.contains(&b'e'));
         }
 
         #[test]

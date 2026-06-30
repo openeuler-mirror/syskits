@@ -277,7 +277,7 @@ impl Who {
         let last_runlevel = (utmpx.pid() / 256) as u8 as char;
         let current_runlevel = (utmpx.pid() % 256) as u8 as char;
         // Creating the run-level string
-        let runlevel_line = format!("run-level {}", current_runlevel);
+        let runlevel_line = format!("run-level {current_runlevel}");
 
         // 生成有关最后运行级别的注释
         let comment = if last_runlevel == 'N' {
@@ -555,7 +555,7 @@ mod tests {
             who_args: vec!["/var/log/wtmp".to_string()],
         };
 
-        assert_eq!(who.exec().is_ok(), true);
+        assert!(who.exec().is_ok());
     }
 
     #[test]
@@ -1496,7 +1496,7 @@ mod tests {
             };
 
             let expected_size = if should_use_c_format { 12 } else { 16 };
-            assert_eq!(time_size, expected_size, "Failed for locale: {}", locale);
+            assert_eq!(time_size, expected_size, "Failed for locale: {locale}");
         }
 
         // 恢复原始环境变量
@@ -1636,7 +1636,7 @@ mod tests {
             };
 
             let expected_size = if should_use_c_format { 12 } else { 16 };
-            assert_eq!(time_size, expected_size, "Failed for locale: '{}'", locale);
+            assert_eq!(time_size, expected_size, "Failed for locale: '{locale}'");
         }
 
         // 恢复原始环境变量

@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use chrono::{DateTime, Local};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, ct_print_verbatim};
@@ -738,23 +738,18 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         // 检查文件名是否指向一个目录。
         let path = PathBuf::from(filename);
         if path.is_dir() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("{}: read error: Is a directory", filename),
-            ));
+            return Err(std::io::Error::other(format!(
+                "{filename}: read error: Is a directory"
+            )));
         }
 
         // 尝试打开文件并处理文件不存在的错误。
         match File::open(filename) {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "cannot open '{}' for reading: No such file or directory",
-                        filename
-                    ),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "cannot open '{filename}' for reading: No such file or directory"
+                )));
             }
             Err(e) => return Err(e),
         }
@@ -814,16 +809,13 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let files_path = if let Some(file_from) = args_match.get_one::<String>(opt_flags::FILES0_FROM) {
         // 从文件中读取文件列表，处理特殊值 "-" 表示标准输入
         if file_from == "-" && args_match.get_one::<String>(opt_flags::FILE).is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "extra operand {}\nfile operands cannot be combined with --files0-from",
-                    args_match
-                        .get_one::<String>(opt_flags::FILE)
-                        .unwrap()
-                        .quote()
-                ),
-            )
+            return Err(std::io::Error::other(format!(
+                "extra operand {}\nfile operands cannot be combined with --files0-from",
+                args_match
+                    .get_one::<String>(opt_flags::FILE)
+                    .unwrap()
+                    .quote()
+            ))
             .into());
         }
 
@@ -995,7 +987,7 @@ fn du_get_size_format(args_match: &ArgMatches) -> Result<DuSizeFormat, Box<dyn C
 
 fn du_get_time(args_match: &ArgMatches) -> Option<DuTime> {
     // 解析显示时间类型选项
-    let time = args_match.contains_id(opt_flags::TIME).then(|| {
+    args_match.contains_id(opt_flags::TIME).then(|| {
         match args_match
             .get_one::<String>(opt_flags::TIME)
             .map(AsRef::as_ref)
@@ -1005,8 +997,7 @@ fn du_get_time(args_match: &ArgMatches) -> Option<DuTime> {
             Some("birth" | "creation") => DuTime::Created,
             _ => unreachable!("should be caught by clap"),
         }
-    });
-    time
+    })
 }
 
 fn du_get_max_depth(
@@ -1310,7 +1301,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Du::default();
+        let tool = Du;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "du");
@@ -5036,23 +5027,23 @@ mod tests {
 
         #[test]
         fn test_ct_main_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = du_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_v() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5076,9 +5067,9 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir];
+            let args = [ctcore::ct_util_name(), dir];
 
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5101,8 +5092,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--all"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--all"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5125,8 +5116,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5149,8 +5140,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--all", "--apparent-size"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--all", "--apparent-size"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5173,8 +5164,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1K"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1K"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5197,8 +5188,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1M"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1M"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5221,8 +5212,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1g"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1g"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5245,8 +5236,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1T"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1T"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5269,8 +5260,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1P"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1P"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5293,8 +5284,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1E"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1E"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5317,8 +5308,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1Z"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1Z"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5341,8 +5332,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--block-size", "1Y"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--block-size", "1Y"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5365,14 +5356,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1K",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5395,14 +5386,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1M",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5425,14 +5416,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1g",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5455,14 +5446,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1T",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5485,14 +5476,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1P",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5515,14 +5506,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1E",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5545,14 +5536,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1Z",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5575,14 +5566,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--apparent-size",
                 "--block-size",
                 "1Y",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5605,8 +5596,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BK"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BK"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5629,8 +5620,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BM"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BM"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5653,8 +5644,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BG"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BG"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5677,8 +5668,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BT"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BT"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5701,8 +5692,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BP"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BP"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5725,8 +5716,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BE"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BE"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5749,8 +5740,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BZ"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BZ"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5773,8 +5764,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-BY"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-BY"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -5797,8 +5788,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BK"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BK"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5821,8 +5812,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BM"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BM"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5845,8 +5836,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BG"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BG"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5869,8 +5860,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BT"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BT"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5893,8 +5884,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BP"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BP"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5917,8 +5908,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BE"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BE"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -5941,8 +5932,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BZ"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BZ"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err()); //du: --block-size argument 'Z' too large
         }
@@ -5965,8 +5956,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--apparent-size", "-BY"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--apparent-size", "-BY"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err()); //du: --block-size argument 'Y' too large
         }
@@ -5989,8 +5980,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-b"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-b"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6013,8 +6004,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--bytes"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--bytes"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6037,8 +6028,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-c"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-c"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6061,8 +6052,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--total"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--total"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6085,8 +6076,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-k"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-k"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6109,8 +6100,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-m"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-m"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6133,8 +6124,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "0"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--max-depth", "0"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6157,8 +6148,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "1"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--max-depth", "1"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6181,8 +6172,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "2"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--max-depth", "2"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6205,8 +6196,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "3"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--max-depth", "3"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6229,8 +6220,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "4"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--max-depth", "4"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6253,8 +6244,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "5"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--max-depth", "5"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6277,8 +6268,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-d", "0"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-d", "0"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6301,8 +6292,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-d", "1"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-d", "1"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6325,8 +6316,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-d", "2"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-d", "2"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6349,8 +6340,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-d", "3"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-d", "3"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6373,8 +6364,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-d", "4"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-d", "4"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6397,8 +6388,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-d", "5"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-d", "5"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6421,8 +6412,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-h"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-h"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6445,8 +6436,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--human-readable"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--human-readable"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6469,8 +6460,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--inodes"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--inodes"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6493,8 +6484,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--human-readable", "--inodes"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--human-readable", "--inodes"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6517,14 +6508,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "-h",
                 "--human-readable",
                 "--inodes",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -6547,8 +6538,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-k"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-k"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6571,8 +6562,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-l"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-l"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6595,8 +6586,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--count-links"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--count-links"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6619,8 +6610,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-l", "--count-links"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-l", "--count-links"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -6643,8 +6634,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-L"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-L"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6667,8 +6658,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--dereference"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--dereference"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6691,8 +6682,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-D"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-D"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6715,8 +6706,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--dereference-args"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--dereference-args"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6739,8 +6730,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-P"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-P"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6763,8 +6754,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--no-dereference"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--no-dereference"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6787,8 +6778,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-m"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-m"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6811,8 +6802,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--null"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--null"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6835,8 +6826,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-0"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-0"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6859,8 +6850,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-S"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-S"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6883,8 +6874,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--separate-dirs"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--separate-dirs"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6907,8 +6898,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-s"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-s"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6931,8 +6922,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--summarize"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--summarize"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6955,8 +6946,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--si"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--si"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -6979,8 +6970,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-s", "--si"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-s", "--si"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7003,8 +6994,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--summarize", "--si"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--summarize", "--si"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7027,8 +7018,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-s", "--summarize", "--si"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-s", "--summarize", "--si"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -7051,8 +7042,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-x"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-x"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7075,8 +7066,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--one-file-system"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--one-file-system"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7099,8 +7090,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "--threshold", "1KB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "--threshold", "1KB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -7123,8 +7114,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1KB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1KB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7147,8 +7138,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1MB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1MB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7171,8 +7162,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1GB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1GB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7195,8 +7186,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1TB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1TB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7219,8 +7210,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1PB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1PB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7243,8 +7234,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1EB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1EB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7267,8 +7258,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1YB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1YB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -7291,8 +7282,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--threshold", "1ZB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--threshold", "1ZB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -7315,8 +7306,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1KB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1KB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7339,8 +7330,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1MB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1MB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7363,8 +7354,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1GB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1GB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7387,8 +7378,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1TB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1TB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7411,8 +7402,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1PB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1PB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7435,8 +7426,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1EB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1EB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7459,8 +7450,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1YB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1YB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -7483,8 +7474,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-t", "1ZB"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-t", "1ZB"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
@@ -7507,8 +7498,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-v"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-v"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7531,8 +7522,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--verbose"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--verbose"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7555,8 +7546,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--exclude", filename];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--exclude", filename];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7579,14 +7570,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--verbose",
                 "--exclude",
                 filename,
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7609,8 +7600,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "-X", filename];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "-X", filename];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7633,8 +7624,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--exclude-from", filename];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--exclude-from", filename];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7657,8 +7648,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--files0-from", filename];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--files0-from", filename];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7681,7 +7672,7 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
@@ -7689,7 +7680,7 @@ mod tests {
                 "--files0-from",
                 filename,
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7712,8 +7703,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time=ctime"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=ctime"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7736,8 +7727,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time=status"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=status"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7760,8 +7751,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time=access"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=access"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7784,8 +7775,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time=atime"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=atime"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7808,8 +7799,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time=use"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=use"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7835,8 +7826,8 @@ mod tests {
                 .metadata()
                 .expect("Failed to get file metadata");
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time=birth"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=birth"];
+            let result = du_main(args.iter().map(OsString::from));
 
             if metadata.created().is_ok() {
                 assert!(result.is_ok());
@@ -7865,8 +7856,8 @@ mod tests {
             let metadata = sub_dir_path
                 .metadata()
                 .expect("Failed to get file metadata");
-            let args = vec![ctcore::ct_util_name(), dir, "--time=creation"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time=creation"];
+            let result = du_main(args.iter().map(OsString::from));
 
             if metadata.created().is_ok() {
                 assert!(result.is_ok());
@@ -7893,14 +7884,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=ctime",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7923,14 +7914,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=status",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7953,14 +7944,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=access",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -7983,14 +7974,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=atime",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8013,14 +8004,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=use",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8046,14 +8037,14 @@ mod tests {
                 .metadata()
                 .expect("Failed to get file metadata");
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=birth",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             if metadata.created().is_ok() {
                 assert!(result.is_ok());
@@ -8083,14 +8074,14 @@ mod tests {
                 .metadata()
                 .expect("Failed to get file metadata");
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
                 filename,
                 "--time=creation",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             if metadata.created().is_ok() {
                 assert!(result.is_ok());
@@ -8117,8 +8108,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time-style", "full-iso"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time-style", "full-iso"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8141,8 +8132,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time-style", "long-iso"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time-style", "long-iso"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8165,8 +8156,8 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![ctcore::ct_util_name(), dir, "--time-style", "iso"];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), dir, "--time-style", "iso"];
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8189,7 +8180,7 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
@@ -8197,7 +8188,7 @@ mod tests {
                 "--time-style",
                 "full-iso",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8220,7 +8211,7 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
@@ -8228,7 +8219,7 @@ mod tests {
                 "--time-style",
                 "iso",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8251,7 +8242,7 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = vec![
+            let args = [
                 ctcore::ct_util_name(),
                 dir,
                 "--exclude-from",
@@ -8262,7 +8253,7 @@ mod tests {
                 "--time-style",
                 "iso",
             ];
-            let result = du_main(args.iter().map(|s| OsString::from(s)));
+            let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
@@ -8500,11 +8491,11 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "0"];
+        let args = [ctcore::ct_util_name(), dir, "--max-depth", "0"];
 
         // 从命令行参数中解析匹配项
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8533,10 +8524,10 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "1"];
+        let args = [ctcore::ct_util_name(), dir, "--max-depth", "1"];
         // 从命令行参数中解析匹配项
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8565,10 +8556,10 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "2"];
+        let args = [ctcore::ct_util_name(), dir, "--max-depth", "2"];
         // 从命令行参数中解析匹配项
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8597,10 +8588,10 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "3"];
+        let args = [ctcore::ct_util_name(), dir, "--max-depth", "3"];
         // 从命令行参数中解析匹配项
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8629,10 +8620,10 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "4"];
+        let args = [ctcore::ct_util_name(), dir, "--max-depth", "4"];
         // 从命令行参数中解析匹配项
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8661,10 +8652,10 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![ctcore::ct_util_name(), dir, "--max-depth", "5"];
+        let args = [ctcore::ct_util_name(), dir, "--max-depth", "5"];
         // 从命令行参数中解析匹配项
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8693,7 +8684,7 @@ mod tests_fn {
                    dddd.\n";
         file.write_all(content.as_bytes()).unwrap();
 
-        let args = vec![
+        let args = [
             ctcore::ct_util_name(),
             dir,
             "--summarize",
@@ -8702,7 +8693,7 @@ mod tests_fn {
         ]; //du: summarizing conflicts with --max-depth=1
 
         let matches = ct_app()
-            .try_get_matches_from(args.iter().map(|s| OsString::from(s)))
+            .try_get_matches_from(args.iter().map(OsString::from))
             .unwrap();
 
         // 解析是否需要汇总信息
@@ -8740,7 +8731,7 @@ mod tests_fn {
         let matches = ct_app().try_get_matches_from(args).unwrap();
 
         // 处理输入文件列表
-        let _ = if let Some(file_from) = matches.get_one::<String>(opt_flags::FILES0_FROM) {
+        if let Some(file_from) = matches.get_one::<String>(opt_flags::FILES0_FROM) {
             let result = du_read_files_from(file_from).unwrap();
             assert_eq!(result, expected);
         };

@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use std::ffi::OsString;
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Tty::default();
+        let tool = Tty;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "tty");
@@ -135,16 +135,16 @@ mod tests {
 
         #[test]
         fn test_tty_main_execution_default() {
-            let args = vec![ctcore::ct_util_name()];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name()];
+            let result = tty_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_tty_main_execution_version() {
-            let args_vec = vec![ctcore::ct_util_name(), "--version"];
-            let args = args_vec.iter().map(|s| OsString::from(s));
+            let args_vec = [ctcore::ct_util_name(), "--version"];
+            let args = args_vec.iter().map(OsString::from);
             let result = tty_main(args);
 
             assert!(result.is_err());
@@ -152,43 +152,43 @@ mod tests {
 
         #[test]
         fn test_tty_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = tty_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tty_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = tty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tty_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = tty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tty_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = tty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_tty_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = tty_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
         #[test]
         fn test_tty_main_silent_long() {
-            let args = vec![ctcore::ct_util_name(), "--silent"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--silent"];
+            let result = tty_main(args.iter().map(OsString::from));
             if std::io::stdin().is_terminal() {
                 assert!(result.is_ok());
             } else {
@@ -197,8 +197,8 @@ mod tests {
         }
         #[test]
         fn test_tty_main_silent_short() {
-            let args = vec![ctcore::ct_util_name(), "-s"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-s"];
+            let result = tty_main(args.iter().map(OsString::from));
             if std::io::stdin().is_terminal() {
                 assert!(result.is_ok());
             } else {
@@ -208,8 +208,8 @@ mod tests {
 
         #[test]
         fn test_tty_main_quiet_long() {
-            let args = vec![ctcore::ct_util_name(), "--quiet"];
-            let result = tty_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--quiet"];
+            let result = tty_main(args.iter().map(OsString::from));
             if std::io::stdin().is_terminal() {
                 assert!(result.is_ok());
             } else {

@@ -185,7 +185,7 @@ fn fs_usage_from_statfs(statvfs: StatFs) -> FsUsage {
                 statvfs.f_bsize as u64
             }
         };
-        return FsUsage {
+        FsUsage {
             blocksize,
             blocks: statvfs.f_blocks,
             bfree: statvfs.f_bfree,
@@ -193,7 +193,7 @@ fn fs_usage_from_statfs(statvfs: StatFs) -> FsUsage {
             bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
             files: statvfs.f_files,
             ffree: statvfs.f_ffree,
-        };
+        }
     }
 
     #[cfg(all(target_os = "linux", not(target_pointer_width = "64")))]
@@ -206,7 +206,7 @@ fn fs_usage_from_statfs(statvfs: StatFs) -> FsUsage {
                 statvfs.f_bsize as u64
             }
         };
-        return FsUsage {
+        FsUsage {
             blocksize,
             blocks: statvfs.f_blocks.into(),
             bfree: statvfs.f_bfree.into(),
@@ -214,7 +214,7 @@ fn fs_usage_from_statfs(statvfs: StatFs) -> FsUsage {
             bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
             files: statvfs.f_files.into(),
             ffree: statvfs.f_ffree.into(),
-        };
+        }
     }
 }
 

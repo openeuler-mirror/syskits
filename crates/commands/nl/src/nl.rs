@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::{Args, ct_show_error};
@@ -652,6 +652,7 @@ impl Tool for Nl {
 }
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use std::ffi::OsString;
@@ -659,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Nl::default();
+        let tool = Nl;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "nl");
@@ -812,16 +813,16 @@ mod tests {
                 let result = NlNumberingStyle::try_from(input);
                 match (result, expected_result) {
                     (Ok(style), Ok(expected)) => {
-                        assert_eq!(style, expected, "Failed for input: {}", input);
+                        assert_eq!(style, expected, "Failed for input: {input}");
                     }
                     (Err(e), Err(expected)) => {
-                        assert_eq!(e, expected, "Failed for input: {}", input);
+                        assert_eq!(e, expected, "Failed for input: {input}");
                     }
                     (Ok(_), Err(_)) => {
-                        panic!("Expected error but got success for input: {}", input);
+                        panic!("Expected error but got success for input: {input}");
                     }
                     (Err(_), Ok(_)) => {
-                        panic!("Expected success but got error for input: {}", input);
+                        panic!("Expected success but got error for input: {input}");
                     }
                 }
             }
@@ -862,8 +863,7 @@ mod tests {
                 let flags = NlFlags::new(matches).unwrap();
                 assert_eq!(
                     &flags.number_format, &expected_format,
-                    "Failed for input: {}",
-                    input
+                    "Failed for input: {input}"
                 );
             }
         }
@@ -984,7 +984,7 @@ mod tests {
             let processed_args = standardize_nl_args(
                 [ctcore::ct_util_name(), "-v", "-10", "test.txt"]
                     .into_iter()
-                    .map(|s| OsString::from(s)),
+                    .map(OsString::from),
             );
 
             let matches = ct_app().try_get_matches_from(processed_args).unwrap();
@@ -1013,7 +1013,7 @@ mod tests {
                     "test.txt",
                 ]
                 .into_iter()
-                .map(|s| OsString::from(s)),
+                .map(OsString::from),
             );
 
             let matches = ct_app().try_get_matches_from(processed_args).unwrap();
@@ -1033,7 +1033,7 @@ mod tests {
                     "test.txt",
                 ]
                 .into_iter()
-                .map(|s| OsString::from(s)),
+                .map(OsString::from),
             );
 
             let matches = ct_app().try_get_matches_from(processed_args).unwrap();

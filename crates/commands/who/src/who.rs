@@ -18,7 +18,7 @@ use std::ffi::OsString;
 use sys_locale::get_locale;
 
 use rust_i18n::t;
-rust_i18n::i18n!("locales", fallback = "zh-CN");
+rust_i18n::i18n!("locales", fallback = "en-US");
 
 mod platform;
 
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Who::default();
+        let tool = Who;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "who");

@@ -83,25 +83,25 @@ fn uptime_print_pretty(up_secs: i64) -> String {
 
     if days > 0 {
         if days == 1 {
-            parts.push(format!("{} day", days));
+            parts.push(format!("{days} day"));
         } else {
-            parts.push(format!("{} days", days));
+            parts.push(format!("{days} days"));
         }
     }
 
     if hours > 0 {
         if hours == 1 {
-            parts.push(format!("{} hour", hours));
+            parts.push(format!("{hours} hour"));
         } else {
-            parts.push(format!("{} hours", hours));
+            parts.push(format!("{hours} hours"));
         }
     }
 
     if minutes > 0 {
         if minutes == 1 {
-            parts.push(format!("{} minute", minutes));
+            parts.push(format!("{minutes} minute"));
         } else {
-            parts.push(format!("{} minutes", minutes));
+            parts.push(format!("{minutes} minutes"));
         }
     }
 
@@ -147,10 +147,7 @@ pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
         let users_result = uptime_print_n_users(user_count);
         let loadavg_result = print_loadavg();
 
-        print!(
-            "{}{}{}{}",
-            time_result, uptime_result, users_result, loadavg_result
-        );
+        print!("{time_result}{uptime_result}{users_result}{loadavg_result}");
 
         Ok(())
     }
@@ -213,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Uptime::default();
+        let tool = Uptime;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "uptime");
@@ -367,38 +364,38 @@ mod tests {
 
         #[test]
         fn test_ct_app_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = uptime_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_app_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = uptime_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_app_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = uptime_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_app_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = uptime_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_app_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = uptime_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = uptime_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
     }

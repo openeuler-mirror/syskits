@@ -292,7 +292,7 @@ impl MkTempParams {
         // 模板是 "XXXabc"，那么 `suffix` 是 "abc.txt"。
         let suffix_from_flag = flags.suffix.unwrap_or_default();
         let suffix_from_template = &flags.template[j..];
-        let suffix = format!("{}{}", suffix_from_template, suffix_from_flag);
+        let suffix = format!("{suffix_from_template}{suffix_from_flag}");
         if suffix.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::SuffixContainsDirSeparator(suffix));
         }
@@ -612,7 +612,7 @@ mod tests {
             is_directory: directory,
             is_dry_run: dry_run,
             is_quiet: quiet,
-            tmpdir: tmpdir,
+            tmpdir,
             suffix,
             is_treat_as_template: treat_as_template,
             template: template.to_string(),
@@ -632,12 +632,12 @@ mod tests {
         fn test_options_from_basic() {
             let matches = get_matches_from(&[ctcore::ct_util_name(), "test.XXXXXX"]);
             let options = MkTempFlags::from(&matches);
-            assert_eq!(options.is_directory, false);
-            assert_eq!(options.is_dry_run, false);
-            assert_eq!(options.is_quiet, false);
+            assert!(!options.is_directory);
+            assert!(!options.is_dry_run);
+            assert!(!options.is_quiet);
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, None);
-            assert_eq!(options.is_treat_as_template, false);
+            assert!(!options.is_treat_as_template);
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
 
@@ -646,12 +646,12 @@ mod tests {
             let matches =
                 get_matches_from(&[ctcore::ct_util_name(), "-d", "-u", "-q", "test.XXXXXX"]);
             let options = MkTempFlags::from(&matches);
-            assert_eq!(options.is_directory, true);
-            assert_eq!(options.is_dry_run, true);
-            assert_eq!(options.is_quiet, true);
+            assert!(options.is_directory);
+            assert!(options.is_dry_run);
+            assert!(options.is_quiet);
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, None);
-            assert_eq!(options.is_treat_as_template, false);
+            assert!(!options.is_treat_as_template);
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
 
@@ -660,12 +660,12 @@ mod tests {
             let matches =
                 get_matches_from(&[ctcore::ct_util_name(), "--suffix", ".log", "test.XXXXXX"]);
             let options = MkTempFlags::from(&matches);
-            assert_eq!(options.is_directory, false);
-            assert_eq!(options.is_dry_run, false);
-            assert_eq!(options.is_quiet, false);
+            assert!(!options.is_directory);
+            assert!(!options.is_dry_run);
+            assert!(!options.is_quiet);
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, Some(".log".to_string()));
-            assert_eq!(options.is_treat_as_template, false);
+            assert!(!options.is_treat_as_template);
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
 
@@ -678,12 +678,12 @@ mod tests {
                 "test.XXXXXX",
             ]);
             let options = MkTempFlags::from(&matches);
-            assert_eq!(options.is_directory, false);
-            assert_eq!(options.is_dry_run, false);
-            assert_eq!(options.is_quiet, false);
+            assert!(!options.is_directory);
+            assert!(!options.is_dry_run);
+            assert!(!options.is_quiet);
             assert_eq!(options.tmpdir, Some(PathBuf::from("/custom/tmpdir")));
             assert_eq!(options.suffix, None);
-            assert_eq!(options.is_treat_as_template, false);
+            assert!(!options.is_treat_as_template);
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
 
@@ -693,12 +693,12 @@ mod tests {
             {
                 let matches = get_matches_from(&[ctcore::ct_util_name(), "-t", "test.XXXXXX"]);
                 let options = MkTempFlags::from(&matches);
-                assert_eq!(options.is_directory, false);
-                assert_eq!(options.is_dry_run, false);
-                assert_eq!(options.is_quiet, false);
+                assert!(!options.is_directory);
+                assert!(!options.is_dry_run);
+                assert!(!options.is_quiet);
                 assert_eq!(options.tmpdir, Some(env::temp_dir()));
                 assert_eq!(options.suffix, None);
-                assert_eq!(options.is_treat_as_template, true);
+                assert!(options.is_treat_as_template);
                 assert_eq!(options.template, "test.XXXXXX".to_string());
             }
 
@@ -706,12 +706,12 @@ mod tests {
             {
                 let matches = get_matches_from(&[ctcore::ct_util_name()]);
                 let options = MkTempFlags::from(&matches);
-                assert_eq!(options.is_directory, false);
-                assert_eq!(options.is_dry_run, false);
-                assert_eq!(options.is_quiet, false);
+                assert!(!options.is_directory);
+                assert!(!options.is_dry_run);
+                assert!(!options.is_quiet);
                 assert_eq!(options.tmpdir, Some(env::temp_dir()));
                 assert_eq!(options.suffix, None);
-                assert_eq!(options.is_treat_as_template, false);
+                assert!(!options.is_treat_as_template);
                 assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
             }
 
@@ -720,12 +720,12 @@ mod tests {
                 unsafe { std::env::set_var("TMPDIR", "/custom/env_tmpdir") };
                 let matches = get_matches_from(&[ctcore::ct_util_name(), "-t"]);
                 let options = MkTempFlags::from(&matches);
-                assert_eq!(options.is_directory, false);
-                assert_eq!(options.is_dry_run, false);
-                assert_eq!(options.is_quiet, false);
+                assert!(!options.is_directory);
+                assert!(!options.is_dry_run);
+                assert!(!options.is_quiet);
                 assert_eq!(options.tmpdir, Some(PathBuf::from("/custom/env_tmpdir")));
                 assert_eq!(options.suffix, None);
-                assert_eq!(options.is_treat_as_template, true);
+                assert!(options.is_treat_as_template);
                 assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
                 unsafe { std::env::remove_var("TMPDIR") };
             }
@@ -765,12 +765,12 @@ mod tests {
         fn test_options_from_with_empty_suffix() {
             let matches = get_matches_from(&[ctcore::ct_util_name(), "--suffix=", "test.XXXXXX"]);
             let options = MkTempFlags::from(&matches);
-            assert_eq!(options.is_directory, false);
-            assert_eq!(options.is_dry_run, false);
-            assert_eq!(options.is_quiet, false);
+            assert!(!options.is_directory);
+            assert!(!options.is_dry_run);
+            assert!(!options.is_quiet);
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, Some("".to_string()));
-            assert_eq!(options.is_treat_as_template, false);
+            assert!(!options.is_treat_as_template);
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
 
@@ -779,12 +779,12 @@ mod tests {
             let matches =
                 get_matches_from(&[ctcore::ct_util_name(), "-d", "-u", "-q", "test.XXXXXX"]);
             let options = MkTempFlags::from(&matches);
-            assert_eq!(options.is_directory, true);
-            assert_eq!(options.is_dry_run, true);
-            assert_eq!(options.is_quiet, true);
+            assert!(options.is_directory);
+            assert!(options.is_dry_run);
+            assert!(options.is_quiet);
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, None);
-            assert_eq!(options.is_treat_as_template, false);
+            assert!(!options.is_treat_as_template);
             assert_eq!(options.template, "test.XXXXXX".to_string());
         }
     }
@@ -798,34 +798,32 @@ mod tests {
             let path = PathBuf::from("/invalid/path");
             let error = MkTempError::PersistError(path.clone());
             let expected_message = format!("could not persist file '{}'", path.display());
-            assert_eq!(format!("{}", error), expected_message);
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_must_end_in_x() {
             let template = "template_without_x".to_string();
             let error = MkTempError::MustEndInX(template.clone());
-            let expected_message = format!("with --suffix, template '{}' must end in X", template);
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message = format!("with --suffix, template '{template}' must end in X");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_too_few_xs() {
             let template = "too_few_X".to_string();
             let error = MkTempError::TooFewXs(template.clone());
-            let expected_message = format!("too few X's in template '{}'", template);
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message = format!("too few X's in template '{template}'");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_prefix_contains_dir_separator() {
             let template = "invalid/template".to_string();
             let error = MkTempError::PrefixContainsDirSeparator(template.clone());
-            let expected_message = format!(
-                "invalid template, '{}', contains directory separator",
-                template
-            );
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message =
+                format!("invalid template, '{template}', contains directory separator");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
@@ -833,26 +831,24 @@ mod tests {
             let suffix = "invalid/suffix".to_string();
             let error = MkTempError::SuffixContainsDirSeparator(suffix.clone());
             let expected_message =
-                format!("invalid suffix '{}', contains directory separator", suffix);
-            assert_eq!(format!("{}", error), expected_message);
+                format!("invalid suffix '{suffix}', contains directory separator");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_invalid_template() {
             let template = "/absolute/template".to_string();
             let error = MkTempError::InvalidTemplate(template.clone());
-            let expected_message = format!(
-                "invalid template, '{}'; with --tmpdir, it may not be absolute",
-                template
-            );
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message =
+                format!("invalid template, '{template}'; with --tmpdir, it may not be absolute");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_too_many_templates() {
             let error = MkTempError::TooManyTemplates;
             let expected_message = "too many templates".to_string();
-            assert_eq!(format!("{}", error), expected_message);
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
@@ -861,10 +857,9 @@ mod tests {
             let template = "non_existent_template".to_string();
             let error = MkTempError::NotFound(template_type.clone(), template.clone());
             let expected_message = format!(
-                "failed to create {} via template '{}': No such file or directory",
-                template_type, template
+                "failed to create {template_type} via template '{template}': No such file or directory"
             );
-            assert_eq!(format!("{}", error), expected_message);
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
@@ -896,29 +891,26 @@ mod tests {
             let template = "non_existent_template".to_string();
             let error = MkTempError::NotFound(template_type.clone(), template.clone());
             let expected_message = format!(
-                "failed to create {} via template '{}': No such file or directory",
-                template_type, template
+                "failed to create {template_type} via template '{template}': No such file or directory"
             );
-            assert_eq!(format!("{}", error), expected_message);
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_invalid_template_with_suffix() {
             let template = "template/with/suffix.XXXXXX".to_string();
             let error = MkTempError::InvalidTemplate(template.clone());
-            let expected_message = format!(
-                "invalid template, '{}'; with --tmpdir, it may not be absolute",
-                template
-            );
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message =
+                format!("invalid template, '{template}'; with --tmpdir, it may not be absolute");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_must_end_in_x_with_suffix() {
             let template = "template_without_x".to_string();
             let error = MkTempError::MustEndInX(template.clone());
-            let expected_message = format!("with --suffix, template '{}' must end in X", template);
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message = format!("with --suffix, template '{template}' must end in X");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
@@ -926,19 +918,17 @@ mod tests {
             let suffix = "invalid/suffix".to_string();
             let error = MkTempError::SuffixContainsDirSeparator(suffix.clone());
             let expected_message =
-                format!("invalid suffix '{}', contains directory separator", suffix);
-            assert_eq!(format!("{}", error), expected_message);
+                format!("invalid suffix '{suffix}', contains directory separator");
+            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
         fn test_mktemp_error_fmt_prefix_contains_dir_separator_with_template() {
             let template = "invalid/template".to_string();
             let error = MkTempError::PrefixContainsDirSeparator(template.clone());
-            let expected_message = format!(
-                "invalid template, '{}', contains directory separator",
-                template
-            );
-            assert_eq!(format!("{}", error), expected_message);
+            let expected_message =
+                format!("invalid template, '{template}', contains directory separator");
+            assert_eq!(format!("{error}"), expected_message);
         }
     }
 
@@ -1548,10 +1538,9 @@ mod tests {
             let suffix = ".tmp";
             let rand_lengths = [1, 5, 10, 20];
             for &rand in rand_lengths.iter() {
-                let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix).expect(&format!(
-                    "Failed to generate temp file path with {} random characters",
-                    rand
-                ));
+                let result = mktemp_dry_exec(&tmpdir, prefix, rand, suffix).unwrap_or_else(|_| {
+                    panic!("Failed to generate temp file path with {rand} random characters")
+                });
                 assert!(result.starts_with(&tmpdir));
                 assert!(result.to_str().unwrap().contains(prefix));
                 assert!(result.to_str().unwrap().ends_with(suffix));
@@ -1674,7 +1663,11 @@ mod tests {
 
         #[test]
         fn test_make_temp_dir_with_relative_tmpdir() {
-            let tmpdir = PathBuf::from("relative_tmpdir");
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static COUNTER: AtomicUsize = AtomicUsize::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+
+            let tmpdir = PathBuf::from(format!("relative_tmpdir_{}", id));
             fs::create_dir_all(&tmpdir).expect("Failed to create relative tmpdir");
             let prefix = "testdir2";
             let rand = 6;
@@ -1683,7 +1676,12 @@ mod tests {
                 .expect("Failed to create temp directory in relative tmpdir");
             assert!(result.exists());
             assert!(result.is_dir());
-            assert!(result.to_str().unwrap().contains("relative_tmpdir"));
+            assert!(
+                result
+                    .to_str()
+                    .unwrap()
+                    .contains(&format!("relative_tmpdir_{}", id))
+            );
             if tmpdir.is_dir() {
                 fs::remove_dir_all(result).expect("Failed to clean up temp directory");
                 fs::remove_dir_all(tmpdir).expect("Failed to clean up relative tmpdir");
@@ -1741,10 +1739,9 @@ mod tests {
             let suffix = ".d";
             let rand_lengths = [1, 5, 10, 20];
             for &rand in rand_lengths.iter() {
-                let result = mktemp_dir(&tmpdir, prefix, rand, suffix).expect(&format!(
-                    "Failed to create temp directory with {} random characters",
-                    rand
-                ));
+                let result = mktemp_dir(&tmpdir, prefix, rand, suffix).unwrap_or_else(|_| {
+                    panic!("Failed to create temp directory with {rand} random characters")
+                });
                 assert!(result.exists());
                 assert!(result.is_dir());
                 assert_eq!(
@@ -2143,10 +2140,10 @@ mod tests {
             let suffix = ".tmp";
             let rand_lengths = [1, 5, 10, 20];
             for &rand in rand_lengths.iter() {
-                let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false).expect(&format!(
-                    "Failed to create temp file with {} random characters",
-                    rand
-                ));
+                let result =
+                    mktemp_exec(&tmpdir, prefix, rand, suffix, false).unwrap_or_else(|_| {
+                        panic!("Failed to create temp file with {rand} random characters")
+                    });
                 assert!(result.exists());
                 assert!(result.is_file());
                 assert_eq!(
@@ -2193,7 +2190,7 @@ mod tests {
                 is_directory: directory,
                 is_dry_run: dry_run,
                 is_quiet: quiet,
-                tmpdir: tmpdir,
+                tmpdir,
                 suffix,
                 is_treat_as_template: treat_as_template,
                 template: template.to_string(),
@@ -2392,45 +2389,45 @@ mod tests {
         use tempfile::tempdir;
         #[test]
         fn test_ct_main_execution_version() {
-            let args = vec![ctcore::ct_util_name(), "--version"];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--version"];
+            let result = mktemp_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_other_version() {
-            let args = vec![ctcore::ct_util_name(), "-V"];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-V"];
+            let result = mktemp_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help() {
-            let args = vec![ctcore::ct_util_name(), "--help"];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--help"];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_help_short() {
-            let args = vec![ctcore::ct_util_name(), "-h"];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-h"];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_execution_unsupport_help() {
-            let args = vec![ctcore::ct_util_name(), "-H"];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-H"];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
         #[test]
         fn test_ct_main_invalid_argument() {
-            let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
 
@@ -2439,8 +2436,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "--directory", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--directory", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2449,8 +2446,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "-d", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-d", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2459,8 +2456,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "--dry-run", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--dry-run", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2469,8 +2466,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "-u", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-u", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2479,8 +2476,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "--quiet", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--quiet", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2489,8 +2486,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "-q", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-q", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2499,8 +2496,8 @@ mod tests {
             let dir = tempdir().unwrap();
             let template = dir.path().to_str().unwrap().to_string() + "/tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "--suffix", "qqq", &template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "--suffix", "qqq", &template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2510,8 +2507,8 @@ mod tests {
             let tmpdir = dir.path().to_str().unwrap();
             let template = "tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), "-p", tmpdir, template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), "-p", tmpdir, template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
 
@@ -2521,8 +2518,8 @@ mod tests {
             let tmpdir = String::from("--tmpdir=") + dir.path().to_str().unwrap();
             let template = "tmp.XXXXXX";
 
-            let args = vec![ctcore::ct_util_name(), &tmpdir, template];
-            let result = mktemp_main(args.iter().map(|s| OsString::from(s)));
+            let args = [ctcore::ct_util_name(), &tmpdir, template];
+            let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
     }
@@ -2719,7 +2716,7 @@ mod tests_tool_implementation {
 
     #[test]
     fn test_tool_implementation() {
-        let tool = Mktemp::default();
+        let tool = Mktemp;
 
         // 测试 name 方法
         assert_eq!(tool.name(), "mktemp");

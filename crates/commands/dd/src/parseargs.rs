@@ -459,7 +459,7 @@ impl std::fmt::Display for ParseError {
                 write!(f, "feature not implemented on this system -> {arg}")
             }
             Self::InvalidNumber(arg) => {
-                write!(f, "invalid number: '{}'", arg)
+                write!(f, "invalid number: '{arg}'")
             }
         }
     }

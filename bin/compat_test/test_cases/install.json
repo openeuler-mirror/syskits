@@ -1,352 +1,847 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "基本功能测试 - 复制单个文件",
-            "setup_commands": [
-                "echo 'test content' > source.txt"
-            ],
-            "args": ["source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -f dest.txt && echo 'File exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "File exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt dest.txt"
-            ]
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "basic: install file into directory",
+      "args": ["file", "dir"],
+      "setup_commands": [
+        "mkdir -p dir",
+        "printf 'foo\n' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "创建目录",
-            "setup_commands": [],
-            "args": ["-d", "test_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d test_dir && echo 'Directory exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Directory exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -rf test_dir"
-            ]
+        "verifications": [
+          {
+            "command": "test -f file && test -f dir/file",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "verbose: install file into directory",
+      "args": ["-v", "file", "dir"],
+      "setup_commands": [
+        "mkdir -p dir",
+        "printf 'foo\n' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "'file' -> 'dir/file'\n",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "显示设置所有者",
-            "setup_commands": [
-                "echo 'test content' > source.txt"
-            ],
-            "args": ["-o", "root", "source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ll dest.txt",
-                        "expected_exit": 0,
-                        "expected_stdout": "Directory exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt",
-                "rm -rf dest.txt"
-            ]
+        "verifications": [
+          {
+            "command": "test -f dir/file",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-d: create directory",
+      "args": ["-d", "newdir"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "设置自定义权限模式",
-            "setup_commands": [
-                "echo 'test content' > source.txt"
-            ],
-            "args": ["-m", "644", "source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c %a dest.txt",
-                        "expected_exit": 0,
-                        "expected_stdout": "644"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt dest.txt"
-            ]
+        "verifications": [
+          {
+            "command": "test -d newdir",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-d: trailing /.",
+      "args": ["-d", "d1/."],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "复制到目标目录",
-            "setup_commands": [
-                "echo 'test content' > source1.txt",
-                "echo 'test content 2' > source2.txt",
-                "mkdir -p target_dir"
-            ],
-            "args": ["-t", "target_dir", "source1.txt", "source2.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -f target_dir/source1.txt && test -f target_dir/source2.txt && echo 'Files exist'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Files exist"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source1.txt source2.txt",
-                "rm -rf target_dir"
-            ]
+        "verifications": [
+          {
+            "command": "test -d d1",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-d: trailing /..",
+      "args": ["-d", "d2/.."],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "创建备份",
-            "setup_commands": [
-                "echo 'original content' > dest.txt",
-                "echo 'new content' > source.txt"
-            ],
-            "args": ["--backup", "source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -f dest.txt~ && echo 'Backup exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Backup exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt dest.txt dest.txt~"
-            ]
+        "verifications": [
+          {
+            "command": "test -d d2",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-D -v: create leading components",
+      "args": ["-D", "-v", "file", "sub3/a/b/c/file"],
+      "setup_commands": [
+        "printf 'foo\n' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "install: creating directory 'sub3'\ninstall: creating directory 'sub3/a'\ninstall: creating directory 'sub3/a/b'\ninstall: creating directory 'sub3/a/b/c'\n'file' -> 'sub3/a/b/c/file'\n",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "保留时间戳",
-            "setup_commands": [
-                "echo 'test content' > source.txt",
-                "touch -t 202001010000 source.txt"
-            ],
-            "args": ["-p", "source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c %Y source.txt",
-                        "expected_exit": 0,
-                        "expected_stdout": "$(stat -c %Y dest.txt)"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt dest.txt"
-            ]
+        "verifications": [
+          {
+            "command": "test -f sub3/a/b/c/file",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-t -D -v: create target directory hierarchy",
+      "args": ["-t", "sub4/a/b/c", "-D", "-v", "file"],
+      "setup_commands": [
+        "printf 'foo\n' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "install: creating directory 'sub4'\ninstall: creating directory 'sub4/a'\ninstall: creating directory 'sub4/a/b'\ninstall: creating directory 'sub4/a/b/c'\n'file' -> 'sub4/a/b/c/file'\n",
+          "stderr": ""
         },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "创建多级目录",
-            "setup_commands": [],
-            "args": ["-d", "dir1/dir2/dir3"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d dir1/dir2/dir3 && echo 'Directories exist'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Directories exist"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -rf dir1"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "比较源文件和目标文件",
-            "setup_commands": [
-                "echo 'test content' > source.txt",
-                "cp source.txt dest.txt"
-            ],
-            "args": ["-C", "source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "cmp source.txt dest.txt && echo 'Files are identical'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Files are identical"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt dest.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "设置自定义后缀",
-            "setup_commands": [
-                "echo 'original content' > dest.txt",
-                "echo 'new content' > source.txt"
-            ],
-            "args": ["--backup", "--suffix=.bak", "source.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -f dest.txt.bak && echo 'Backup exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Backup exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt dest.txt dest.txt.bak"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "创建父目录",
-            "setup_commands": [
-                "echo 'test content' > source.txt"
-            ],
-            "args": ["-D", "newdir/subdir/dest.txt", "source.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -f newdir/subdir/dest.txt && echo 'File exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "File exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt",
-                "rm -rf newdir"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "verbose模式",
-            "setup_commands": [
-                "echo 'test content' > source.txt"
-            ],
-            "args": ["-v", "-d", "verbose_dir"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "creating directory 'verbose_dir'",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "test -d verbose_dir && echo 'Directory exists'",
-                        "expected_exit": 0,
-                        "expected_stdout": "Directory exists"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f source.txt",
-                "rm -rf verbose_dir"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "错误情况 - 源文件不存在",
-            "setup_commands": [],
-            "args": ["nonexistent.txt", "dest.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "install: cannot stat 'nonexistent.txt': No such file or directory"
-                }
-            },
-            "cleanup_commands": []
-        },
-        {
-            "tstdin": "",
-            "command": "install",
-            "description": "拆解符号表功能",
-            "setup_commands": [],
-            "args": ["-s", "src/compat_test/test_dep/install/test_bin", "/root"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": []
+        "verifications": [
+          {
+            "command": "test -f sub4/a/b/c/file",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-t -D: existing file is not directory",
+      "args": ["-t", "sub4/file_exists", "-D", "-v", "file"],
+      "setup_commands": [
+        "mkdir -p sub4",
+        "touch sub4/file_exists",
+        "printf 'foo\n' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "install: failed to access 'sub4/file_exists': Not a directory\n"
         }
-    ]
-} 
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-t -D: existing directory",
+      "args": ["-t", "sub4/dir_exists", "-D", "-v", "file"],
+      "setup_commands": [
+        "mkdir -p sub4/dir_exists",
+        "touch sub4/dir_exists",
+        "printf 'foo\n' > file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "'file' -> 'sub4/dir_exists/file'\n",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f sub4/dir_exists/file",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "errors: omitting directory",
+      "args": [".", "."],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "install: omitting directory '.'\n"
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-C -v: first install",
+      "args": ["-C", "-v", "-m0644", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "'a' -> 'b'\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-C -v: destination exists and same",
+      "args": ["-C", "-v", "-m0644", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "printf 'test\n' > b",
+        "chmod 0644 a b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-v: destination exists without -C",
+      "args": ["-v", "-m0644", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "printf 'old\n' > b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "removed 'b'\n'a' -> 'b'\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-C -v with special mode (ignored)",
+      "args": ["-C", "-v", "-m2755", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "printf 'old\n' > b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "removed 'b'\n'a' -> 'b'\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-C -v with symlinks",
+      "args": ["-C", "-v", "-m0644", "c", "d"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "printf 'test\n' > b",
+        "ln -s a c",
+        "ln -s b d"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "removed 'd'\n'c' -> 'd'\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-p: preserve timestamps",
+      "args": ["-p", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "touch -t 202001010101.01 a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test \"$(stat -c %Y a)\" = \"$(stat -c %Y b)\"",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-s --strip-program: custom strip",
+      "args": ["src", "dest", "-s", "--strip-program=./b"],
+      "setup_commands": [
+        "cat <<'SH' > b\n#!/bin/sh\nsed s/b/B/ \"$1\" > \"$1.t\" && mv \"$1.t\" \"$1\"\nSH",
+        "chmod +x b",
+        "printf 'abc\n' > src",
+        "printf 'aBc\n' > exp"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp dest",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-s --strip-program failure removes dest",
+      "args": ["src", "dest2", "-s", "--strip-program=./FOO"],
+      "setup_commands": [
+        "printf 'abc\n' > src"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test ! -e dest2",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-s --strip-program: no naked hyphen",
+      "args": ["-s", "--strip-program=./no-hyphen", "--", "src", "-dest"],
+      "setup_commands": [
+        "cat <<'SH' > no-hyphen\n#!/bin/sh\nprintf -- '%s\\n' \"$1\" | grep '^[^-]'\nSH",
+        "chmod +x no-hyphen",
+        "printf 'abc\n' > src"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f -dest",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-T: treat dest as file",
+      "args": ["-T", "a", "dest"],
+      "setup_commands": [
+        "printf 'abc\n' > a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f dest",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "-T: dest is directory",
+      "args": ["-T", "a", "dir"],
+      "setup_commands": [
+        "printf 'abc\n' > a",
+        "mkdir -p dir"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "install: cannot create regular file 'dir': Is a directory\n"
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "backup: -b -S suffix",
+      "args": ["-b", "-S", ".bak", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "printf 'old\n' > b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f b && test -f b.bak",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "--strip-program without -s warns",
+      "args": ["--strip-program=./b", "a", "dest"],
+      "setup_commands": [
+        "cat <<'SH' > b\n#!/bin/sh\nexit 0\nSH",
+        "chmod +x b",
+        "printf 'abc\n' > a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": "install: WARNING: ignoring --strip-program option as -s option was not specified\n"
+        },
+        "verifications": [
+          {
+            "command": "test -f dest",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "--compare long flag",
+      "args": ["-v", "--compare", "-m0644", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a",
+        "printf 'test\n' > b",
+        "chmod 0644 a b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "--strip long flag",
+      "args": ["--strip", "-m0755", "src", "dest"],
+      "setup_commands": [
+        "cp /bin/true src"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f dest",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "--preserve-context (warn if unsupported)",
+      "args": ["--preserve-context", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "if selinuxenabled 2>/dev/null; then exit 0; else test \"$CMD_STDERR\" = \"install: WARNING: ignoring --preserve-context; this kernel is not SELinux-enabled\\n\"; fi",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "install",
+      "description": "--context warning when unsupported",
+      "args": ["--context=system_u:object_r:tmp_t:s0", "a", "b"],
+      "setup_commands": [
+        "printf 'test\n' > a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "if selinuxenabled 2>/dev/null; then exit 0; else test \"$CMD_STDERR\" = \"install: warning: ignoring --context; it requires an SELinux-enabled kernel\\n\"; fi",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+     {
+      "command": "install",
+      "description": "Basic install - copy file to new file",
+      "setup_commands": [
+        "mkdir -p /tmp/test_install_basic",
+        "echo 'test content' > /tmp/test_install_basic/source.txt"
+      ],
+      "args": ["/tmp/test_install_basic/source.txt", "/tmp/test_install_basic/dest.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f /tmp/test_install_basic/dest.txt",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f /tmp/test_install_basic/source.txt",
+            "expected_exit": 0
+          },
+          {
+            "command": "diff /tmp/test_install_basic/source.txt /tmp/test_install_basic/dest.txt",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_basic"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install file to existing directory",
+      "setup_commands": [
+        "mkdir -p /tmp/test_install_dir",
+        "echo 'test' > /tmp/test_install_file.txt"
+      ],
+      "args": ["/tmp/test_install_file.txt", "/tmp/test_install_dir/"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f /tmp/test_install_dir/test_install_file.txt",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_dir /tmp/test_install_file.txt"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -d flag - create directory",
+      "args": ["-d", "/tmp/test_install_mkdir/subdir"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d /tmp/test_install_mkdir/subdir",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_mkdir"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -d flag - create multiple directories",
+      "args": ["-d", "/tmp/test_install_multi1", "/tmp/test_install_multi2"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -d /tmp/test_install_multi1",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -d /tmp/test_install_multi2",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_multi1 /tmp/test_install_multi2"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -m flag - set file mode",
+      "setup_commands": [
+        "echo 'test' > /tmp/test_install_mode_src.txt"
+      ],
+      "args": ["-m", "644", "/tmp/test_install_mode_src.txt", "/tmp/test_install_mode_dest.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f /tmp/test_install_mode_dest.txt",
+            "expected_exit": 0
+          },
+          {
+            "command": "stat -c '%a' /tmp/test_install_mode_dest.txt | grep -q '^644$'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_install_mode_src.txt /tmp/test_install_mode_dest.txt"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -D flag - create leading directories",
+      "setup_commands": [
+        "echo 'test' > /tmp/test_install_D_src.txt"
+      ],
+      "args": ["-D", "/tmp/test_install_D_src.txt", "/tmp/test_install_D_dir/sub1/sub2/dest.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f /tmp/test_install_D_dir/sub1/sub2/dest.txt",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -d /tmp/test_install_D_dir/sub1/sub2",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_D_src.txt /tmp/test_install_D_dir"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -t flag - target directory",
+      "setup_commands": [
+        "mkdir -p /tmp/test_install_t_dir",
+        "echo 'test1' > /tmp/test_install_t_src1.txt",
+        "echo 'test2' > /tmp/test_install_t_src2.txt"
+      ],
+      "args": ["-t", "/tmp/test_install_t_dir", "/tmp/test_install_t_src1.txt", "/tmp/test_install_t_src2.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f /tmp/test_install_t_dir/test_install_t_src1.txt",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -f /tmp/test_install_t_dir/test_install_t_src2.txt",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_t_dir /tmp/test_install_t_src1.txt /tmp/test_install_t_src2.txt"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -C flag - compare and skip if same",
+      "setup_commands": [
+        "echo 'test content' > /tmp/test_install_C_src.txt",
+        "echo 'test content' > /tmp/test_install_C_dest.txt",
+        "chmod 644 /tmp/test_install_C_dest.txt"
+      ],
+      "args": ["-C", "-m", "644", "/tmp/test_install_C_src.txt", "/tmp/test_install_C_dest.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f /tmp/test_install_C_dest.txt",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_install_C_src.txt /tmp/test_install_C_dest.txt"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Install with -C flag - copy if content differs",
+      "setup_commands": [
+        "echo 'test1' > /tmp/test_install_C2_src.txt",
+        "echo 'test2' > /tmp/test_install_C2_dest.txt"
+      ],
+      "args": ["-C", "-m", "644", "/tmp/test_install_C2_src.txt", "/tmp/test_install_C2_dest.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "diff /tmp/test_install_C2_src.txt /tmp/test_install_C2_dest.txt",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_install_C2_src.txt /tmp/test_install_C2_dest.txt"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Error: missing file operand",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        }
+      }
+    },
+    {
+      "command": "install",
+      "description": "Error: omitting directory without -d flag",
+      "setup_commands": [
+        "mkdir -p /tmp/test_install_err_dir",
+        "mkdir -p /tmp/test_install_err_target"
+      ],
+      "args": ["/tmp/test_install_err_dir", "/tmp/test_install_err_target/"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/test_install_err_dir /tmp/test_install_err_target"
+      ]
+    },
+    {
+      "command": "install",
+      "description": "Error: -C and -p are mutually exclusive",
+      "setup_commands": [
+        "echo 'test' > /tmp/test_install_err_Cp_src.txt"
+      ],
+      "args": ["-C", "-p", "/tmp/test_install_err_Cp_src.txt", "/tmp/test_install_err_Cp_dest.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_install_err_Cp_src.txt /tmp/test_install_err_Cp_dest.txt"
+      ]
+    }
+  ]
+}

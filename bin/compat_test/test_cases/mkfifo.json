@@ -1,138 +1,443 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "基本功能测试",
-            "args": ["test_fifo"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test_fifo"
-            ]
+  "tests": [
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "errors: missing operand",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "mkfifo: missing operand\nTry 'mkfifo --help' for more information.\n"
         },
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "创建多个命名管道",
-            "args": ["fifo1", "fifo2", "fifo3"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f fifo1 fifo2 fifo3"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "设置权限模式",
-            "args": ["-m", "600", "mode_fifo"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "stat -c %a mode_fifo",
-                        "expected_exit": 0,
-                        "expected_stdout": "600"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f mode_fifo"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "文件已存在测试",
-            "setup_commands": [
-                "mkfifo existing_fifo"
-            ],
-            "args": ["existing_fifo"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "mkfifo: cannot create fifo 'existing_fifo': File exists\n"
-                }
-            },
-            "cleanup_commands": [
-                "rm -f existing_fifo"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "目录不存在测试",
-            "args": ["nonexistent_dir/test_fifo"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "mkfifo: cannot create fifo 'nonexistent_dir/test_fifo': No such file or directory\n"
-                }
-            },
-            "cleanup_commands": []
-        },
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "使用默认SELinux安全上下文",
-            "args": ["-Z", "selinux_fifo"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls -Z selinux_fifo",
-                        "expected_exit": 0,
-                        "expected_stdout": ".*selinux_fifo$"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f selinux_fifo"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "mkfifo",
-            "description": "使用指定的SELinux安全上下文",
-            "args": ["--context=system_u:object_r:tmp_t:s0", "context_fifo"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "ls -Z context_fifo",
-                        "expected_exit": 0,
-                        "expected_stdout": "system_u:object_r:tmp_t:s0.*context_fifo$"
-                    }
-                ]
-            },
-            "cleanup_commands": [
-                "rm -f context_fifo"
-            ]
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
         }
-    ]
-} 
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "basic: create single fifo",
+      "args": [
+        "test_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p test_fifo && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "basic: create multiple fifos",
+      "args": [
+        "fifo1",
+        "fifo2",
+        "fifo3"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p fifo1 && test -p fifo2 && test -p fifo3 && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f fifo1 fifo2 fifo3"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "mode: numeric -m 600",
+      "args": [
+        "-m",
+        "600",
+        "mode_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a mode_fifo",
+            "expected_exit": 0,
+            "expected_stdout": "600\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f mode_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "mode: symbolic -m u=rw,go=",
+      "args": [
+        "-m",
+        "u=rw,go=",
+        "mode_sym"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a mode_sym",
+            "expected_exit": 0,
+            "expected_stdout": "600\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f mode_sym"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "mode: restrictive umask -m 734",
+      "args": [
+        "-m",
+        "734",
+        "umask_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c %a umask_fifo",
+            "expected_exit": 0,
+            "expected_stdout": "734\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "environment": {
+        "files": [],
+        "env_vars": {},
+        "working_dir": null,
+        "run_as_user": null,
+        "run_as_group": null,
+        "umask": "0777",
+        "resource_limits": null
+      },
+      "cleanup_commands": [
+        "rm -f umask_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "errors: existing fifo",
+      "args": [
+        "existing_fifo"
+      ],
+      "setup_commands": [
+        "mkfifo existing_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "mkfifo: cannot create fifo 'existing_fifo': File exists\n"
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f existing_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "errors: missing parent directory",
+      "args": [
+        "nonexistent_dir/test_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "mkfifo: cannot create fifo 'nonexistent_dir/test_fifo': No such file or directory\n"
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "errors: invalid mode",
+      "args": [
+        "-m",
+        "9",
+        "bad_mode_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "mkfifo: invalid mode\n"
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f bad_mode_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "errors: mode exceeds permission bits",
+      "args": [
+        "-m",
+        "1777",
+        "bad_bits_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "mkfifo: mode must specify only file permission bits\n"
+        },
+        "verifications": [],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f bad_bits_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "selinux: -Z default context",
+      "args": [
+        "-Z",
+        "ctx_default_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p ctx_default_fifo && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ctx_default_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "selinux: --context without value",
+      "args": [
+        "--context",
+        "ctx_empty_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p ctx_empty_fifo && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ctx_empty_fifo"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "mkfifo",
+      "description": "selinux: --context=CTX",
+      "args": [
+        "--context=system_u:object_r:tmp_t:s0",
+        "ctx_explicit_fifo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -p ctx_explicit_fifo && echo ok",
+            "expected_exit": 0,
+            "expected_stdout": "ok\n",
+            "expected_stderr": ""
+          }
+        ],
+        "use_patterns": false,
+        "env_changes": {},
+        "file_changes": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": true,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ctx_explicit_fifo"
+      ]
+    }
+  ]
+}

@@ -185,6 +185,9 @@ pub struct TestCase {
     /// 是否使用伪终端执行
     #[serde(default, rename = "tty", alias = "tty_mode")]
     pub tty: bool,
+    /// 基线对比时是否使用 bash 执行命令（触发内建命令行为）
+    #[serde(default, rename = "compareUseBash", alias = "compare_use_bash")]
+    pub compare_use_bash: bool,
     /// 命令名称
     pub command: String,
     /// 测试描述
@@ -659,6 +662,7 @@ mod tests {
             tstdin: "".to_string(),
             byte_mode: false,
             tty: false,
+            compare_use_bash: false,
             command: "echo".to_string(),
             description: "Test echo command".to_string(),
             args: vec!["Hello".to_string()],

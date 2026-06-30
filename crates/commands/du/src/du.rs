@@ -396,15 +396,14 @@ fn du(
                                 }
                             }
 
-                            // 检查是否已统计过当前项的inode，如果是，只更新链接计数
-                            if let Some(inode) = this_stat.inode {
-                                if du_seen_inodes.contains(&inode) {
-                                    if du_opts.count_links {
-                                        state.inodes += 1;
+                            // 默认模式下避免重复统计同一 inode；--count-links 时不过滤。
+                            if !du_opts.count_links {
+                                if let Some(inode) = this_stat.inode {
+                                    if du_seen_inodes.contains(&inode) {
+                                        continue;
                                     }
-                                    continue;
+                                    du_seen_inodes.insert(inode);
                                 }
-                                du_seen_inodes.insert(inode);
                             }
                             // 递归统计子目录，或更新当前目录的统计信息
                             if this_stat.is_dir {
@@ -672,7 +671,12 @@ impl DuStatPrinter {
                     let limit = multiplier.pow(power);
                     // 如果当前大小超过这个单位的上限，就使用这个单位进行转换
                     if size >= limit {
-                        return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
+                        let print_unit = if multiplier == 1000 && unit == 'K' {
+                            'k'
+                        } else {
+                            unit
+                        };
+                        return format!("{:.1}{}", (size as f64) / (limit as f64), print_unit);
                     }
                 }
                 // 如果没有超过任何已知单位的上限，就以字节为单位显示
@@ -808,7 +812,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     // 处理输入文件列表
     let files_path = if let Some(file_from) = args_match.get_one::<String>(opt_flags::FILES0_FROM) {
         // 从文件中读取文件列表，处理特殊值 "-" 表示标准输入
-        if file_from == "-" && args_match.get_one::<String>(opt_flags::FILE).is_some() {
+        if args_match.get_one::<String>(opt_flags::FILE).is_some() {
             return Err(std::io::Error::other(format!(
                 "extra operand {}\nfile operands cannot be combined with --files0-from",
                 args_match
@@ -873,6 +877,9 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let (print_tx, rx) = mpsc::channel::<CTResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || du_stat_printer.du_print_stats(&rx));
 
+    // 跨顶层参数共享 inode 去重集合，以匹配 GNU du 在多参数下的行为。
+    let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
+
     // 遍历文件列表，对每个文件进行统计
     'loop_file: for path in files_path {
         // 如果配置了排除模式，则检查当前路径是否被排除
@@ -891,11 +898,16 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
 
         // 检查参数提供的路径是否存在
         if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
-            // 从初始路径开始计算磁盘使用情况
-            let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
-            if let Some(inode) = stat.inode {
-                seen_inodes.insert(inode);
+            if !du_traversal_options.count_links {
+                if let Some(inode) = stat.inode {
+                    if seen_inodes.contains(&inode) {
+                        continue;
+                    }
+                    seen_inodes.insert(inode);
+                }
             }
+
+            // 从初始路径开始计算磁盘使用情况
             let stat = du(stat, &du_traversal_options, 0, &mut seen_inodes, &print_tx)
                 .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
 
@@ -7640,7 +7652,6 @@ mod tests {
             fs::create_dir(&sub_dir_path).unwrap();
             let test_file_1 = sub_dir_path.join("test_file.txt");
             let mut file = File::create(&test_file_1).unwrap();
-            let filename = test_file_1.to_str().unwrap();
             let dir = temp_dir.path().to_str().unwrap();
             let content = "aaaa.\n\
                    bbbb.\n\
@@ -7648,7 +7659,14 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = [ctcore::ct_util_name(), dir, "--files0-from", filename];
+            let files0 = sub_dir_path.join("files0.lst");
+            let mut files0_file = File::create(&files0).unwrap();
+            files0_file
+                .write_all(format!("{dir}\0").as_bytes())
+                .unwrap();
+            let files0_name = files0.to_str().unwrap();
+
+            let args = [ctcore::ct_util_name(), "--files0-from", files0_name];
             let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
@@ -7672,13 +7690,19 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
+            let files0 = sub_dir_path.join("files0.lst");
+            let mut files0_file = File::create(&files0).unwrap();
+            files0_file
+                .write_all(format!("{dir}\0").as_bytes())
+                .unwrap();
+            let files0_name = files0.to_str().unwrap();
+
             let args = [
                 ctcore::ct_util_name(),
-                dir,
                 "--exclude-from",
                 filename,
                 "--files0-from",
-                filename,
+                files0_name,
             ];
             let result = du_main(args.iter().map(OsString::from));
 
@@ -8242,13 +8266,19 @@ mod tests {
                    dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
+            let files0 = sub_dir_path.join("files0.lst");
+            let mut files0_file = File::create(&files0).unwrap();
+            files0_file
+                .write_all(format!("{dir}\0").as_bytes())
+                .unwrap();
+            let files0_name = files0.to_str().unwrap();
+
             let args = [
                 ctcore::ct_util_name(),
-                dir,
                 "--exclude-from",
                 file_name,
                 "--files0-from",
-                file_name,
+                files0_name,
                 "--time=ctime",
                 "--time-style",
                 "iso",

@@ -1,417 +1,998 @@
 {
-    "tests": [
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 基本用法：统计指定目录",
-            "setup_commands": [
-                "mkdir /test_du_du_basic1",
-                "touch /test_du_du_basic1/a.txt",
-                "touch /test_du_du_basic1/b.txt",
-                "touch /test_du_du_basic1/c.txt",
-                "touch /test_du_du_basic1/.hidden",
-                "mkdir /test_du_du_basic1/subdir",
-                "touch /test_du_du_basic1/subdir/d.txt"
-            ],
-            "args": [
-                "/test_du_du_basic1"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "4   /test_du_du_basic1/subdir\n8     /test_du_du_basic1\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic1"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 同时指定多个路径",
-            "setup_commands": [
-                "mkdir /test_du_du_basic2",
-                "touch /test_du_du_basic2/a.txt",
-                "touch /test_du_du_basic2/b.txt",
-                "echo 'hello' > /test_du_du_basic2/c.txt",
-                "touch /test_du_du_basic2/.hidden",
-                "mkdir /test_du_du_basic2/subdir",
-                "touch /test_du_du_basic2/subdir/d.txt"
-            ],
-            "args": [
-                "/test_du_du_basic2/b.txt",
-                "/test_du_du_basic2/subdir",
-                "/test_du_du_basic2/c.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0   /test_du_du_basic2/b.txt\n4      /test_du_du_basic2/subdir\n4     /test_du_du_basic2/c.txt\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic2"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用-s",
-            "setup_commands": [
-                "mkdir /test_du_du_basic3",
-                "touch /test_du_du_basic3/a.txt",
-                "touch /test_du_du_basic3/b.txt",
-                "touch /test_du_du_basic3/c.txt",
-                "touch /test_du_du_basic3/.hidden",
-                "mkdir /test_du_du_basic3/subdir",
-                "touch /test_du_du_basic3/subdir/d.txt"
-            ],
-            "args": [
-                "-s",
-                "/test_du_du_basic3"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "8   /test_du_du_basic3\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic3"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用-a",
-            "setup_commands": [
-                "mkdir /test_du_du_basic4",
-                "touch /test_du_du_basic4/a.txt",
-                "touch /test_du_du_basic4/b.txt",
-                "echo 'hello' > /test_du_du_basic4/c.txt",
-                "touch /test_du_du_basic4/.hidden",
-                "mkdir /test_du_du_basic4/subdir",
-                "touch /test_du_du_basic4/subdir/d.txt"
-            ],
-            "args": [
-                "-a",
-                "/test_du_du_basic4"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0   /test_du_du_basic4/a.txt\n0      /test_du_du_basic4/b.txt\n4      /test_du_du_basic4/c.txt\n0      /test_du_du_basic4/.hidden\n0    /test_du_du_basic4/subdir/d.txt\n4        /test_du_du_basic4/subdir\n12    /test_du_du_basic4\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic4"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用-h",
-            "setup_commands": [
-                "mkdir /test_du_du_basic5",
-                "touch /test_du_du_basic5/a.txt",
-                "touch /test_du_du_basic5/b.txt",
-                "echo 'hello' > /test_du_du_basic5/c.txt",
-                "touch /test_du_du_basic5/.hidden",
-                "mkdir /test_du_du_basic5/subdir",
-                "touch /test_du_du_basic5/subdir/d.txt"
-            ],
-            "args": [
-                "-h",
-                "/test_du_du_basic5"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "4.0K        /test_du_du_basic5/subdir\n12K   /test_du_du_basic5\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic5"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用-k显示指定输出块的大小",
-            "setup_commands": [
-                "mkdir /test_du_du_basic6",
-                "touch /test_du_du_basic6/a.txt",
-                "touch /test_du_du_basic6/b.txt",
-                "echo 'hello' > /test_du_du_basic6/c.txt",
-                "touch /test_du_du_basic6/.hidden",
-                "mkdir /test_du_du_basic6/subdir",
-                "touch /test_du_du_basic6/subdir/d.txt"
-            ],
-            "args": [
-                "-k",
-                "/test_du_du_basic6"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "4.0K        /test_du_du_basic6/subdir\n12K   /test_du_du_basic6\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic6"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用--apparent-size",
-            "setup_commands": [
-                "mkdir /test_du_du_basic7",
-                "touch /test_du_du_basic7/a.txt",
-                "touch /test_du_du_basic7/b.txt",
-                "echo 'hello' > /test_du_du_basic7/c.txt",
-                "touch /test_du_du_basic7/.hidden",
-                "mkdir /test_du_du_basic7/subdir",
-                "touch /test_du_du_basic7/subdir/d.txt"
-            ],
-            "args": [
-                "--apparent-size",
-                "/test_du_du_basic7"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "0   /test_du_du_basic7/subdir\n1    /test_du_du_basic7\n",
-                "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_basic7"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 硬链接处理（多个路径指向同一 inode）",
-            "setup_commands": [
-                "mkdir /test_du_du_hardlink",
-                "echo 'hello' > /test_du_du_hardlink/origin.txt",
-                "ln /test_du_du_hardlink/origin.txt /test_du_du_hardlink/hardlink1",
-                "ln /test_du_du_hardlink/origin.txt /test_du_du_hardlink/hardlink2"
-            ],
-            "args": [
-                "/test_du_du_hardlink/origin.txt",
-                "/test_du_du_hardlink/hardlink1",
-                "/test_du_du_hardlink/hardlink2"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "4   /test_du_du_hardlink/origin.txt\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_hardlink"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 符号链接本身的磁盘占用（不跟随）",
-            "setup_commands": [
-                "mkdir /test_du_du_symlink",
-                "echo 'hello' > /test_du_du_symlink/target.txt",
-                "ln -s /test_du_du_symlink/target.txt /test_du_du_symlink/symlink.txt"
-            ],
-            "args": [
-                "/test_du_du_symlink/symlink.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "0   /test_du_du_symlink/symlink.txt\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_symlink"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 符号链接 + -L 选项（跟随符号链接）",
-            "setup_commands": [
-                "mkdir /test_du_du_symlink_L",
-                "echo 'hello' > /test_du_du_symlink_L/target.txt",
-                "ln -s /test_du_du_symlink_L/target.txt /test_du_du_symlink_L/symlink.txt"
-            ],
-            "args": [
-                "-L",
-                "/test_du_du_symlink_L/symlink.txt"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "4   /test_du_du_symlink_L/symlink.txt\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_symlink_L"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 空目录的磁盘占用",
-            "setup_commands": [
-                "mkdir /empty_dir_test"
-            ],
-            "args": [
-                "/empty_dir_test"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "4   /empty_dir_test\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /empty_dir_test"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用 --exclude 排除匹配的文件",
-            "setup_commands": [
-                "mkdir /test_du_du_exclude",
-                "touch /test_du_du_exclude/a.txt",
-                "echo 'hello' > /test_du_du_exclude/b.log",
-                "mkdir /test_du_du_exclude/subdir",
-                "echo 'world' > /test_du_du_exclude/subdir/c.log",
-                "touch /test_du_du_exclude/subdir/d.txt"
-            ],
-            "args": [
-                "-a",
-                "--exclude=*.log",
-                "/test_du_du_exclude"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "0   /test_du_du_exclude/a.txt\n0    /test_du_du_exclude/subdir/d.txt\n4     /test_du_du_exclude/subdir\n8   /test_du_du_exclude\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_exclude"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用 --max-depth 限制目录展开层级",
-            "setup_commands": [
-                "mkdir -p /test_du_du_maxdepth/subdir1/subsubdir",
-                "touch /test_du_du_maxdepth/a.txt",
-                "touch /test_du_du_maxdepth/subdir1/b.txt",
-                "touch /test_du_du_maxdepth/subdir1/subsubdir/c.txt"
-            ],
-            "args": [
-                "-a",
-                "--max-depth=1",
-                "/test_du_du_maxdepth"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "0   /test_du_du_maxdepth/a.txt\n8   /test_du_du_maxdepth/subdir1\n12        /test_du_du_maxdepth\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_maxdepth"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 指定目录不存在",
-            "setup_commands": [
-            ],
-            "args": [
-                "missing_dir"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 部分目录不存在",
-            "setup_commands": [
-                "mkdir /test_du_dir1",
-                "mkdir /test_du_dir2"
-            ],
-            "args": [
-                "/test_du_dir1",
-                "missing_dir",
-                "/test_du_dir2"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 1,
-                    "stdout": "4   /test_du_dir1\n4        /test_du_dir2\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_dir1 /test_du_dir2"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "du",
-            "description": "du: 使用 --max-depth=0",
-            "setup_commands": [
-                "mkdir -p /test_du_du_maxdepth/subdir1/subsubdir",
-                "touch /test_du_du_maxdepth/a.txt",
-                "touch /test_du_du_maxdepth/subdir1/b.txt",
-                "touch /test_du_du_maxdepth/subdir1/subsubdir/c.txt"
-            ],
-            "args": [
-                "-a",
-                "--max-depth=0",
-                "/test_du_du_maxdepth"
-            ],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "12  /test_du_du_maxdepth\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -rf /test_du_du_maxdepth"
-            ]
-        }
-    ]
+  "tests": [
+    {
+      "command": "du",
+      "description": "du/basic.sh: 基本目录统计",
+      "setup_commands": [
+        "mkdir -p /du_case_basic/a/b",
+        "printf '%*s' 257 x > /du_case_basic/a/b/f"
+      ],
+      "args": [
+        "/du_case_basic/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_basic"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/two-args.sh: 同时统计多个参数",
+      "setup_commands": [
+        "mkdir -p /du_case_multi/d/1 /du_case_multi/d/2",
+        "touch /du_case_multi/d/1/a /du_case_multi/d/2/b"
+      ],
+      "args": [
+        "/du_case_multi/d/1",
+        "/du_case_multi/d/2"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_multi"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/basic.sh: -a 输出所有文件",
+      "setup_commands": [
+        "mkdir -p /du_case_all/a/sub",
+        "echo hello > /du_case_all/a/f1",
+        "touch /du_case_all/a/sub/f2"
+      ],
+      "args": [
+        "-a",
+        "/du_case_all/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_all"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/basic.sh: -s summarize",
+      "setup_commands": [
+        "mkdir -p /du_case_sum/a/sub",
+        "echo hello > /du_case_sum/a/sub/f"
+      ],
+      "args": [
+        "-s",
+        "/du_case_sum/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_sum"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -c 输出 total",
+      "setup_commands": [
+        "mkdir -p /du_case_total/a/sub",
+        "touch /du_case_total/a/f /du_case_total/a/sub/g"
+      ],
+      "args": [
+        "-c",
+        "/du_case_total/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_total"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/basic.sh: -S 不累计子目录",
+      "setup_commands": [
+        "mkdir -p /du_case_sep/a/sub",
+        "dd if=/dev/zero of=/du_case_sep/a/sub/f bs=1 count=8 >/dev/null 2>&1"
+      ],
+      "args": [
+        "-S",
+        "/du_case_sep/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_sep"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/max-depth.sh: --max-depth=2",
+      "setup_commands": [
+        "mkdir -p /du_case_depth/a/b/c/d/e",
+        "touch /du_case_depth/a/b/c/f"
+      ],
+      "args": [
+        "--max-depth=2",
+        "/du_case_depth/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_depth"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/max-depth.sh: -d 1",
+      "setup_commands": [
+        "mkdir -p /du_case_depth_short/a/b/c",
+        "touch /du_case_depth_short/a/b/f"
+      ],
+      "args": [
+        "-d",
+        "1",
+        "/du_case_depth_short/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_depth_short"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: --max-depth=0",
+      "setup_commands": [
+        "mkdir -p /du_case_depth_zero/a/b",
+        "touch /du_case_depth_zero/a/b/f"
+      ],
+      "args": [
+        "--max-depth=0",
+        "/du_case_depth_zero/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_depth_zero"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/one-file-system.sh: -x 同一文件系统",
+      "setup_commands": [
+        "mkdir -p /du_case_xdev/a/b",
+        "touch /du_case_xdev/a/b/f"
+      ],
+      "args": [
+        "-x",
+        "/du_case_xdev/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_xdev"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -h human-readable",
+      "setup_commands": [
+        "mkdir -p /du_case_human/a",
+        "dd if=/dev/zero of=/du_case_human/a/f bs=1 count=2048 >/dev/null 2>&1"
+      ],
+      "args": [
+        "-h",
+        "/du_case_human/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_human"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: --si",
+      "setup_commands": [
+        "mkdir -p /du_case_si/a",
+        "dd if=/dev/zero of=/du_case_si/a/f bs=1 count=2048 >/dev/null 2>&1"
+      ],
+      "args": [
+        "--si",
+        "/du_case_si/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_si"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -k",
+      "setup_commands": [
+        "mkdir -p /du_case_k/a",
+        "echo hello > /du_case_k/a/f"
+      ],
+      "args": [
+        "-k",
+        "/du_case_k/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_k"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -m",
+      "setup_commands": [
+        "mkdir -p /du_case_m/a",
+        "dd if=/dev/zero of=/du_case_m/a/f bs=1 count=4096 >/dev/null 2>&1"
+      ],
+      "args": [
+        "-m",
+        "/du_case_m/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_m"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/basic.sh: --block-size=1",
+      "setup_commands": [
+        "mkdir -p /du_case_B1/a",
+        "echo hello > /du_case_B1/a/f"
+      ],
+      "args": [
+        "--block-size=1",
+        "/du_case_B1/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_B1"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/basic.sh: -B 1K",
+      "setup_commands": [
+        "mkdir -p /du_case_B1K/a",
+        "echo hello > /du_case_B1K/a/f"
+      ],
+      "args": [
+        "-B",
+        "1K",
+        "/du_case_B1K/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_B1K"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/apparent.sh: -b bytes",
+      "setup_commands": [
+        "mkdir -p /du_case_bytes/d",
+        "for i in 1 2 3 4 5; do echo foo > /du_case_bytes/d/$i; done"
+      ],
+      "args": [
+        "-b",
+        "/du_case_bytes/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_bytes"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/apparent.sh: --apparent-size",
+      "setup_commands": [
+        "mkdir -p /du_case_apparent/d",
+        "for i in 1 2 3 4 5; do echo foo > /du_case_apparent/d/$i; done"
+      ],
+      "args": [
+        "--apparent-size",
+        "/du_case_apparent/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_apparent"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -0 null 结尾输出",
+      "setup_commands": [
+        "mkdir -p /du_case_null/a",
+        "touch /du_case_null/a/f"
+      ],
+      "args": [
+        "-0",
+        "/du_case_null/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_null"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/threshold.sh: 正阈值 --threshold=1",
+      "setup_commands": [
+        "mkdir -p /du_case_threshold_pos/a/b",
+        "touch /du_case_threshold_pos/a/b/zero",
+        "echo hi > /du_case_threshold_pos/a/b/one"
+      ],
+      "args": [
+        "-a",
+        "--threshold=1",
+        "/du_case_threshold_pos/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_threshold_pos"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/threshold.sh: 负阈值 --threshold=-1",
+      "setup_commands": [
+        "mkdir -p /du_case_threshold_neg/a/b",
+        "touch /du_case_threshold_neg/a/b/zero",
+        "echo hi > /du_case_threshold_neg/a/b/one"
+      ],
+      "args": [
+        "-a",
+        "--threshold=-1",
+        "/du_case_threshold_neg/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_threshold_neg"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/threshold.sh: 无效阈值 SIZE",
+      "setup_commands": [
+        "mkdir -p /du_case_threshold_bad/a"
+      ],
+      "args": [
+        "--threshold=SIZE",
+        "/du_case_threshold_bad/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_threshold_bad"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/threshold.sh: 无效阈值 -0",
+      "setup_commands": [
+        "mkdir -p /du_case_threshold_minus0/a"
+      ],
+      "args": [
+        "--threshold=-0",
+        "/du_case_threshold_minus0/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_threshold_minus0"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/threshold.sh: --threshold 缺参数",
+      "setup_commands": [],
+      "args": [
+        "--threshold"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes 基础",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_base/d",
+        "touch /du_case_inodes_base/d/f"
+      ],
+      "args": [
+        "--inodes",
+        "/du_case_inodes_base/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_base"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes -l",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_l/d",
+        "touch /du_case_inodes_l/d/f",
+        "ln /du_case_inodes_l/d/f /du_case_inodes_l/d/h"
+      ],
+      "args": [
+        "--inodes",
+        "-l",
+        "/du_case_inodes_l/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_l"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes -a",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_a/d/sub",
+        "touch /du_case_inodes_a/d/f /du_case_inodes_a/d/sub/g"
+      ],
+      "args": [
+        "--inodes",
+        "-a",
+        "/du_case_inodes_a/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_a"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes -c",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_c/d/sub",
+        "touch /du_case_inodes_c/d/f /du_case_inodes_c/d/sub/g"
+      ],
+      "args": [
+        "--inodes",
+        "-c",
+        "/du_case_inodes_c/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_c"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes -h",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_h/d",
+        "for i in 1 2 3 4 5 6 7 8 9 10; do touch /du_case_inodes_h/d/file$i; done"
+      ],
+      "args": [
+        "--inodes",
+        "-h",
+        "/du_case_inodes_h/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_h"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes --si",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_si/d",
+        "for i in 1 2 3 4 5 6 7 8 9 10; do touch /du_case_inodes_si/d/file$i; done"
+      ],
+      "args": [
+        "--inodes",
+        "--si",
+        "/du_case_inodes_si/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_si"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/inodes.sh: --inodes -b (应提示 ineffective)",
+      "setup_commands": [
+        "mkdir -p /du_case_inodes_b/d",
+        "touch /du_case_inodes_b/d/f"
+      ],
+      "args": [
+        "--inodes",
+        "-b",
+        "/du_case_inodes_b/d"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_inodes_b"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/exclude.sh: --exclude",
+      "setup_commands": [
+        "mkdir -p /du_case_exclude/a/b/c /du_case_exclude/a/x/y /du_case_exclude/a/u/v"
+      ],
+      "args": [
+        "--exclude=x",
+        "/du_case_exclude/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_exclude"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/exclude.sh: -X --exclude-from",
+      "setup_commands": [
+        "mkdir -p /du_case_exclude_from/a/b/c /du_case_exclude_from/a/x/y /du_case_exclude_from/a/u/v",
+        "printf 'b\n' > /du_case_exclude_from/excl"
+      ],
+      "args": [
+        "-X",
+        "/du_case_exclude_from/excl",
+        "/du_case_exclude_from/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_exclude_from"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/exclude.sh: 多个 --exclude 组件路径",
+      "setup_commands": [
+        "mkdir -p /du_case_exclude_multi/a/b/c /du_case_exclude_multi/a/x/y /du_case_exclude_multi/a/u/v"
+      ],
+      "args": [
+        "--exclude=/du_case_exclude_multi/a/u",
+        "--exclude=/du_case_exclude_multi/a/b",
+        "/du_case_exclude_multi/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_exclude_multi"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/files0-from-dir.sh: --files0-from=FILE",
+      "setup_commands": [
+        "mkdir -p /du_case_files0",
+        "echo hello > /du_case_files0/a",
+        "echo world > /du_case_files0/b",
+        "printf '/du_case_files0/a\\0/du_case_files0/b\\0' > /du_case_files0/list"
+      ],
+      "args": [
+        "--files0-from=/du_case_files0/list"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_files0"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: --files0-from 与 file operand 互斥",
+      "setup_commands": [
+        "mkdir -p /du_case_files0_extra",
+        "touch /du_case_files0_extra/a",
+        "printf '/du_case_files0_extra/a\\0' > /du_case_files0_extra/list"
+      ],
+      "args": [
+        "--files0-from=/du_case_files0_extra/list",
+        "/du_case_files0_extra/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_files0_extra"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/files0-from-dir.sh: --files0-from=DIR 报错",
+      "setup_commands": [
+        "mkdir -p /du_case_files0_dir/listdir"
+      ],
+      "args": [
+        "--files0-from=/du_case_files0_dir/listdir"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_files0_dir"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/no-deref.sh: 默认不跟随命令行符号链接",
+      "setup_commands": [
+        "mkdir -p /du_case_no_deref/dir/a/b",
+        "ln -s /du_case_no_deref/dir /du_case_no_deref/slink"
+      ],
+      "args": [
+        "/du_case_no_deref/slink"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_no_deref"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -P 显式不跟随符号链接",
+      "setup_commands": [
+        "mkdir -p /du_case_P/dir/a/b",
+        "ln -s /du_case_P/dir /du_case_P/slink"
+      ],
+      "args": [
+        "-P",
+        "/du_case_P/slink"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_P"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/deref.sh: -L 跟随符号链接",
+      "setup_commands": [
+        "mkdir -p /du_case_L/dir/a/b",
+        "ln -s /du_case_L/dir /du_case_L/slink"
+      ],
+      "args": [
+        "-L",
+        "/du_case_L/slink"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_L"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/deref-args.sh: -D 仅跟随命令行符号链接",
+      "setup_commands": [
+        "mkdir -p /du_case_D/dir/a",
+        "ln -s /du_case_D/dir /du_case_D/slink"
+      ],
+      "args": [
+        "-D",
+        "/du_case_D/slink"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_D"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/deref-args.sh: -H 是 -D 别名",
+      "setup_commands": [
+        "mkdir -p /du_case_H/dir/a",
+        "ln -s /du_case_H/dir /du_case_H/slink"
+      ],
+      "args": [
+        "-H",
+        "/du_case_H/slink"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_H"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/trailing-slash.sh: 符号链接 + trailing slash",
+      "setup_commands": [
+        "mkdir -p /du_case_trailing/dir/1/2",
+        "ln -s /du_case_trailing/dir /du_case_trailing/slink"
+      ],
+      "args": [
+        "/du_case_trailing/slink/"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_trailing"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/hard-link.sh: 默认硬链接去重（多参数）",
+      "setup_commands": [
+        "mkdir -p /du_case_hard_default",
+        "echo non-empty > /du_case_hard_default/f1",
+        "ln /du_case_hard_default/f1 /du_case_hard_default/f2"
+      ],
+      "args": [
+        "/du_case_hard_default/f1",
+        "/du_case_hard_default/f2"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_hard_default"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/hard-link.sh: --count-links 不去重",
+      "setup_commands": [
+        "mkdir -p /du_case_hard_count",
+        "echo non-empty > /du_case_hard_count/f1",
+        "ln /du_case_hard_count/f1 /du_case_hard_count/f2"
+      ],
+      "args": [
+        "--count-links",
+        "/du_case_hard_count/f1",
+        "/du_case_hard_count/f2"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_hard_count"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/deref.sh: -L dangling symlink 返回错误",
+      "setup_commands": [
+        "mkdir -p /du_case_dangle",
+        "ln -s nowhere /du_case_dangle/dangle"
+      ],
+      "args": [
+        "-L",
+        "/du_case_dangle/dangle"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_dangle"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/restore-wd.sh: 多参数目录不应丢失工作路径",
+      "setup_commands": [
+        "mkdir -p /du_case_restore/a /du_case_restore/b"
+      ],
+      "args": [
+        "/du_case_restore/a",
+        "/du_case_restore/b"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_restore"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: 目标不存在",
+      "setup_commands": [],
+      "args": [
+        "/du_case_missing/not-exist"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "du",
+      "description": "du: 部分参数不存在",
+      "setup_commands": [
+        "mkdir -p /du_case_partial_exist/a /du_case_partial_exist/b"
+      ],
+      "args": [
+        "/du_case_partial_exist/a",
+        "/du_case_partial_exist/not-exist",
+        "/du_case_partial_exist/b"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_partial_exist"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: -s 与 --max-depth 冲突场景",
+      "setup_commands": [
+        "mkdir -p /du_case_sum_conflict/a/b",
+        "touch /du_case_sum_conflict/a/b/f"
+      ],
+      "args": [
+        "-s",
+        "--max-depth=1",
+        "/du_case_sum_conflict/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_sum_conflict"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: --time 默认修改时间",
+      "setup_commands": [
+        "mkdir -p /du_case_time_default/a",
+        "echo hi > /du_case_time_default/a/f"
+      ],
+      "args": [
+        "--time",
+        "/du_case_time_default/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_time_default"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: --time=access --time-style=iso",
+      "setup_commands": [
+        "mkdir -p /du_case_time_access/a",
+        "echo hi > /du_case_time_access/a/f",
+        "cat /du_case_time_access/a/f > /dev/null"
+      ],
+      "args": [
+        "--time=access",
+        "--time-style=iso",
+        "/du_case_time_access/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_time_access"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du: --time-style=long-iso",
+      "setup_commands": [
+        "mkdir -p /du_case_time_long/a",
+        "echo hi > /du_case_time_long/a/f"
+      ],
+      "args": [
+        "--time",
+        "--time-style=long-iso",
+        "/du_case_time_long/a"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_time_long"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/2g.sh: 稀疏 2G 文件",
+      "setup_commands": [
+        "mkdir -p /du_case_2g",
+        "truncate -s 2G /du_case_2g/big"
+      ],
+      "args": [
+        "-k",
+        "/du_case_2g/big"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_2g"
+      ]
+    },
+    {
+      "command": "du",
+      "description": "du/8gb.sh: 稀疏 8G 文件 + -ab",
+      "setup_commands": [
+        "mkdir -p /du_case_8g",
+        "truncate -s 8G /du_case_8g/big"
+      ],
+      "args": [
+        "-a",
+        "-b",
+        "/du_case_8g/big"
+      ],
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+      },
+      "cleanup_commands": [
+        "rm -rf /du_case_8g"
+      ]
+    }
+  ]
 }

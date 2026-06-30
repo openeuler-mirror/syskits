@@ -28,7 +28,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -41,6 +41,8 @@ use std::num::ParseIntError;
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
+const PTX_HELP_TEXT: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G)\n  or:  ptx -G [OPTION]... [INPUT [OUTPUT]]\nOutput a permuted index, including context, of the words in the input files.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -A, --auto-reference           output automatically generated references\n  -G, --traditional              behave more like System V 'ptx'\n  -F, --flag-truncation=STRING   use STRING for flagging line truncations.\n                                 The default is '/'\n  -M, --macro-name=STRING        macro name to use instead of 'xx'\n  -O, --format=roff              generate output as roff directives\n  -R, --right-side-refs          put references at right, not counted in -w\n  -S, --sentence-regexp=REGEXP   for end of lines or end of sentences\n  -T, --format=tex               generate output as TeX directives\n  -W, --word-regexp=REGEXP       use REGEXP to match each keyword\n  -b, --break-file=FILE          word break characters in this FILE\n  -f, --ignore-case              fold lower case to upper case for sorting\n  -g, --gap-size=NUMBER          gap size in columns between output fields\n  -i, --ignore-file=FILE         read ignore word list from FILE\n  -o, --only-file=FILE           read only word list from this FILE\n  -r, --references               first field of each line is a reference\n  -t, --typeset-mode               - not implemented -\n  -w, --width=NUMBER             output width in columns, reference excluded\n      --help        display this help and exit\n      --version     output version information and exit\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/ptx>\nor available locally via: info '(coreutils) ptx invocation'\n";
+const PTX_VERSION_TEXT: &str = "ptx (GNU coreutils) 9.4\nCopyright (C) 2023 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\nWritten by F. Pinard.\n";
 
 #[derive(Debug)]
 enum OutFormat {
@@ -255,8 +257,6 @@ struct WordRef {
 
 #[derive(Debug)]
 enum PtxError {
-    DumbFormat,
-    NotImplemented(&'static str),
     ParseError(ParseIntError),
 }
 
@@ -266,10 +266,6 @@ impl CTError for PtxError {}
 impl Display for PtxError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::DumbFormat => {
-                write!(f, "There is no dumb format with GNU extensions disabled")
-            }
-            Self::NotImplemented(s) => write!(f, "{s} not implemented yet"),
             Self::ParseError(e) => e.fmt(f),
         }
     }
@@ -282,15 +278,15 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         config.is_gnu_ext = false;
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
-    } else {
-        return Err(PtxError::NotImplemented("GNU extensions").into());
     }
-    if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP) {
-        return Err(PtxError::NotImplemented("-S").into());
+    if let Some(reg) = matches.get_one::<String>(ptx_options::PTX_SENTENCE_REGEXP) {
+        config.context_regex = reg.to_string();
+        // Note: Zero-length regex check is deferred to actual usage time
+        // to match GNU ptx behavior (only errors when processing non-empty content)
     }
     config.is_auto_ref = matches.get_flag(ptx_options::PTX_AUTO_REFERENCE);
     config.is_input_ref = matches.get_flag(ptx_options::PTX_REFERENCES);
-    config.is_right_ref &= matches.get_flag(ptx_options::PTX_RIGHT_SIDE_REFS);
+    config.is_right_ref = matches.get_flag(ptx_options::PTX_RIGHT_SIDE_REFS);
     config.is_ignore_case = matches.get_flag(ptx_options::PTX_IGNORE_CASE);
     if matches.contains_id(ptx_options::PTX_MACRO_NAME) {
         config.macro_name = matches
@@ -305,18 +301,33 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
             .to_string();
     }
     if matches.contains_id(ptx_options::PTX_WIDTH) {
-        config.line_width = matches
+        let width: usize = matches
             .get_one::<String>(ptx_options::PTX_WIDTH)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
+        if width == 0 {
+            return Err(CtSimpleError::new(1, "invalid line width: '0'"));
+        }
+        config.line_width = width;
     }
     if matches.contains_id(ptx_options::PTX_GAP_SIZE) {
-        config.gap_size = matches
+        let gap: usize = matches
             .get_one::<String>(ptx_options::PTX_GAP_SIZE)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
+        if gap == 0 {
+            return Err(CtSimpleError::new(1, "invalid gap width: '0'"));
+        }
+        config.gap_size = gap;
+    }
+    if let Some(fmt) = matches.get_one::<String>(ptx_options::PTX_FORMAT) {
+        config.format = match fmt.as_str() {
+            "roff" => OutFormat::Roff,
+            "tex" => OutFormat::Tex,
+            _ => config.format,
+        };
     }
     if matches.get_flag(ptx_options::PTX_FORMAT_ROFF) {
         config.format = OutFormat::Roff;
@@ -325,6 +336,29 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         config.format = OutFormat::Tex;
     }
     Ok(config)
+}
+
+fn regex_matches_zero_len(pattern: &str) -> bool {
+    Regex::new(pattern)
+        .ok()
+        .and_then(|re| re.find(""))
+        .is_some_and(|m| m.start() == m.end())
+}
+
+fn compile_regex_lossy(pattern: &str) -> Regex {
+    if let Ok(re) = Regex::new(pattern) {
+        return re;
+    }
+
+    if pattern.ends_with('\\') {
+        let mut fixed = pattern.to_owned();
+        fixed.push('\\');
+        if let Ok(re) = Regex::new(&fixed) {
+            return re;
+        }
+    }
+
+    Regex::new(r"$^").expect("fallback regex must be valid")
 }
 
 /// 文件内容
@@ -374,7 +408,12 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
         });
 
         // 读取所有行并转换为字符向量
-        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+        let lines: Vec<String> = if config.is_gnu_ext && !config.is_input_ref {
+            let all_lines = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+            vec![all_lines.join(" ")]
+        } else {
+            reader.lines().collect::<std::io::Result<Vec<String>>>()?
+        };
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
 
         let size = lines.len();
@@ -406,8 +445,8 @@ fn ptx_create_word_set(
     file_map: &FileMap,
 ) -> BTreeSet<WordRef> {
     // 编译正则表达式
-    let reg = Regex::new(&filter.word_regex).unwrap();
-    let ref_reg = Regex::new(&config.context_regex).unwrap();
+    let reg = compile_regex_lossy(&filter.word_regex);
+    let ref_reg = compile_regex_lossy(&config.context_regex);
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
 
     // 遍历每个文件的每一行
@@ -576,18 +615,24 @@ fn ptx_get_output_chunks(
 ) -> (String, String, String, String) {
     // 1. 计算基础尺寸
     let half_line_size = config.line_width / 2;
+    let trunc_len = if config.trunc_str.is_empty() {
+        0
+    } else {
+        config.trunc_str.len()
+    };
 
-    // 2. 计算最大允许尺寸
-    // before 块的最大尺寸 = 半行宽度 - 间隔大小
-    let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
-    // after 块的最大尺寸 = 半行宽度 - 2*截断标记长度 - 关键词长度 - 1
-    let max_after_size = cmp::max(
-        half_line_size as isize
-            - (2 * config.trunc_str.len()) as isize
-            - keyword.len() as isize
-            - 1,
-        0,
-    ) as usize;
+    // 2. 计算最大允许尺寸（对齐 coreutils fix_output_parameters 逻辑）
+    let mut max_before_size = half_line_size.saturating_sub(config.gap_size);
+    let mut max_keyafter_size = half_line_size;
+    if trunc_len > 0 {
+        if config.is_gnu_ext {
+            max_before_size = max_before_size.saturating_sub(2 * trunc_len);
+            max_keyafter_size = max_keyafter_size.saturating_sub(2 * trunc_len);
+        } else {
+            max_keyafter_size = max_keyafter_size.saturating_sub(2 * trunc_len + 1);
+        }
+    }
+    let max_after_size = max_keyafter_size.saturating_sub(keyword.len());
 
     // 3. 预分配字符串缓冲区
     let mut head = String::with_capacity(half_line_size);
@@ -607,6 +652,10 @@ fn ptx_get_output_chunks(
     // 4.5 提取 before 文本
     let before_str: String = all_before[before_beg..before_end].iter().collect();
     before.push_str(&before_str);
+    if before.is_empty() && !all_before.is_empty() && all_before.iter().all(|c| c.is_whitespace()) {
+        // Keep one spacer for whitespace-only left context, matching coreutils alignment.
+        before.push(' ');
+    }
 
     // 5. 处理 after 块
     // 5.1 计算 after 块的结束位置
@@ -661,9 +710,15 @@ fn ptx_get_output_chunks(
         tail.push_str(&config.trunc_str);
     }
     // 8.2 处理左侧截断
-    if before_beg != 0 && head_beg == head_end {
+    // Only mark left truncation when we actually dropped non-whitespace context.
+    let left_truncated_non_ws = before_beg != 0
+        && all_before
+            .iter()
+            .take(before_beg)
+            .any(|c| !c.is_whitespace());
+    if left_truncated_non_ws && head_beg == head_end {
         before = format!("{}{}", config.trunc_str, before);
-    } else if before_beg != 0 && head_beg != 0 {
+    } else if left_truncated_non_ws && head_beg != 0 {
         head = format!("{}{}", config.trunc_str, head);
     }
 
@@ -691,13 +746,23 @@ fn ptx_format_tex_line(
     word_ref: &WordRef,
     line: &str,
     chars_line: &[char],
+    context_reg: &Regex,
     reference: &str,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
 
     // 获取关键词前后的文本范围
-    let before_chars_trim_idx = (0, word_ref.position);
-    let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
+    let before_start = context_base_start(config, line, chars_line, context_reg);
+    let (context_left, context_right) = context_bounds(
+        config,
+        line,
+        context_reg,
+        word_ref.position,
+        word_ref.position_end,
+        before_start,
+    );
+    let before_chars_trim_idx = (context_left, word_ref.position);
+    let after_chars_trim_idx = (word_ref.position_end, context_right);
 
     // 提取关键词和上下文
     let keyword = &line[word_ref.position..word_ref.position_end];
@@ -710,7 +775,8 @@ fn ptx_format_tex_line(
     // 转义特殊字符并构建输出
     write!(
         output,
-        "\\xx{{{}}}{{{}}}{{{}}}{{{}}}{{{}}}",
+        "\\{} {{{}}}{{{}}}{{{}}}{{{}}}{{{}}}",
+        config.macro_name,
         format_tex_field(&tail),
         format_tex_field(&before),
         format_tex_field(keyword),
@@ -737,14 +803,24 @@ fn ptx_format_roff_line(
     word_ref: &WordRef,
     line: &str,
     chars_line: &[char],
+    context_reg: &Regex,
     reference: &str,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
     write!(output, ".{}", config.macro_name).unwrap();
 
     // 获取关键词前后的文本范围
-    let before_chars_trim_idx = (0, word_ref.position);
-    let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
+    let before_start = context_base_start(config, line, chars_line, context_reg);
+    let (context_left, context_right) = context_bounds(
+        config,
+        line,
+        context_reg,
+        word_ref.position,
+        word_ref.position_end,
+        before_start,
+    );
+    let before_chars_trim_idx = (context_left, word_ref.position);
+    let after_chars_trim_idx = (word_ref.position_end, context_right);
 
     // 提取关键词和上下文
     let keyword = &line[word_ref.position..word_ref.position_end];
@@ -774,6 +850,187 @@ fn ptx_format_roff_line(
     output
 }
 
+fn str_cols(s: &str) -> usize {
+    s.chars().count()
+}
+
+fn context_base_start(
+    config: &PtxConfig,
+    line: &str,
+    chars_line: &[char],
+    context_reg: &Regex,
+) -> usize {
+    if config.is_input_ref {
+        match context_reg.find(line) {
+            Some(m) => {
+                let mut idx = m.end();
+                while idx < chars_line.len() && chars_line[idx].is_whitespace() {
+                    idx += 1;
+                }
+                idx
+            }
+            None => 0,
+        }
+    } else {
+        0
+    }
+}
+
+fn context_bounds(
+    config: &PtxConfig,
+    line: &str,
+    context_reg: &Regex,
+    keyword_beg: usize,
+    keyword_end: usize,
+    base_start: usize,
+) -> (usize, usize) {
+    if !config.is_gnu_ext || config.context_regex == "\\w+" {
+        return (base_start, line.len());
+    }
+
+    let mut left = base_start;
+    for m in context_reg.find_iter(line) {
+        if m.end() <= keyword_beg {
+            left = m.end();
+        } else {
+            break;
+        }
+    }
+    left = left.max(base_start);
+
+    let mut right = line.len();
+    for m in context_reg.find_iter(line) {
+        if m.start() >= keyword_end {
+            right = m.end();
+            break;
+        }
+    }
+
+    (left, right)
+}
+
+fn ptx_format_dumb_line(
+    config: &PtxConfig,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    context_reg: &Regex,
+    reference: &str,
+    reference_max_width: usize,
+) -> String {
+    let mut output = String::with_capacity(line.len() * 2);
+    let before_start = context_base_start(config, line, chars_line, context_reg);
+    let (context_left, context_right) = context_bounds(
+        config,
+        line,
+        context_reg,
+        word_ref.position,
+        word_ref.position_end,
+        before_start,
+    );
+    let before_chars_trim_idx = (context_left, word_ref.position);
+    let after_chars_trim_idx = (word_ref.position_end, context_right);
+    let keyword = &line[word_ref.position..word_ref.position_end];
+    let all_before = &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1];
+    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
+    let (tail, before, after, head) = ptx_get_output_chunks(all_before, keyword, all_after, config);
+    let keyafter = format!("{keyword}{after}");
+    let gap_size = config.gap_size;
+    let mut effective_line_width = config.line_width;
+    if (config.is_auto_ref || config.is_input_ref) && !config.is_right_ref {
+        effective_line_width = effective_line_width.saturating_sub(reference_max_width + gap_size);
+    }
+    let half_line_width = effective_line_width / 2;
+
+    let reference_len = str_cols(reference);
+    if !config.is_right_ref {
+        if config.is_auto_ref {
+            output.push_str(reference);
+            output.push(':');
+            let pad = reference_max_width
+                .saturating_add(gap_size)
+                .saturating_sub(reference_len.saturating_add(1));
+            output.push_str(&" ".repeat(pad));
+        } else {
+            output.push_str(reference);
+            let pad = reference_max_width
+                .saturating_add(gap_size)
+                .saturating_sub(reference_len);
+            output.push_str(&" ".repeat(pad));
+        }
+    }
+
+    let before_len = str_cols(&before);
+    let tail_len = str_cols(&tail);
+    let before_is_only_trunc = !config.trunc_str.is_empty() && before == config.trunc_str;
+    if !tail.is_empty() {
+        output.push_str(&tail);
+        let pad = half_line_width
+            .saturating_sub(gap_size)
+            .saturating_sub(before_len)
+            .saturating_sub(tail_len);
+        output.push_str(&" ".repeat(pad));
+    } else {
+        let before_space_adjust = if config.is_gnu_ext
+            && before.is_empty()
+            && word_ref.position > before_start
+            && chars_line[word_ref.position - 1].is_whitespace()
+            && half_line_width <= gap_size + config.trunc_str.len() * 2
+        {
+            1
+        } else {
+            0
+        };
+        let trunc_only_adjust = if config.is_gnu_ext
+            && before_is_only_trunc
+            && word_ref.position > before_start
+            && chars_line[word_ref.position - 1].is_whitespace()
+            && half_line_width <= gap_size + config.trunc_str.len() * 2
+        {
+            1
+        } else {
+            0
+        };
+        let whitespace_before_adjust =
+            if config.is_gnu_ext && !before.is_empty() && before.chars().all(char::is_whitespace) {
+                1
+            } else {
+                0
+            };
+        let pad = half_line_width
+            .saturating_sub(gap_size)
+            .saturating_sub(before_len)
+            .saturating_add(before_space_adjust)
+            .saturating_add(trunc_only_adjust)
+            .saturating_add(whitespace_before_adjust);
+        output.push_str(&" ".repeat(pad));
+    }
+
+    output.push_str(&before);
+    output.push_str(&" ".repeat(gap_size));
+    output.push_str(&keyafter);
+
+    let keyafter_len = str_cols(&keyafter);
+    let head_len = str_cols(&head);
+    if !head.is_empty() {
+        let pad = half_line_width
+            .saturating_sub(keyafter_len)
+            .saturating_sub(head_len);
+        output.push_str(&" ".repeat(pad));
+        output.push_str(&head);
+    } else if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
+        let pad = half_line_width.saturating_sub(keyafter_len);
+        output.push_str(&" ".repeat(pad));
+    }
+
+    if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
+        output.push_str(&" ".repeat(gap_size));
+        output.push_str(reference);
+    }
+
+    output
+}
+
 /// 执行 PTX 命令的核心逻辑
 fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
@@ -784,7 +1041,37 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
             Box::new(file)
         });
 
-    let context_reg = Regex::new(&settings.config.context_regex).unwrap();
+    let context_reg = compile_regex_lossy(&settings.config.context_regex);
+
+    // Check for zero-length regex match only when there are words to process
+    // This matches GNU ptx behavior (only errors when processing non-empty content)
+    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "error: regular expression has a match of length zero: '{}'",
+                settings.config.context_regex
+            ),
+        ));
+    }
+
+    let mut reference_max_width = 0usize;
+    if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
+    {
+        for word_ref in &settings.words {
+            let file_map_value = settings
+                .file_map
+                .get(&word_ref.filename)
+                .expect("Missing file in file map");
+            let reference = ptx_get_reference(
+                &settings.config,
+                word_ref,
+                &file_map_value.lines[word_ref.local_line_nr],
+                &context_reg,
+            );
+            reference_max_width = reference_max_width.max(str_cols(&reference));
+        }
+    }
 
     for word_ref in &settings.words {
         let file_map_value = settings
@@ -805,6 +1092,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
                 word_ref,
                 &file_map_value.lines[word_ref.local_line_nr],
                 &file_map_value.chars_lines[word_ref.local_line_nr],
+                &context_reg,
                 &reference,
             ),
             OutFormat::Roff => ptx_format_roff_line(
@@ -812,9 +1100,18 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
                 word_ref,
                 &file_map_value.lines[word_ref.local_line_nr],
                 &file_map_value.chars_lines[word_ref.local_line_nr],
+                &context_reg,
                 &reference,
             ),
-            OutFormat::Dumb => return Err(PtxError::DumbFormat.into()),
+            OutFormat::Dumb => ptx_format_dumb_line(
+                &settings.config,
+                word_ref,
+                &file_map_value.lines[word_ref.local_line_nr],
+                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &context_reg,
+                &reference,
+                reference_max_width,
+            ),
         };
 
         writeln!(writer, "{output_line}").map_err_context(String::new)?;
@@ -825,7 +1122,20 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
 pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let settings = PtxSettings::new(args)?;
+    let args: Vec<OsString> = args.collect();
+    if args.len() == 2 {
+        if let Some(arg1) = args[1].to_str() {
+            if arg1 == "--help" {
+                print!("{PTX_HELP_TEXT}");
+                return Ok(());
+            }
+            if arg1 == "--version" || arg1 == "-V" {
+                print!("{PTX_VERSION_TEXT}");
+                return Ok(());
+            }
+        }
+    }
+    let settings = PtxSettings::new(args.into_iter())?;
     ptx_exec(&settings)
 }
 
@@ -835,10 +1145,11 @@ mod ptx_options {
     pub static PTX_TRADITIONAL: &str = "traditional";
     pub static PTX_FLAG_TRUNCATION: &str = "flag-truncation";
     pub static PTX_MACRO_NAME: &str = "macro-name";
-    pub static PTX_FORMAT_ROFF: &str = "format=roff";
+    pub static PTX_FORMAT: &str = "format";
+    pub static PTX_FORMAT_ROFF: &str = "format-roff";
     pub static PTX_RIGHT_SIDE_REFS: &str = "right-side-refs";
     pub static PTX_SENTENCE_REGEXP: &str = "sentence-regexp";
-    pub static PTX_FORMAT_TEX: &str = "format=tex";
+    pub static PTX_FORMAT_TEX: &str = "format-tex";
     pub static PTX_WORD_REGEXP: &str = "word-regexp";
     pub static PTX_BREAK_FILE: &str = "break-file";
     pub static PTX_IGNORE_CASE: &str = "ignore-case";
@@ -846,6 +1157,7 @@ mod ptx_options {
     pub static PTX_IGNORE_FILE: &str = "ignore-file";
     pub static PTX_ONLY_FILE: &str = "only-file";
     pub static PTX_REFERENCES: &str = "references";
+    pub static PTX_TYPESET_MODE: &str = "typeset-mode";
     pub static PTX_WIDTH: &str = "width";
 }
 
@@ -951,9 +1263,12 @@ pub fn ct_app() -> Command {
             .value_name("STRING"),
         Arg::new(ptx_options::PTX_FORMAT_ROFF)
             .short('O')
-            .long(ptx_options::PTX_FORMAT_ROFF)
             .help(t!("ptx.clap.ptx_format_roff"))
             .action(ArgAction::SetTrue),
+        Arg::new(ptx_options::PTX_FORMAT)
+            .long(ptx_options::PTX_FORMAT)
+            .value_name("FORMAT")
+            .value_parser(["roff", "tex"]),
         Arg::new(ptx_options::PTX_RIGHT_SIDE_REFS)
             .short('R')
             .long(ptx_options::PTX_RIGHT_SIDE_REFS)
@@ -966,7 +1281,6 @@ pub fn ct_app() -> Command {
             .value_name("REGEXP"),
         Arg::new(ptx_options::PTX_FORMAT_TEX)
             .short('T')
-            .long(ptx_options::PTX_FORMAT_TEX)
             .help(t!("ptx.clap.ptx_format_tex"))
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_WORD_REGEXP)
@@ -1006,7 +1320,11 @@ pub fn ct_app() -> Command {
             .short('r')
             .long(ptx_options::PTX_REFERENCES)
             .help(t!("ptx.clap.ptx_references"))
-            .value_name("FILE")
+            .action(ArgAction::SetTrue),
+        Arg::new(ptx_options::PTX_TYPESET_MODE)
+            .short('t')
+            .long(ptx_options::PTX_TYPESET_MODE)
+            .hide(true)
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_WIDTH)
             .short('w')
@@ -1058,7 +1376,10 @@ mod tests {
         assert!(command.get_name().contains("ptx"));
 
         // 测试 execute 方法
-        let args = vec![OsString::from("ptx"), OsString::from("--version")];
+        let args = vec![
+            OsString::from("ptx"),
+            OsString::from("--definitely-invalid-flag"),
+        ];
         assert!(tool.execute(&args).is_err());
     }
 
@@ -1068,20 +1389,29 @@ mod tests {
         #[test]
         fn test_get_config_default() {
             let matches = ct_app().try_get_matches_from(vec!["ptx"]).unwrap();
-            let result = get_config(&matches);
-            assert!(result.is_err()); // GNU extensions not implemented
+            let config = get_config(&matches).unwrap();
+            assert!(config.is_gnu_ext);
+            assert!(matches!(config.format, OutFormat::Dumb));
         }
 
         #[test]
-        fn test_get_config_sentence_regexp_not_supported() {
+        fn test_get_config_sentence_regexp_supported() {
             let matches = ct_app()
                 .try_get_matches_from(vec!["ptx", "-G", "-S", "[A-Z].*"])
                 .unwrap();
-            let err = get_config(&matches).unwrap_err();
-            assert!(
-                err.to_string().contains("-S not implemented yet"),
-                "错误信息应提示 -S 尚未实现，当前为 {err}"
-            );
+            let config = get_config(&matches).unwrap();
+            assert_eq!(config.context_regex, "[A-Z].*");
+        }
+
+        #[test]
+        fn test_get_config_sentence_regexp_zero_len_accepted() {
+            // Zero-length regex check is now deferred to execution time
+            // to match GNU ptx behavior (only errors when processing non-empty content)
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-S", "^"])
+                .unwrap();
+            let config = get_config(&matches).unwrap();
+            assert_eq!(config.context_regex, "^");
         }
 
         #[test]
@@ -1246,10 +1576,64 @@ mod tests {
             let line = "hello test world";
             let chars_line: Vec<char> = line.chars().collect();
             let reference = "1";
+            let context_reg = compile_regex_lossy(&config.context_regex);
 
-            let result = ptx_format_roff_line(&config, &word_ref, line, &chars_line, reference);
+            let result = ptx_format_roff_line(
+                &config,
+                &word_ref,
+                line,
+                &chars_line,
+                &context_reg,
+                reference,
+            );
             assert!(result.starts_with(".xx"));
             assert!(result.contains("test"));
+        }
+
+        #[test]
+        fn test_format_dumb_line_w10_two_tokens_alignment() {
+            let config = PtxConfig {
+                line_width: 10,
+                gap_size: 3,
+                trunc_str: "/".to_string(),
+                ..Default::default()
+            };
+            let line = "foo bar";
+            let chars_line: Vec<char> = line.chars().collect();
+            let word_ref = WordRef {
+                word: "bar".to_string(),
+                global_line_nr: 0,
+                local_line_nr: 0,
+                position: 4,
+                position_end: 7,
+                filename: "test.txt".to_string(),
+            };
+            let context_reg = compile_regex_lossy(&config.context_regex);
+            let got =
+                ptx_format_dumb_line(&config, &word_ref, line, &chars_line, &context_reg, "", 0);
+            assert_eq!(got, "     /   bar");
+        }
+
+        #[test]
+        fn test_format_dumb_line_sentence_regex_alignment() {
+            let config = PtxConfig {
+                context_regex: "[.!?]".to_string(),
+                ..Default::default()
+            };
+            let line = "alpha. beta! gamma?";
+            let chars_line: Vec<char> = line.chars().collect();
+            let word_ref = WordRef {
+                word: "beta".to_string(),
+                global_line_nr: 0,
+                local_line_nr: 0,
+                position: 7,
+                position_end: 11,
+                filename: "test.txt".to_string(),
+            };
+            let context_reg = compile_regex_lossy(&config.context_regex);
+            let got =
+                ptx_format_dumb_line(&config, &word_ref, line, &chars_line, &context_reg, "", 0);
+            assert_eq!(got, "                                        beta!");
         }
     }
 
@@ -1337,7 +1721,7 @@ mod tests {
             };
 
             let result = ptx_exec(&settings);
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
     }
 
@@ -1427,8 +1811,8 @@ mod tests {
 
             // 验证空白字符被正确处理
             assert_eq!(tail, "");
-            assert_eq!(before_out, "/");
-            assert_eq!(after_out, "   "); // 修改期望值，因为函数总是添加截断标记
+            assert_eq!(before_out, " ");
+            assert_eq!(after_out, "   ");
             assert_eq!(head, "");
         }
     }

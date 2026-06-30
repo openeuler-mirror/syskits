@@ -205,9 +205,18 @@ impl StdbufFlags {
         self.set_command_env(&mut command, "_STDBUF_E", &self.stderr);
 
         // 执行命令并等待完成
-        let mut process = command
-            .spawn()
-            .map_err_context(|| format!("failed to execute process: {command_name}"))?;
+        let mut process = command.spawn().map_err(|e| {
+            // Handle command not found with exit code 127
+            let exit_code = if e.kind() == std::io::ErrorKind::NotFound {
+                127
+            } else {
+                126
+            };
+            CtSimpleError::new(
+                exit_code,
+                format!("failed to run command '{command_name}': {e}"),
+            )
+        })?;
 
         let status = process
             .wait()
@@ -222,10 +231,13 @@ impl StdbufFlags {
                     Err(i.into())
                 }
             }
-            None => Err(CtSimpleError::new(
-                1,
-                format!("process killed by signal {}", status.signal().unwrap()),
-            )),
+            None => {
+                let signal = status.signal().unwrap();
+                Err(CtSimpleError::new(
+                    1,
+                    format!("process killed by signal {signal}"),
+                ))
+            }
         }
     }
 
@@ -280,8 +292,12 @@ fn preload_strings() -> CTResult<(&'static str, &'static str)> {
 pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 解析命令行参数
-    let matches = ct_app().try_get_matches_from(args)?;
+
+    // 解析命令行参数 - handle clap errors with exit code 125
+    let matches = ct_app().try_get_matches_from(args).map_err(|e| {
+        // Clap errors should return exit code 125
+        CtSimpleError::new(125, e.to_string())
+    })?;
 
     // 创建配置对象
     let settings = StdbufFlags::new(matches)?;

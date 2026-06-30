@@ -1,8 +1,73 @@
 hostname:
   clap:
-    opt_domain: Display the name of the DNS domain if possible
-    opt_ip_address: Display the network address(es) of the host
-    opt_fqdn: Display the FQDN (Fully Qualified Domain Name) (default)
-    opt_short: Display the short hostname (the portion before the first dot) if possible
+    opt_alias: Display alias names
+    opt_all_fqdns: Display all long host names (FQDNs)
+    opt_boot: Set default hostname if none available
+    opt_domain: Display DNS domain name
+    opt_fqdn: Display long host name (FQDN)
+    opt_file: Read host name or NIS domain name from given file
+    opt_ip_address: Display addresses for the host name
+    opt_all_ip_addresses: Display all addresses for the host
+    opt_short: Display short host name
+    opt_nis: Display NIS/YP domain name
   usage: hostname [OPTION]... [HOSTNAME]
   about: Display or set the system's host name.
+  after_help: |
+    
+    This command can get or set the host name or the NIS domain name. You can
+    also get the DNS domain or the FQDN (fully qualified domain name).
+    Unless you are using bind or NIS for host lookups you can change the
+    FQDN (Fully Qualified Domain Name) and the DNS domain name (which is
+    part of the FQDN) in the /etc/hosts file.
+    
+    Program name aliases:
+      {yp,nis,}domainname=hostname -y
+      dnsdomainname=hostname -d
+  usage_text: |
+    Usage: hostname [-b] {hostname|-F file}         set host name (from file)
+           hostname [-a|-A|-d|-f|-i|-I|-s|-y]       display formatted name
+           hostname                                 display host name
+
+           {yp,nis,}domainname {nisdomain|-F file}  set NIS domain name (from file)
+           {yp,nis,}domainname                      display NIS domain name
+
+           dnsdomainname                            display dns domain name
+
+           hostname -V|--version|-h|--help          print info and exit
+
+    Program name:
+           {yp,nis,}domainname=hostname -y
+           dnsdomainname=hostname -d
+
+    Program options:
+        -a, --alias            alias names
+        -A, --all-fqdns        all long host names (FQDNs)
+        -b, --boot             set default hostname if none available
+        -d, --domain           DNS domain name
+        -f, --fqdn, --long     long host name (FQDN)
+        -F, --file             read host name or NIS domain name from given file
+        -i, --ip-address       addresses for the host name
+        -I, --all-ip-addresses all addresses for the host
+        -s, --short            short host name
+        -y, --yp, --nis        NIS/YP domain name
+
+    Description:
+       This command can get or set the host name or the NIS domain name. You can
+       also get the DNS domain or the FQDN (fully qualified domain name).
+       Unless you are using bind or NIS for host lookups you can change the
+       FQDN (Fully Qualified Domain Name) and the DNS domain name (which is
+       part of the FQDN) in the /etc/hosts file.
+  messages:
+    version_output: "hostname %{version}"
+    option_no_argument: "%{progname}: option '--%{name}' doesn't allow an argument"
+    option_file_requires_arg: "%{progname}: option '--file' requires an argument"
+    unrecognized_option: "%{progname}: unrecognized option '--%{name}'"
+    option_requires_arg_short: "%{progname}: option requires an argument -- '%{ch}'"
+    invalid_option_short: "%{progname}: invalid option -- '%{ch}'"
+    io_error: "%{progname}: %{msg}"
+    specified_hostname_invalid: "%{progname}: the specified hostname is invalid"
+    local_domain_not_set: "%{progname}: Local domain name not set"
+    must_be_root_change_host: "%{progname}: you must be root to change the host name"
+    must_be_root_change_domain: "%{progname}: you must be root to change the domain name"
+    name_too_long: "%{progname}: name too long"
+    gai_error: "%{progname}: %{msg}"

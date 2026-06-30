@@ -1,0 +1,322 @@
+{
+  "tests": [
+    {
+      "command": "stdbuf",
+      "description": "Basic: Valid size syntax -o1",
+      "args": ["-o1", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Basic: Valid size syntax -oK (1024 bytes)",
+      "args": ["-oK", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Basic: Unbuffered mode -o0",
+      "args": ["-o0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Basic: Line buffered mode -oL",
+      "args": ["-oL", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Basic: All streams buffered -i0 -o0 -e0",
+      "args": ["-i0", "-o0", "-e0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Error: Missing operand",
+      "args": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 125,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'missing operand'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Error: No buffering mode specified",
+      "args": ["true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 125,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'buffering mode'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Error: Invalid mode (lowercase l instead of L)",
+      "args": ["-ol", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 125,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'invalid mode'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Error: Line buffering stdin is meaningless",
+      "args": ["-iL", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 125,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'line buffering stdin is meaningless'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Error: Command not found",
+      "args": ["-o1", "no_such_command_xyz"],
+      "expectation": {
+        "execution": {
+          "exit_code": 127,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDERR\" | grep -q 'failed to run command\\|No such file'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Multiple buffer size formats",
+      "args": ["-o1024", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Buffer size with M suffix (1MB)",
+      "args": ["-o1M", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Buffer size with K suffix (1KB)",
+      "args": ["-o1K", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Error stream buffering -e0",
+      "args": ["-e0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Input stream buffering -i0",
+      "args": ["-i0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Combined output and error buffering",
+      "args": ["-o0", "-e0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Line buffering for error stream",
+      "args": ["-eL", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Execute echo command with buffering",
+      "args": ["-oL", "echo", "test"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "test\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Execute command with arguments",
+      "args": ["-o0", "printf", "hello world"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "hello world",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Long option --output",
+      "args": ["--output=L", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Long option --input",
+      "args": ["--input=0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Long option --error",
+      "args": ["--error=0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Command that exits with non-zero status",
+      "args": ["-oL", "sh", "-c", "exit 42"],
+      "expectation": {
+        "execution": {
+          "exit_code": 42,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "command": "stdbuf",
+      "description": "Test: Buffer size 0 (unbuffered)",
+      "args": ["-o0", "-e0", "-i0", "true"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    }
+  ]
+}

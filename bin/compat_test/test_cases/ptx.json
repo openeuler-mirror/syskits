@@ -1,253 +1,318 @@
 {
-    "tests": [
-        {
-            "command": "ptx",
-            "description": "ptx: 扩展模式",
-            "args": ["ptx_example.txt"],
-            "setup_commands": [
-                "echo 'Hello world \nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt\n"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，基本功能测试",
-            "args": ["-G", "ptx_example.txt"],
-            "setup_commands": [
-                "echo 'Hello world \nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt\n"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "tstdin": "hello world\nthis is a test\n",
-            "command": "ptx",
-            "description": "ptx: 传统模式，从标准输入读取",
-            "args": ["-G"],
-            "setup_commands": [
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，忽略大小写",
-            "args": ["-G", "-f",
-            "ptx_example.txt"],
-            "setup_commands": [
-                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，将结果写入到文件",
-            "args": ["-G", "ptx_example.txt", "output_index.txt"],
-            "setup_commands": [
-                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                    {
-                        "command": "cat output_index.txt",
-                        "expected_exit": 0,
-                        "expected_stdout": "",
-                        "expected_stderr": null
-                    }
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt output_index.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，自定义行宽",
-            "args": ["-G", "-w", "30", "ptx_example.txt"],
-            "setup_commands": [
-                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，忽略特定词",
-            "args": ["-G", "-i", "stopwords.txt",
-            "ptx_example.txt"],
-            "setup_commands": [
-                "echo -e 'the\\nan' > stopwords.txt",
-                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt stopwords.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，错误参数处理",
-            "args": ["-G", "--badoption",
-            "ptx_example.txt"],
-            "setup_commands": [
-                "echo 'Hello world\nThe quick brown fox jumps over the lazy dog\nhello again\nPTX generates an index\nThe fox is clever\ngoodbye world' > ptx_example.txt"
-            ],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-                "rm -f ptx_example.txt"
-            ],
-            "requires_root": false
-        },
-        {
-            "command": "ptx",
-            "description": "ptx: 传统模式，文件不存在",
-            "args": ["-G", "not_exist.txt"],
-            "setup_commands": [],
-            "expectation": {
-                "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
-                },
-                "verifications": [
-                ],
-                "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
-                }
-            },
-            "cleanup_commands": [
-            ],
-            "requires_root": false
+  "tests": [
+    {
+      "command": "ptx",
+      "description": "Basic ptx with single token",
+      "args": [
+        "-w10"
+      ],
+      "setup_commands": [
+        "echo 'bar' > /tmp/test_ptx_1tok.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_1tok.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "        bar\n",
+          "stderr": ""
         }
-    ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_1tok.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Basic ptx with two tokens",
+      "args": [
+        "-w10"
+      ],
+      "setup_commands": [
+        "echo 'foo bar' > /tmp/test_ptx_2tok.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_2tok.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "     /   bar\n        foo/\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_2tok.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Narrow width test (w2) - should not infloop",
+      "args": [
+        "-w2"
+      ],
+      "setup_commands": [
+        "echo 'qux' > /tmp/test_ptx_narrow.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_narrow.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "      qux\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_narrow.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Narrow width with gap size (g1 w2)",
+      "args": [
+        "-g1",
+        "-w2"
+      ],
+      "setup_commands": [
+        "echo 'ta' > /tmp/test_ptx_narrow_g.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_narrow_g.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "  ta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_narrow_g.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Two separate input files",
+      "args": [
+        "-g1",
+        "-w1"
+      ],
+      "setup_commands": [
+        "echo 'a' > /tmp/test_ptx_f1.txt",
+        "echo 'b' > /tmp/test_ptx_f2.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_f1.txt",
+        "/tmp/test_ptx_f2.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "  a\n  b\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_f1.txt /tmp/test_ptx_f2.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Format roff output",
+      "args": [
+        "--format=roff"
+      ],
+      "setup_commands": [
+        "echo 'foo' > /tmp/test_ptx_roff.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_roff.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \"foo\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_roff.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Format tex output",
+      "args": [
+        "--format=tex"
+      ],
+      "setup_commands": [
+        "echo 'foo' > /tmp/test_ptx_tex.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_tex.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{foo}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_tex.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -O flag (format=roff short form)",
+      "args": [
+        "-O"
+      ],
+      "setup_commands": [
+        "echo 'test' > /tmp/test_ptx_O.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_O.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \"test\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_O.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test -T flag (format=tex short form)",
+      "args": [
+        "-T"
+      ],
+      "setup_commands": [
+        "echo 'test' > /tmp/test_ptx_T.txt"
+      ],
+      "input_files": [
+        "/tmp/test_ptx_T.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{test}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_T.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test stdin input (no file argument)",
+      "args": [
+        "-w20"
+      ],
+      "setup_commands": [
+        "echo 'stdin test' > /tmp/test_ptx_stdin_input.txt"
+      ],
+      "stdin_file": "/tmp/test_ptx_stdin_input.txt",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'stdin'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'test'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_stdin_input.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test dash (-) as stdin",
+      "args": [
+        "-w20",
+        "-"
+      ],
+      "setup_commands": [
+        "echo 'dash test' > /tmp/test_ptx_dash_input.txt"
+      ],
+      "stdin_file": "/tmp/test_ptx_dash_input.txt",
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'dash'",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f /tmp/test_ptx_dash_input.txt"
+      ]
+    },
+    {
+      "command": "ptx",
+      "description": "Test --help flag",
+      "args": [
+        "--help"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'Usage:'",
+            "expected_exit": 0
+          },
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -q 'permuted index'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    },
+    {
+      "command": "ptx",
+      "description": "Test --version flag",
+      "args": [
+        "--version"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "echo \"$CMD_STDOUT\" | grep -iq 'ptx'",
+            "expected_exit": 0
+          }
+        ]
+      }
+    }
+  ]
 }

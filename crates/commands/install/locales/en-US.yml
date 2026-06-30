@@ -7,10 +7,10 @@ install:
     install_strip: strip symbol tables (no action Windows)
     install_strip_program: program used to strip binaries (no action Windows)
     install_target_directory: move all SOURCE arguments into DIRECTORY
-    install_no_target_directory: (unimplemented) treat DEST as a normal file
+    install_no_target_directory: treat DEST as a normal file
     install_verbose: explain what is being done
-    install_preserve_context: (unimplemented) preserve security context
-    install_context: (unimplemented) set security context of files and directories
+    install_preserve_context: preserve security context
+    install_context: set security context of files and directories
   usage: install [OPTION]... [FILE]...
   about: |-
     Copy SOURCE to DEST or multiple SOURCE(s) to the existing

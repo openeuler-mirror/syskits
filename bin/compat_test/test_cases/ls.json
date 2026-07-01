@@ -1769,6 +1769,157 @@
                 "cleanup_commands": [
                     "rm -rf test_qs_esc"
                 ]
+            },
+            {
+                "command": "ls",
+                "description": "块大小 (--block-size=2KB vs 2K)",
+                "setup_commands": [
+                    "mkdir -p test_bs_kb",
+                    "dd if=/dev/zero of=test_bs_kb/file bs=2048 count=1 2>/dev/null"
+                ],
+                "args": ["-s", "--block-size=2KB", "test_bs_kb"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls -s --block-size=2KB test_bs_kb | grep -E '^3 '",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_bs_kb"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "目录优先被 -U 禁用",
+                "setup_commands": [
+                    "mkdir -p test_gdf_u",
+                    "mkdir test_gdf_u/dir1",
+                    "touch test_gdf_u/file1",
+                    "mkdir test_gdf_u/dir2"
+                ],
+                "args": ["-U", "--group-directories-first", "test_gdf_u"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "dir1\nfile1\ndir2",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_gdf_u"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "隐藏模式被 -a 覆盖",
+                "setup_commands": [
+                    "mkdir -p test_hide_a",
+                    "touch test_hide_a/hidden_file"
+                ],
+                "args": ["-a", "--hide=*hidden*", "test_hide_a"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": ".\n..\nhidden_file",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_hide_a"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "环境变量 TIME_STYLE",
+                "setup_commands": [
+                    "mkdir -p test_env_ts",
+                    "touch test_env_ts/file"
+                ],
+                "args": ["-l", "test_env_ts"],
+                "env": {
+                    "TIME_STYLE": "+%Y-%m-%d_TEST"
+                },
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls -l test_env_ts | grep '_TEST'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_env_ts"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 block-size 向上取整 (2KB unit, 4KB file)",
+                "setup_commands": [
+                    "mkdir -p test_bs_round",
+                    "dd if=/dev/zero of=test_bs_round/file bs=4096 count=1 2>/dev/null"
+                ],
+                "args": ["-s", "--block-size=2KB", "test_bs_round"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "total 3\n*3 file",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_bs_round"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 block-size 总计行计算 (先求和再取整)",
+                "setup_commands": [
+                    "mkdir -p test_bs_total",
+                    "dd if=/dev/zero of=test_bs_total/file1 bs=4096 count=1 2>/dev/null",
+                    "dd if=/dev/zero of=test_bs_total/file2 bs=4096 count=1 2>/dev/null"
+                ],
+                "args": ["-s", "--block-size=2KB", "test_bs_total"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "total 5\n*3 file1\n*3 file2",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_bs_total"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 block-size 无后缀 (1M vs M)（中英文差异）",
+                "setup_commands": [
+                    "mkdir -p test_bs_suffix",
+                    "dd if=/dev/zero of=test_bs_suffix/file bs=1M count=2 2>/dev/null"
+                ],
+                "args": ["-s", "--block-size=1M", "test_bs_suffix"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "total 2\n*2 file",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_bs_suffix"
+                ]
             }
     ]
 } 

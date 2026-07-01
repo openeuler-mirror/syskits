@@ -77,7 +77,9 @@
     {
       "command": "cksum",
       "description": "cksum: 测试标准输入的显式处理",
-      "args": ["-"],
+      "args": [
+        "-"
+      ],
       "tstdin": "Hello stdin\n",
       "setup_commands": [],
       "expectation": {
@@ -105,7 +107,9 @@
     {
       "command": "cksum",
       "description": "cksum: 测试空文件的校验和计算",
-      "args": ["empty"],
+      "args": [
+        "empty"
+      ],
       "tstdin": "",
       "setup_commands": [
         "touch empty"
@@ -124,7 +128,10 @@
     {
       "command": "cksum",
       "description": "cksum: 测试有无换行的文件",
-      "args": ["f1", "f2"],
+      "args": [
+        "f1",
+        "f2"
+      ],
       "tstdin": "",
       "setup_commands": [
         "touch f1",
@@ -146,7 +153,9 @@
     {
       "command": "cksum",
       "description": "cksum: 测试不存在的文件",
-      "args": ["not_exist_file"],
+      "args": [
+        "not_exist_file"
+      ],
       "tstdin": "",
       "setup_commands": [],
       "expectation": {
@@ -195,8 +204,7 @@
           "stderr": ""
         }
       },
-      "cleanup_commands": [
-      ]
+      "cleanup_commands": []
     },
     {
       "command": "cksum",

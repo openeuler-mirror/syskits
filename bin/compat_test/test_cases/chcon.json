@@ -319,7 +319,114 @@
                 "rm -f chcon_test_file chcon_symlink"
             ],
             "requires_root": true
+        },
+        {
+            "command": "chcon",
+            "description": "chcon: 直接指定完整安全上下文",
+            "args": ["system_u:object_r:tmp_t:s0", "ctx_file"],
+            "setup_commands": ["echo 'x' > ctx_file"],
+            "expectation": {
+                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
+                "verifications": [{
+                "command": "stat -c '%C' ctx_file",
+                "expected_exit": 0,
+                "expected_stdout": "system_u:object_r:tmp_t:s0\n",
+                "expected_stderr": null
+                }]
+            },
+            "cleanup_commands": ["rm -f ctx_file"],
+            "requires_root": true
+        },
+        {
+            "command": "chcon",
+            "description": "chcon: --dereference 影响目标而不是 symlink",
+            "args": ["--dereference", "-t", "tmp_t", "link_file"],
+            "setup_commands": [
+                "echo hi > real_file",
+                "ln -s real_file link_file"
+            ],
+            "expectation": {
+                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
+                "verifications": [
+                { "command": "stat -c '%C' real_file", "expected_exit": 0, "expected_stdout": "system_u:object_r:tmp_t:s0\n", "expected_stderr": null },
+                { "command": "stat -c '%C' link_file", "expected_exit": 0, "expected_stdout": "", "expected_stderr": null }
+                ]
+            },
+            "cleanup_commands": ["rm -f real_file link_file"],
+            "requires_root": true
+        },
+        {
+            "command": "chcon",
+            "description": "chcon: verbose 输出（仅有中英文差异）",
+            "args": ["-v", "-t", "tmp_t", "v_file"],
+            "setup_commands": ["echo hi > v_file"],
+            "expectation": {
+                "execution": {
+                "exit_code": 0,
+                "stdout": "changed context of 'v_file'\n",
+                "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f v_file"],
+            "requires_root": true
+        },
+        {
+            "command": "chcon",
+            "description": "chcon: -R -P 不跟随目录符号链接",
+            "args": ["-R", "-P", "-t", "tmp_t", "rootdir"],
+            "setup_commands": [
+                "mkdir rootdir",
+                "mkdir targetdir",
+                "touch targetdir/fileX",
+                "ln -s targetdir rootdir/linkdir"
+            ],
+            "expectation": {
+                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
+                "verifications": [
+                {
+                    "command": "stat -c '%C' targetdir/fileX",
+                    "expected_exit": 0,
+                    "expected_stdout": "system_u:object_r:default_t:s0\n",
+                    "expected_stderr": null
+                },
+                {
+                    "command": "stat -c '%C' targetdir",
+                    "expected_exit": 0,
+                    "expected_stdout": "system_u:object_r:default_t:s0\n",
+                    "expected_stderr": null
+                }
+                ]
+            },
+            "cleanup_commands": ["rm -rf rootdir targetdir"],
+            "requires_root": true
+        },
+        {
+            "command": "chcon",
+            "description": "chcon: --help",
+            "args": ["--help"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
+                "verifications": [
+                ]
+            },
+            "cleanup_commands": [],
+            "requires_root": true
+        },
+        {
+            "command": "chcon",
+            "description": "chcon: --version",
+            "args": ["--version"],
+            "setup_commands": [
+            ],
+            "expectation": {
+                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
+                "verifications": [
+                ]
+            },
+            "cleanup_commands": [],
+            "requires_root": true
         }
-
     ]
 }

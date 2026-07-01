@@ -2039,12 +2039,12 @@
             },
             {
                 "command": "ls",
-                "description": "测试 --dired 输出完整性 (检查是否包含 //DIRED-OPTIONS//)",
+                "description": "测试未来时间戳显示 (中英文差异)",
                 "setup_commands": [
-                    "mkdir -p test_dired_opt",
-                    "touch test_dired_opt/file"
+                    "mkdir -p test_future",
+                    "touch -d 'tomorrow' test_future/future_file"
                 ],
-                "args": ["-l", "--dired", "test_dired_opt"],
+                "args": ["-l", "test_future/future_file"],
                 "expectation": {
                     "execution": {
                         "exit_code": 0,
@@ -2052,11 +2052,14 @@
                         "stderr": ""
                     },
                     "verifications": [
-                        { "command": "ls -l --dired test_dired_opt | grep '//DIRED-OPTIONS//'", "expected_exit": 0 }
+                        {
+                            "command": "ls -l test_future/future_file | grep -E '[0-9]{4}'",
+                            "expected_exit": 0
+                        }
                     ]
                 },
                 "cleanup_commands": [
-                    "rm -rf test_dired_opt"
+                    "rm -rf test_future"
                 ]
             },
             {

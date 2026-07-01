@@ -1920,6 +1920,169 @@
                 "cleanup_commands": [
                     "rm -rf test_bs_suffix"
                 ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 TIME_STYLE 环境变量 (GNU ls 使用 TIME_STYLE, syskits ls 似乎使用了 LS_TIME_STYLE)",
+                "setup_commands": [
+                    "mkdir -p test_env_time_style_std",
+                    "touch test_env_time_style_std/file"
+                ],
+                "args": ["-l", "test_env_time_style_std"],
+                "env": {
+                    "TIME_STYLE": "long-iso"
+                },
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls -l test_env_time_style_std | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_env_time_style_std"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 --time-style 的 posix- 前缀支持",
+                "setup_commands": [
+                    "mkdir -p test_posix_style",
+                    "touch test_posix_style/file"
+                ],
+                "args": ["-l", "--time-style=posix-long-iso", "test_posix_style"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls -l --time-style=posix-long-iso test_posix_style | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_posix_style"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试版本排序 (leading zeros)",
+                "setup_commands": [
+                    "mkdir test_ver_zero",
+                    "touch test_ver_zero/a.1 test_ver_zero/a.01"
+                ],
+                "args": ["-v", "test_ver_zero"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "a.01\na.1",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_ver_zero"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 --time=mtime (GNU ls 支持, syskits ls 目前不支持)",
+                "setup_commands": [
+                    "mkdir -p test_time_mtime",
+                    "touch test_time_mtime/file"
+                ],
+                "args": ["--time=mtime", "test_time_mtime"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "file",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_time_mtime"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 -T/--tabsize",
+                "setup_commands": [
+                    "mkdir -p test_tabsize",
+                    "touch test_tabsize/a test_tabsize/b"
+                ],
+                "args": ["-C", "-T", "4", "test_tabsize"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls -C -T 4 test_tabsize | cat -A | grep '\\^I'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_tabsize"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 --dired 输出完整性 (检查是否包含 //DIRED-OPTIONS//)",
+                "setup_commands": [
+                    "mkdir -p test_dired_opt",
+                    "touch test_dired_opt/file"
+                ],
+                "args": ["-l", "--dired", "test_dired_opt"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        { "command": "ls -l --dired test_dired_opt | grep '//DIRED-OPTIONS//'", "expected_exit": 0 }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_dired_opt"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试未来时间戳显示 (GNU ls 显示年份, syskits ls 显示时间)",
+                "setup_commands": [
+                    "mkdir -p test_future",
+                    "touch -d 'next year' test_future/future_file"
+                ],
+                "args": ["-l", "test_future/future_file"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls -l test_future/future_file | grep -E '[0-9]{4}'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_future"
+                ]
             }
     ]
 } 

@@ -517,8 +517,442 @@
         "cleanup_commands": [
             "rm -f test_file_chown_user_colon",
             "userdel -r testuser_chown_user_colon"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -v 显示详细信息",
+      "args": ["-v", "testuser_chown_v", "test_file_v"],
+      "setup_commands": [
+        "useradd testuser_chown_v",
+        "touch test_file_v",
+        "chown root test_file_v"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "chown root test_file_v",
+            "expected_exit": 0,
+            "expected_stdout": "",
+            "expected_stderr": null
+          }
         ],
-        "requires_root": true
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_v",
+        "userdel -r testuser_chown_v"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -c 仅在更改时报告 (发生更改)",
+      "args": ["-c", "testuser_chown_c", "test_file_c"],
+      "setup_commands": [
+        "useradd testuser_chown_c",
+        "touch test_file_c",
+        "chown root test_file_c"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' test_file_c",
+            "expected_exit": 0,
+            "expected_stdout": "testuser_chown_c\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_c",
+        "userdel -r testuser_chown_c"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -c 仅在更改时报告 (未发生更改)",
+      "args": ["-c", "testuser_chown_c_no", "test_file_c_no"],
+      "setup_commands": [
+        "useradd testuser_chown_c_no",
+        "touch test_file_c_no",
+        "chown testuser_chown_c_no test_file_c_no"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_c_no",
+        "userdel -r testuser_chown_c_no"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -f 抑制错误信息",
+      "args": ["-f", "testuser_chown_f", "nonexistent_file_f"],
+      "setup_commands": [
+        "useradd testuser_chown_f"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": null,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "userdel -r testuser_chown_f"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: --from 匹配时更改",
+      "args": ["--from=root", "testuser_from_match", "test_file_from_match"],
+      "setup_commands": [
+        "useradd testuser_from_match",
+        "touch test_file_from_match",
+        "chown root test_file_from_match"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' test_file_from_match",
+            "expected_exit": 0,
+            "expected_stdout": "testuser_from_match\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_from_match",
+        "userdel -r testuser_from_match"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: --from 不匹配时不更改",
+      "args": ["--from=testuser_from_mismatch", "target_user", "test_file_from_mismatch"],
+      "setup_commands": [
+        "useradd testuser_from_mismatch",
+        "useradd target_user",
+        "touch test_file_from_mismatch",
+        "chown root test_file_from_mismatch"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' test_file_from_mismatch",
+            "expected_exit": 0,
+            "expected_stdout": "root\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_from_mismatch",
+        "userdel -r testuser_from_mismatch",
+        "userdel -r target_user"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: --reference 使用参考文件的所有者",
+      "args": ["--reference=ref_file_chown", "target_file_chown"],
+      "setup_commands": [
+        "useradd testuser_ref",
+        "touch ref_file_chown target_file_chown",
+        "chown testuser_ref ref_file_chown",
+        "chown root target_file_chown"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' target_file_chown",
+            "expected_exit": 0,
+            "expected_stdout": "testuser_ref\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ref_file_chown target_file_chown",
+        "userdel -r testuser_ref"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -R -H 遍历命令行指定的符号链接目录",
+      "args": ["-R", "-H", "testuser_H", "link_dir_H"],
+      "setup_commands": [
+        "useradd testuser_H",
+        "mkdir -p real_dir_H/subdir",
+        "touch real_dir_H/subdir/file.txt",
+        "ln -s real_dir_H link_dir_H",
+        "chown -R root real_dir_H"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' real_dir_H/subdir/file.txt",
+            "expected_exit": 0,
+            "expected_stdout": "testuser_H\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf real_dir_H link_dir_H",
+        "userdel -r testuser_H"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -R -L 遍历目录中的符号链接",
+      "args": ["-R", "-L", "testuser_L", "start_dir_L"],
+      "setup_commands": [
+        "useradd testuser_L",
+        "mkdir -p external_dir_L",
+        "touch external_dir_L/file.txt",
+        "mkdir start_dir_L",
+        "ln -s external_dir_L start_dir_L/link",
+        "chown root external_dir_L/file.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' external_dir_L/file.txt",
+            "expected_exit": 0,
+            "expected_stdout": "testuser_L\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf start_dir_L external_dir_L",
+        "userdel -r testuser_L"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: -R -P 不遍历符号链接 (默认)",
+      "args": ["-R", "-P", "testuser_P", "start_dir_P"],
+      "setup_commands": [
+        "useradd testuser_P",
+        "mkdir -p external_dir_P",
+        "touch external_dir_P/file.txt",
+        "mkdir start_dir_P",
+        "ln -s external_dir_P start_dir_P/link",
+        "chown root external_dir_P/file.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' external_dir_P/file.txt",
+            "expected_exit": 0,
+            "expected_stdout": "root\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf start_dir_P external_dir_P",
+        "userdel -r testuser_P"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: 使用数字 UID",
+      "args": ["0", "test_file_uid"],
+      "setup_commands": [
+        "useradd testuser_uid",
+        "touch test_file_uid",
+        "chown testuser_uid test_file_uid"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%u' test_file_uid",
+            "expected_exit": 0,
+            "expected_stdout": "0\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_uid",
+        "userdel -r testuser_uid"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "chown: --dereference 解引用符号链接 (默认)",
+      "args": ["--dereference", "testuser_deref", "link_deref"],
+      "setup_commands": [
+        "useradd testuser_deref",
+        "touch target_deref",
+        "ln -s target_deref link_deref",
+        "chown root target_deref",
+        "chown -h root link_deref"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%U' target_deref",
+            "expected_exit": 0,
+            "expected_stdout": "testuser_deref\n",
+            "expected_stderr": null
+          },
+          {
+            "command": "stat -c '%U' link_deref",
+            "expected_exit": 0,
+            "expected_stdout": "root\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f target_deref link_deref",
+        "userdel -r testuser_deref"
+      ],
+      "requires_root": true
     }
   ]
 } 

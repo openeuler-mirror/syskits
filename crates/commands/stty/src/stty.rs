@@ -24,15 +24,16 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use device::Device;
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort, tcflag_t};
 use nix::sys::termios::{
-    SpecialCharacterIndices, Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O, SpecialCharacterIndices,
+    Termios, cfgetispeed, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::stdin;
 use std::ops::ControlFlow;
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
@@ -50,9 +51,25 @@ mod stty_flags {
 struct SttyFlags {
     is_all: bool,
     is_save: bool,
+    file_name: Option<String>,
     file: Device,
     settings: Option<Vec<String>>,
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const IUCLC_RAW_BIT: tcflag_t = 0o0001000;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const IUCLC_RAW_BIT: tcflag_t = 0;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const XCASE_RAW_BIT: tcflag_t = 0o0000004;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const XCASE_RAW_BIT: tcflag_t = 0;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const OFILL_RAW_BIT: tcflag_t = 0o0000100;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const OFILL_RAW_BIT: tcflag_t = 0;
 
 // 解析配置参数，将参数与可能的值组合成一个字符串列表
 //
@@ -108,14 +125,16 @@ impl SttyFlags {
                     .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {e}")))?;
                 Device::File(fd)
             }
-            None => Device::Stdout(stdout()),
+            None => Device::Stdin(stdin()),
         };
+        let file_name = matches.get_one::<String>(stty_flags::STTY_FILE).cloned();
 
         Ok(Self {
             // 是否显示所有设置的标志
             is_all: matches.get_flag(stty_flags::STTY_ALL),
             // 是否保存当前设置的标志
             is_save: matches.get_flag(stty_flags::STTY_SAVE),
+            file_name,
             file,
             settings,
         })
@@ -181,6 +200,118 @@ pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
     stty(&stty_opts)
 }
 
+fn find_special_setting(name: &str) -> Option<settings::SpecialSettingEntry> {
+    settings::SPECIAL_SETTINGS
+        .iter()
+        .copied()
+        .find(|entry| entry.name == name)
+}
+
+fn find_regular_setting(name: &str) -> Option<bool> {
+    for setting in CONTROL_SETTINGS {
+        if setting.name == name {
+            return Some(setting.group.is_some());
+        }
+    }
+    for setting in INPUT_SETTINGS {
+        if setting.name == name {
+            return Some(setting.group.is_some());
+        }
+    }
+    for setting in OUTPUT_SETTINGS {
+        if setting.name == name {
+            return Some(setting.group.is_some());
+        }
+    }
+    for setting in LOCAL_SETTINGS {
+        if setting.name == name {
+            return Some(setting.group.is_some());
+        }
+    }
+    None
+}
+
+fn is_custom_regular_setting(name: &str) -> bool {
+    matches!(name, "ofill" | "iuclc" | "xcase")
+}
+
+fn find_combination_setting(name: &str) -> Option<bool> {
+    let reversible = match name {
+        "evenp" | "parity" | "oddp" | "nl" | "cooked" | "raw" | "pass8" | "litout" | "cbreak"
+        | "decctlq" | "tabs" | "lcase" | "LCASE" => true,
+        "ek" | "sane" | "crt" | "dec" => false,
+        _ => return None,
+    };
+    Some(reversible)
+}
+
+fn validate_setting_syntax(setting: &str) -> CTResult<()> {
+    if BAUD_RATES.iter().any(|(text, _, _)| *text == setting) {
+        return Ok(());
+    }
+
+    if setting.contains(':') {
+        return Ok(());
+    }
+
+    let mut parts = setting.split_whitespace();
+    let Some(name) = parts.next() else {
+        return Err(CtSimpleError::new(1, "invalid argument ''"));
+    };
+    let value = parts.next();
+
+    if let Some(entry) = find_special_setting(name) {
+        if entry.requires_value && value.is_none() {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid argument '{setting}'"),
+            ));
+        }
+        return Ok(());
+    }
+
+    let (is_remove, base_name) = match name.strip_prefix('-') {
+        Some(s) => (true, s),
+        None => (false, name),
+    };
+
+    if is_custom_regular_setting(base_name) {
+        if value.is_some() {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid argument '{setting}'"),
+            ));
+        }
+        return Ok(());
+    }
+
+    if let Some(is_reversible) = find_combination_setting(base_name) {
+        if value.is_some() || (is_remove && !is_reversible) {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid argument '{setting}'"),
+            ));
+        }
+        return Ok(());
+    }
+
+    let Some(is_grouped) = find_regular_setting(base_name) else {
+        return Err(CtSimpleError::new(
+            1,
+            format!("invalid argument '{setting}'"),
+        ));
+    };
+
+    if value.is_some() || (is_remove && is_grouped) {
+        return Err(CtSimpleError::new(
+            1,
+            format!("invalid argument '{setting}'"),
+        ));
+    }
+
+    Ok(())
+}
+
 /// 设置或打印终端的配置
 ///
 /// 此函数根据提供的`SttyFlags`参数检查、获取或设置终端属性
@@ -198,30 +329,77 @@ fn stty(opts: &SttyFlags) -> CTResult<()> {
     // Check 参数冲突
     opts.check()?;
 
+    if let Some(settings) = &opts.settings {
+        for setting in settings {
+            validate_setting_syntax(setting)?;
+        }
+    }
+
     // 通过 tcgetattr 获取终端配置
-    let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
+    let mut termios =
+        tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
 
     // 通过 stty_apply_setting 应用设置
     if let Some(settings) = &opts.settings {
+        let drain_only = settings
+            .iter()
+            .all(|setting| matches!(setting.as_str(), "drain" | "-drain"));
+
         for setting in settings {
-            if let ControlFlow::Break(false) = stty_apply_setting(&mut termios, setting, &opts.file)
-            {
+            let applied = stty_apply_setting(&mut termios, setting, &opts.file)?;
+            if matches!(
+                applied,
+                ControlFlow::Break(false) | ControlFlow::Continue(())
+            ) {
                 let err_message = format!("invalid argument '{setting}'");
                 return Err(CtSimpleError::new(1, err_message));
             }
         }
 
-        tcsetattr(
-            opts.file.as_fd(),
-            nix::sys::termios::SetArg::TCSANOW,
-            &termios,
-        )
-        .expect("Could not write terminal attributes");
+        if drain_only {
+            stty_print_settings(&termios, opts)?;
+        } else {
+            tcsetattr(
+                opts.file.as_fd(),
+                nix::sys::termios::SetArg::TCSANOW,
+                &termios,
+            )
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            let current =
+                tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            if !termios_equal(&termios, &current) {
+                let msg = match &opts.file_name {
+                    Some(file) => format!("{file}: unable to perform all requested operations"),
+                    None => "unable to perform all requested operations".to_string(),
+                };
+                return Err(CtSimpleError::new(1, msg));
+            }
+        }
     } else {
         // 如果没有设置需要应用，则打印当前设置
-        stty_print_settings(&termios, opts).expect("make proper error here from nix error");
+        stty_print_settings(&termios, opts)?;
     }
     Ok(())
+}
+
+fn termios_equal(lhs: &Termios, rhs: &Termios) -> bool {
+    let lhs_libc: nix::libc::termios = lhs.clone().into();
+    let rhs_libc: nix::libc::termios = rhs.clone().into();
+    let lhs_input = lhs.input_flags.bits() & !IUCLC_RAW_BIT;
+    let rhs_input = rhs.input_flags.bits() & !IUCLC_RAW_BIT;
+    let lhs_output = lhs.output_flags.bits() & !OFILL_RAW_BIT;
+    let rhs_output = rhs.output_flags.bits() & !OFILL_RAW_BIT;
+    let lhs_local = lhs.local_flags.bits() & !XCASE_RAW_BIT;
+    let rhs_local = rhs.local_flags.bits() & !XCASE_RAW_BIT;
+
+    lhs_input == rhs_input
+        && lhs_output == rhs_output
+        && lhs.control_flags.bits() == rhs.control_flags.bits()
+        && lhs_local == rhs_local
+        && lhs_libc.c_line == rhs_libc.c_line
+        && lhs.control_chars == rhs.control_chars
+        && cfgetispeed(lhs) == cfgetispeed(rhs)
+        && cfgetospeed(lhs) == cfgetospeed(rhs)
 }
 
 /// 根据提供的 termios 结构和选项打印终端大小和行设置。
@@ -425,8 +603,7 @@ fn stty_print_settings(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
 /// - `opts`: 一个`SttyFlags`引用，包含命令行选项
 /// - `flags`: 一个`Settings<T>`切片，描述要检查和打印的标志
 fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: &[Settings<T>]) {
-    // 初始化一个标志变量，用于跟踪是否已经打印了设置
-    let mut printed = false;
+    let mut printed_flags = Vec::new();
     // 遍历每个设置标志
     for &Settings {
         name,
@@ -446,21 +623,303 @@ fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: 
         if group.is_some() {
             // 如果设置标志已设置且不被视为正常，或如果选择了显示所有设置，则打印
             if is_val && (!is_sane || opts.is_all) {
-                print!("{name} ");
-                printed = true;
+                printed_flags.push(name.to_string());
             }
         } else if opts.is_all || is_val != is_sane {
-            if !is_val {
-                print!("-");
-            }
-            print!("{name} ");
-            printed = true;
+            let text = if is_val {
+                name.to_string()
+            } else {
+                format!("-{name}")
+            };
+            printed_flags.push(text);
         }
     }
 
-    // 如果打印了任何设置，则换行
-    if printed {
-        println!();
+    if !printed_flags.is_empty() {
+        println!("{}", printed_flags.join(" "));
+    }
+}
+
+fn set_input_raw_bit(termios: &mut Termios, bit: tcflag_t, enabled: bool) {
+    if bit == 0 {
+        return;
+    }
+    let new_bits = if enabled {
+        termios.input_flags.bits() | bit
+    } else {
+        termios.input_flags.bits() & !bit
+    };
+    termios.input_flags = I::from_bits_retain(new_bits);
+}
+
+fn set_output_raw_bit(termios: &mut Termios, bit: tcflag_t, enabled: bool) {
+    if bit == 0 {
+        return;
+    }
+    let new_bits = if enabled {
+        termios.output_flags.bits() | bit
+    } else {
+        termios.output_flags.bits() & !bit
+    };
+    termios.output_flags = O::from_bits_retain(new_bits);
+}
+
+fn set_local_raw_bit(termios: &mut Termios, bit: tcflag_t, enabled: bool) {
+    if bit == 0 {
+        return;
+    }
+    let new_bits = if enabled {
+        termios.local_flags.bits() | bit
+    } else {
+        termios.local_flags.bits() & !bit
+    };
+    termios.local_flags = L::from_bits_retain(new_bits);
+}
+
+fn apply_sane_flags<T: TermiosFlag>(termios: &mut Termios, flags: &[Settings<T>]) {
+    for Settings {
+        flag,
+        is_sane,
+        group,
+        ..
+    } in flags
+    {
+        if let Some(group) = group {
+            group.apply(termios, false);
+        }
+        flag.apply(termios, *is_sane);
+    }
+}
+
+fn sane_control_char_value(name: &str) -> Option<u8> {
+    match name {
+        "intr" => Some(3),
+        "quit" => Some(28),
+        "erase" => Some(127),
+        "kill" => Some(21),
+        "eof" => Some(4),
+        "eol" => Some(0),
+        "eol2" => Some(0),
+        "swtch" => Some(0),
+        "start" => Some(17),
+        "stop" => Some(19),
+        "susp" => Some(26),
+        "rprnt" => Some(18),
+        "werase" => Some(23),
+        "lnext" => Some(22),
+        "discard" => Some(15),
+        _ => None,
+    }
+}
+
+fn apply_sane_mode(termios: &mut Termios) {
+    apply_sane_flags(termios, CONTROL_SETTINGS);
+    apply_sane_flags(termios, INPUT_SETTINGS);
+    apply_sane_flags(termios, OUTPUT_SETTINGS);
+    apply_sane_flags(termios, LOCAL_SETTINGS);
+
+    set_input_raw_bit(termios, IUCLC_RAW_BIT, false);
+    set_output_raw_bit(termios, OFILL_RAW_BIT, false);
+    set_local_raw_bit(termios, XCASE_RAW_BIT, false);
+
+    for (name, cc_index) in CONTROL_CHARS {
+        if let Some(value) = sane_control_char_value(name) {
+            termios.control_chars[*cc_index as usize] = value;
+        }
+    }
+    termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
+    termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+}
+
+fn apply_cooked_mode(termios: &mut Termios) {
+    I::BRKINT.apply(termios, true);
+    I::IGNPAR.apply(termios, true);
+    I::ISTRIP.apply(termios, true);
+    I::ICRNL.apply(termios, true);
+    I::IXON.apply(termios, true);
+    O::OPOST.apply(termios, true);
+    L::ISIG.apply(termios, true);
+    L::ICANON.apply(termios, true);
+}
+
+fn apply_raw_mode(termios: &mut Termios) {
+    termios.input_flags = I::from_bits_retain(0);
+    O::OPOST.apply(termios, false);
+    L::ISIG.apply(termios, false);
+    L::ICANON.apply(termios, false);
+    set_local_raw_bit(termios, XCASE_RAW_BIT, false);
+    termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
+    termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+}
+
+fn stty_apply_custom_flag(termios: &mut Termios, name: &str, is_remove: bool) -> ControlFlow<bool> {
+    match name {
+        "ofill" => {
+            set_output_raw_bit(termios, OFILL_RAW_BIT, !is_remove);
+            ControlFlow::Break(true)
+        }
+        "iuclc" => {
+            set_input_raw_bit(termios, IUCLC_RAW_BIT, !is_remove);
+            ControlFlow::Break(true)
+        }
+        "xcase" => {
+            set_local_raw_bit(termios, XCASE_RAW_BIT, !is_remove);
+            ControlFlow::Break(true)
+        }
+        _ => ControlFlow::Continue(()),
+    }
+}
+
+fn stty_apply_combination_setting(
+    termios: &mut Termios,
+    name: &str,
+    reversed: bool,
+) -> ControlFlow<bool> {
+    match name {
+        "evenp" | "parity" => {
+            if reversed {
+                C::PARENB.apply(termios, false);
+                C::CSIZE.apply(termios, false);
+                C::CS8.apply(termios, true);
+            } else {
+                C::PARODD.apply(termios, false);
+                C::CSIZE.apply(termios, false);
+                C::PARENB.apply(termios, true);
+                C::CS7.apply(termios, true);
+            }
+            ControlFlow::Break(true)
+        }
+        "oddp" => {
+            if reversed {
+                C::PARENB.apply(termios, false);
+                C::CSIZE.apply(termios, false);
+                C::CS8.apply(termios, true);
+            } else {
+                C::CSIZE.apply(termios, false);
+                C::CS7.apply(termios, true);
+                C::PARODD.apply(termios, true);
+                C::PARENB.apply(termios, true);
+            }
+            ControlFlow::Break(true)
+        }
+        "nl" => {
+            if reversed {
+                I::ICRNL.apply(termios, true);
+                I::INLCR.apply(termios, false);
+                I::IGNCR.apply(termios, false);
+                O::ONLCR.apply(termios, true);
+                O::OCRNL.apply(termios, false);
+                O::ONLRET.apply(termios, false);
+            } else {
+                I::ICRNL.apply(termios, false);
+                O::ONLCR.apply(termios, false);
+            }
+            ControlFlow::Break(true)
+        }
+        "ek" => {
+            if reversed {
+                ControlFlow::Break(false)
+            } else {
+                termios.control_chars[SpecialCharacterIndices::VERASE as usize] = 127;
+                termios.control_chars[SpecialCharacterIndices::VKILL as usize] = 21;
+                ControlFlow::Break(true)
+            }
+        }
+        "sane" => {
+            if reversed {
+                ControlFlow::Break(false)
+            } else {
+                apply_sane_mode(termios);
+                ControlFlow::Break(true)
+            }
+        }
+        "cbreak" => {
+            L::ICANON.apply(termios, reversed);
+            ControlFlow::Break(true)
+        }
+        "pass8" => {
+            if reversed {
+                C::CSIZE.apply(termios, false);
+                C::CS7.apply(termios, true);
+                C::PARENB.apply(termios, true);
+                I::ISTRIP.apply(termios, true);
+            } else {
+                C::PARENB.apply(termios, false);
+                C::CSIZE.apply(termios, false);
+                C::CS8.apply(termios, true);
+                I::ISTRIP.apply(termios, false);
+            }
+            ControlFlow::Break(true)
+        }
+        "litout" => {
+            if reversed {
+                C::CSIZE.apply(termios, false);
+                C::CS7.apply(termios, true);
+                C::PARENB.apply(termios, true);
+                I::ISTRIP.apply(termios, true);
+                O::OPOST.apply(termios, true);
+            } else {
+                C::PARENB.apply(termios, false);
+                C::CSIZE.apply(termios, false);
+                C::CS8.apply(termios, true);
+                I::ISTRIP.apply(termios, false);
+                O::OPOST.apply(termios, false);
+            }
+            ControlFlow::Break(true)
+        }
+        "raw" | "cooked" => {
+            let cooked_mode = (name == "raw" && reversed) || (name == "cooked" && !reversed);
+            if cooked_mode {
+                apply_cooked_mode(termios);
+            } else {
+                apply_raw_mode(termios);
+            }
+            ControlFlow::Break(true)
+        }
+        "decctlq" => {
+            I::IXANY.apply(termios, reversed);
+            ControlFlow::Break(true)
+        }
+        "tabs" => {
+            O::TABDLY.apply(termios, false);
+            if reversed {
+                O::TAB3.apply(termios, true);
+            } else {
+                O::TAB0.apply(termios, true);
+            }
+            ControlFlow::Break(true)
+        }
+        "lcase" | "LCASE" => {
+            set_local_raw_bit(termios, XCASE_RAW_BIT, !reversed);
+            set_input_raw_bit(termios, IUCLC_RAW_BIT, !reversed);
+            O::OLCUC.apply(termios, !reversed);
+            ControlFlow::Break(true)
+        }
+        "crt" => {
+            if reversed {
+                ControlFlow::Break(false)
+            } else {
+                L::ECHOE.apply(termios, true);
+                L::ECHOCTL.apply(termios, true);
+                L::ECHOKE.apply(termios, true);
+                ControlFlow::Break(true)
+            }
+        }
+        "dec" => {
+            if reversed {
+                ControlFlow::Break(false)
+            } else {
+                termios.control_chars[SpecialCharacterIndices::VINTR as usize] = 3;
+                termios.control_chars[SpecialCharacterIndices::VERASE as usize] = 127;
+                termios.control_chars[SpecialCharacterIndices::VKILL as usize] = 21;
+                L::ECHOE.apply(termios, true);
+                L::ECHOCTL.apply(termios, true);
+                L::ECHOKE.apply(termios, true);
+                I::IXANY.apply(termios, false);
+                ControlFlow::Break(true)
+            }
+        }
+        _ => ControlFlow::Continue(()),
     }
 }
 
@@ -479,13 +938,23 @@ fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: 
 /// - `ControlFlow::Continue(false)`: 如果没有应用特殊设置。
 /// - `ControlFlow::Break(true)`: 如果成功应用了特殊设置。
 /// - `ControlFlow::Break(false)`: 如果成功应用了常规标志设置。
-fn stty_apply_setting(termios: &mut Termios, s: &str, device: &Device) -> ControlFlow<bool> {
+fn stty_apply_setting(
+    termios: &mut Termios,
+    s: &str,
+    device: &Device,
+) -> CTResult<ControlFlow<bool>> {
+    if let ControlFlow::Break(applied) = stty_apply_recover_mode(termios, s) {
+        return Ok(ControlFlow::Break(applied));
+    }
+
     // 首先处理波特率设置
-    stty_apply_baud_rate_flag(termios, s)?;
+    if let ControlFlow::Break(applied) = stty_apply_baud_rate_flag(termios, s)? {
+        return Ok(ControlFlow::Break(applied));
+    }
 
     // 处理特殊设置
-    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, s, device) {
-        return ControlFlow::Break(applied);
+    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, s, device)? {
+        return Ok(ControlFlow::Break(applied));
     }
 
     // 处理常规标志设置
@@ -493,12 +962,61 @@ fn stty_apply_setting(termios: &mut Termios, s: &str, device: &Device) -> Contro
         Some(s) => (true, s),
         None => (false, s),
     };
-    // 应用控制、输入、输出和本地设置中的标志
-    stty_apply_flag(termios, CONTROL_SETTINGS, name, remove)?;
-    stty_apply_flag(termios, INPUT_SETTINGS, name, remove)?;
-    stty_apply_flag(termios, OUTPUT_SETTINGS, name, remove)?;
-    stty_apply_flag(termios, LOCAL_SETTINGS, name, remove)?;
-    ControlFlow::Break(false)
+
+    if let ControlFlow::Break(applied) = stty_apply_custom_flag(termios, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_combination_setting(termios, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, CONTROL_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, INPUT_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, OUTPUT_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, LOCAL_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    Ok(ControlFlow::Continue(()))
+}
+
+fn stty_apply_recover_mode(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+    if !input.contains(':') {
+        return ControlFlow::Continue(());
+    }
+
+    let parts: Vec<&str> = input.split(':').collect();
+    if parts.len() != 4 + termios.control_chars.len() {
+        return ControlFlow::Break(false);
+    }
+
+    let mut parsed = [0u64; 4];
+    for (idx, raw) in parts.iter().take(4).enumerate() {
+        let Ok(value) = u64::from_str_radix(raw, 16) else {
+            return ControlFlow::Break(false);
+        };
+        parsed[idx] = value;
+    }
+
+    termios.input_flags = nix::sys::termios::InputFlags::from_bits_truncate(parsed[0] as _);
+    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_truncate(parsed[1] as _);
+    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_truncate(parsed[2] as _);
+    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_truncate(parsed[3] as _);
+
+    for (idx, raw) in parts.iter().skip(4).enumerate() {
+        let Ok(value) = u8::from_str_radix(raw, 16) else {
+            return ControlFlow::Break(false);
+        };
+        termios.control_chars[idx] = value;
+    }
+
+    ControlFlow::Break(true)
 }
 
 /// 为终端应用特殊设置。例如：speed, rows, columns etc.
@@ -519,11 +1037,11 @@ fn stty_apply_special_setting(
     termios: &mut Termios,
     s: &str,
     device: &Device,
-) -> ControlFlow<bool> {
+) -> CTResult<ControlFlow<bool>> {
     // 将输入拆分为部分（例如 "eol ^M" -> ["eol", "^M"]）
     let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.is_empty() {
-        return ControlFlow::Continue(());
+        return Ok(ControlFlow::Continue(()));
     }
 
     // 查找特殊设置
@@ -534,16 +1052,21 @@ fn stty_apply_special_setting(
 
             // 检查是否需要值但未提供
             if entry.requires_value && value.is_none() {
-                return ControlFlow::Break(false);
+                return Ok(ControlFlow::Break(false));
             }
 
             // 应用设置
-            let applied = entry.setting.apply(termios, value, device).unwrap();
-            return ControlFlow::Break(applied);
+            return match entry.setting.apply(termios, value, device) {
+                Ok(applied) => Ok(ControlFlow::Break(applied)),
+                Err(err) if err.to_string().starts_with("invalid argument") => {
+                    Ok(ControlFlow::Break(false))
+                }
+                Err(err) => Err(err),
+            };
         }
     }
 
-    ControlFlow::Continue(())
+    Ok(ControlFlow::Continue(()))
 }
 
 /// 应用或移除指定的 termios 配置标志。
@@ -609,22 +1132,26 @@ fn stty_apply_flag<T: TermiosFlag>(
 /// 该函数遍历预定义的波特率列表，尝试将输入字符串与其中一个波特率匹配。如果找到匹配项，
 /// 它会使用 `cfsetospeed` 函数将终端的输入和输出速度设置为对应的波特率。如果设置波特率失败，
 /// 将会触发错误并 panic。如果没有找到匹配项，则返回 `ControlFlow::Continue(())`，表示输入未匹配到任何波特率设置。
-fn stty_apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+fn stty_apply_baud_rate_flag(termios: &mut Termios, input: &str) -> CTResult<ControlFlow<bool>> {
     // 设置特殊设置中的波特率：将输入和输出速度设置为 N 波特
     for (text, _, baud_rate) in BAUD_RATES {
         if *text == input {
-            cfsetospeed(termios, *baud_rate).expect("Failed to set baud rate");
-            return ControlFlow::Break(true);
+            cfsetospeed(termios, *baud_rate)
+                .map_err(|e| CtSimpleError::new(1, format!("Failed to set output speed: {e}")))?;
+            nix::sys::termios::cfsetispeed(termios, *baud_rate)
+                .map_err(|e| CtSimpleError::new(1, format!("Failed to set input speed: {e}")))?;
+            return Ok(ControlFlow::Break(true));
         }
     }
-    ControlFlow::Continue(())
+    Ok(ControlFlow::Continue(()))
 }
 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
-    let application_info = t!("stty.usage");
-    let usage_description = t!("stty.about");
+    let application_info = t!("stty.about");
+    let usage_description = t!("stty.usage");
+    let after_help = t!("stty.after_help");
     let args = vec![
         Arg::new(stty_flags::STTY_ALL)
             .short('a')
@@ -652,6 +1179,7 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
+        .after_help(after_help)
         .infer_long_args(true)
         .args(&args)
 }
@@ -676,6 +1204,7 @@ impl Tool for Stty {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::os::fd::AsRawFd;
 
     #[test]
     fn test_tool_implementation() {
@@ -696,6 +1225,19 @@ mod tests {
 
     /// 检测是否在容器环境中运行
     fn is_container() -> bool {
+        // 无 tty 的非交互环境下，依赖终端 ioctl 的测试无法稳定执行。
+        if unsafe { nix::libc::isatty(stdin().as_raw_fd()) } != 1 {
+            return true;
+        }
+        if std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .is_err()
+        {
+            return true;
+        }
+
         // 检查常见的容器环境标识
         if std::env::var("KUBERNETES_SERVICE_HOST").is_ok()
             || std::env::var("DOCKER_CONTAINER").is_ok()
@@ -808,7 +1350,7 @@ mod tests {
             let flags = SttyFlags::new(&matches).unwrap();
             assert!(flags.is_all);
             assert!(!flags.is_save);
-            assert!(matches!(flags.file, Device::Stdout(_)));
+            assert!(matches!(flags.file, Device::Stdin(_)));
         }
 
         #[test]
@@ -865,7 +1407,8 @@ mod tests {
             let flags = SttyFlags {
                 is_all: true,
                 is_save: true,
-                file: Device::Stdout(stdout()),
+                file_name: None,
+                file: Device::Stdin(stdin()),
                 settings: None,
             };
             assert!(flags.check().is_err());
@@ -903,6 +1446,18 @@ mod tests {
             let settings = parse_settings(args);
             assert!(settings.is_empty());
         }
+
+        #[test]
+        fn test_validate_setting_syntax_combination_and_custom() {
+            assert!(validate_setting_syntax("evenp").is_ok());
+            assert!(validate_setting_syntax("-evenp").is_ok());
+            assert!(validate_setting_syntax("ek").is_ok());
+            assert!(validate_setting_syntax("-ek").is_err());
+
+            assert!(validate_setting_syntax("ofill").is_ok());
+            assert!(validate_setting_syntax("-ofill").is_ok());
+            assert!(validate_setting_syntax("ofill extra").is_err());
+        }
     }
 
     #[cfg(test)]
@@ -917,10 +1472,11 @@ mod tests {
             }
 
             let termios = unsafe { std::mem::zeroed::<Termios>() };
-            let device = Device::Stdout(stdout());
+            let device = Device::Stdin(stdin());
             let opts = SttyFlags {
                 is_all: true,
                 is_save: false,
+                file_name: None,
                 file: device,
                 settings: None,
             };
@@ -938,7 +1494,8 @@ mod tests {
             let opts = SttyFlags {
                 is_all: true,
                 is_save: false,
-                file: Device::Stdout(stdout()),
+                file_name: None,
+                file: Device::Stdin(stdin()),
                 settings: None,
             };
             assert!(stty_print_control_chars(&termios, &opts).is_ok());
@@ -973,7 +1530,7 @@ mod tests {
             for (text, _, _) in BAUD_RATES {
                 assert!(matches!(
                     stty_apply_baud_rate_flag(&mut termios, text),
-                    ControlFlow::Break(true)
+                    Ok(ControlFlow::Break(true))
                 ));
             }
         }
@@ -983,7 +1540,7 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             assert!(matches!(
                 stty_apply_baud_rate_flag(&mut termios, "invalid"),
-                ControlFlow::Continue(())
+                Ok(ControlFlow::Continue(()))
             ));
         }
 
@@ -995,31 +1552,145 @@ mod tests {
             }
 
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-            let device = Device::Stdout(stdout());
+            let device = Device::Stdin(stdin());
             assert!(matches!(
                 stty_apply_special_setting(&mut termios, "size", &device),
-                ControlFlow::Break(true)
+                Ok(ControlFlow::Break(true))
             ));
         }
 
         #[test]
         fn test_stty_apply_special_setting_min() {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-            let device = Device::Stdout(stdout());
+            let device = Device::Stdin(stdin());
             assert!(matches!(
                 stty_apply_special_setting(&mut termios, "min 1", &device),
-                ControlFlow::Break(true)
+                Ok(ControlFlow::Break(true))
             ));
         }
 
         #[test]
         fn test_stty_apply_special_setting_invalid() {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-            let device = Device::Stdout(stdout());
+            let device = Device::Stdin(stdin());
             assert!(matches!(
                 stty_apply_special_setting(&mut termios, "invalid", &device),
-                ControlFlow::Continue(())
+                Ok(ControlFlow::Continue(()))
             ));
+        }
+
+        #[test]
+        fn test_stty_apply_combination_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdin(stdin());
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "evenp", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            assert!(termios.control_flags.contains(C::PARENB));
+            assert!(!termios.control_flags.contains(C::PARODD));
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-evenp", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            assert!(!termios.control_flags.contains(C::PARENB));
+            assert!(termios.control_flags.contains(C::CS8));
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "raw", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            assert!(termios.input_flags.bits() == 0);
+            assert_eq!(
+                termios.control_chars[SpecialCharacterIndices::VMIN as usize],
+                1
+            );
+            assert_eq!(
+                termios.control_chars[SpecialCharacterIndices::VTIME as usize],
+                0
+            );
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-raw", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            assert!(termios.input_flags.contains(I::BRKINT));
+            assert!(termios.output_flags.contains(O::OPOST));
+            assert!(termios.local_flags.contains(L::ICANON));
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "tabs", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            assert!(O::TAB0.is_in(&termios, Some(O::TABDLY)));
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-tabs", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            assert!(O::TAB3.is_in(&termios, Some(O::TABDLY)));
+        }
+
+        #[test]
+        fn test_stty_apply_non_reversible_combination_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdin(stdin());
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-ek", &device),
+                Ok(ControlFlow::Break(false))
+            ));
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-sane", &device),
+                Ok(ControlFlow::Break(false))
+            ));
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-crt", &device),
+                Ok(ControlFlow::Break(false))
+            ));
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-dec", &device),
+                Ok(ControlFlow::Break(false))
+            ));
+        }
+
+        #[test]
+        fn test_stty_apply_custom_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdin(stdin());
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "ofill", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            if OFILL_RAW_BIT != 0 {
+                assert_ne!(termios.output_flags.bits() & OFILL_RAW_BIT, 0);
+            }
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "-ofill", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            if OFILL_RAW_BIT != 0 {
+                assert_eq!(termios.output_flags.bits() & OFILL_RAW_BIT, 0);
+            }
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "iuclc", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            if IUCLC_RAW_BIT != 0 {
+                assert_ne!(termios.input_flags.bits() & IUCLC_RAW_BIT, 0);
+            }
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "xcase", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+            if XCASE_RAW_BIT != 0 {
+                assert_ne!(termios.local_flags.bits() & XCASE_RAW_BIT, 0);
+            }
         }
     }
 

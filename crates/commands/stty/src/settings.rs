@@ -77,6 +77,7 @@ pub const CONTROL_SETTINGS: &[Settings<C>] = &[
     Settings::new_grouped("cs7", C::CS7, C::CSIZE),
     Settings::new_grouped("cs8", C::CS8, C::CSIZE).sane(),
     Settings::new("hupcl", C::HUPCL),
+    Settings::new("hup", C::HUPCL).hidden(),
     Settings::new("cstopb", C::CSTOPB),
     Settings::new("cread", C::CREAD).sane(),
     Settings::new("clocal", C::CLOCAL),
@@ -95,7 +96,7 @@ pub const INPUT_SETTINGS: &[Settings<I>] = &[
     Settings::new("icrnl", I::ICRNL).sane(),
     Settings::new("ixoff", I::IXOFF),
     Settings::new("tandem", I::IXOFF),
-    Settings::new("ixon", I::IXON),
+    Settings::new("ixon", I::IXON).sane(),
     // not supported by nix
     // Settings::new("iuclc", I::IUCLC),
     Settings::new("ixany", I::IXANY),
@@ -526,9 +527,7 @@ impl SpecialSetting {
     /// * 如果解析值失败，则返回一个错误
     fn apply_min_chars(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
         if let Some(val) = value {
-            let parsed_val = val
-                .parse::<u8>()
-                .map_err(|_| CtSimpleError::new(1, "Invalid value"))?;
+            let parsed_val = parse_u8_with_base(val)?;
             // 将解析后的值设置为termios配置中的最小字符数
             termios.control_chars[SpecialCharacterIndices::VMIN as usize] = parsed_val;
             Ok(true)
@@ -552,9 +551,7 @@ impl SpecialSetting {
     ///   如果成功应用或没有提供值，则返回Ok(true)或Ok(false)，错误情况下返回Err
     fn apply_timeout(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
         if let Some(val) = value {
-            let parsed_val = val
-                .parse::<u8>()
-                .map_err(|_| CtSimpleError::new(1, "Invalid value"))?;
+            let parsed_val = parse_u8_with_base(val)?;
             // 将解析后的值设置为Termios结构体中的VTIME特殊字符
             termios.control_chars[SpecialCharacterIndices::VTIME as usize] = parsed_val;
             Ok(true)
@@ -584,7 +581,7 @@ impl SpecialSetting {
         // 这里使用`unsafe`是因为`tiocgwinsz`是一个直接与操作系统交互的低级操作
         // 需要确保调用是正确的，避免不安全的操作
         unsafe { tiocgwinsz(device.as_raw_fd(), &mut size as *mut _)? };
-        println!("rows {}; columns {}", size.rows, size.columns);
+        println!("{} {}", size.rows, size.columns);
         Ok(true)
     }
 
@@ -605,7 +602,7 @@ impl SpecialSetting {
         for (text, _, baud_rate) in BAUD_RATES {
             // 如果找到匹配的波特率，则打印当前的波特率并终止遍历
             if *baud_rate == speed {
-                println!("speed {text} baud");
+                println!("{text}");
                 break;
             }
         }
@@ -629,9 +626,7 @@ impl SpecialSetting {
         // 检查是否有值提供，如果没有则直接返回Ok(false)
         if let Some(val) = value {
             // 将提供的字符串值解析为无符号短整型，如果解析失败则返回错误
-            let parsed_val = val
-                .parse::<c_ushort>()
-                .map_err(|_| CtSimpleError::new(1, "Invalid value"))?;
+            let parsed_val = parse_u16_with_base(val)?;
 
             // 获取当前终端的尺寸
             let mut size = TermSize::default();
@@ -665,9 +660,7 @@ impl SpecialSetting {
     /// 如果解析失败或未提供值，则返回Ok(false)，并不改变Termios配置
     fn apply_line(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
         if let Some(line) = value {
-            let line = line
-                .parse::<u8>()
-                .map_err(|_| CtSimpleError::new(1, "Invalid line discipline value"))?;
+            let line = parse_u8_with_base(line)?;
             // 将当前的Termios配置转换为nix::libc::termios类型，直接修改c_line字段
             let mut libc_termios: nix::libc::termios = termios.clone().into();
             libc_termios.c_line = line;
@@ -768,9 +761,7 @@ impl SpecialSetting {
 /// - `Err(CtSimpleError)`: 如果解析失败或波特率不被支持，则返回错误
 fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
     // 尝试将字符串解析为u32类型，如果解析失败，则返回一个自定义的错误
-    let rate = s
-        .parse::<u32>()
-        .map_err(|_| CtSimpleError::new(1, "Invalid baud rate"))?;
+    let rate = parse_u32_with_base(s)?;
 
     // 遍历预定义的波特率数组，查找匹配的波特率值
     for (_, baud_rate_val, baud_rate) in BAUD_RATES {
@@ -780,7 +771,7 @@ fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
         }
     }
 
-    Err(CtSimpleError::new(1, "Unsupported baud rate"))
+    Err(CtSimpleError::new(1, format!("invalid argument '{s}'")))
 }
 
 /// Parse a control character from a string
@@ -802,26 +793,58 @@ fn parse_control_char(s: &str) -> CTResult<nix::libc::cc_t> {
         return Ok(s.as_bytes()[0]);
     } else if s.len() == 2 && s.starts_with('^') {
         // 如果是以 ^ 开头的两个字符，解析为控制字符
-        let char = s.chars().nth(1).unwrap();
-        if char.is_ascii_alphabetic() {
-            return Ok((char as u8) & 0x1F); // 转换为控制字符
+        if let Some(char) = s.chars().nth(1) {
+            if char.is_ascii_alphabetic() {
+                return Ok((char as u8) & 0x1F); // 转换为控制字符
+            }
         }
     }
 
-    Err(CtSimpleError::new(
-        1,
-        "Control character must be a single character or a valid control sequence like '^A'",
-    ))
+    Err(CtSimpleError::new(1, format!("invalid argument '{s}'")))
+}
+
+fn parse_u32_with_base(raw: &str) -> CTResult<u32> {
+    let (radix, digits) = parse_numeric_base(raw);
+    let value = u32::from_str_radix(digits, radix)
+        .map_err(|_| CtSimpleError::new(1, format!("invalid argument '{raw}'")))?;
+    Ok(value)
+}
+
+fn parse_u16_with_base(raw: &str) -> CTResult<c_ushort> {
+    let value = parse_u32_with_base(raw)?;
+    c_ushort::try_from(value)
+        .map_err(|_| CtSimpleError::new(1, format!("invalid argument '{raw}'")))
+}
+
+fn parse_u8_with_base(raw: &str) -> CTResult<u8> {
+    let value = parse_u32_with_base(raw)?;
+    u8::try_from(value).map_err(|_| CtSimpleError::new(1, format!("invalid argument '{raw}'")))
+}
+
+fn parse_numeric_base(raw: &str) -> (u32, &str) {
+    if raw.starts_with("0x") || raw.starts_with("0X") {
+        (16, &raw[2..])
+    } else if raw.len() > 1 && raw.starts_with('0') {
+        (8, &raw[1..])
+    } else {
+        (10, raw)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use nix::sys::termios::{ControlFlags, Termios};
-    use std::io::stdout;
+    use std::io::stdin;
+    use std::os::fd::AsRawFd;
 
     /// 检测是否在容器环境中运行
     fn is_container() -> bool {
+        // 无 tty 的非交互环境下，依赖终端 ioctl 的测试无法稳定执行。
+        if unsafe { nix::libc::isatty(stdin().as_raw_fd()) } != 1 {
+            return true;
+        }
+
         // 检查常见的容器环境标识
         if std::env::var("KUBERNETES_SERVICE_HOST").is_ok()
             || std::env::var("DOCKER_CONTAINER").is_ok()
@@ -914,7 +937,7 @@ mod tests {
         }
 
         let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-        let device = Device::Stdout(stdout());
+        let device = Device::Stdin(stdin());
         let size_setting = SPECIAL_SETTINGS
             .iter()
             .find(|s| s.name == "size")
@@ -928,7 +951,7 @@ mod tests {
     #[test]
     fn test_special_setting_min() {
         let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-        let device = Device::Stdout(stdout());
+        let device = Device::Stdin(stdin());
         let min_setting = SPECIAL_SETTINGS
             .iter()
             .find(|s| s.name == "min")
@@ -942,7 +965,7 @@ mod tests {
     #[test]
     fn test_special_setting_time() {
         let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-        let device = Device::Stdout(stdout());
+        let device = Device::Stdin(stdin());
         let time_setting = SPECIAL_SETTINGS
             .iter()
             .find(|s| s.name == "time")
@@ -956,7 +979,7 @@ mod tests {
     #[test]
     fn test_special_setting_invalid_value() {
         let mut termios = unsafe { std::mem::zeroed::<Termios>() };
-        let device = Device::Stdout(stdout());
+        let device = Device::Stdin(stdin());
         let min_setting = SPECIAL_SETTINGS
             .iter()
             .find(|s| s.name == "min")

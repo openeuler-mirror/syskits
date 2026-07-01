@@ -9,3 +9,152 @@ stty:
     stty [-F 设备 | --file=设备] [-a|--all]
     stty [-F 设备 | --file=设备] [-g|--save]
   about: '打印或更改终端特性。'
+  after_help: |-
+    长选项的必选参数在短选项中同样必选。
+      -a, --all          以人类可读形式打印当前所有设置
+      -g, --save         以 stty 可读形式打印当前所有设置
+      -F, --file=DEVICE  打开并使用指定 DEVICE，而不是标准输入
+          --help         显示帮助并退出
+          --version      显示版本信息并退出
+    
+    SETTING 前可加可选的 '-' 表示取反。'*' 表示非 POSIX 设置。
+    可用设置项由底层系统决定。
+    
+    特殊字符：
+     * discard CHAR  CHAR 用于切换是否丢弃输出
+       eof CHAR      CHAR 发送文件结束符（结束输入）
+       eol CHAR      CHAR 结束一行
+     * eol2 CHAR     作为行结束的备用 CHAR
+       erase CHAR    CHAR 删除最近输入的一个字符
+       intr CHAR     CHAR 发送中断信号
+       kill CHAR     CHAR 删除当前整行
+     * lnext CHAR    CHAR 将下一个字符按字面值输入
+       quit CHAR     CHAR 发送退出信号
+     * rprnt CHAR    CHAR 重绘当前行
+       start CHAR    CHAR 在停止后恢复输出
+       stop CHAR     CHAR 停止输出
+       susp CHAR     CHAR 发送终端挂起信号
+     * swtch CHAR    CHAR 切换到不同的 shell 层
+     * werase CHAR   CHAR 删除最近输入的一个单词
+    
+    特殊设置：
+       N             将输入和输出速率都设置为 N 波特
+     * cols N        告诉内核终端有 N 列
+     * columns N     与 cols N 相同
+     * [-]drain      应用设置前等待传输完成（默认开启）
+       ispeed N      将输入速率设置为 N
+     * line N        使用行规约 N
+       min N         在 -icanon 下，设置一次完整读取的最少字符数为 N
+       ospeed N      将输出速率设置为 N
+     * rows N        告诉内核终端有 N 行
+     * size          打印内核记录的终端行列数
+       speed         打印终端速率
+       time N        在 -icanon 下，设置读取超时为 N 个 0.1 秒
+    
+    控制设置：
+       [-]clocal     关闭调制解调器控制信号
+       [-]cread      允许接收输入
+     * [-]crtscts    启用 RTS/CTS 硬件流控
+       csN           设置字符位宽为 N，N 取值 [5..8]
+       [-]cstopb     每个字符使用两个停止位（带 '-' 时使用一个）
+       [-]hup        最后一个进程关闭 tty 时发送挂起信号
+       [-]hupcl      与 [-]hup 相同
+       [-]parenb     输出生成奇偶校验位并在输入中期望校验位
+       [-]parodd     设为奇校验（带 '-' 时为偶校验）
+     * [-]cmspar     使用“粘滞”校验（mark/space）
+    
+    输入设置：
+       [-]brkint     break 字符触发中断信号
+       [-]icrnl      将回车转换为换行
+       [-]ignbrk     忽略 break 字符
+       [-]igncr      忽略回车
+       [-]ignpar     忽略带奇偶校验错误的字符
+     * [-]imaxbel    输入缓冲满时蜂鸣且不清空缓冲
+       [-]inlcr      将换行转换为回车
+       [-]inpck      启用输入奇偶校验检查
+       [-]istrip     清除输入字符的高位（第 8 位）
+     * [-]iutf8      假设输入字符为 UTF-8 编码
+     * [-]iuclc      将大写字符转换为小写
+     * [-]ixany      允许任意字符恢复输出（不仅是 start 字符）
+       [-]ixoff      启用发送 start/stop 字符
+       [-]ixon       启用 XON/XOFF 软流控
+       [-]parmrk     标记奇偶校验错误（255-0-字符序列）
+       [-]tandem     与 [-]ixoff 相同
+    
+    输出设置：
+     * bsN           退格延时风格，N 取值 [0..1]
+     * crN           回车延时风格，N 取值 [0..3]
+     * ffN           换页延时风格，N 取值 [0..1]
+     * nlN           换行延时风格，N 取值 [0..1]
+     * [-]ocrnl      将回车转换为换行
+     * [-]ofdel      延时填充使用 DEL 字符而不是 NUL 字符
+     * [-]ofill      延时使用填充字符而不是定时方式
+     * [-]olcuc      将小写字符转换为大写
+     * [-]onlcr      将换行转换为回车+换行
+     * [-]onlret     换行执行回车动作
+     * [-]onocr      首列不输出回车
+       [-]opost      启用输出后处理
+     * tabN          水平制表延时风格，N 取值 [0..3]
+     * tabs          与 tab0 相同
+     * -tabs         与 tab3 相同
+     * vtN           垂直制表延时风格，N 取值 [0..1]
+    
+    本地设置：
+       [-]crterase   将 erase 回显为“退格-空格-退格”
+     * crtkill       kill 整行时遵循 echoprt 和 echoe 设置
+     * -crtkill      kill 整行时遵循 echoctl 和 echok 设置
+     * [-]ctlecho    以帽号表示法回显控制字符（'^c'）
+       [-]echo       回显输入字符
+     * [-]echoctl    与 [-]ctlecho 相同
+       [-]echoe      与 [-]crterase 相同
+       [-]echok      在 kill 字符后回显换行
+     * [-]echoke     与 [-]crtkill 相同
+       [-]echonl     即使关闭其他回显也回显换行
+     * [-]echoprt    反向回显被删除字符，包在 '\\' 和 '/' 之间
+     * [-]extproc    启用 LINEMODE（高时延链路有用）
+     * [-]flusho     丢弃输出
+       [-]icanon     启用特殊字符：erase、kill、werase、rprnt
+       [-]iexten     启用非 POSIX 特殊字符
+       [-]isig       启用 intr、quit、susp 特殊字符
+       [-]noflsh     禁用 intr/quit 特殊字符后的冲刷行为
+     * [-]prterase   与 [-]echoprt 相同
+     * [-]tostop     停止尝试向终端写入的后台作业
+     * [-]xcase      在 icanon 下，用 '\\' 转义输入大写字符
+    
+    组合设置：
+     * [-]LCASE      与 [-]lcase 相同
+       cbreak        与 -icanon 相同
+       -cbreak       与 icanon 相同
+       cooked        与 brkint ignpar istrip icrnl ixon opost isig icanon 等效，
+                     并将 eof/eol 设为默认值
+       -cooked       与 raw 相同
+       crt           与 echoe echoctl echoke 相同
+       dec           与 echoe echoctl echoke -ixany intr ^c erase 0177 kill ^u 相同
+     * [-]decctlq    与 [-]ixany 相同
+       ek            将 erase/kill 字符恢复为默认值
+       evenp         与 parenb -parodd cs7 相同
+       -evenp        与 -parenb cs8 相同
+     * [-]lcase      与 xcase iuclc olcuc 相同
+       litout        与 -parenb -istrip -opost cs8 相同
+       -litout       与 parenb istrip opost cs7 相同
+       nl            与 -icrnl -onlcr 相同
+       -nl           与 icrnl -inlcr -igncr onlcr -ocrnl -onlret 相同
+       oddp          与 parenb parodd cs7 相同
+       -oddp         与 -parenb cs8 相同
+       [-]parity     与 [-]evenp 相同
+       pass8         与 -parenb -istrip cs8 相同
+       -pass8        与 parenb istrip cs7 相同
+       raw           与 -ignbrk -brkint -ignpar -parmrk -inpck -istrip
+                     -inlcr -igncr -icrnl -ixon -ixoff -icanon -opost
+                     -isig -iuclc -ixany -imaxbel -xcase min 1 time 0 相同
+       -raw          与 cooked 相同
+       sane          与 cread -ignbrk brkint -inlcr -igncr icrnl
+                     icanon iexten echo echoe echok -echonl -noflsh
+                     -ixoff -iutf8 -iuclc -ixany imaxbel -xcase -olcuc -ocrnl
+                     opost -ofill onlcr -onocr -onlret nl0 cr0 tab0 bs0 vt0 ff0
+                     isig -tostop -ofdel -echoprt echoctl echoke -extproc -flusho 相同，
+                     并将全部特殊字符恢复为默认值
+    
+    默认作用于连接到标准输入的 tty 行。无参数时，打印波特率、行规约，
+    以及相对于 stty sane 的差异。设置中的 CHAR 可按字面输入，
+    或写成 ^c、0x37、0177、127；特殊值 ^- 或 undef 用于禁用特殊字符。

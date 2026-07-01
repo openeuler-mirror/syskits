@@ -1,6 +1,310 @@
 {
     "tests": [
         {
+            "command": "vdir",
+            "description": "vdir: -s (size)",
+            "setup_commands": [
+                "mkdir -p test_vdir_s",
+                "touch test_vdir_s/file"
+            ],
+            "args": ["-s", "test_vdir_s"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_s"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --sort=width",
+            "setup_commands": [
+                "mkdir -p test_vdir_width",
+                "touch test_vdir_width/z test_vdir_width/aa test_vdir_width/bbb"
+            ],
+            "args": ["--sort=width", "test_vdir_width"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_width"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time=atime",
+            "setup_commands": [
+                "mkdir -p test_vdir_atime",
+                "touch test_vdir_atime/1",
+                "sleep 1",
+                "touch test_vdir_atime/2",
+                "cat test_vdir_atime/1 > /dev/null"
+            ],
+            "args": ["--time=atime", "-t", "test_vdir_atime"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_atime"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time-style=long-iso",
+            "setup_commands": [
+                "mkdir -p test_vdir_ts",
+                "touch test_vdir_ts/file"
+            ],
+            "args": ["--time-style=long-iso", "test_vdir_ts"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ts"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -T (tabsize)",
+            "setup_commands": [
+                "mkdir -p test_vdir_T",
+                "touch test_vdir_T/file"
+            ],
+            "args": ["-C", "-T", "4", "test_vdir_T"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_T"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -u (access time)",
+            "setup_commands": [
+                "mkdir -p test_vdir_u",
+                "touch test_vdir_u/1",
+                "sleep 1",
+                "touch test_vdir_u/2",
+                "cat test_vdir_u/1 > /dev/null"
+            ],
+            "args": ["-u", "-t", "test_vdir_u"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_u"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -U (unsorted)",
+            "setup_commands": [
+                "mkdir -p test_vdir_U",
+                "touch test_vdir_U/a test_vdir_U/b"
+            ],
+            "args": ["-U", "test_vdir_U"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_U"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -v (version sort)",
+            "setup_commands": [
+                "mkdir -p test_vdir_v",
+                "touch test_vdir_v/file1 test_vdir_v/file10 test_vdir_v/file2"
+            ],
+            "args": ["-v", "test_vdir_v"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_v"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -w (width)",
+            "setup_commands": [
+                "mkdir -p test_vdir_w",
+                "touch test_vdir_w/1 test_vdir_w/2"
+            ],
+            "args": ["-w", "10", "-C", "test_vdir_w"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_w"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -x (across)",
+            "setup_commands": [
+                "mkdir -p test_vdir_x",
+                "touch test_vdir_x/1 test_vdir_x/2 test_vdir_x/3"
+            ],
+            "args": ["-x", "test_vdir_x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_x"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -X (extension sort)",
+            "setup_commands": [
+                "mkdir -p test_vdir_X",
+                "touch test_vdir_X/b.txt test_vdir_X/a.doc"
+            ],
+            "args": ["-X", "test_vdir_X"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_X"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -Z (context)",
+            "setup_commands": [
+                "mkdir -p test_vdir_Z",
+                "touch test_vdir_Z/file"
+            ],
+            "args": ["-Z", "test_vdir_Z"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_Z"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --zero",
+            "setup_commands": [
+                "mkdir -p test_vdir_zero",
+                "touch test_vdir_zero/1 test_vdir_zero/2"
+            ],
+            "args": ["--zero", "test_vdir_zero"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\u00002\u0000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_zero"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: -1 (one line)",
+            "setup_commands": [
+                "mkdir -p test_vdir_1",
+                "touch test_vdir_1/file1 test_vdir_1/file2"
+            ],
+            "args": ["-1", "test_vdir_1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1\nfile2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_1"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "帮助信息 (--help)",
+            "args": ["--help"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "版本信息 (--version)",
+            "args": ["--version"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
             "tstdin": "",
             "command": "vdir",
             "description": "vdir: 基本列出当前目录（时间中英文区别）",
@@ -90,13 +394,11 @@
             "description": "vdir: 错误路径处理",
             "setup_commands": [
                 "mkdir test_vdir_vdir_basic",
-                "cd test_vdir_vdir_basic",
-                "touch a.txt",
-                "touch b.txt",
-                "touch c.txt",
-                "touch .hidden",
-                "mkdir subdir",
-                "cd .."
+                "touch test_vdir_vdir_basic/a.txt",
+                "touch test_vdir_vdir_basic/b.txt",
+                "touch test_vdir_vdir_basic/c.txt",
+                "touch test_vdir_vdir_basic/.hidden",
+                "mkdir test_vdir_vdir_basic/subdir"
             ],
             "args": [
                 "test_vdir_vdir_basic/a.txt",

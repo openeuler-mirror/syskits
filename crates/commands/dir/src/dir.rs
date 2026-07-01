@@ -49,6 +49,7 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
         && !matches.get_flag(ls_flags::format::LS_LONG_NUMERIC_UID_GID)
         && !matches.get_flag(ls_flags::format::LS_ONE_LINE)
         && !matches.get_flag(ls_flags::LS_ZERO)
+        && !matches.get_flag(ls_flags::LS_FULL_TIME)
     {
         default_format_style = true;
     }

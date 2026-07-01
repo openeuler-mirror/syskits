@@ -12,6 +12,7 @@
 //! tty 命令行工具，用于打印当前终端设备的文件名
 
 extern crate rust_i18n;
+use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -29,7 +30,16 @@ mod tty_flags {
 pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = match ct_app().try_get_matches_from(args) {
+        Ok(m) => m,
+        Err(e) => {
+            e.print().ok();
+            match e.kind() {
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => return Ok(()),
+                _ => return Err(2.into()),
+            }
+        }
+    };
 
     if let Some(value) = tty_handle_silent(matches) {
         return value;
@@ -147,7 +157,7 @@ mod tests {
             let args = args_vec.iter().map(OsString::from);
             let result = tty_main(args);
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -155,7 +165,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "-V"];
             let result = tty_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]

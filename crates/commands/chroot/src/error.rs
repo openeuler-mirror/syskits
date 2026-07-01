@@ -34,6 +34,9 @@ pub enum ChrootError {
     /// Failed to find the specified group.
     NoSuchGroup(String),
 
+    /// Failed to find the specified user.
+    NoSuchUser(String),
+
     /// The given directory does not exist.
     NoSuchDirectory(String),
 
@@ -79,6 +82,7 @@ impl Display for ChrootError {
                 ctcore::ct_execute_phrase(),
             ),
             Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
+            Self::NoSuchUser(s) => write!(f, "no such user: {}", s.maybe_quote(),),
             Self::NoSuchDirectory(s) => write!(
                 f,
                 "cannot change root directory to {}: no such directory",
@@ -149,6 +153,14 @@ mod tests {
         let error = ChrootError::NoSuchGroup("unknown_group".into());
 
         assert_eq!(format!("{error}"), "no such group: unknown_group");
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_no_such_user_error() {
+        let error = ChrootError::NoSuchUser("unknown_user".into());
+
+        assert_eq!(format!("{}", error), "no such user: unknown_user");
         assert_eq!(error.code(), 125);
     }
 
@@ -241,6 +253,12 @@ mod tests {
     #[test]
     fn test_code_for_no_such_group_error() {
         let error = ChrootError::NoSuchGroup("unknown_group".into());
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_code_for_no_such_user_error() {
+        let error = ChrootError::NoSuchUser("unknown_user".into());
         assert_eq!(error.code(), 125);
     }
 

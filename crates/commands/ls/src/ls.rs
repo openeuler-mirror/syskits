@@ -3383,7 +3383,36 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
     let hostname_osstring = hostname::get().unwrap_or(OsString::from(""));
     let hostname = hostname_osstring.to_string_lossy();
 
-    let absolute_path_buf = fs::canonicalize(&path.p_buf).unwrap_or_default();
+    let absolute_path_buf = match fs::canonicalize(&path.p_buf) {
+        Ok(p) => p,
+        // 处理断开的软链接
+        Err(_) => {
+            if let Ok(target) = fs::read_link(&path.p_buf) {
+                let parent = path.p_buf.parent().unwrap_or(Path::new("."));
+                let parent = if parent.as_os_str().is_empty() {
+                    Path::new(".")
+                } else {
+                    parent
+                };
+                match fs::canonicalize(parent) {
+                    Ok(p) => p.join(target),
+                    Err(_) => {
+                        if path.p_buf.is_absolute() {
+                            path.p_buf.clone()
+                        } else {
+                            std::env::current_dir().unwrap_or_default().join(&path.p_buf)
+                        }
+                    }
+                }
+            } else {
+                if path.p_buf.is_absolute() {
+                    path.p_buf.clone()
+                } else {
+                    std::env::current_dir().unwrap_or_default().join(&path.p_buf)
+                }
+            }
+        }
+    };
     let absolute_path = absolute_path_buf.to_string_lossy();
 
     #[cfg(target_os = "linux")]

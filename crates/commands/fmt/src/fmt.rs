@@ -19,7 +19,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
-use ctcore::ct_show_error;
+use ctcore::ct_show;
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::OsString;
@@ -204,11 +204,7 @@ fn fmt_process_file<W: ?Sized + Write>(
         match File::open(file_name) {
             Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
             Err(e) => {
-                ct_show_error!(
-                    "cannot open {} for reading: {}",
-                    file_name.quote(),
-                    io_error_message(&e)
-                );
+                ct_show!(CtSimpleError::new(1, format!("{}: {}", file_name.maybe_quote(), e)));
                 return Ok(false);
             }
         }

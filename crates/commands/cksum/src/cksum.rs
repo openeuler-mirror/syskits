@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
-    ct_error::{CTError, CTResult, CtSimpleError, FromIo},
+    ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code},
     ct_show,
     ct_sum::{
         BSD, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1, Sha224, Sha256,
@@ -30,8 +30,7 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write, stdin, stdout};
-use std::iter;
+use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -154,6 +153,7 @@ struct CksumOptions {
     untagged: bool,
     length: Option<usize>,
     output_format: CksumOutputFormat,
+    zero: bool,
 }
 
 /// Calculate checksum
@@ -183,6 +183,8 @@ where
         cksum_digest_read(&mut cksum_opts.digest, &mut stdin_buffer, cksum_opts.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
 
+        let line_end = if cksum_opts.zero { "\0" } else { "\n" };
+
         let sum = match cksum_opts.output_format {
             CksumOutputFormat::Raw => {
                 // 对于原始格式，根据算法类型转换校验和字符串为字节序列
@@ -211,33 +213,36 @@ where
 
         let bsd_width = 5;
         match cksum_opts.algo_name {
-            CKSUM_ALGORITHM_OPTIONS_SYSV => println!(
-                "{} {}",
+            CKSUM_ALGORITHM_OPTIONS_SYSV => print!(
+                "{} {}{}",
                 sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits)
+                div_ceil(sz, cksum_opts.output_bits),
+                line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_BSD => println!(
-                "{:0bsd_width$} {:bsd_width$}",
+            CKSUM_ALGORITHM_OPTIONS_BSD => print!(
+                "{:0bsd_width$} {:bsd_width$}{}",
                 sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits)
+                div_ceil(sz, cksum_opts.output_bits),
+                line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_CRC => println!("{sum} {sz}"),
+            CKSUM_ALGORITHM_OPTIONS_CRC => print!("{sum} {sz}{}", line_end),
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
-                    println!("BLAKE2b-{} (-) = {sum}", length * 8);
+                    print!("BLAKE2b-{} (-) = {sum}{}", length * 8, line_end);
                 } else {
-                    println!("BLAKE2b (-) = {sum}");
+                    print!("BLAKE2b (-) = {sum}{}", line_end);
                 }
             }
             _ => {
                 // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
-                    println!("{sum}  -");
+                    print!("{sum}  -{}", line_end);
                 } else {
-                    println!(
-                        "{} (-) = {sum}",
-                        cksum_opts.algo_name.to_ascii_uppercase()
+                    print!(
+                        "{} (-) = {sum}{}",
+                        cksum_opts.algo_name.to_ascii_uppercase(),
+                        line_end
                     );
                 }
             }
@@ -250,6 +255,8 @@ where
     if cksum_opts.output_format == CksumOutputFormat::Raw && f.len() > 1 {
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
+
+    let line_end = if cksum_opts.zero { "\0" } else { "\n" };
 
     // 遍历文件列表，对每个文件或标准输入计算校验和
     for file_name in f {
@@ -321,36 +328,39 @@ where
         let bsd_width = 5;
         // 根据算法格式化并输出校验和结果
         match cksum_opts.algo_name {
-            CKSUM_ALGORITHM_OPTIONS_SYSV => println!(
-                "{} {} {}",
+            CKSUM_ALGORITHM_OPTIONS_SYSV => print!(
+                "{} {} {}{}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, cksum_opts.output_bits),
-                filename.display()
+                filename.display(),
+                line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_BSD => println!(
-                "{:0bsd_width$} {:bsd_width$} {}",
+            CKSUM_ALGORITHM_OPTIONS_BSD => print!(
+                "{:0bsd_width$} {:bsd_width$} {}{}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, cksum_opts.output_bits),
-                filename.display()
+                filename.display(),
+                line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_CRC => println!("{sum} {sz} {}", filename.display()),
+            CKSUM_ALGORITHM_OPTIONS_CRC => print!("{sum} {sz} {}{}", filename.display(), line_end),
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
-                    println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
+                    print!("BLAKE2b-{} ({}) = {sum}{}", length * 8, filename.display(), line_end);
                 } else {
-                    println!("BLAKE2b ({}) = {sum}", filename.display());
+                    print!("BLAKE2b ({}) = {sum}{}", filename.display(), line_end);
                 }
             }
             _ => {
                 // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
-                    println!("{sum}  {}", filename.display());
+                    print!("{sum}  {}{}", filename.display(), line_end);
                 } else {
-                    println!(
-                        "{} ({}) = {sum}",
+                    print!(
+                        "{} ({}) = {sum}{}",
                         cksum_opts.algo_name.to_ascii_uppercase(),
-                        filename.display()
+                        filename.display(),
+                        line_end
                     );
                 }
             }
@@ -394,6 +404,13 @@ mod opt_flags {
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
     pub const BASE64: &str = "base64";
+    pub const CHECK: &str = "check";
+    pub const QUIET: &str = "quiet";
+    pub const STATUS: &str = "status";
+    pub const IGNORE_MISSING: &str = "ignore-missing";
+    pub const STRICT: &str = "strict";
+    pub const WARN: &str = "warn";
+    pub const ZERO: &str = "zero";
 }
 
 #[derive(Default)]
@@ -408,7 +425,11 @@ impl Tool for Cksum {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        cksum_main(args.iter().cloned()).map(|_| ())
+        let exit_code = cksum_main(args.iter().cloned())?;
+        if exit_code != 0 {
+            set_ct_exit_code(exit_code);
+        }
+        Ok(())
     }
 }
 
@@ -480,7 +501,12 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         length,
         untagged: matches.get_flag(opt_flags::UNTAGGED),
         output_format,
+        zero: matches.get_flag(opt_flags::ZERO),
     };
+
+    if matches.get_flag(opt_flags::CHECK) {
+        return cksum_check(opts, &matches);
+    }
 
     match matches.get_many::<String>(opt_flags::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
@@ -489,6 +515,205 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     };
 
     Ok(0)
+}
+
+fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i32> {
+    let quiet = matches.get_flag(opt_flags::QUIET);
+    let status = matches.get_flag(opt_flags::STATUS);
+    let warn = matches.get_flag(opt_flags::WARN);
+    let strict = matches.get_flag(opt_flags::STRICT);
+    let ignore_missing = matches.get_flag(opt_flags::IGNORE_MISSING);
+
+    let files = match matches.get_many::<String>(opt_flags::FILE) {
+        Some(v) => v.map(OsStr::new).collect(),
+        None => vec![OsStr::new("-")],
+    };
+
+    let mut bad_format = 0;
+    let mut bad_checksum = 0;
+    let mut missing_files = 0;
+    let mut failed_open = 0;
+    let mut no_file_verified = false;
+
+    for cksum_file in files {
+        let f_name = Path::new(cksum_file);
+        let mut n_properly_formatted_this_file = 0;
+        let mut n_verified_this_file = 0;
+        let file_input: Box<dyn BufRead> = if f_name == OsStr::new("-") {
+            Box::new(BufReader::new(stdin()))
+        } else {
+            match File::open(f_name) {
+                Ok(f) => Box::new(BufReader::new(f)),
+                Err(e) => {
+                    ctcore::ct_show_error!("{}: {}", f_name.display(), e);
+                    failed_open += 1;
+                    continue;
+                }
+            }
+        };
+
+        for (line_num, line_result) in file_input.lines().enumerate() {
+            let line = match line_result {
+                Ok(l) => l,
+                Err(e) => {
+                    ctcore::ct_show_error!("{}: {}", f_name.display(), e);
+                    continue;
+                }
+            };
+
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            let (digest_str, filename_str) = match parse_check_line(&line) {
+                Some((d, f)) => (d, f),
+                None => {
+                bad_format += 1;
+                if warn {
+                    ctcore::ct_show_error!(
+                        "{}: {}: improperly formatted checksum line",
+                        f_name.display(),
+                        line_num + 1
+                    );
+                }
+                continue;
+                }
+            };
+
+            let is_valid_format = match opts.output_format {
+                CksumOutputFormat::Hexadecimal => match opts.algo_name {
+                    CKSUM_ALGORITHM_OPTIONS_CRC
+                    | CKSUM_ALGORITHM_OPTIONS_SYSV
+                    | CKSUM_ALGORITHM_OPTIONS_BSD => digest_str.chars().all(|c| c.is_ascii_digit()),
+                    _ => {
+                        let expected_len = opts.output_bits / 4;
+                        digest_str.len() == expected_len
+                            && digest_str.chars().all(|c| c.is_ascii_hexdigit())
+                    }
+                },
+                CksumOutputFormat::Base64 => {
+                    let bytes = (opts.output_bits + 7) / 8;
+                    let expected_len = (bytes + 2) / 3 * 4;
+                    digest_str.len() == expected_len
+                        && digest_str.chars().all(|c| {
+                            c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
+                        })
+                }
+                CksumOutputFormat::Raw => true,
+            };
+
+            if !is_valid_format {
+                bad_format += 1;
+                if warn {
+                    ctcore::ct_show_error!("{}: {}: improperly formatted checksum line", f_name.display(), line_num + 1);
+                }
+                continue;
+            };
+
+            n_properly_formatted_this_file += 1;
+            let target_path = Path::new(filename_str);
+            let mut target_file: Box<dyn Read> = match File::open(target_path) {
+                Ok(f) => Box::new(BufReader::new(f)),
+                Err(_) => {
+                    if !ignore_missing {
+                        if !status {
+                            println!("{}: FAILED open or read", filename_str);
+                        }
+                        missing_files += 1;
+                    }
+                    continue;
+                }
+            };
+
+            let (sum_hex, _) = match cksum_digest_read(
+                &mut opts.digest,
+                &mut BufReader::new(&mut target_file),
+                opts.output_bits,
+            ) {
+                Ok(s) => {
+                    n_verified_this_file += 1;
+                    s
+                }
+                Err(_) => {
+                    if !ignore_missing {
+                        if !status {
+                            println!("{}: FAILED open or read", filename_str);
+                        }
+                        missing_files += 1;
+                    }
+                    continue;
+                }
+            };
+
+            if sum_hex.eq_ignore_ascii_case(digest_str) {
+                if !quiet && !status {
+                    println!("{}: OK", filename_str);
+                }
+            } else {
+                if !status {
+                    println!("{}: FAILED", filename_str);
+                }
+                bad_checksum += 1;
+            }
+        }
+
+        if ignore_missing && n_properly_formatted_this_file > 0 && n_verified_this_file == 0 {
+            if !status {
+                ctcore::ct_show_error!("{}: no file was verified", f_name.display());
+            }
+            no_file_verified = true;
+        }
+    }
+
+    if bad_checksum > 0 {
+        if !status {
+            ctcore::ct_show_error!("{} computed checksum did NOT match", bad_checksum);
+        }
+        return Ok(1);
+    }
+    if bad_format > 0 {
+        if !status {
+            ctcore::ct_show_error!("{} lines are improperly formatted", bad_format);
+        }
+        if strict {
+            return Ok(1);
+        }
+    }
+    if missing_files > 0 || failed_open > 0 || no_file_verified {
+        return Ok(1);
+    }
+
+    Ok(0)
+}
+
+fn parse_check_line(line: &str) -> Option<(&str, &str)> {
+    let trimmed = line.trim();
+
+    // Try to parse as BSD format: ALGO (filename) = DIGEST
+    if let Some(last_idx) = trimmed.rfind(") = ") {
+        let digest_start = last_idx + 4;
+        let digest = &trimmed[digest_start..];
+        if let Some(first_idx) = trimmed.find(" (") {
+            if first_idx < last_idx {
+                let filename = &trimmed[first_idx + 2..last_idx];
+                return Some((digest, filename));
+            }
+        }
+    }
+
+    if let Some(first_space) = trimmed.find(' ') {
+        let digest = &trimmed[..first_space];
+        let rest = &trimmed[first_space + 1..];
+        if let Some(filename) = rest.strip_prefix('*') {
+            return Some((digest, filename));
+        }
+        if let Some(filename) = rest.strip_prefix(' ') {
+            return Some((digest, filename));
+        }
+        let filename = rest.trim_start();
+        return Some((digest, filename));
+    }
+    None
 }
 
 pub fn ct_app() -> Command {
@@ -548,7 +773,7 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::LENGTH)
             .value_parser(value_parser!(usize))
             .short('l')
-            .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+            .help(t!("cksum.clap.length", default = "digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8"))
             .action(ArgAction::Set),
         Arg::new(opt_flags::RAW)
             .long(opt_flags::RAW)
@@ -561,6 +786,38 @@ fn args_init() -> Vec<Arg> {
             // Even though this could easily just override an earlier '--raw',
             // GNU cksum does not permit these flags to be combined:
             .conflicts_with(opt_flags::RAW),
+        Arg::new(opt_flags::CHECK)
+            .short('c')
+            .long(opt_flags::CHECK)
+            .help(t!("cksum.clap.check", default = "read checksums from the FILEs and check them"))
+            .action(ArgAction::SetTrue)
+            .overrides_with(opt_flags::TAG),
+        Arg::new(opt_flags::QUIET)
+            .long(opt_flags::QUIET)
+            .help(t!("cksum.clap.quiet", default = "don't print OK for each successfully verified file"))
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::STATUS)
+            .long(opt_flags::STATUS)
+            .help(t!("cksum.clap.status", default = "don't output anything, status code shows success"))
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::IGNORE_MISSING)
+            .long(opt_flags::IGNORE_MISSING)
+            .help(t!("cksum.clap.ignore_missing", default = "don't fail or report status for missing files"))
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::STRICT)
+            .long(opt_flags::STRICT)
+            .help(t!("cksum.clap.strict", default = "exit non-zero for improperly formatted checksum lines"))
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::WARN)
+            .short('w')
+            .long(opt_flags::WARN)
+            .help(t!("cksum.clap.warn", default = "warn about improperly formatted checksum lines"))
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::ZERO)
+            .short('z')
+            .long(opt_flags::ZERO)
+            .help(t!("cksum.clap.zero", default = "end each output line with NUL, not newline, and disable file name escaping"))
+            .action(ArgAction::SetTrue),
         Arg::new("help")
             .short('h')
             .long("help")
@@ -2338,6 +2595,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2386,6 +2644,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2434,6 +2693,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2481,6 +2741,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2529,6 +2790,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2577,6 +2839,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2625,6 +2888,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2673,6 +2937,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2721,6 +2986,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2769,6 +3035,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2817,6 +3084,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2865,6 +3133,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2913,6 +3182,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -2961,6 +3231,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3010,6 +3281,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3058,6 +3330,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3106,6 +3379,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3154,6 +3428,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3202,6 +3477,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3250,6 +3526,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3298,6 +3575,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3346,6 +3624,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3394,6 +3673,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3443,6 +3723,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3491,6 +3772,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3539,6 +3821,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3588,6 +3871,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3636,6 +3920,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3684,6 +3969,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3733,6 +4019,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3781,6 +4068,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3829,6 +4117,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results
@@ -3878,6 +4167,7 @@ mod tests {
                 length: Some(length),
                 untagged: false,
                 output_format,
+                zero: false,
             };
 
             match results

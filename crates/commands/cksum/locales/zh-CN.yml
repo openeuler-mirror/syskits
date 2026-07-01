@@ -5,6 +5,16 @@ cksum:
     tag: 创建一个BSD风格的校验和，撤销--untagged（默认）
     raw: 输出原始二进制摘要，非十六进制
     base64: 输出base64摘要，非十六进制
+    help: 显示帮助信息
+    version: 显示版本信息
+    length: 指定摘要长度（位数）；不能超过 blake2 算法的最大值且必须是 8 的倍数
+    check: 从 <文件> 中读取校验和并进行检验
+    quiet: 不对每个验证成功的文件输出 "成功"
+    status: 不输出任何内容，使用状态码表示成功
+    ignore_missing: 找不到文件时，不要退出或者返回失败状态
+    strict: 遇到格式不正确的校验和行时返回非零状态
+    warn: 遇到格式不正确的校验和行时显示警告
+    zero: 以 NUL 空字符而非换行符结束每个输出行，同时禁用文件名转义
   usage: cksum [选项] [文件]...
   about: '为每个文件打印CRC和大小'
   after_help: |-

@@ -164,6 +164,7 @@ pub mod ls_flags {
     pub static LS_ZERO: &str = "zero";
     pub static LS_DIRED: &str = "dired";
     pub static LS_HYPERLINK: &str = "hyperlink";
+    pub static LS_F: &str = "f";
 }
 
 const LS_DEFAULT_TERM_WIDTH: u16 = 80;
@@ -823,9 +824,17 @@ fn parse_width(s: &str) -> Result<u16, LsError> {
 
 impl LsConfig {
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
+        let get_last = |flag: &str| -> usize {
+            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+                options.index_of(flag).unwrap_or(0)
+            } else {
+                0
+            }
+        };
+
         let context = options.get_flag(ls_flags::LS_CONTEXT);
         let (mut format, opt) = ls_extract_format(options);
-        let files = extract_files(options);
+        let mut files = extract_files(options);
 
         // -o、-n 和 -g 选项比较复杂。它们不能相互覆盖
         // 因为有可能将它们组合在一起。例如，选项
@@ -874,11 +883,12 @@ impl LsConfig {
             }
         }
 
-        let ls_sort = extract_sort(options);
+        let mut ls_sort = extract_sort(options);
         let ls_time = extract_time(options);
         let mut is_needs_color = extract_color(options);
-        let is_hyperlink = extract_hyperlink(options);
+        let mut is_hyperlink = extract_hyperlink(options);
 
+        let mut is_alloc_size = options.get_flag(ls_flags::size::LS_ALLOCATION_SIZE);
         let opt_block_size = options.get_one::<String>(ls_flags::size::LS_BLOCK_SIZE);
         let is_opt_si = opt_block_size.is_some()
             && options
@@ -1051,6 +1061,58 @@ impl LsConfig {
             }
         }
 
+        let f_index = get_last(ls_flags::LS_F);
+        // 如果用户输入了 -f
+        if f_index > 0 {
+            let sort_flags = [
+                ls_flags::LS_SORT,
+                ls_flags::sort::LS_TIME,
+                ls_flags::sort::LS_SIZE,
+                ls_flags::sort::LS_NONE,
+                ls_flags::sort::LS_VERSION,
+                ls_flags::sort::LS_EXTENSION,
+            ];
+            
+            if f_index > sort_flags.iter().map(|&f| get_last(f)).max().unwrap_or(0) {
+                ls_sort = LsSort::None;
+            }
+
+            let files_flags = [ls_flags::files::LS_ALL, ls_flags::files::LS_ALMOST_ALL];
+            if f_index > files_flags.iter().map(|&f| get_last(f)).max().unwrap_or(0) {
+                files = LsFiles::LsAll;
+            }
+
+            if f_index > get_last(ls_flags::LS_COLOR) {
+                is_needs_color = false;
+            }
+
+            if f_index > get_last(ls_flags::LS_HYPERLINK) {
+                is_hyperlink = false;
+            }
+
+            if f_index > get_last(ls_flags::size::LS_ALLOCATION_SIZE) {
+                is_alloc_size = false;
+            }
+
+            if format == LsFormat::Long {
+                let long_flags = [
+                    ls_flags::format::LS_LONG,
+                    ls_flags::LS_FORMAT,
+                    ls_flags::format::LS_LONG_NO_GROUP,
+                    ls_flags::format::LS_LONG_NO_OWNER,
+                    ls_flags::format::LS_LONG_NUMERIC_UID_GID,
+                    ls_flags::LS_FULL_TIME,
+                ];
+                if f_index > long_flags.iter().map(|&f| get_last(f)).max().unwrap_or(0) {
+                    format = if stdout().is_terminal() {
+                        LsFormat::Columns
+                    } else {
+                        LsFormat::OneLine
+                    };
+                }
+            }
+        }
+
         // 根据 ls info 页面，`--0` 意味着以下标志：
         // - `--显示控制字符
         // - `-format=单列
@@ -1080,13 +1142,6 @@ impl LsConfig {
             ls_flags::quoting::LS_ESCAPE,
             ls_flags::quoting::LS_LITERAL,
         ];
-        let get_last = |flag: &str| -> usize {
-            if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
-                options.index_of(flag).unwrap_or(0)
-            } else {
-                0
-            }
-        };
         if get_last(ls_flags::LS_ZERO)
             > zero_formats_opts
                 .into_iter()
@@ -1172,7 +1227,7 @@ impl LsConfig {
             #[cfg(unix)]
             is_inode: options.get_flag(ls_flags::LS_INODE),
             long,
-            is_alloc_size: options.get_flag(ls_flags::size::LS_ALLOCATION_SIZE),
+            is_alloc_size,
             file_size_block_size,
             block_size,
             width,
@@ -1320,6 +1375,11 @@ pub fn ct_app() -> Command {
             .overrides_with(ls_flags::LS_ZERO)
             .help("List entries separated by ASCII NUL characters.")
             .action(ArgAction::SetTrue),
+        Arg::new(ls_flags::LS_F)
+            .short('f')
+            .help("do not sort, enable -aU, disable -ls --color")
+            .action(ArgAction::SetTrue)
+            .overrides_with(ls_flags::LS_F),
         Arg::new(ls_flags::LS_DIRED)
             .long(ls_flags::LS_DIRED)
             .short('D')

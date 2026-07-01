@@ -1668,7 +1668,7 @@
             },
             {
                 "command": "ls",
-                "description": "时间风格 (--time-style=+FORMAT)",
+                "description": "时间风格 (--time-style=+FORMAT)（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_ts_fmt",
                     "touch test_ts_fmt/file"
@@ -1772,7 +1772,7 @@
             },
             {
                 "command": "ls",
-                "description": "块大小 (--block-size=2KB vs 2K)",
+                "description": "块大小（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_bs_kb",
                     "dd if=/dev/zero of=test_bs_kb/file bs=2048 count=1 2>/dev/null"
@@ -1837,7 +1837,7 @@
             },
             {
                 "command": "ls",
-                "description": "环境变量 TIME_STYLE",
+                "description": "环境变量 TIME_STYLE（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_env_ts",
                     "touch test_env_ts/file"
@@ -1865,7 +1865,7 @@
             },
             {
                 "command": "ls",
-                "description": "测试 block-size 向上取整 (2KB unit, 4KB file)",
+                "description": "测试 block-size 向上取整（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_bs_round",
                     "dd if=/dev/zero of=test_bs_round/file bs=4096 count=1 2>/dev/null"
@@ -1884,7 +1884,7 @@
             },
             {
                 "command": "ls",
-                "description": "测试 block-size 总计行计算 (先求和再取整)",
+                "description": "测试 block-size 总计行计算（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_bs_total",
                     "dd if=/dev/zero of=test_bs_total/file1 bs=4096 count=1 2>/dev/null",
@@ -1923,7 +1923,7 @@
             },
             {
                 "command": "ls",
-                "description": "测试 TIME_STYLE 环境变量 (GNU ls 使用 TIME_STYLE, syskits ls 似乎使用了 LS_TIME_STYLE)",
+                "description": "测试 TIME_STYLE 环境变量（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_env_time_style_std",
                     "touch test_env_time_style_std/file"
@@ -1951,7 +1951,7 @@
             },
             {
                 "command": "ls",
-                "description": "测试 --time-style 的 posix- 前缀支持",
+                "description": "测试 --time-style 的 posix- 前缀支持（中英文差异）",
                 "setup_commands": [
                     "mkdir -p test_posix_style",
                     "touch test_posix_style/file"
@@ -1995,7 +1995,7 @@
             },
             {
                 "command": "ls",
-                "description": "测试 --time=mtime (GNU ls 支持, syskits ls 目前不支持)",
+                "description": "测试 --time=mtime",
                 "setup_commands": [
                     "mkdir -p test_time_mtime",
                     "touch test_time_mtime/file"

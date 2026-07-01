@@ -16,9 +16,9 @@
             "args": [],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "a.txt\nb.txt\nc.txt\nsubdir\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "a.txt\nb.txt\nc.txt\nsubdir\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -43,9 +43,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "a.txt\nb.txt\nsubdir\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "a.txt\nb.txt\nsubdir\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -66,9 +66,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "file1.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "file1.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -93,9 +93,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "file1.txt\n\ntest_dir_dir_mix/subdir:\na.txt\nb.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "file1.txt\n\ntest_dir_dir_mix/subdir:\na.txt\nb.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -118,9 +118,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 1,
-                    "stdout": "",
-                    "stderr": "dir: cannot access 'test_dir_dir_missing/missing_file.txt': No such file or directory\n"
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": "dir: cannot access 'test_dir_dir_missing/missing_file.txt': No such file or directory\n"
                 }
             },
             "cleanup_commands": [
@@ -144,9 +144,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": ".\n..\n.hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": ".\n..\n.hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -170,9 +170,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": ".hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": ".hidden1\n.hidden2\n.hidden_dir\nfile1.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -198,9 +198,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "rw-r--r-- 1 $USER $USER 0 file1.txt\nrw------- 1 $USER $USER 0 file2.txt\ndrwxr-xr-x 2 $USER $USER 4096 subdir\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "rw-r--r-- 1 $USER $USER 0 file1.txt\nrw------- 1 $USER $USER 0 file2.txt\ndrwxr-xr-x 2 $USER $USER 4096 subdir\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -222,9 +222,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "fileA.txt\nfileB.txt\nfileC.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "fileA.txt\nfileB.txt\nfileC.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -249,9 +249,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "file1.txt\n\ndir1:\nfile2.txt\n\ndir1/dir1_sub:\nfile3.txt\n\ndir2:\nfile4.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "file1.txt\n\ndir1:\nfile2.txt\n\ndir1/dir1_sub:\nfile3.txt\n\ndir2:\nfile4.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -276,9 +276,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -307,9 +307,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "drwxr-xr-x 2 $USER $USER 4096 subdir2\ndrwxr-xr-x 2 $USER $USER 4096 subdir1\nrw------- 1 $USER $USER 0 fileB.txt\nrw-r--r-- 1 $USER $USER 0 fileA.txt\n",
-                    "stderr": ""
+                "exit_code": 0,
+                "stdout": "drwxr-xr-x 2 $USER $USER 4096 subdir2\ndrwxr-xr-x 2 $USER $USER 4096 subdir1\nrw------- 1 $USER $USER 0 fileB.txt\nrw-r--r-- 1 $USER $USER 0 fileA.txt\n",
+                "stderr": ""
                 }
             },
             "cleanup_commands": [
@@ -324,11 +324,7 @@
                 "mkdir -p /test_dir_dir_inode",
                 "touch /test_dir_dir_inode/file.txt"
             ],
-            "args": [
-                "-i",
-                "-l",
-                "/test_dir_dir_inode/file.txt"
-            ],
+            "args": ["-i", "-l", "/test_dir_dir_inode/file.txt"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -354,10 +350,7 @@
                 "mkdir -p test_dir_d",
                 "touch test_dir_d/file.txt"
             ],
-            "args": [
-                "-d",
-                "test_dir_d"
-            ],
+            "args": ["-d", "test_dir_d"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -378,11 +371,7 @@
                 "touch test_dir_F/file.txt",
                 "ln -s file.txt test_dir_F/link.txt"
             ],
-            "args": [
-                "-F",
-                "-1",
-                "test_dir_F"
-            ],
+            "args": ["-F", "-1", "test_dir_F"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -402,10 +391,7 @@
                 "mkdir -p test_dir_1",
                 "touch test_dir_1/file1.txt test_dir_1/file2.txt"
             ],
-            "args": [
-                "-1",
-                "test_dir_1"
-            ],
+            "args": ["-1", "test_dir_1"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -428,10 +414,7 @@
                 "touch test_locale_dir_C/windows",
                 "touch test_locale_dir_C/Apple"
             ],
-            "args": [
-                "-1",
-                "test_locale_dir_C"
-            ],
+            "args": ["-1", "test_locale_dir_C"],
             "env": {
                 "LC_COLLATE": "C"
             },
@@ -453,11 +436,7 @@
                 "mkdir -p test_author",
                 "touch test_author/file"
             ],
-            "args": [
-                "-l",
-                "--author",
-                "test_author"
-            ],
+            "args": ["-l", "--author", "test_author"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -477,11 +456,7 @@
                 "touch 'test_escape/file with space'",
                 "touch 'test_escape/file\nnewline'"
             ],
-            "args": [
-                "-b",
-                "-1",
-                "test_escape"
-            ],
+            "args": ["-b", "-1", "test_escape"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -500,11 +475,7 @@
                 "mkdir -p test_bs",
                 "dd if=/dev/zero of=test_bs/file bs=1M count=2 2>/dev/null"
             ],
-            "args": [
-                "-l",
-                "--block-size=M",
-                "test_bs"
-            ],
+            "args": ["-l", "--block-size=M", "test_bs"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -523,11 +494,7 @@
                 "mkdir -p test_backup",
                 "touch test_backup/file test_backup/file~"
             ],
-            "args": [
-                "-B",
-                "-1",
-                "test_backup"
-            ],
+            "args": ["-B", "-1", "test_backup"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -548,11 +515,7 @@
                 "sleep 1",
                 "touch test_ctime/2"
             ],
-            "args": [
-                "-c",
-                "-l",
-                "test_ctime"
-            ],
+            "args": ["-c", "-l", "test_ctime"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -571,10 +534,7 @@
                 "mkdir -p test_cols",
                 "touch test_cols/1 test_cols/2 test_cols/3"
             ],
-            "args": [
-                "-C",
-                "test_cols"
-            ],
+            "args": ["-C", "test_cols"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -594,10 +554,7 @@
                 "touch test_color/file",
                 "mkdir test_color/dir"
             ],
-            "args": [
-                "--color=always",
-                "test_color"
-            ],
+            "args": ["--color=always", "test_color"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -616,10 +573,7 @@
                 "mkdir -p test_f",
                 "touch test_f/a test_f/b"
             ],
-            "args": [
-                "-f",
-                "test_f"
-            ],
+            "args": ["-f", "test_f"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -639,11 +593,7 @@
                 "touch test_ft/file",
                 "mkdir test_ft/dir"
             ],
-            "args": [
-                "--file-type",
-                "-1",
-                "test_ft"
-            ],
+            "args": ["--file-type", "-1", "test_ft"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -662,10 +612,7 @@
                 "mkdir -p test_fmt",
                 "touch test_fmt/1 test_fmt/2"
             ],
-            "args": [
-                "--format=commas",
-                "test_fmt"
-            ],
+            "args": ["--format=commas", "test_fmt"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -684,10 +631,7 @@
                 "mkdir -p test_fulltime",
                 "touch test_fulltime/file"
             ],
-            "args": [
-                "--full-time",
-                "test_fulltime"
-            ],
+            "args": ["--full-time", "test_fulltime"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -706,10 +650,7 @@
                 "mkdir -p test_g",
                 "touch test_g/file"
             ],
-            "args": [
-                "-g",
-                "test_g"
-            ],
+            "args": ["-g", "test_g"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -729,11 +670,7 @@
                 "touch test_gdf/file",
                 "mkdir test_gdf/dir"
             ],
-            "args": [
-                "--group-directories-first",
-                "-1",
-                "test_gdf"
-            ],
+            "args": ["--group-directories-first", "-1", "test_gdf"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -752,11 +689,7 @@
                 "mkdir -p test_G",
                 "touch test_G/file"
             ],
-            "args": [
-                "-l",
-                "-G",
-                "test_G"
-            ],
+            "args": ["-l", "-G", "test_G"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -775,11 +708,7 @@
                 "mkdir -p test_si",
                 "dd if=/dev/zero of=test_si/file bs=1000 count=1 2>/dev/null"
             ],
-            "args": [
-                "-l",
-                "--si",
-                "test_si"
-            ],
+            "args": ["-l", "--si", "test_si"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -799,10 +728,7 @@
                 "ln -s target test_H/link",
                 "touch test_H/target/file"
             ],
-            "args": [
-                "-H",
-                "test_H/link"
-            ],
+            "args": ["-H", "test_H/link"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -821,11 +747,7 @@
                 "mkdir -p test_hide",
                 "touch test_hide/keep test_hide/hide_me"
             ],
-            "args": [
-                "--hide=*hide*",
-                "-1",
-                "test_hide"
-            ],
+            "args": ["--hide=*hide*", "-1", "test_hide"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -845,11 +767,7 @@
                 "mkdir test_ind/dir",
                 "touch test_ind/file"
             ],
-            "args": [
-                "--indicator-style=slash",
-                "-1",
-                "test_ind"
-            ],
+            "args": ["--indicator-style=slash", "-1", "test_ind"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -868,12 +786,7 @@
                 "mkdir -p test_I",
                 "touch test_I/a.txt test_I/b.log"
             ],
-            "args": [
-                "-I",
-                "*.log",
-                "-1",
-                "test_I"
-            ],
+            "args": ["-I", "*.log", "-1", "test_I"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -892,11 +805,7 @@
                 "mkdir -p test_k",
                 "dd if=/dev/zero of=test_k/file bs=2048 count=1 2>/dev/null"
             ],
-            "args": [
-                "-k",
-                "-s",
-                "test_k/file"
-            ],
+            "args": ["-k", "-s", "test_k/file"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -916,11 +825,7 @@
                 "touch test_L/file",
                 "ln -s file test_L/link"
             ],
-            "args": [
-                "-L",
-                "-l",
-                "test_L/link"
-            ],
+            "args": ["-L", "-l", "test_L/link"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -939,10 +844,7 @@
                 "mkdir -p test_m",
                 "touch test_m/1 test_m/2"
             ],
-            "args": [
-                "-m",
-                "test_m"
-            ],
+            "args": ["-m", "test_m"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -961,11 +863,7 @@
                 "mkdir -p test_N",
                 "touch 'test_N/file name'"
             ],
-            "args": [
-                "-N",
-                "-1",
-                "test_N"
-            ],
+            "args": ["-N", "-1", "test_N"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -984,10 +882,7 @@
                 "mkdir -p test_o",
                 "touch test_o/file"
             ],
-            "args": [
-                "-o",
-                "test_o"
-            ],
+            "args": ["-o", "test_o"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1006,11 +901,7 @@
                 "mkdir -p test_p/dir",
                 "touch test_p/file"
             ],
-            "args": [
-                "-p",
-                "-1",
-                "test_p"
-            ],
+            "args": ["-p", "-1", "test_p"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1029,11 +920,7 @@
                 "mkdir -p test_q",
                 "touch 'test_q/file?'"
             ],
-            "args": [
-                "-q",
-                "-1",
-                "test_q"
-            ],
+            "args": ["-q", "-1", "test_q"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1052,11 +939,7 @@
                 "mkdir -p test_Q",
                 "touch test_Q/file"
             ],
-            "args": [
-                "-Q",
-                "-1",
-                "test_Q"
-            ],
+            "args": ["-Q", "-1", "test_Q"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1075,11 +958,7 @@
                 "mkdir -p test_qs",
                 "touch 'test_qs/file name'"
             ],
-            "args": [
-                "--quoting-style=shell",
-                "-1",
-                "test_qs"
-            ],
+            "args": ["--quoting-style=shell", "-1", "test_qs"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1098,10 +977,7 @@
                 "mkdir -p test_s",
                 "touch test_s/file"
             ],
-            "args": [
-                "-s",
-                "test_s"
-            ],
+            "args": ["-s", "test_s"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1120,11 +996,7 @@
                 "mkdir -p test_X",
                 "touch test_X/b.txt test_X/a.doc"
             ],
-            "args": [
-                "-X",
-                "-1",
-                "test_X"
-            ],
+            "args": ["-X", "-1", "test_X"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1143,11 +1015,7 @@
                 "mkdir -p test_ts",
                 "touch test_ts/file"
             ],
-            "args": [
-                "-l",
-                "--time-style=iso",
-                "test_ts"
-            ],
+            "args": ["-l", "--time-style=iso", "test_ts"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1169,12 +1037,7 @@
                 "touch test_u/2",
                 "cat test_u/1 > /dev/null"
             ],
-            "args": [
-                "-u",
-                "-t",
-                "-1",
-                "test_u"
-            ],
+            "args": ["-u", "-t", "-1", "test_u"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1193,10 +1056,7 @@
                 "mkdir -p test_U",
                 "touch test_U/a test_U/b"
             ],
-            "args": [
-                "-U",
-                "test_U"
-            ],
+            "args": ["-U", "test_U"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1215,12 +1075,7 @@
                 "mkdir -p test_w",
                 "touch test_w/1 test_w/2"
             ],
-            "args": [
-                "-w",
-                "10",
-                "-C",
-                "test_w"
-            ],
+            "args": ["-w", "10", "-C", "test_w"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1239,10 +1094,7 @@
                 "mkdir -p test_x",
                 "touch test_x/1 test_x/2 test_x/3"
             ],
-            "args": [
-                "-x",
-                "test_x"
-            ],
+            "args": ["-x", "test_x"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1261,10 +1113,7 @@
                 "mkdir -p test_Z",
                 "touch test_Z/file"
             ],
-            "args": [
-                "-Z",
-                "test_Z"
-            ],
+            "args": ["-Z", "test_Z"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1283,10 +1132,7 @@
                 "mkdir -p test_zero",
                 "touch test_zero/1 test_zero/2"
             ],
-            "args": [
-                "--zero",
-                "test_zero"
-            ],
+            "args": ["--zero", "test_zero"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1306,10 +1152,7 @@
                 "ln -s target test_dl/link",
                 "touch test_dl/target/file"
             ],
-            "args": [
-                "--dereference-command-line-symlink-to-dir",
-                "test_dl/link"
-            ],
+            "args": ["--dereference-command-line-symlink-to-dir", "test_dl/link"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1328,10 +1171,7 @@
                 "mkdir -p /test_hyp_dir",
                 "touch /test_hyp_dir/file"
             ],
-            "args": [
-                "--hyperlink=always",
-                "/test_hyp_dir"
-            ],
+            "args": ["--hyperlink=always", "/test_hyp_dir"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1350,11 +1190,7 @@
                 "mkdir -p test_scc",
                 "touch 'test_scc/file?'"
             ],
-            "args": [
-                "--show-control-chars",
-                "-1",
-                "test_scc"
-            ],
+            "args": ["--show-control-chars", "-1", "test_scc"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1373,12 +1209,7 @@
                 "mkdir -p test_T",
                 "touch test_T/file"
             ],
-            "args": [
-                "-C",
-                "-T",
-                "4",
-                "test_T"
-            ],
+            "args": ["-C", "-T", "4", "test_T"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1399,10 +1230,7 @@
                 "dd if=/dev/zero of=test_S/large bs=1024 count=1 2>/dev/null",
                 "dd if=/dev/zero of=test_S/medium bs=100 count=1 2>/dev/null"
             ],
-            "args": [
-                "-S",
-                "test_S"
-            ],
+            "args": ["-S", "test_S"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1421,10 +1249,7 @@
                 "mkdir -p test_v",
                 "touch test_v/file1 test_v/file10 test_v/file2"
             ],
-            "args": [
-                "-v",
-                "test_v"
-            ],
+            "args": ["-v", "test_v"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1443,11 +1268,7 @@
                 "mkdir -p test_h",
                 "dd if=/dev/zero of=test_h/file bs=1024 count=1 2>/dev/null"
             ],
-            "args": [
-                "-l",
-                "-h",
-                "test_h"
-            ],
+            "args": ["-l", "-h", "test_h"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1472,10 +1293,7 @@
                 "mkdir -p test_n",
                 "touch test_n/file"
             ],
-            "args": [
-                "-n",
-                "test_n"
-            ],
+            "args": ["-n", "test_n"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1500,10 +1318,7 @@
                 "mkdir -p test_D",
                 "touch test_D/file"
             ],
-            "args": [
-                "-D",
-                "test_D"
-            ],
+            "args": ["-D", "test_D"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1528,10 +1343,7 @@
                 "mkdir -p test_qs_c",
                 "touch 'test_qs_c/file name'"
             ],
-            "args": [
-                "--quoting-style=c",
-                "test_qs_c"
-            ],
+            "args": ["--quoting-style=c", "test_qs_c"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1553,10 +1365,7 @@
                 "touch test_ind_class/exec",
                 "chmod +x test_ind_class/exec"
             ],
-            "args": [
-                "--indicator-style=classify",
-                "test_ind_class"
-            ],
+            "args": ["--indicator-style=classify", "test_ind_class"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1576,9 +1385,7 @@
                 "touch 'test_default_esc/a b'",
                 "touch 'test_default_esc/a\tb'"
             ],
-            "args": [
-                "test_default_esc"
-            ],
+            "args": ["test_default_esc"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1599,10 +1406,7 @@
                 "sleep 1",
                 "touch test_t/new"
             ],
-            "args": [
-                "-t",
-                "test_t"
-            ],
+            "args": ["-t", "test_t"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1623,10 +1427,7 @@
                 "touch test_width_sort/z",
                 "touch test_width_sort/bb"
             ],
-            "args": [
-                "--sort=width",
-                "test_width_sort"
-            ],
+            "args": ["--sort=width", "test_width_sort"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1648,11 +1449,7 @@
                 "touch test_time_access/2",
                 "cat test_time_access/1 > /dev/null"
             ],
-            "args": [
-                "--time=access",
-                "-t",
-                "test_time_access"
-            ],
+            "args": ["--time=access", "-t", "test_time_access"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -1663,6 +1460,243 @@
             "cleanup_commands": [
                 "rm -rf test_time_access"
             ]
+        },
+        {
+            "command": "dir",
+            "description": "帮助信息 (--help)",
+            "args": ["--help"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "dir",
+            "description": "版本信息 (--version)",
+            "args": ["--version"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "dir",
+            "description": "格式化输出 (--format=vertical)",
+            "setup_commands": [
+                "mkdir -p test_fmt_vert",
+                "touch test_fmt_vert/1 test_fmt_vert/2"
+            ],
+            "args": ["--format=vertical", "test_fmt_vert"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fmt_vert"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "格式化输出 (--format=horizontal)",
+            "setup_commands": [
+                "mkdir -p test_fmt_horiz",
+                "touch test_fmt_horiz/1 test_fmt_horiz/2"
+            ],
+            "args": ["--format=horizontal", "test_fmt_horiz"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fmt_horiz"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "排序 (--sort=time)",
+            "setup_commands": [
+                "mkdir -p test_sort_time",
+                "touch test_sort_time/old",
+                "sleep 1",
+                "touch test_sort_time/new"
+            ],
+            "args": ["--sort=time", "test_sort_time"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "new\nold",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_sort_time"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "时间类型 (--time=mtime)",
+            "setup_commands": [
+                "mkdir -p test_time_mtime",
+                "touch test_time_mtime/file"
+            ],
+            "args": ["--time=mtime", "test_time_mtime"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_time_mtime"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "引用风格 (--quoting-style=escape)",
+            "setup_commands": [
+                "mkdir -p test_qs_esc",
+                "touch 'test_qs_esc/file\tname'"
+            ],
+            "args": ["--quoting-style=escape", "-1", "test_qs_esc"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file\\tname",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_qs_esc"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "指示符样式 (--indicator-style=none)",
+            "setup_commands": [
+                "mkdir -p test_ind_none",
+                "mkdir test_ind_none/dir"
+            ],
+            "args": ["--indicator-style=none", "-1", "test_ind_none"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ind_none"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "颜色 (--color=never)",
+            "setup_commands": [
+                "mkdir -p test_color_never",
+                "touch test_color_never/file",
+                "chmod +x test_color_never/file"
+            ],
+            "args": ["--color=never", "test_color_never"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_color_never"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "超链接 (--hyperlink=never)",
+            "setup_commands": [
+                "mkdir -p test_hyp_never",
+                "touch test_hyp_never/file"
+            ],
+            "args": ["--hyperlink=never", "test_hyp_never"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_hyp_never"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "块大小 (--block-size=1K)",
+            "setup_commands": [
+                "mkdir -p test_bs_1k",
+                "dd if=/dev/zero of=test_bs_1k/file bs=1024 count=2 2>/dev/null"
+            ],
+            "args": ["-s", "--block-size=1K", "test_bs_1k"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                 "verifications": [
+                    {
+                        "command": "dir -s --block-size=1K test_bs_1k | grep -E '^2 '",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_bs_1k"
+            ]
+        },
+        {
+            "command": "dir",
+            "description": "时间风格 (--time-style=long-iso)",
+            "setup_commands": [
+                "mkdir -p test_ts_long",
+                "touch test_ts_long/file"
+            ],
+            "args": ["-l", "--time-style=long-iso", "test_ts_long"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                     {
+                        "command": "dir -l --time-style=long-iso test_ts_long | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_ts_long"
+            ]
         }
     ]
-}
+  }

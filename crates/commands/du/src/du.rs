@@ -876,6 +876,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     // 使用独立线程进行输出打印，以便在计算仍在进行时能打印完成的结果
     let (print_tx, rx) = mpsc::channel::<CTResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || du_stat_printer.du_print_stats(&rx));
+    let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
 
     // 跨顶层参数共享 inode 去重集合，以匹配 GNU du 在多参数下的行为。
     let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
@@ -895,16 +896,16 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
                 }
             }
         }
-
         // 检查参数提供的路径是否存在
-        if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
-            if !du_traversal_options.count_links {
-                if let Some(inode) = stat.inode {
-                    if seen_inodes.contains(&inode) {
-                        continue;
+        if let Ok(mut stat) = DuStat::new(&path, &du_traversal_options) {
+            if let Some(inode) = stat.inode {
+                if seen_inodes.contains(&inode) {
+                    if du_traversal_options.count_links {
+                        stat.inodes += 1;
                     }
-                    seen_inodes.insert(inode);
+                    continue;
                 }
+                seen_inodes.insert(inode);
             }
 
             // 从初始路径开始计算磁盘使用情况

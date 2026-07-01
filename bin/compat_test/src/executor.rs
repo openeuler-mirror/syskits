@@ -233,7 +233,25 @@ impl CommandExecutor {
             Some(self.config.default_timeout)
         });
         let use_bytes = test_case.byte_mode;
-        let expected = if use_bytes {
+        let expected = if test_case.compare_use_bash && !use_bytes {
+            if test_case.tty {
+                self.execute_coreutils_with_bash_tty(
+                    &test_case.tstdin,
+                    &test_case.command,
+                    &test_case.args,
+                    &mut coreutils_sandbox,
+                    timeout,
+                )?
+            } else {
+                self.execute_coreutils_with_bash(
+                    &test_case.tstdin,
+                    &test_case.command,
+                    &test_case.args,
+                    &mut coreutils_sandbox,
+                    timeout,
+                )?
+            }
+        } else if use_bytes {
             let args_os = resolve_args_os(test_case)?;
             let stdin_bytes = resolve_stdin_bytes(test_case)?;
             if test_case.tty {
@@ -294,6 +312,23 @@ impl CommandExecutor {
 
         coreutils_sandbox.cleanup()?;
         Ok((expected, verification_results))
+    }
+
+    fn prepare_coreutils_path(&self, sandbox: &mut IsolatedSandbox) {
+        if let Some(ref coreutils_path) = self.config.coreutils_path {
+            let current_path = sandbox.get_env("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
+            sandbox.add_env("PATH", &new_path);
+        }
+    }
+
+    fn build_shell_command_line(command: &str, args: &[String]) -> String {
+        let mut cmdline = shell_quote(command);
+        for arg in args {
+            cmdline.push(' ');
+            cmdline.push_str(&shell_quote(arg));
+        }
+        cmdline
     }
 
     /// 在沙箱中执行 syskits 命令
@@ -450,14 +485,7 @@ impl CommandExecutor {
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
     ) -> Result<CommandResult> {
-        // 确保设置正确的 PATH 环境变量
-        if let Some(ref coreutils_path) = self.config.coreutils_path {
-            // 获取当前的 PATH 环境变量
-            let current_path = sandbox.get_env("PATH").unwrap_or_default();
-            // 将 coreutils 路径添加到 PATH 的开头
-            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
-            sandbox.add_env("PATH", &new_path);
-        }
+        self.prepare_coreutils_path(sandbox);
 
         sandbox.execute_command(command, args, Some(tstdin), true, timeout)
     }
@@ -471,13 +499,39 @@ impl CommandExecutor {
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
     ) -> Result<CommandResult> {
-        if let Some(ref coreutils_path) = self.config.coreutils_path {
-            let current_path = sandbox.get_env("PATH").unwrap_or_default();
-            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
-            sandbox.add_env("PATH", &new_path);
-        }
+        self.prepare_coreutils_path(sandbox);
 
         sandbox.execute_command_tty(command, args, Some(tstdin), true, timeout)
+    }
+
+    /// 在沙箱中通过 bash 执行基线命令（用于对齐 shell 内建命令语义）
+    fn execute_coreutils_with_bash(
+        &self,
+        tstdin: &str,
+        command: &str,
+        args: &[String],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        self.prepare_coreutils_path(sandbox);
+        let cmdline = Self::build_shell_command_line(command, args);
+        let shell_args = vec!["-lc".to_string(), cmdline];
+        sandbox.execute_command("bash", &shell_args, Some(tstdin), true, timeout)
+    }
+
+    /// 在沙箱中通过 bash 执行基线命令（伪终端）
+    fn execute_coreutils_with_bash_tty(
+        &self,
+        tstdin: &str,
+        command: &str,
+        args: &[String],
+        sandbox: &mut IsolatedSandbox,
+        timeout: Option<u64>,
+    ) -> Result<CommandResult> {
+        self.prepare_coreutils_path(sandbox);
+        let cmdline = Self::build_shell_command_line(command, args);
+        let shell_args = vec!["-lc".to_string(), cmdline];
+        sandbox.execute_command_tty("bash", &shell_args, Some(tstdin), true, timeout)
     }
 
     /// 在沙箱中执行 GNU coreutils 命令（原始字节参数）
@@ -489,11 +543,7 @@ impl CommandExecutor {
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
     ) -> Result<CommandResult> {
-        if let Some(ref coreutils_path) = self.config.coreutils_path {
-            let current_path = sandbox.get_env("PATH").unwrap_or_default();
-            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
-            sandbox.add_env("PATH", &new_path);
-        }
+        self.prepare_coreutils_path(sandbox);
 
         sandbox.execute_command_bytes(command, args, Some(tstdin), true, timeout, true)
     }
@@ -507,14 +557,29 @@ impl CommandExecutor {
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
     ) -> Result<CommandResult> {
-        if let Some(ref coreutils_path) = self.config.coreutils_path {
-            let current_path = sandbox.get_env("PATH").unwrap_or_default();
-            let new_path = format!("{}:{}", coreutils_path.display(), current_path);
-            sandbox.add_env("PATH", &new_path);
-        }
+        self.prepare_coreutils_path(sandbox);
 
         sandbox.execute_command_bytes_tty(command, args, Some(tstdin), true, timeout, true)
     }
+}
+
+fn shell_quote(s: &str) -> String {
+    if s.is_empty() {
+        return "''".to_string();
+    }
+
+    if s.bytes().all(|b| {
+        b.is_ascii_alphanumeric()
+            || matches!(
+                b,
+                b'_' | b'/' | b'.' | b'-' | b'+' | b':' | b'=' | b',' | b'@'
+            )
+    }) {
+        return s.to_string();
+    }
+
+    let escaped = s.replace('\'', "'\"'\"'");
+    format!("'{escaped}'")
 }
 
 fn resolve_args_os(test_case: &TestCase) -> Result<Vec<OsString>> {

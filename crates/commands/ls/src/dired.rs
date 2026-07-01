@@ -45,6 +45,7 @@ use ctcore::ct_error::CTResult;
 /// 字节位置，同时考虑影响位置的附加行或填充。
 ///
 use crate::LsConfig;
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiredBytePosition {
@@ -122,9 +123,22 @@ pub fn dired_print_dired_output<W: Write>(
     if ls_config.is_recursive {
         dired_print_positions("//SUBDIRED//", &dired_output.subdired_positions);
     }
+    let style_str = match &ls_config.quoting_style {
+        CtQuotingStyle::Literal { .. } => "literal",
+        CtQuotingStyle::Shell { escape, always_quote, .. } => match (escape, always_quote) {
+            (false, false) => "shell",
+            (false, true) => "shell-always",
+            (true, false) => "shell-escape",
+            (true, true) => "shell-escape-always",
+        },
+        CtQuotingStyle::C { quotes } => match quotes {
+            CtQuotes::None => "escape",
+            _ => "c",
+        },
+    };
     println!(
         "//DIRED-OPTIONS// --quoting-style={}",
-        ls_config.quoting_style
+        style_str
     );
     Ok(())
 }

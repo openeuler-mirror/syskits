@@ -17,7 +17,7 @@ use std::path::Path;
 use clap::Command;
 use sys_locale::get_locale;
 
-use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
+use ct_ls::{LsConfig, LsDereference, LsFormat, PathData, ls_flags};
 
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
@@ -39,6 +39,7 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
         && !matches.get_flag(ls_flags::quoting::LS_C)
         && !matches.get_flag(ls_flags::quoting::LS_ESCAPE)
         && !matches.get_flag(ls_flags::quoting::LS_LITERAL)
+        && !matches.get_flag(ls_flags::LS_ZERO)
     {
         default_quoting_style = true;
     }
@@ -51,6 +52,7 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
         && !matches.get_flag(ls_flags::format::LS_LONG_NO_OWNER)
         && !matches.get_flag(ls_flags::format::LS_LONG_NUMERIC_UID_GID)
         && !matches.get_flag(ls_flags::format::LS_ONE_LINE)
+        && !matches.get_flag(ls_flags::LS_ZERO)
     {
         default_format_style = true;
     }
@@ -64,6 +66,15 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
     }
     if default_format_style {
         config.format = LsFormat::Long;
+        if matches.get_flag(ls_flags::LS_DIRED) {
+            config.is_dired = true;
+        }
+        if !matches.get_flag(ls_flags::dereference::LS_ALL)
+            && !matches.get_flag(ls_flags::dereference::LS_ARGS)
+            && !matches.get_flag(ls_flags::dereference::LS_DIR_ARGS)
+        {
+            config.dereference = LsDereference::LsNone;
+        }
     }
 
     let paths_list = matches.get_many::<OsString>(ls_flags::LS_PATHS);

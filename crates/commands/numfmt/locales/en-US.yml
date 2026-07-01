@@ -9,6 +9,7 @@ numfmt:
     numfmt_to_unit: the output unit size
     numfmt_round: use METHOD for rounding when scaling
     numfmt_invalid: set the failure mode for invalid input
+    numfmt_zero_terminated: line delimiter is NUL, not newline
   usage: numfmt [OPTION]... [NUMBER]...
   about: Convert numbers from/to human-readable strings
   after_help: |-

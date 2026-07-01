@@ -39,6 +39,7 @@ pub struct NumfmtConfigs {
     pub suffix: Option<String>,
     pub format: NumfmtFormatOptions,
     pub invalid: NumfmtInvalidModes,
+    pub zero_terminated: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

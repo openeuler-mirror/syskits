@@ -9,6 +9,7 @@ numfmt:
     numfmt_to_unit: 输出单位大小
     numfmt_round: 缩放时使用METHOD进行舍入
     numfmt_invalid: 设置无效输入的失败模式
+    numfmt_zero_terminated: 以 NUL 空字符而非换行符作为行分隔符
   usage: numfmt [选项]... [数字]...
   about: '将数字转换为/从人类可读字符串'
   after_help: |-

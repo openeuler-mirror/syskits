@@ -168,7 +168,7 @@ pub fn ct_app() -> Command {
             Arg::new(uptime_flags::SINCE)
                 .short('s')
                 .long(uptime_flags::SINCE)
-                .help(t!("uptime.since"))
+                .help(t!("uptime.clap.since", default = "system up since"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

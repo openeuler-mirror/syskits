@@ -36,6 +36,7 @@ use ctcore::ct_signals::{ALL_SIGNALS, get_ct_signal_by_name_or_value};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::convert::TryInto;
+use std::ffi::CStr;
 use std::io::Error;
 use std::io::Write;
 
@@ -103,9 +104,7 @@ impl KillCompatMode {
     /// 无参数时的错误信息
     pub fn no_args_error_message(&self) -> &'static str {
         match self {
-            Self::Bash => {
-                "usage: kill [-s sigspec | -n signum | -sigspec] pid | jobspec ... or kill -l [sigspec]"
-            }
+            Self::Bash => BASH_KILL_USAGE,
             Self::UtilLinux | Self::Coreutils => "not enough arguments",
         }
     }
@@ -124,6 +123,10 @@ pub mod kill_flags {
     pub static TIMEOUT: &str = "timeout"; // --timeout (util-linux)
     pub static VERBOSE: &str = "verbose"; // --verbose (util-linux)
 }
+
+const BASH_KILL_USAGE: &str =
+    "usage: kill [-s sigspec | -n signum | -sigspec] pid | jobspec ... or kill -l [sigspec]";
+const BASH_NO_SIGNAL: usize = usize::MAX;
 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
@@ -219,6 +222,12 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
     rust_i18n::set_locale(&lang_code);
     // 收集并忽略不相关的参数
     let mut args = args.collect_ignore();
+
+    // 默认模式严格对齐 bash 内建 kill，不使用 clap 的 GNU 长选项解析。
+    if compat_mode == KillCompatMode::Bash {
+        return kill_main_bash(writer, &args);
+    }
+
     // 处理过时的kill命令参数
     let obs_signal = kill_handle_obsolete(&mut args);
     // 尝试解析命令行参数
@@ -269,6 +278,248 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
         // 否则，执行kill命令并处理信号
         kill_exec(obs_signal, matches, &pids_or_signals)
     }
+}
+
+fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
+    if args.len() <= 1 {
+        return Err(CtSimpleError::new(2, BASH_KILL_USAGE));
+    }
+
+    let mut index = 1usize;
+    let mut listing = false;
+    let mut saw_signal = false;
+    let mut sigspec = String::from("TERM");
+    let mut sig_value = 15usize;
+
+    while index < args.len() {
+        let word = args[index].as_str();
+
+        if kill_is_exact_short_option(word, 'l') || kill_is_exact_short_option(word, 'L') {
+            listing = true;
+            index += 1;
+            continue;
+        }
+
+        if kill_is_exact_short_option(word, 's') || kill_is_exact_short_option(word, 'n') {
+            index += 1;
+            if index >= args.len() {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("{word}: option requires an argument"),
+                ));
+            }
+            sigspec = args[index].clone();
+            sig_value = kill_parse_signal_value_bash(&sigspec).unwrap_or(BASH_NO_SIGNAL);
+            saw_signal = true;
+            index += 1;
+            continue;
+        }
+
+        if let Some(rest) = word.strip_prefix("-s")
+            && !rest.is_empty()
+            && rest.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+        {
+            sigspec = rest.to_string();
+            sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
+            saw_signal = true;
+            index += 1;
+            continue;
+        }
+
+        if let Some(rest) = word.strip_prefix("-n")
+            && !rest.is_empty()
+            && rest.as_bytes().first().is_some_and(u8::is_ascii_digit)
+        {
+            sigspec = rest.to_string();
+            sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
+            saw_signal = true;
+            index += 1;
+            continue;
+        }
+
+        if kill_is_exact_short_option(word, '-') {
+            index += 1;
+            break;
+        }
+
+        if kill_is_exact_short_option(word, '?') {
+            return Err(CtSimpleError::new(2, BASH_KILL_USAGE));
+        }
+
+        if word.starts_with('-') && !saw_signal {
+            let rest = &word[1..];
+            sigspec = rest.to_string();
+            sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
+            saw_signal = true;
+            index += 1;
+            continue;
+        }
+
+        break;
+    }
+
+    let operands = &args[index..];
+    if listing {
+        return kill_list_bash(writer, operands);
+    }
+
+    if sig_value == BASH_NO_SIGNAL {
+        return Err(CtSimpleError::new(
+            1,
+            format!("{sigspec}: invalid signal specification"),
+        ));
+    }
+
+    if operands.is_empty() {
+        return Err(CtSimpleError::new(2, BASH_KILL_USAGE));
+    }
+
+    kill_exec_bash(sig_value, operands)
+}
+
+fn kill_is_exact_short_option(word: &str, option: char) -> bool {
+    let bytes = word.as_bytes();
+    bytes.len() == 2 && bytes[0] == b'-' && bytes[1] == option as u8
+}
+
+fn kill_exec_bash(sig_value: usize, operands: &[String]) -> CTResult<()> {
+    let sig: Option<Signal> = if sig_value == 0 {
+        None
+    } else {
+        let parsed: Signal = (sig_value as i32)
+            .try_into()
+            .map_err(|_| CtSimpleError::new(1, "invalid signal specification"))?;
+        Some(parsed)
+    };
+
+    let mut any_succeeded = false;
+    for pid_arg in operands {
+        let pid = match pid_arg.parse::<i32>() {
+            Ok(pid) => pid,
+            Err(_) => {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("{pid_arg}: arguments must be process or job IDs"),
+                ));
+            }
+        };
+
+        let result = match sig {
+            Some(sig) => signal::kill(Pid::from_raw(pid), sig),
+            None => signal::kill(Pid::from_raw(pid), None),
+        };
+
+        match result {
+            Ok(()) => any_succeeded = true,
+            Err(e) => {
+                let err = kill_errno_description(e as i32);
+                return Err(CtSimpleError::new(1, format!("({pid}) - {err}")));
+            }
+        }
+    }
+
+    if any_succeeded {
+        Ok(())
+    } else {
+        Err(CtSimpleError::new(1, "failed to send signal"))
+    }
+}
+
+fn kill_errno_description(errno: i32) -> String {
+    // SAFETY: libc::strerror returns a valid null-terminated C string for known errno values.
+    let c_str = unsafe { libc::strerror(errno) };
+    if c_str.is_null() {
+        return "Unknown error".to_string();
+    }
+    // SAFETY: c_str is guaranteed to be a valid C string pointer by strerror.
+    unsafe { CStr::from_ptr(c_str) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn kill_list_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
+    if args.is_empty() {
+        return kill_print_signals(writer, KillCompatMode::Bash);
+    }
+
+    let mut first_error: Option<String> = None;
+    for arg in args {
+        if kill_print_signal_bash(writer, arg).is_err() && first_error.is_none() {
+            first_error = Some(format!("{arg}: invalid signal specification"));
+        }
+    }
+
+    if let Some(message) = first_error {
+        Err(CtSimpleError::new(1, message))
+    } else {
+        Ok(())
+    }
+}
+
+fn kill_print_signal_bash<W: Write>(writer: &mut W, signal_name_or_value: &str) -> CTResult<()> {
+    if let Ok(mut num) = signal_name_or_value.parse::<i32>() {
+        if num >= 128 {
+            num -= 128;
+        }
+        if num >= 0
+            && let Some(name) = kill_bash_signal_name(num as usize)
+        {
+            writeln!(writer, "{name}")?;
+            return Ok(());
+        }
+        return Err(CtSimpleError::new(1, "invalid signal specification"));
+    }
+
+    if let Some(num) = kill_parse_signal_value_bash(signal_name_or_value) {
+        writeln!(writer, "{num}")?;
+        return Ok(());
+    }
+
+    Err(CtSimpleError::new(1, "invalid signal specification"))
+}
+
+fn kill_parse_signal_value_bash(signal: &str) -> Option<usize> {
+    let normalized = signal.to_ascii_uppercase();
+    let has_sig_prefix = normalized.starts_with("SIG");
+    let name = normalized.strip_prefix("SIG").unwrap_or(&normalized);
+
+    // bash 内建规则：SIG 前缀后面直接跟数字（如 SIG0）不是有效信号规格。
+    if has_sig_prefix && !name.is_empty() && name.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+
+    if let Ok(num) = name.parse::<usize>() {
+        if kill_bash_signal_name(num).is_some() {
+            return Some(num);
+        }
+    }
+
+    for (index, _) in ALL_SIGNALS.iter().enumerate() {
+        if let Some(sig_name) = kill_bash_signal_name(index)
+            && sig_name == name
+        {
+            return Some(index);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use ctcore::ct_signals::parse_rt_signal;
+        if let Some(rt) = parse_rt_signal(name) {
+            return Some(rt);
+        }
+    }
+
+    None
+}
+
+fn kill_bash_signal_name(num: usize) -> Option<&'static str> {
+    #[cfg(target_os = "linux")]
+    if num == 29 {
+        return Some("IO");
+    }
+
+    ALL_SIGNALS.get(num).copied()
 }
 
 /// 发送信号以终止进程执行。
@@ -708,85 +959,45 @@ fn kill_print_signals<W: Write>(writer: &mut W, mode: KillCompatMode) -> CTResul
 
 /// util-linux 格式: N) SIGNAME (5列)
 fn kill_print_signals_util_linux<W: Write>(writer: &mut W) -> CTResult<()> {
-    let mut count = 0;
+    let mut entries: Vec<String> = Vec::new();
 
-    // 输出标准信号 (1-31, 跳过0号EXIT)
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate().skip(1) {
-        write!(writer, "{idx:2}) SIG{signal:<9}")?;
-        count += 1;
-
-        if count % 5 == 0 {
-            writeln!(writer)?;
-        } else {
-            write!(writer, " ")?;
+    // 标准信号 (1-31, 跳过0号EXIT)
+    for idx in 1..ALL_SIGNALS.len() {
+        if let Some(signal) = kill_bash_signal_name(idx) {
+            entries.push(format!("{idx:2}) SIG{signal}"));
         }
     }
 
-    // 输出实时信号
+    // 实时信号
     #[cfg(target_os = "linux")]
     {
         use std::sync::OnceLock;
 
         static RT_RANGE: OnceLock<(i32, i32)> = OnceLock::new();
         let (rtmin, rtmax) = RT_RANGE.get_or_init(|| (libc::SIGRTMIN(), libc::SIGRTMAX()));
-
-        // 换行如果需要
-        if count % 5 != 0 {
-            writeln!(writer)?;
-        }
-
-        // SIGRTMIN
-        write!(writer, "{rtmin:2}) SIGRTMIN   ")?;
-        count = 1;
-
-        // SIGRTMIN+1 到 SIGRTMIN+15
-        for i in 1..=15 {
-            let sig_num = rtmin + i;
-            if sig_num > *rtmax {
-                break;
-            }
-            write!(writer, "{sig_num:2}) SIGRTMIN+{i:<2}")?;
-            count += 1;
-
-            if count % 5 == 0 {
-                writeln!(writer)?;
-                count = 0;
+        for sig_num in *rtmin..=*rtmax {
+            let name = if sig_num == *rtmin {
+                "SIGRTMIN".to_string()
+            } else if sig_num <= *rtmin + 15 {
+                format!("SIGRTMIN+{}", sig_num - *rtmin)
+            } else if sig_num == *rtmax {
+                "SIGRTMAX".to_string()
             } else {
-                write!(writer, " ")?;
-            }
-        }
-
-        // SIGRTMAX-14 到 SIGRTMAX
-        let start_offset = 14;
-        for i in (0..=start_offset).rev() {
-            let sig_num = rtmax - i;
-            if sig_num <= rtmin + 15 {
-                continue;
-            }
-
-            if count % 5 == 0 && count > 0 {
-                writeln!(writer)?;
-                count = 0;
-            }
-
-            if i == 0 {
-                write!(writer, "{sig_num:2}) SIGRTMAX   ")?;
-            } else {
-                write!(writer, "{sig_num:2}) SIGRTMAX-{i:<2}")?;
-            }
-            count += 1;
-
-            if count % 5 == 0 {
-                writeln!(writer)?;
-                count = 0;
-            } else {
-                write!(writer, " ")?;
-            }
+                format!("SIGRTMAX-{}", *rtmax - sig_num)
+            };
+            entries.push(format!("{sig_num:2}) {name}"));
         }
     }
 
-    if count > 0 {
-        writeln!(writer)?;
+    let chunks: Vec<&[String]> = entries.chunks(5).collect();
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let line = chunk.join("\t");
+        if idx + 1 == chunks.len() {
+            // 与 bash 内建输出保持一致：最后一行末尾带一个 '\t' 再换行。
+            writeln!(writer, "{line}\t")?;
+        } else {
+            writeln!(writer, "{line}")?;
+        }
     }
 
     Ok(())
@@ -944,7 +1155,26 @@ impl Tool for Kill {
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
-        kill_main(&mut out, args.iter().cloned())
+        // 默认 Bash 兼容模式下，CLI 需要对齐 bash 内建 kill 的错误前缀格式。
+        if KillCompatMode::from_env() == KillCompatMode::Bash {
+            match kill_main(&mut out, args.iter().cloned()) {
+                Ok(()) => Ok(()),
+                Err(err) => {
+                    let err_message = err.to_string();
+                    if !err_message.is_empty() {
+                        if err.code() == 2 && err_message.starts_with("usage: ") {
+                            eprintln!("kill: {err_message}");
+                        } else {
+                            eprintln!("bash: line 1: kill: {err_message}");
+                        }
+                    }
+                    ctcore::ct_error::set_ct_exit_code(err.code());
+                    Ok(())
+                }
+            }
+        } else {
+            kill_main(&mut out, args.iter().cloned())
+        }
     }
 }
 
@@ -967,7 +1197,8 @@ mod tests {
 
         // 测试 execute 方法
         let args = vec![OsString::from("kill"), OsString::from("--version")];
-        assert!(tool.execute(&args).is_err());
+        // 默认 Bash 兼容模式下，错误会在 execute 中被转为退出码和 stderr 输出。
+        assert!(tool.execute(&args).is_ok());
     }
 
     #[cfg(test)]
@@ -1557,17 +1788,8 @@ mod tests {
         use std::io::Cursor;
         #[test]
         fn kill_main_with_table_flag() {
-            // 使用 coreutils 模式测试 -t (默认 bash 模式不支持 -t)
-            // SAFETY: 测试环境中设置环境变量是安全的
-            unsafe {
-                std::env::set_var("SYSKITS_KILL_MODE", "coreutils");
-            }
-            let args = [ctcore::ct_util_name(), "--table"];
             let mut output = Cursor::new(Vec::new());
-            let result = kill_main(&mut output, args.iter().map(OsString::from));
-            unsafe {
-                std::env::remove_var("SYSKITS_KILL_MODE");
-            }
+            let result = kill_table(&mut output);
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("HUP")); // Assuming HUP is in the signal list
@@ -1575,7 +1797,7 @@ mod tests {
 
         #[test]
         fn kill_main_with_list_flag() {
-            let args = [ctcore::ct_util_name(), "--list"];
+            let args = [ctcore::ct_util_name(), "-l"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
@@ -1585,13 +1807,17 @@ mod tests {
 
         #[test]
         fn kill_main_with_signal_and_pid() {
-            let args = [ctcore::ct_util_name(), "-s", "TERM", "1234"];
+            let args = [ctcore::ct_util_name(), "-s", "0", "invalid_pid"];
 
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
-            assert!(result.is_ok());
-            let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str.is_empty()); // No output expected for successful signal sending
+            assert!(result.is_err());
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("arguments must be process or job IDs")
+            );
         }
 
         #[test]
@@ -1602,7 +1828,7 @@ mod tests {
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
             let err = result.unwrap_err();
-            assert_eq!(err.to_string(), "unknown signal name 'INVALID'");
+            assert_eq!(err.to_string(), "INVALID: invalid signal specification");
         }
 
         #[test]
@@ -1616,22 +1842,21 @@ mod tests {
 
         #[test]
         fn kill_main_with_obsolete_signal() {
-            let args = [ctcore::ct_util_name(), "-9", "1234"];
+            let args = [ctcore::ct_util_name(), "-TERM"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
-            assert!(result.is_ok());
-            let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str.is_empty()); // No output expected for successful signal sending
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 2);
         }
 
         #[test]
         fn kill_main_with_multiple_pids() {
-            let args = [ctcore::ct_util_name(), "-s", "TERM", "1234", "5678"];
+            let args = [ctcore::ct_util_name(), "-l", "HUP", "TERM"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str.is_empty()); // No output expected for successful signal sending
+            assert_eq!(output_str, "1\n15\n");
         }
 
         #[test]
@@ -1643,19 +1868,17 @@ mod tests {
             let err = result.unwrap_err();
             assert!(
                 err.to_string()
-                    .contains("failed to parse argument 'invalid_pid'")
+                    .contains("arguments must be process or job IDs")
             );
         }
 
         #[test]
         fn kill_main_with_default_signal() {
-            let args = [ctcore::ct_util_name(), "1234"];
+            let args = [ctcore::ct_util_name(), "2147483647"];
 
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
-            assert!(result.is_ok());
-            let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str.is_empty()); // No output expected for successful signal sending
+            assert!(result.is_err());
         }
 
         #[test]

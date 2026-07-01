@@ -467,6 +467,7 @@ pub struct LsConfig {
     line_ending: CtLineEnding,
     is_dired: bool,
     is_hyperlink: bool,
+    size_suffix: String,
 }
 
 // 可删除或添加到长format 的字段
@@ -935,6 +936,7 @@ impl LsConfig {
         let env_var_ls_block_len = std::env::var_os("LS_BLOCK_SIZE");
         let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
         let mut is_env_var_blocksize = false;
+        let mut size_suffix = String::new();
 
         let raw_block_size = if let Some(opt_block_size) = opt_block_size {
             OsString::from(opt_block_size)
@@ -952,18 +954,26 @@ impl LsConfig {
         let (file_size_block_size, block_size) =
             if !is_opt_si && !is_opt_hr && !raw_block_size.is_empty() {
                 match parse_size_u64(&raw_block_size.to_string_lossy()) {
-                    Ok(size) => match (is_env_var_blocksize, opt_kb) {
-                        (true, true) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE),
-                        (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
-                        (false, true) => {
-                            // --block-size overrides -k
-                            if opt_block_size.is_some() {
-                                (size, size)
-                            } else {
-                                (size, LS_DEFAULT_BLOCK_SIZE)
+                    Ok(size) => {
+                        let s_str = raw_block_size.to_string_lossy();
+                        if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
+                            if let Some(first_non_digit) = s_str.find(|c: char| !c.is_ascii_digit()) {
+                                size_suffix = s_str[first_non_digit..].to_string();
                             }
                         }
-                        (false, false) => (size, size),
+                        match (is_env_var_blocksize, opt_kb) {
+                            (true, true) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE),
+                            (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
+                            (false, true) => {
+                                // --block-size overrides -k
+                                if opt_block_size.is_some() {
+                                    (size, size)
+                                } else {
+                                    (size, LS_DEFAULT_BLOCK_SIZE)
+                                }
+                            }
+                            (false, false) => (size, size),
+                        }
                     },
                     Err(_) => {
                         // 只有在使用 --block-size 指定了无效的块大小时才会失败、
@@ -1267,6 +1277,7 @@ impl LsConfig {
             line_ending: CtLineEnding::from_zero_flag(options.get_flag(ls_flags::LS_ZERO)),
             is_dired,
             is_hyperlink,
+            size_suffix,
         })
     }
 }
@@ -2430,6 +2441,21 @@ fn pad_right(string: &str, cnt: usize) -> String {
     format!("{string:<cnt$}")
 }
 
+fn get_raw_block_size(md: &Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        if md.file_type().is_char_device() || md.file_type().is_block_device() {
+            0u64
+        } else {
+            md.blocks() * 512
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        md.len()
+    }
+}
+
 fn return_total<W: Write>(
     items: &[PathData],
     ls_config: &LsConfig,
@@ -2440,14 +2466,18 @@ fn return_total<W: Write>(
         total_size += path_data_item
             .get_metadata(out)
             .as_ref()
-            .map_or(0, |md| get_block_size(md, ls_config));
+            .map_or(0, |md| get_raw_block_size(md));
     }
     if ls_config.is_dired {
         dired::dired_indent(out)?;
     }
+    let display_total = match ls_config.size_format {
+        LsSizeFormat::Binary | LsSizeFormat::Decimal => total_size,
+        LsSizeFormat::Bytes => (total_size + ls_config.block_size - 1) / ls_config.block_size,
+    };
     Ok(format!(
         "total {}{}",
-        display_size(total_size, ls_config),
+        display_size(display_total, ls_config),
         ls_config.line_ending
     ))
 }
@@ -2619,22 +2649,10 @@ fn display_grid_by_format_long_type<W: Write>(
 
 #[allow(unused_variables)]
 fn get_block_size(md: &Metadata, config: &LsConfig) -> u64 {
-    #[cfg(unix)]
-    {
-        let raw_blocks = if md.file_type().is_char_device() || md.file_type().is_block_device() {
-            0u64
-        } else {
-            md.blocks() * 512
-        };
-        match config.size_format {
-            LsSizeFormat::Binary | LsSizeFormat::Decimal => raw_blocks,
-            LsSizeFormat::Bytes => raw_blocks / config.block_size,
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        // 无法获取 windows 的块大小，只能返回到文件大小
-        md.len()
+    let raw_blocks = get_raw_block_size(md);
+    match config.size_format {
+        LsSizeFormat::Binary | LsSizeFormat::Decimal => raw_blocks,
+        LsSizeFormat::Bytes => (raw_blocks + config.block_size - 1) / config.block_size,
     }
 }
 
@@ -3159,7 +3177,13 @@ fn display_size(size: u64, config: &LsConfig) -> String {
     match config.size_format {
         LsSizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
         LsSizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
-        LsSizeFormat::Bytes => size.to_string(),
+        LsSizeFormat::Bytes => {
+            if !config.size_suffix.is_empty() {
+                format!("{}{}", size, config.size_suffix)
+            } else {
+                size.to_string()
+            }
+        }
     }
 }
 

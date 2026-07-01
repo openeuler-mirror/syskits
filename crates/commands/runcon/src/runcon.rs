@@ -278,6 +278,7 @@ impl RunconSettings {
             || matches.contains_id(runcon_options::RUNCON_ROLE)
             || matches.contains_id(runcon_options::RUNCON_TYPE)
             || matches.contains_id(runcon_options::RUNCON_RANGE)
+            || matches.get_flag(runcon_options::RUNCON_COMPUTE)
         {
             // 自定义上下文模式
             let compute_transition_context = matches.get_flag(runcon_options::RUNCON_COMPUTE);

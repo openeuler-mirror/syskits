@@ -499,6 +499,154 @@
     },
     {
       "command": "cksum",
+      "description": "cksum: 测试 check 选项（中英文差异）",
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  file' > sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file sums"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (失败情况)（中英文差异）",
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "echo 'bar' > file",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  file' > sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "file: FAILED\n",
+          "stderr": "cksum: 1 computed checksum did NOT match\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file sums"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (ignore-missing)",
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "--ignore-missing",
+        "sums"
+      ],
+      "setup_commands": [
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  missing_file' > sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f sums"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (ignore-missing)，多文件（中英文差异）",
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "--ignore-missing",
+        "sums"
+      ],
+      "setup_commands": [
+        "echo 'bar' > file",
+        "cksum -a md5 file > sums",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  missing_file' >> sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f sums file"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (status)",
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "--status",
+        "sums"
+      ],
+      "setup_commands": [
+        "echo 'bar' > file",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  file' > sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file sums"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (quiet)",
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "--quiet",
+        "sums"
+      ],
+      "setup_commands": [
+        "echo 'foo' > file",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  file' > sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file sums"
+      ]
+    },
+    {
+      "command": "cksum",
       "description": "cksum: 测试 help 选项",
       "args": [
         "--help"
@@ -526,6 +674,80 @@
           "ignore_stdout": true
         }
       }
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (BSD 格式)（中英文差异）",
+      "setup_commands": [
+        "echo 'foo' > bsd_file",
+        "echo 'MD5 (bsd_file) = d3b07384d113edec49eaa6238ad5ff00' > bsd_sums"
+      ],
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "bsd_sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "bsd_file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f bsd_file bsd_sums"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (GNU 格式带二进制标记)（中英文差异）",
+      "setup_commands": [
+        "echo 'foo' > bin_file",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00 *bin_file' > bin_sums"
+      ],
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "bin_sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "bin_file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f bin_file bin_sums"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (strict 模式)（仅有中英文差异）",
+      "setup_commands": [
+        "echo 'foo' > file",
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  file' > bad_sums",
+        "echo 'garbage line' >> bad_sums"
+      ],
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "--strict",
+        "bad_sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "file: OK\n",
+          "stderr": "cksum: bad_sums: 2: improperly formatted checksum line\ncksum: 1 lines are improperly formatted\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file bad_sums"
+      ]
     },
     {
       "command": "cksum",
@@ -567,6 +789,30 @@
       },
       "cleanup_commands": [
         "rmdir test_dir"
+      ]
+    },
+    {
+      "command": "cksum",
+      "description": "cksum: 测试 check 选项 (ignore-missing 且无文件被验证)",
+      "setup_commands": [
+        "echo 'd3b07384d113edec49eaa6238ad5ff00  missing_file' > sums"
+      ],
+      "args": [
+        "-a",
+        "md5",
+        "--check",
+        "--ignore-missing",
+        "sums"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: sums: no file was verified\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f sums"
       ]
     }
   ]

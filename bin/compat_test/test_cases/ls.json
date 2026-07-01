@@ -1432,6 +1432,93 @@
             "cleanup_commands": [
                 "rm -rf test_width"
             ]
-        }
+            },
+            {
+                "command": "ls",
+                "description": "格式化输出 (--format=verbose)",
+                "setup_commands": [
+                    "mkdir -p test_fmt_verbose",
+                    "touch test_fmt_verbose/file"
+                ],
+                "args": ["--format=verbose", "test_fmt_verbose"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls --format=verbose test_fmt_verbose | grep -E '^-rw-r--r--'",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_fmt_verbose"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "格式化输出 (--format=horizontal)",
+                "setup_commands": [
+                    "mkdir -p test_fmt_horiz",
+                    "touch test_fmt_horiz/1 test_fmt_horiz/2"
+                ],
+                "args": ["--format=horizontal", "test_fmt_horiz"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_fmt_horiz"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "排序 (--sort=time)",
+                "setup_commands": [
+                    "mkdir -p test_sort_time",
+                    "touch test_sort_time/old",
+                    "sleep 1",
+                    "touch test_sort_time/new"
+                ],
+                "args": ["--sort=time", "test_sort_time"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "new\nold",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_sort_time"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "时间类型 (--time=access)",
+                "setup_commands": [
+                    "mkdir -p test_time_access",
+                    "touch test_time_access/1",
+                    "sleep 1",
+                    "touch test_time_access/2",
+                    "cat test_time_access/1 > /dev/null"
+                ],
+                "args": ["--time=access", "--sort=time", "test_time_access"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "1\n2",
+                        "stderr": ""
+                    }
+                },
+                "cleanup_commands": [
+                    "rm -rf test_time_access"
+                ]
+            }
     ]
 } 

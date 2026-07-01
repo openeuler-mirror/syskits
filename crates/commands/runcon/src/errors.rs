@@ -67,6 +67,15 @@ pub(crate) enum DefaultError {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
+    /// SELinux 无效上下文
+    #[error("Invalid security context: {}", operand1.quote())]
+    InvalidSecurityContext {
+        /// 操作对象
+        operand1: OsString,
+        /// 错误来源
+        source: io::Error,
+    },
+
     /// SELinux 操作错误
     #[error("{operation} failed")]
     SELinux {
@@ -114,6 +123,11 @@ impl DefaultError {
             operand1: operand1.into(),
             source,
         }
+    }
+
+    /// 创建 InvalidSecurityContext 错误
+    pub(crate) fn from_invalid_security_context(operand1: impl Into<OsString>, source: io::Error) -> Self {
+        Self::InvalidSecurityContext { operand1: operand1.into(), source }
     }
 
     /// 创建 SELinux 错误

@@ -102,7 +102,12 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
         RunconCommandLineMode::PlainContext { context, command } => {
             get_plain_context(context)
                 .and_then(|ctx| set_next_exec_context(&ctx))
-                .map_err(RunconError::new)?;
+                .map_err(|e: DefaultError| match e {
+                    DefaultError::InvalidSecurityContext { .. } => {
+                        RunconError::with_code(125, e)
+                    }
+                    _ => RunconError::new(e),
+                })?;
             runcon_exec(command, &settings.arguments)
         }
 
@@ -126,7 +131,12 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                     command,
                 )
                 .and_then(|ctx| set_next_exec_context(&ctx))
-                .map_err(RunconError::new)?;
+                .map_err(|e| match e {
+                    DefaultError::InvalidSecurityContext { .. } => {
+                        RunconError::with_code(125, e)
+                    }
+                    _ => RunconError::new(e),
+                })?;
                 runcon_exec(command, &settings.arguments)
             }
             // 无命令时，仅打印当前上下文
@@ -360,11 +370,7 @@ fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     if sc.check() != Some(true) {
         let ctx = OsStr::from_bytes(c_context.as_bytes());
         let err = io::ErrorKind::InvalidInput.into();
-        return Err(DefaultError::from_io1(
-            "Checking security context",
-            ctx,
-            err,
-        ));
+        return Err(DefaultError::from_invalid_security_context(ctx, err));
     }
 
     // 设置下一次执行的上下文

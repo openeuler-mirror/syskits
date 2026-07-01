@@ -437,6 +437,337 @@
             "cleanup_commands": [
                 "rm -rf test_posix_dir"
             ]
+        },
+        {
+            "command": "ls",
+            "description": "几乎所有文件 (-A)",
+            "setup_commands": [
+                "mkdir -p test_A",
+                "touch test_A/.hidden test_A/visible",
+                "cd test_A"
+            ],
+            "args": ["-A"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".hidden\nvisible",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "cd ..",
+                "rm -rf test_A"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "显示作者 (--author -l)",
+            "setup_commands": [
+                "mkdir -p test_author",
+                "touch test_author/file"
+            ],
+            "args": ["-l", "--author", "test_author"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_author"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "转义字符 (-b)",
+            "setup_commands": [
+                "mkdir -p test_escape",
+                "touch 'test_escape/file with space'",
+                "touch 'test_escape/file\nnewline'"
+            ],
+            "args": ["-b", "test_escape"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_escape"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "块大小 (--block-size=M -l)",
+            "setup_commands": [
+                "mkdir -p test_bs",
+                "dd if=/dev/zero of=test_bs/file bs=1M count=2 2>/dev/null"
+            ],
+            "args": ["-l", "--block-size=M", "test_bs"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_bs"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "忽略备份文件 (-B)",
+            "setup_commands": [
+                "mkdir -p test_backup",
+                "touch test_backup/file test_backup/file~"
+            ],
+            "args": ["-B", "test_backup"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_backup"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "按ctime排序 (-c -l)",
+            "setup_commands": [
+                "mkdir -p test_ctime",
+                "touch test_ctime/1",
+                "sleep 1",
+                "touch test_ctime/2"
+            ],
+            "args": ["-c", "-l", "test_ctime"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ctime"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "多列输出 (-C)",
+            "setup_commands": [
+                "mkdir -p test_cols",
+                "touch test_cols/1 test_cols/2 test_cols/3"
+            ],
+            "args": ["-C", "test_cols"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_cols"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "强制颜色 (--color=always)",
+            "setup_commands": [
+                "mkdir -p test_color",
+                "touch test_color/file",
+                "mkdir test_color/dir"
+            ],
+            "args": ["--color=always", "test_color"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_color"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "Dired模式 (-D)",
+            "setup_commands": [
+                "mkdir -p test_dired",
+                "touch test_dired/file"
+            ],
+            "args": ["-D", "test_dired"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_dired"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "不排序 (-f)",
+            "setup_commands": [
+                "mkdir -p test_f",
+                "touch test_f/a test_f/b"
+            ],
+            "args": ["-f", "test_f"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_f"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "文件类型指示 (--file-type)",
+            "setup_commands": [
+                "mkdir -p test_ft",
+                "touch test_ft/file",
+                "mkdir test_ft/dir"
+            ],
+            "args": ["--file-type", "test_ft"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir/\nfile",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_ft"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "格式化输出 (--format=commas)",
+            "setup_commands": [
+                "mkdir -p test_fmt",
+                "touch test_fmt/1 test_fmt/2"
+            ],
+            "args": ["--format=commas", "test_fmt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1, 2",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fmt"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "完整时间 (--full-time)",
+            "setup_commands": [
+                "mkdir -p test_fulltime",
+                "touch test_fulltime/file"
+            ],
+            "args": ["--full-time", "test_fulltime"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_fulltime"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "不显示所有者 (-g)（中英文差异）",
+            "setup_commands": [
+                "mkdir -p test_g",
+                "touch test_g/file"
+            ],
+            "args": ["-g", "test_g"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_g"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "目录优先 (--group-directories-first)",
+            "setup_commands": [
+                "mkdir -p test_gdf",
+                "touch test_gdf/file",
+                "mkdir test_gdf/dir"
+            ],
+            "args": ["--group-directories-first", "test_gdf"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "dir\nfile",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_gdf"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "不显示组 (-G)（中英文差异）",
+            "setup_commands": [
+                "mkdir -p test_G",
+                "touch test_G/file"
+            ],
+            "args": ["-l", "-G", "test_G"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_G"
+            ]
+        },
+        {
+            "command": "ls",
+            "description": "SI单位 (--si)（中英文差异）",
+            "setup_commands": [
+                "mkdir -p test_si",
+                "dd if=/dev/zero of=test_si/file bs=1000 count=1 2>/dev/null"
+            ],
+            "args": ["-l", "--si", "test_si"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_si"
+            ]
         }
     ]
 } 

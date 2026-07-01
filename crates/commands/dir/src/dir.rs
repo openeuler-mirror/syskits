@@ -35,6 +35,7 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
         && !matches.get_flag(ls_flags::quoting::LS_C)
         && !matches.get_flag(ls_flags::quoting::LS_ESCAPE)
         && !matches.get_flag(ls_flags::quoting::LS_LITERAL)
+        && !matches.get_flag(ls_flags::LS_ZERO)
     {
         default_quoting_style = true;
     }

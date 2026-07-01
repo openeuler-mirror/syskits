@@ -962,18 +962,18 @@ impl LsConfig {
                             }
                         }
                         match (is_env_var_blocksize, opt_kb) {
-                            (true, true) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE),
-                            (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
-                            (false, true) => {
-                                // --block-size overrides -k
-                                if opt_block_size.is_some() {
-                                    (size, size)
-                                } else {
-                                    (size, LS_DEFAULT_BLOCK_SIZE)
-                                }
+                        (true, true) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE),
+                        (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
+                        (false, true) => {
+                            // --block-size overrides -k
+                            if opt_block_size.is_some() {
+                                (size, size)
+                            } else {
+                                (size, LS_DEFAULT_BLOCK_SIZE)
                             }
-                            (false, false) => (size, size),
                         }
+                        (false, false) => (size, size),
+                    }
                     },
                     Err(_) => {
                         // 只有在使用 --block-size 指定了无效的块大小时才会失败、
@@ -1217,9 +1217,9 @@ impl LsConfig {
             None
         };
 
-        let is_dired = options.get_flag(ls_flags::LS_DIRED);
+        let mut is_dired = options.get_flag(ls_flags::LS_DIRED);
         if is_dired && format != LsFormat::Long {
-            return Err(Box::new(LsError::LsConflictingArgumentDired));
+            is_dired = false;
         }
         if is_dired && format == LsFormat::Long && options.get_flag(ls_flags::LS_ZERO) {
             return Err(Box::new(LsError::LsDiredAndZeroAreIncompatible));
@@ -1834,6 +1834,7 @@ pub fn ct_app() -> Command {
                 ls_flags::LS_INDICATOR_STYLE,
             ])
             .action(ArgAction::SetTrue),
+        //This still needs support for posix-*
         Arg::new(ls_flags::LS_TIME_STYLE)
             .long(ls_flags::LS_TIME_STYLE)
             .help("time/date format with -l; see LS_TIME_STYLE below")

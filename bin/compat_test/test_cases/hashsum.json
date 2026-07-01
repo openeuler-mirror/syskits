@@ -1565,7 +1565,7 @@
         },
         {
             "command": "sha256sum",
-            "description": "sha256sum: 校验包含转义字符的文件（验证反转义逻辑）",
+            "description": "sha256sum: 校验包含转义字符的文件（验证反转义逻辑）(中英文差异）",
             "args": [
                 "-c",
                 "escaped_checksum.txt"
@@ -1671,6 +1671,107 @@
             },
             "cleanup_commands": [
                 "rm -f test_file_stdin_check"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验 BSD 风格的校验和文件（中英文差异）",
+            "args": ["-c", "checksum_bsd.txt"],
+            "setup_commands": [
+                "echo 'BSD' > test_file_bsd",
+                "sha256sum --tag test_file_bsd > checksum_bsd.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_bsd: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_bsd checksum_bsd.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验二进制模式生成的校验和文件 (*标记)（中英文差异）",
+            "args": ["-c", "checksum_binary.txt"],
+            "setup_commands": [
+                "echo 'Binary' > test_file_binary",
+                "sha256sum -b test_file_binary > checksum_binary.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "test_file_binary: OK\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_file_binary checksum_binary.txt"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 计算空文件的哈希值",
+            "args": ["empty_file"],
+            "setup_commands": [
+                "touch empty_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  empty_file\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f empty_file"
+            ]
+        },
+        {
+            "command": "sha256sum",
+            "description": "sha256sum: 校验模式混合结果（一个成功，一个失败）（中英文差异）",
+            "args": ["-c", "checksum_mixed.txt"],
+            "setup_commands": [
+                "echo 'Content1' > file1",
+                "echo 'Content2' > file2",
+                "sha256sum file1 file2 > checksum_mixed.txt",
+                "echo 'Modified' > file2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "file1: OK\nfile2: FAILED\n",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file1 file2 checksum_mixed.txt"
             ]
         }
     ]

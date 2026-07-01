@@ -3100,9 +3100,10 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
     match get_time(metadata, config) {
         Some(time) => {
             //如果日期来自过去 6 个月，则为最近日期
+            let now = chrono::Local::now();
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
-                > chrono::Local::now();
+            let six_months = chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap();
+            let recent = time > now - six_months && time < now;
 
             match &config.time_style {
                 LsTimeStyle::LsFullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),

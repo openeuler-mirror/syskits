@@ -2081,6 +2081,56 @@
                 "cleanup_commands": [
                     "rm -rf test_sort_ext_dot"
                 ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 --hyperlink 处理断链 (GNU ls 生成完整路径 URI，syskits ls 因 canonicalize 失败生成空路径 URI)",
+                "setup_commands": [
+                    "mkdir -p /test_hyp_broken_ls",
+                    "ln -s non_existent /test_hyp_broken_ls/broken"
+                ],
+                "args": ["--hyperlink=always", "/test_hyp_broken_ls/broken"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf /test_hyp_broken_ls"
+                ]
+            },
+            {
+                "command": "ls",
+                "description": "测试 --hyperlink 和 --color=always 处理断链 (临时目录不同)",
+                "setup_commands": [
+                    "mkdir -p test_hyp_color",
+                    "ln -s non_existent test_hyp_color/broken"
+                ],
+                "args": ["--hyperlink=always", "--color=always", "test_hyp_color/broken"],
+                "expectation": {
+                    "execution": {
+                        "exit_code": 0,
+                        "stdout": "",
+                        "stderr": ""
+                    },
+                    "verifications": [
+                        {
+                            "command": "ls --hyperlink=always --color=always test_hyp_color/broken | grep 'file://.*/test_hyp_color/broken'",
+                            "expected_exit": 0
+                        },
+                        {
+                            "command": "ls --hyperlink=always --color=always test_hyp_color/broken | cat -A | grep '\\^\\['",
+                            "expected_exit": 0
+                        }
+                    ]
+                },
+                "cleanup_commands": [
+                    "rm -rf test_hyp_color"
+                ]
             }
     ]
 } 

@@ -31,6 +31,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write, stdin, stdout};
+use std::iter;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -179,8 +180,8 @@ where
     if implicit_stdin {
         let mut stdin_buffer = BufReader::new(stdin());
         let (sum_hex, sz) =
-            cksum_digest_read(&mut cksum_opts.digest, &mut stdin_buffer, cksum_opts.output_bits)
-                .map_err_context(|| "failed to read input".to_string())?;
+        cksum_digest_read(&mut cksum_opts.digest, &mut stdin_buffer, cksum_opts.output_bits)
+            .map_err_context(|| "failed to read input".to_string())?;
 
         let sum = match cksum_opts.output_format {
             CksumOutputFormat::Raw => {
@@ -318,33 +319,22 @@ where
         };
 
         let bsd_width = 5;
-        // 根据算法和是否为标准输入，格式化并输出校验和结果
-        match (cksum_opts.algo_name, not_file) {
-            (CKSUM_ALGORITHM_OPTIONS_SYSV, true) => println!(
-                "{} {}",
-                sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits)
-            ),
-            (CKSUM_ALGORITHM_OPTIONS_SYSV, false) => println!(
+        // 根据算法格式化并输出校验和结果
+        match cksum_opts.algo_name {
+            CKSUM_ALGORITHM_OPTIONS_SYSV => println!(
                 "{} {} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, cksum_opts.output_bits),
                 filename.display()
             ),
-            (CKSUM_ALGORITHM_OPTIONS_BSD, true) => println!(
-                "{:0bsd_width$} {:bsd_width$}",
-                sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits)
-            ),
-            (CKSUM_ALGORITHM_OPTIONS_BSD, false) => println!(
+            CKSUM_ALGORITHM_OPTIONS_BSD => println!(
                 "{:0bsd_width$} {:bsd_width$} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, cksum_opts.output_bits),
                 filename.display()
             ),
-            (CKSUM_ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
-            (CKSUM_ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
-            (CKSUM_ALGORITHM_OPTIONS_BLAKE2B, _) if !cksum_opts.untagged => {
+            CKSUM_ALGORITHM_OPTIONS_CRC => println!("{sum} {sz} {}", filename.display()),
+            CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
                     println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());

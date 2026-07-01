@@ -1077,6 +1077,235 @@
             "cleanup_commands": [
                 "rm -f test_dd_in test_dd_out expected_seek"
             ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不跟随符号链接 (iflag=nofollow)",
+            "args": [
+                "if=test_dd_link",
+                "of=test_dd_out",
+                "iflag=nofollow",
+                "status=none"
+            ],
+            "setup_commands": [
+                "touch test_dd_target",
+                "ln -s test_dd_target test_dd_link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                }
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_target test_dd_link test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 数据同步 (conv=fdatasync)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "conv=fdatasync",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: IBM EBCDIC 转换 (conv=ibm)",
+            "args": [
+                "if=test_dd_ascii",
+                "of=test_dd_ibm",
+                "conv=ibm",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '12' > test_dd_ascii"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '\\361\\362' > expected_ibm && cmp test_dd_ibm expected_ibm",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_ascii test_dd_ibm expected_ibm"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 元数据同步 (conv=fsync)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "conv=fsync",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 独占创建成功 (conv=excl)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_excl_ok",
+                "conv=excl",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in",
+                "rm -f test_dd_excl_ok"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_excl_ok",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_excl_ok"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不创建文件成功 (conv=nocreat)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_nocreat_ok",
+                "conv=nocreat",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in",
+                "touch test_dd_nocreat_ok"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_nocreat_ok",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_nocreat_ok"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: bs覆盖ibs/obs (bs=10)",
+            "args": [
+                "if=/dev/zero",
+                "of=test_dd_bs_override",
+                "bs=10",
+                "ibs=5",
+                "obs=5",
+                "count=1",
+                "status=none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test $(stat -c %s test_dd_bs_override) -eq 10",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_bs_override"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 交换奇数个字节 (conv=swab)",
+            "args": [
+                "if=test_dd_swab_odd",
+                "of=test_dd_swab_out_odd",
+                "conv=swab",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '123' > test_dd_swab_odd"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '213' > expected_swab_odd && cmp test_dd_swab_out_odd expected_swab_odd",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_swab_odd test_dd_swab_out_odd expected_swab_odd"
+            ]
         }
     ]
 }

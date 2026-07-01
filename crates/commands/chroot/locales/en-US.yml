@@ -3,5 +3,7 @@ chroot:
     user: User (ID or name) to switch before running the program
     group: Group (ID or name) to switch to
     groups: Comma-separated list of groups to switch to
+    help: Print help information
+    version: Print version information
   usage: chroot [OPTION]... NEWROOT [COMMAND [ARG]...]
   about: Run COMMAND with root directory set to NEWROOT.

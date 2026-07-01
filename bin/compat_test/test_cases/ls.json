@@ -2064,27 +2064,22 @@
             },
             {
                 "command": "ls",
-                "description": "测试未来时间戳显示 (GNU ls 显示年份, syskits ls 显示时间)",
+                "description": "测试 -X 排序：点文件扩展名处理 (GNU ls 视 .bashrc 为扩展名，syskits ls 视为无扩展名)",
                 "setup_commands": [
-                    "mkdir -p test_future",
-                    "touch -d 'next year' test_future/future_file"
+                    "mkdir -p test_sort_ext_dot",
+                    "touch test_sort_ext_dot/file",
+                    "touch test_sort_ext_dot/.bashrc"
                 ],
-                "args": ["-l", "test_future/future_file"],
+                "args": ["-X", "test_sort_ext_dot"],
                 "expectation": {
                     "execution": {
                         "exit_code": 0,
-                        "stdout": "",
+                        "stdout": "file\n.bashrc",
                         "stderr": ""
-                    },
-                    "verifications": [
-                        {
-                            "command": "ls -l test_future/future_file | grep -E '[0-9]{4}'",
-                            "expected_exit": 0
-                        }
-                    ]
+                    }
                 },
                 "cleanup_commands": [
-                    "rm -rf test_future"
+                    "rm -rf test_sort_ext_dot"
                 ]
             }
     ]

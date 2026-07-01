@@ -1306,6 +1306,293 @@
             "cleanup_commands": [
                 "rm -f test_dd_swab_odd test_dd_swab_out_odd expected_swab_odd"
             ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 进度显示 (status=progress)",
+            "args": [
+                "if=/dev/zero",
+                "of=/dev/null",
+                "count=1",
+                "status=progress"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "ignore_fields": {
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "dd",
+            "description": "dd: 完整块读取 (iflag=fullblock)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=fullblock",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 字节计数与跳过 (iflag=count_bytes,skip_bytes)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=count_bytes,skip_bytes",
+                "skip=1",
+                "count=1",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf '123' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '2' > expected_bytes && cmp test_dd_out expected_bytes",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out expected_bytes"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不更新访问时间 (iflag=noatime)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=noatime",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 直接I/O (iflag=direct, oflag=direct)",
+            "args": [
+                "if=test_dd_direct_in",
+                "of=test_dd_direct_out",
+                "iflag=direct",
+                "oflag=direct",
+                "bs=1048576",
+                "count=1",
+                "status=none"
+            ],
+            "setup_commands": [
+                "dd if=/dev/zero of=test_dd_direct_in bs=1048576 count=1 status=none"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_direct_in test_dd_direct_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_direct_in test_dd_direct_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 忽略读取错误 (conv=noerror)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "conv=noerror",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 同步I/O (oflag=dsync)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "oflag=dsync",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 非阻塞I/O (iflag=nonblock)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=nonblock",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不使用缓存 (iflag=nocache, oflag=nocache)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=nocache",
+                "oflag=nocache",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
+        },
+        {
+            "command": "dd",
+            "description": "dd: 不分配控制终端 (iflag=noctty)",
+            "args": [
+                "if=test_dd_in",
+                "of=test_dd_out",
+                "iflag=noctty",
+                "status=none"
+            ],
+            "setup_commands": [
+                "printf 'data' > test_dd_in"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cmp test_dd_in test_dd_out",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f test_dd_in test_dd_out"
+            ]
         }
     ]
 }

@@ -11,6 +11,9 @@
           "stdout": "",
           "stderr": ""
         },
+        "ignore_fields": {
+          "ignore_stdout": true
+        },
         "verifications": [
           {
             "command": "date | grep -E '\\w{3}\\s+\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}\\s+CST\\s+\\d{4}'",
@@ -33,6 +36,9 @@
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
         },
         "verifications": [
           {
@@ -57,6 +63,9 @@
           "stdout": "",
           "stderr": ""
         },
+        "ignore_fields": {
+          "ignore_stdout": true
+        },
         "verifications": [
           {
             "command": "date -d 'last Monday' | grep -E 'Mon\\s+Jul\\s+21\\s+00:00:00\\s+CST\\s+2025'",
@@ -79,6 +88,9 @@
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
         },
         "verifications": [
           {
@@ -103,6 +115,9 @@
           "stdout": "",
           "stderr": ""
         },
+        "ignore_fields": {
+          "ignore_stdout": true
+        },
         "verifications": [
           {
             "command": "date -d 'Friday' | grep -E 'Fri\\s+Jul\\s+25\\s+00:00:00\\s+CST\\s+2025'",
@@ -125,6 +140,9 @@
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
         },
         "verifications": [
           {
@@ -149,6 +167,9 @@
           "stdout": "",
           "stderr": ""
         },
+        "ignore_fields": {
+          "ignore_stdout": true
+        },
         "verifications": [
           {
             "command": "date -d 'tues' | grep -E 'Tue\\s+Jul\\s+29\\s+00:00:00\\s+CST\\s+2025'",
@@ -171,6 +192,9 @@
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
         },
         "verifications": [
           {
@@ -195,6 +219,9 @@
           "stdout": "",
           "stderr": ""
         },
+        "ignore_fields": {
+          "ignore_stdout": true
+        },
         "verifications": [
           {
             "command": "date -d 'yesterday' | grep -E 'Thu\\s+Jul\\s+24'",
@@ -217,6 +244,9 @@
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_stdout": true
         },
         "verifications": [
           {

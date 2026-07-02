@@ -616,6 +616,126 @@
             "groupdel chgrp_test_group_P"
         ],
         "requires_root": true
-    }
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试数字 GID",
+        "args": ["0", "test_file"],
+        "setup_commands": [
+            "touch test_file",
+            "chgrp 1000 test_file || true"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%g' test_file",
+                    "expected_exit": 0,
+                    "expected_stdout": "0\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -f test_file"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --preserve-root 和 --no-preserve-root 选项",
+        "args": ["--preserve-root", "--no-preserve-root", "root", "test_dir"],
+        "setup_commands": [
+            "mkdir test_dir"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            }
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --help 选项",
+        "args": ["--help"],
+        "expectation": {
+            "execution": {
+                "exit_code": 0
+            },
+            "ignore_fields": {
+                "ignore_stdout": true,
+                "ignore_stderr": true
+            }
+        }
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --version 选项",
+        "args": ["--version"],
+        "expectation": {
+            "execution": {
+                "exit_code": 0
+            },
+            "ignore_fields": {
+                "ignore_stdout": true,
+                "ignore_stderr": true
+            }
+        }
+    },
+    {
+            "command": "chgrp",
+            "description": "chgrp: 测试 --silent 选项 (alias for -f)",
+            "args": ["--silent", "root", "nonexistent_file"],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "requires_root": true
+        },
+        {
+            "command": "chgrp",
+            "description": "chgrp: 测试 --reference 选项（参考文件为符号链接）",
+            "args": ["--reference=symlink_ref", "target_file"],
+            "setup_commands": [
+                "groupadd chgrp_test_ref_sym",
+                "touch real_ref target_file",
+                "ln -s real_ref symlink_ref",
+                "chgrp chgrp_test_ref_sym real_ref",
+                "chgrp root target_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%G' target_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "chgrp_test_ref_sym\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f real_ref symlink_ref target_file",
+                "groupdel chgrp_test_ref_sym"
+            ],
+            "requires_root": true
+        }
   ]
 }

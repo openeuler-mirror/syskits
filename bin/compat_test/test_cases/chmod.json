@@ -1,17 +1,16 @@
 {
   "tests": [
     {
-      "tstdin": "",
       "command": "chmod",
-      "description": "测试文件权限修改",
-      "setup_commands": [
-        "mkdir -p test_dir",
-        "cd test_dir",
-        "touch test_file",
-        "chmod 644 test_file",
-        "export TEST_VAR=test_value"
+      "description": "chmod: 八进制模式修改单个文件",
+      "args": [
+        "755",
+        "test_file_octal_single"
       ],
-      "args": ["755", "test_file"],
+      "setup_commands": [
+        "touch test_file_octal_single",
+        "chmod 600 test_file_octal_single"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -20,25 +19,269 @@
         },
         "verifications": [
           {
-            "command": "ls -l test_file",
+            "command": "stat -c '%a' test_file_octal_single",
             "expected_exit": 0,
-            "expected_stdout": "-rwxr-xr-x"
-          },
-          {
-            "command": "test -x test_file",
-            "expected_exit": 0
-          },
-          {
-            "command": "echo $TEST_VAR",
-            "expected_exit": 0,
-            "expected_stdout": "test_value\n"
+            "expected_stdout": "755\n"
           }
-        ]
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
       },
       "cleanup_commands": [
-        "cd ..",
-        "rm -rf test_dir"
-      ]
+        "rm -f test_file_octal_single"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 八进制模式修改多个文件",
+      "args": [
+        "644",
+        "file1_octal.txt",
+        "file2_octal.txt"
+      ],
+      "setup_commands": [
+        "touch file1_octal.txt file2_octal.txt",
+        "chmod 600 file1_octal.txt file2_octal.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' file1_octal.txt",
+            "expected_exit": 0,
+            "expected_stdout": "644\n"
+          },
+          {
+            "command": "stat -c '%a' file2_octal.txt",
+            "expected_exit": 0,
+            "expected_stdout": "644\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f file1_octal.txt file2_octal.txt"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 符号模式 u+x",
+      "args": [
+        "u+x",
+        "test_file_sym_u"
+      ],
+      "setup_commands": [
+        "touch test_file_sym_u",
+        "chmod 644 test_file_sym_u"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_sym_u",
+            "expected_exit": 0,
+            "expected_stdout": "744\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_sym_u"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 符号模式组合 a-w,o+x",
+      "args": [
+        "a-w,o+x",
+        "test_file_sym_multi"
+      ],
+      "setup_commands": [
+        "touch test_file_sym_multi",
+        "chmod 666 test_file_sym_multi"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_sym_multi",
+            "expected_exit": 0,
+            "expected_stdout": "445\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_sym_multi"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 符号模式 ugo+x",
+      "args": [
+        "ugo+x",
+        "test_file_sym_ugo"
+      ],
+      "setup_commands": [
+        "touch test_file_sym_ugo",
+        "chmod 644 test_file_sym_ugo"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_sym_ugo",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_sym_ugo"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --reference 参考文件",
+      "args": [
+        "--reference=ref_file",
+        "target_file"
+      ],
+      "setup_commands": [
+        "touch ref_file target_file",
+        "chmod 755 ref_file",
+        "chmod 600 target_file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' target_file",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ref_file target_file"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: -R 递归修改目录和文件",
+      "args": [
+        "-R",
+        "755",
+        "test_dir_rec"
+      ],
+      "setup_commands": [
+        "mkdir -p test_dir_rec/subdir",
+        "touch test_dir_rec/file1 test_dir_rec/subdir/file2",
+        "chmod -R 600 test_dir_rec"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_dir_rec",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          },
+          {
+            "command": "stat -c '%a' test_dir_rec/file1",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          },
+          {
+            "command": "stat -c '%a' test_dir_rec/subdir",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          },
+          {
+            "command": "stat -c '%a' test_dir_rec/subdir/file2",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf test_dir_rec"
+      ],
+      "requires_root": false,
+      "timeout": 30
     }
   ]
-} 
+}

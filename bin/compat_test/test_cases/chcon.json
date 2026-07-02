@@ -3,29 +3,33 @@
         {
             "command": "chcon",
             "description": "chcon: 基本功能修改type",
-            "args": ["-t", "tmp_t", "chcon_test_file"],
+            "args": [
+                "-t",
+                "tmp_t",
+                "chcon_test_file"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file"
             ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
                 "verifications": [
-                {
-                    "command": "stat -c '%C' chcon_test_file",
-                    "expected_exit": 0,
-                    "expected_stdout": "testuser_chown\n",
-                    "expected_stderr": null
-                }
+                    {
+                        "command": "stat -c '%C' chcon_test_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "testuser_chown\n",
+                        "expected_stderr": null
+                    }
                 ],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
             "cleanup_commands": [
@@ -36,7 +40,11 @@
         {
             "command": "chcon",
             "description": "chcon: 修改 user",
-            "args": ["-u", "system_u", "chcon_test_file2"],
+            "args": [
+                "-u",
+                "system_u",
+                "chcon_test_file2"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file2"
             ],
@@ -69,7 +77,11 @@
         {
             "command": "chcon",
             "description": "chcon: 修改 role",
-            "args": ["-r", "object_r", "chcon_test_file3"],
+            "args": [
+                "-r",
+                "object_r",
+                "chcon_test_file3"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file3"
             ],
@@ -102,7 +114,11 @@
         {
             "command": "chcon",
             "description": "chcon: 修改 level",
-            "args": ["-l", "s0-s0:c0.c1023", "chcon_test_file4"],
+            "args": [
+                "-l",
+                "s0-s0:c0.c1023",
+                "chcon_test_file4"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file4"
             ],
@@ -135,7 +151,17 @@
         {
             "command": "chcon",
             "description": "chcon: 多属性同时修改",
-            "args": ["-u", "system_u", "-r", "object_r", "-t", "tmp_t", "-l", "s0-s0:c0.c1023", "chcon_test_file5"],
+            "args": [
+                "-u",
+                "system_u",
+                "-r",
+                "object_r",
+                "-t",
+                "tmp_t",
+                "-l",
+                "s0-s0:c0.c1023",
+                "chcon_test_file5"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file5"
             ],
@@ -168,7 +194,10 @@
         {
             "command": "chcon",
             "description": "chcon: 使用 --reference 从另一文件继承",
-            "args": ["--reference=src_file", "target_file"],
+            "args": [
+                "--reference=src_file",
+                "target_file"
+            ],
             "setup_commands": [
                 "echo 'hello world' > src_file",
                 "echo 'hello world' > target_file",
@@ -203,7 +232,12 @@
         {
             "command": "chcon",
             "description": "chcon: 递归修改目录及内容",
-            "args": ["-R", "-t", "tmp_t", "chcon_test_dir"],
+            "args": [
+                "-R",
+                "-t",
+                "tmp_t",
+                "chcon_test_dir"
+            ],
             "setup_commands": [
                 "mkdir -p chcon_test_dir",
                 "touch chcon_test_dir/f1",
@@ -250,7 +284,11 @@
         {
             "command": "chcon",
             "description": "chcon: 修改不存在的 type",
-            "args": ["-t", "not_a_type", "chcon_test_file6"],
+            "args": [
+                "-t",
+                "not_a_type",
+                "chcon_test_file6"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file6"
             ],
@@ -283,7 +321,12 @@
         {
             "command": "chcon",
             "description": "chcon: 修改符号链接（symlink）而不跟随目标",
-            "args": ["-h", "-l", "s0-s0:c0.c1023", "chcon_symlink"],
+            "args": [
+                "-h",
+                "-l",
+                "s0-s0:c0.c1023",
+                "chcon_symlink"
+            ],
             "setup_commands": [
                 "echo 'hello world' > chcon_test_file",
                 "ln -s chcon_test_file chcon_symlink"
@@ -323,57 +366,106 @@
         {
             "command": "chcon",
             "description": "chcon: 直接指定完整安全上下文",
-            "args": ["system_u:object_r:tmp_t:s0", "ctx_file"],
-            "setup_commands": ["echo 'x' > ctx_file"],
+            "args": [
+                "system_u:object_r:tmp_t:s0",
+                "ctx_file"
+            ],
+            "setup_commands": [
+                "echo 'x' > ctx_file"
+            ],
             "expectation": {
-                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
-                "verifications": [{
-                "command": "stat -c '%C' ctx_file",
-                "expected_exit": 0,
-                "expected_stdout": "system_u:object_r:tmp_t:s0\n",
-                "expected_stderr": null
-                }]
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%C' ctx_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "system_u:object_r:tmp_t:s0\n",
+                        "expected_stderr": null
+                    }
+                ]
             },
-            "cleanup_commands": ["rm -f ctx_file"],
+            "cleanup_commands": [
+                "rm -f ctx_file"
+            ],
             "requires_root": true
         },
         {
             "command": "chcon",
             "description": "chcon: --dereference 影响目标而不是 symlink",
-            "args": ["--dereference", "-t", "tmp_t", "link_file"],
+            "args": [
+                "--dereference",
+                "-t",
+                "tmp_t",
+                "link_file"
+            ],
             "setup_commands": [
                 "echo hi > real_file",
                 "ln -s real_file link_file"
             ],
             "expectation": {
-                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
                 "verifications": [
-                { "command": "stat -c '%C' real_file", "expected_exit": 0, "expected_stdout": "system_u:object_r:tmp_t:s0\n", "expected_stderr": null },
-                { "command": "stat -c '%C' link_file", "expected_exit": 0, "expected_stdout": "", "expected_stderr": null }
+                    {
+                        "command": "stat -c '%C' real_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "system_u:object_r:tmp_t:s0\n",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "stat -c '%C' link_file",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
                 ]
             },
-            "cleanup_commands": ["rm -f real_file link_file"],
+            "cleanup_commands": [
+                "rm -f real_file link_file"
+            ],
             "requires_root": true
         },
         {
             "command": "chcon",
-            "description": "chcon: verbose 输出（仅有中英文差异）",
-            "args": ["-v", "-t", "tmp_t", "v_file"],
-            "setup_commands": ["echo hi > v_file"],
+            "description": "chcon: verbose 输出",
+            "args": [
+                "-v",
+                "-t",
+                "tmp_t",
+                "v_file"
+            ],
+            "setup_commands": [
+                "echo hi > v_file"
+            ],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "changed context of 'v_file'\n",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "changed context of 'v_file'\n",
+                    "stderr": ""
                 }
             },
-            "cleanup_commands": ["rm -f v_file"],
+            "cleanup_commands": [
+                "rm -f v_file"
+            ],
             "requires_root": true
         },
         {
             "command": "chcon",
             "description": "chcon: -R -P 不跟随目录符号链接",
-            "args": ["-R", "-P", "-t", "tmp_t", "rootdir"],
+            "args": [
+                "-R",
+                "-P",
+                "-t",
+                "tmp_t",
+                "rootdir"
+            ],
             "setup_commands": [
                 "mkdir rootdir",
                 "mkdir targetdir",
@@ -381,35 +473,51 @@
                 "ln -s targetdir rootdir/linkdir"
             ],
             "expectation": {
-                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
-                "verifications": [
-                {
-                    "command": "stat -c '%C' targetdir/fileX",
-                    "expected_exit": 0,
-                    "expected_stdout": "system_u:object_r:default_t:s0\n",
-                    "expected_stderr": null
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                {
-                    "command": "stat -c '%C' targetdir",
-                    "expected_exit": 0,
-                    "expected_stdout": "system_u:object_r:default_t:s0\n",
-                    "expected_stderr": null
-                }
+                "verifications": [
+                    {
+                        "command": "stat -c '%C' targetdir/fileX",
+                        "expected_exit": 0,
+                        "expected_stdout": "system_u:object_r:default_t:s0\n",
+                        "expected_stderr": null
+                    },
+                    {
+                        "command": "stat -c '%C' targetdir",
+                        "expected_exit": 0,
+                        "expected_stdout": "system_u:object_r:default_t:s0\n",
+                        "expected_stderr": null
+                    }
                 ]
             },
-            "cleanup_commands": ["rm -rf rootdir targetdir"],
+            "cleanup_commands": [
+                "rm -rf rootdir targetdir"
+            ],
             "requires_root": true
         },
         {
             "command": "chcon",
             "description": "chcon: --help",
-            "args": ["--help"],
-            "setup_commands": [
+            "args": [
+                "--help"
             ],
+            "setup_commands": [],
             "expectation": {
-                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
-                "verifications": [
-                ]
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
             },
             "cleanup_commands": [],
             "requires_root": true
@@ -417,13 +525,23 @@
         {
             "command": "chcon",
             "description": "chcon: --version",
-            "args": ["--version"],
-            "setup_commands": [
+            "args": [
+                "--version"
             ],
+            "setup_commands": [],
             "expectation": {
-                "execution": { "exit_code": 0, "stdout": "", "stderr": "" },
-                "verifications": [
-                ]
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
             },
             "cleanup_commands": [],
             "requires_root": true

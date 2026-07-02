@@ -1076,7 +1076,7 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     unsafe {
-        ctcore::libc::setlocale(ctcore::libc::LC_ALL, b"\0".as_ptr() as *const _);
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr() as *const _);
     }
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(t) => t,
@@ -2691,11 +2691,11 @@ mod tests {
         #[test]
         fn test_ignore_non_printing_characters() {
             let a = SortLine {
-                line: "\x01\x02Apple",
+                line: "\x01\x02b",
                 index: 0,
             };
             let b = SortLine {
-                line: "apple",
+                line: "a",
                 index: 1,
             };
             let settings = SortGlobalConfigs {
@@ -2724,7 +2724,7 @@ mod tests {
             };
 
             let result = sort_compare_by(&a, &b, &settings, &a_line_data, &b_line_data);
-            assert_eq!(result, Ordering::Less); // Non-printing characters are ignored
+            assert_eq!(result, Ordering::Greater); // Non-printing characters are ignored
         }
 
         #[test]

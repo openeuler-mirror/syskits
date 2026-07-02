@@ -89,21 +89,20 @@ fn check_order(
 ) -> CTResult<()> {
     if *check_opt != CheckOrderOption::Disabled
         && (*check_opt == CheckOrderOption::Enabled || seen_unpairable)
+        && !issued_warning[file_idx - 1]
     {
-        if !issued_warning[file_idx - 1] {
-            // Drop trailing newlines for comparison
-            let prev_cmp = &prev[..prev.len().saturating_sub(1)];
-            let curr_cmp = &current[..current.len().saturating_sub(1)];
-            let order = strcoll_compare(prev_cmp, curr_cmp, false);
+        // Drop trailing newlines for comparison
+        let prev_cmp = &prev[..prev.len().saturating_sub(1)];
+        let curr_cmp = &current[..current.len().saturating_sub(1)];
+        let order = strcoll_compare(prev_cmp, curr_cmp, false);
 
-            if order == Ordering::Greater {
-                let msg = t!("comm.messages.not_sorted", file_num = file_idx);
-                if *check_opt == CheckOrderOption::Enabled {
-                    return Err(ctcore::ct_error::CtSimpleError::new(1, format!("{}", msg)));
-                } else {
-                    ctcore::ct_show_error!("{}", msg);
-                    issued_warning[file_idx - 1] = true;
-                }
+        if order == Ordering::Greater {
+            let msg = t!("comm.messages.not_sorted", file_num = file_idx);
+            if *check_opt == CheckOrderOption::Enabled {
+                return Err(ctcore::ct_error::CtSimpleError::new(1, msg.to_string()));
+            } else {
+                ctcore::ct_show_error!("{}", msg);
+                issued_warning[file_idx - 1] = true;
             }
         }
     }
@@ -330,7 +329,7 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     if issued_warning[0] || issued_warning[1] {
         return Err(ctcore::ct_error::CtSimpleError::new(
             1,
-            format!("{}", t!("comm.messages.input_not_sorted")),
+            t!("comm.messages.input_not_sorted").to_string(),
         ));
     }
 

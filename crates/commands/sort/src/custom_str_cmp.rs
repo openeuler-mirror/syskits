@@ -16,6 +16,7 @@
 use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 
+#[allow(dead_code)]
 fn custom_filter_char(
     c: char,
     is_ignore_non_printing: bool,
@@ -30,6 +31,7 @@ fn custom_filter_char(
     true
 }
 
+#[allow(dead_code)]
 fn custom_cmp_chars(a: char, b: char, is_ignore_case: bool) -> Ordering {
     match is_ignore_case {
         true => a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()),
@@ -37,6 +39,7 @@ fn custom_cmp_chars(a: char, b: char, is_ignore_case: bool) -> Ordering {
     }
 }
 
+#[allow(dead_code)]
 pub fn custom_cmp_str(
     a: &str,
     b: &str,

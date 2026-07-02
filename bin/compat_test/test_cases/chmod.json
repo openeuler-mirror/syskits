@@ -542,6 +542,204 @@
       "cleanup_commands": [],
       "requires_root": false,
       "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 无效的八进制模式",
+      "args": [
+        "999",
+        "test_file_invalid_mode"
+      ],
+      "setup_commands": [
+        "touch test_file_invalid_mode"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_invalid_mode"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 无效的符号模式",
+      "args": [
+        "u+z",
+        "test_file_invalid_sym"
+      ],
+      "setup_commands": [
+        "touch test_file_invalid_sym"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_invalid_sym"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --help 显示帮助信息",
+      "args": [
+        "--help"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": true,
+          "ignore_stderr": true,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --version 显示版本信息",
+      "args": [
+        "--version"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": true,
+          "ignore_stderr": true,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 缺少操作数",
+      "args": [],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 空字符串文件名",
+      "args": [
+        "755",
+        ""
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --reference 指定的内容为符号链接，会自动解引用",
+      "args": [
+        "--reference=ref_link",
+        "target_file_ref_link"
+      ],
+      "setup_commands": [
+        "touch ref_file_real target_file_ref_link",
+        "chmod 777 ref_file_real",
+        "ln -s ref_file_real ref_link",
+        "chmod 600 target_file_ref_link"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' target_file_ref_link",
+            "expected_exit": 0,
+            "expected_stdout": "777\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ref_file_real ref_link target_file_ref_link"
+      ],
+      "requires_root": false,
+      "timeout": 30
     }
   ]
 }

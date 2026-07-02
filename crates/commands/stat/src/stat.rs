@@ -30,6 +30,7 @@ use std::path::Path;
 
 // 声明 i18n 宏和初始化函数
 rust_i18n::i18n!("locales", fallback = "en-US");
+use rust_i18n::t;
 use sys_locale::get_locale;
 
 mod stat_options {
@@ -953,10 +954,8 @@ impl Stater {
             'D' => StatOutputType::UnsignedHex(meta.dev()),
             // raw mode in hex
             'f' => StatOutputType::UnsignedHex(meta.mode() as u64),
-            // file type
-            'F' => {
-                StatOutputType::Str(pretty_filetype(meta.mode() as mode_t, meta.len()).to_owned())
-            }
+            // file type (localized)
+            'F' => StatOutputType::Str(localized_filetype(meta.mode() as mode_t, meta.len())),
             // group ID of owner
             'g' => StatOutputType::Unsigned(meta.gid() as u64),
             // group name of owner
@@ -1058,36 +1057,48 @@ impl Stater {
     }
 
     fn default_format(show_fs: bool, terse: bool, show_dev_type: bool) -> String {
-        // SELinux related format is *ignored*
-
         if show_fs {
             if terse {
-                "%n %i %l %t %s %S %b %f %a %c %d\n".into()
+                t!("default_format.fs_terse")
             } else {
-                "  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock \
-                 size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b \
-                 Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n"
-                    .into()
+                t!("default_format.fs_normal")
             }
         } else if terse {
-            "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n".into()
+            t!("default_format.file_terse")
         } else {
-            [
-                "  File: %n\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n",
-                if show_dev_type {
-                    "Device: %Hd,%Ld\tInode: %-10i  Links: %-5h Device type: %Hr,%Lr\n"
-                } else {
-                    "Device: %Hd,%Ld\tInode: %-10i  Links: %h\n"
-                },
-                "Access: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\n",
-                "Access: %x\nModify: %y\nChange: %z\n Birth: %w\n",
-            ]
-            .join("")
+            let part2 = if show_dev_type {
+                t!("default_format.file_part2_dev")
+            } else {
+                t!("default_format.file_part2_no_dev")
+            };
+            format!(
+                "{}{}{}{}{}",
+                t!("default_format.file_part1"),
+                part2,
+                t!("default_format.file_part3"),
+                t!("default_format.file_part_context"),
+                t!("default_format.file_part4"),
+            )
         }
     }
 }
 
-// 添加一个函数，直接使用 rustix 的 statx 获取文件信息并转换为 fs::Metadata
+/// \u8fd4\u56de\u672c\u5730\u5316\u7684\u6587\u4ef6\u7c7b\u578b\u5b57\u7b26\u4e32\uff08\u901a\u8fc7 t!() \u5b8f\u8fdb\u884c\u7ffb\u8bd1\uff09
+fn localized_filetype(mode: mode_t, size: u64) -> String {
+    match pretty_filetype(mode, size) {
+        "regular empty file" => t!("file_type.regular_empty_file"),
+        "regular file" => t!("file_type.regular_file"),
+        "directory" => t!("file_type.directory"),
+        "symbolic link" => t!("file_type.symbolic_link"),
+        "character special file" => t!("file_type.character_special_file"),
+        "block special file" => t!("file_type.block_special_file"),
+        "fifo" => t!("file_type.fifo"),
+        "socket" => t!("file_type.socket"),
+        _ => t!("file_type.weird_file"),
+    }
+}
+
+// \u6dfb\u52a0\u4e00\u4e2a\u51fd\u6570\uff0c\u76f4\u63a5\u4f7f\u7528 rustix \u7684 statx \u83b7\u53d6\u6587\u4ef6\u4fe1\u606f\u5e76\u8f6c\u6362\u4e3a fs::Metadata
 fn get_metadata(
     file: &OsStr,
     follow_links: bool,

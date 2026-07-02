@@ -848,7 +848,7 @@ impl<'a> SpliceByteChunkWriter<'a> {
             .next()
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
         if splice_settings.verbose {
-            println!("creating file {}", file_name.quote());
+            println!("{} {}", t!("split.creating_file"), file_name.quote());
         }
         let splice_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SpliceByteChunkWriter {
@@ -890,7 +890,7 @@ impl Write for SpliceByteChunkWriter<'_> {
                     .next()
                     .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
-                    println!("creating file {}", file_name.quote());
+                    println!("{} {}", t!("split.creating_file"), file_name.quote());
                 }
                 self.inner = self
                     .settings
@@ -977,7 +977,7 @@ impl<'a> SpliceLineChunkWriter<'a> {
             .next()
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
         if splice_settings.verbose {
-            println!("creating file {}", file_name.quote());
+            println!("{} {}", t!("split.creating_file"), file_name.quote());
         }
         let buf_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SpliceLineChunkWriter {
@@ -1010,11 +1010,11 @@ impl Write for SpliceLineChunkWriter<'_> {
                 let filename = self
                     .filename_iterator
                     .next()
-                    .ok_or_else(|| std::io::Error::other("输出文件后缀用尽"))?;
+                    .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
 
                 // 开启详细日志时，打印创建文件信息
                 if self.settings.verbose {
-                    println!("创建文件 {}", filename.quote());
+                    println!("{} {}", t!("split.creating_file"), filename.quote());
                 }
 
                 // 实例化当前分块对应的底层写入器
@@ -1097,7 +1097,7 @@ impl<'a> SplitLineBytesChunkWriter<'a> {
             .next()
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
         if splice_settings.verbose {
-            println!("creating file {}", file_name.quote());
+            println!("{} {}", t!("split.creating_file"), file_name.quote());
         }
         let buf_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SplitLineBytesChunkWriter {
@@ -1155,7 +1155,7 @@ impl Write for SplitLineBytesChunkWriter<'_> {
                     .next()
                     .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
-                    println!("creating file {}", filename.quote());
+                    println!("{} {}", t!("split.creating_file"), filename.quote());
                 }
                 self.inner = self
                     .settings

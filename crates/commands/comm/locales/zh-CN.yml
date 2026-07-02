@@ -1,11 +1,15 @@
 comm:
   clap:
+    help: 显示此帮助信息并退出
+    version: 显示版本信息并退出
     column_1: 不显示第1列（文件1特有的行）
     column_2: 不显示第2列（文件2特有的行）
     column_3: 不显示第3列（两个文件中都有的行）
     delimiter: 使用STR分隔列
     zero_terminated: 行分隔符是NUL，不是换行符
     total: 输出摘要
+    check_order: 检查输入是否被正确排序，即使所有输入行均可配对
+    nocheck_order: 不检查输入是否被正确排序
   usage: comm [选项]... 文件1 文件2
   about: |-
     逐行比较两个已排序的文件。
@@ -14,3 +18,8 @@ comm:
 
     不带选项时，生成三列输出。第一列包含文件1特有的行，
     第二列包含文件2特有的行，第三列包含两个文件共有的行。
+  messages:
+    total: 总计
+    both_stdin: 两个文件不能同为标准输入
+    not_sorted: 文件 %{file_num} 没有被正确排序
+    input_not_sorted: 输入没有被正确排序

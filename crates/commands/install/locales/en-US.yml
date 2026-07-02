@@ -13,5 +13,6 @@ install:
     install_context: set security context of files and directories
   usage: install [OPTION]... [FILE]...
   about: |-
-    Copy SOURCE to DEST or multiple SOURCE(s) to the existing
     DIRECTORY, while setting permission modes and owner/group
+  verbose_creating_dir: "creating directory"
+  verbose_removed: "removed"

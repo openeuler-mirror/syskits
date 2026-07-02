@@ -1,186 +1,296 @@
 {
     "tests": [
         {
-            "tstdin": "",
             "command": "pr",
-            "description": "基本功能测试 - 默认格式化",
-            "setup_commands": [
-                "echo -e 'line1\\nline2\\nline3' > test.txt"
+            "description": "pr --help",
+            "args": [
+                "--help"
             ],
-            "args": ["test.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试 -h 选项 - 自定义头部",
-            "setup_commands": [
-                "echo -e 'line1\\nline2' > test.txt"
-            ],
-            "args": ["-h", "Custom Header", "test.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试 -t 选项 - 省略头部和尾部",
-            "setup_commands": [
-                "echo -e 'line1\\nline2\\nline3' > test.txt"
-            ],
-            "args": ["-t", "test.txt"],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\n",
+                    "stdout": "",
                     "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试 -n 选项 - 显示行号",
-            "setup_commands": [
-                "echo -e 'line1\\nline2' > test.txt"
-            ],
-            "args": ["-n", "-t", "test.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "     1\tline1\n     2\tline2\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试 C locale 下的时间格式化",
-            "setup_commands": [
-                "echo -e 'test content' > test.txt"
-            ],
-            "args": ["test.txt"],
-            "env": {
-                "LC_TIME": "C"
-            },
-            "expectation": {
-                "execution": {
-                    "exit_code": 0
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试非 C locale 下的时间格式化（ISO格式）",
-            "setup_commands": [
-                "echo -e 'test content' > test.txt"
-            ],
-            "args": ["test.txt"],
-            "env": {
-                "LC_TIME": "en_US.UTF-8"
-            },
-            "expectation": {
-                "execution": {
-                    "exit_code": 0
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试中文 locale 下的时间格式化",
-            "setup_commands": [
-                "echo -e '中文内容测试' > test.txt"
-            ],
-            "args": ["test.txt"],
-            "env": {
-                "LC_TIME": "zh_CN.UTF-8"
-            },
-            "expectation": {
-                "execution": {
-                    "exit_code": 0
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试 -d 选项 - 双倍行距",
-            "setup_commands": [
-                "echo -e 'line1\\nline2' > test.txt"
-            ],
-            "args": ["-d", "-t", "test.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\n\nline2\n\n",
-                    "stderr": ""
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试多列输出",
-            "setup_commands": [
-                "echo -e 'line1\\nline2\\nline3\\nline4' > test.txt"
-            ],
-            "args": ["--column=2", "-t", "test.txt"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0
-                }
-            },
-            "cleanup_commands": [
-                "rm -f test.txt"
-            ]
-        },
-        {
-            "tstdin": "",
-            "command": "pr",
-            "description": "测试标准输入",
-            "input": "line1\nline2\nline3\n",
-            "args": ["-t"],
-            "expectation": {
-                "execution": {
-                    "exit_code": 0,
-                    "stdout": "line1\nline2\nline3\n",
-                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
                 }
             }
+        },
+        {
+            "command": "pr",
+            "description": "pr --version",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            }
+        },
+        {
+            "command": "pr",
+            "description": "Basic format",
+            "args": [
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nline1\nline2\nline3\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'line1\nline2\nline3' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Pagination control (+PAGE:END)",
+            "args": [
+                "+1:1",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -ne 'l1\n\\fl2\n' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Pagination control (--pages)",
+            "args": [
+                "--pages=2:2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 2 页\n\n\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -ne 'l1\n\\fl2\n' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Set length (-l / --length)",
+            "args": [
+                "-l",
+                "20",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nline\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo 'line' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Implied omit header with small length",
+            "args": [
+                "-l",
+                "10",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "line\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo 'line' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Columns (-COLUMN)",
+            "args": [
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t    l3\nl2\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Columns (--columns)",
+            "args": [
+                "--columns=2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t    l3\nl2\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Columns across (-a)",
+            "args": [
+                "-a",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t    l2\nl3\t\t\t\t    l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Merge mode (-m)",
+            "args": [
+                "-m",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                                                 第 1 页\n\n\ndoc1_1\t\t\t\t    doc2_1\ndoc1_2\t\t\t\t    doc2_2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'doc1_1\ndoc1_2' > f1",
+                "echo -e 'doc2_1\ndoc2_2' > f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Double space (-d)",
+            "args": [
+                "-d",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\n\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Omit Header (-t)",
+            "args": [
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "l1\nl2\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Omit pagination (-T)",
+            "args": [
+                "-T",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "l1\nl2\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -ne 'l1\n\\fl2\n' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
         }
     ]
 }

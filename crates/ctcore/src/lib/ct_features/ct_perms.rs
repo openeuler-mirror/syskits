@@ -302,7 +302,7 @@ impl CtChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        ct_show_error!("{}", n);
+                        println!("{}", n);
                     }
                     0
                 }
@@ -404,7 +404,7 @@ impl CtChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        ct_show_error!("{}", n);
+                        println!("{}", n);
                     }
                     0
                 }

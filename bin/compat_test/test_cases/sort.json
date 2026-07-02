@@ -708,6 +708,209 @@
                 }
             },
             "cleanup_commands": ["rm -f test_P.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --sort=human-numeric 选项",
+            "setup_commands": [
+                "echo -e '1M\\n100K\\n1G' > test_sort_h.txt"
+            ],
+            "args": ["--sort=human-numeric", "test_sort_h.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "100K\n1M\n1G\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_sort_h.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --sort=month 选项",
+            "setup_commands": [
+                "echo -e 'Feb\\nJan\\nMar' > test_sort_M.txt"
+            ],
+            "args": ["--sort=month", "test_sort_M.txt"],
+            "env": { "LC_ALL": "C" },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Jan\nFeb\nMar\n",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
+                }
+            },
+            "cleanup_commands": ["rm -f test_sort_M.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --sort=numeric 选项",
+            "setup_commands": [
+                "echo -e '10\\n2\\n1' > test_sort_n.txt"
+            ],
+            "args": ["--sort=numeric", "test_sort_n.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2\n10\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_sort_n.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --sort=version 选项",
+            "setup_commands": [
+                "echo -e '1.2\\n1.10\\n1.1' > test_sort_V.txt"
+            ],
+            "args": ["--sort=version", "test_sort_V.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.1\n1.2\n1.10\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_sort_V.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --check=diagnose-first 选项 (失败情况)",
+            "setup_commands": [
+                "echo -e 'b\\na' > test_check_diag.txt"
+            ],
+            "args": ["--check=diagnose-first", "test_check_diag.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sort: test_check_diag.txt:2: disorder: a\n"
+                }
+            },
+            "cleanup_commands": ["rm -f test_check_diag.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --check=quiet 选项 (失败情况)",
+            "setup_commands": [
+                "echo -e 'b\\na' > test_check_quiet.txt"
+            ],
+            "args": ["--check=quiet", "test_check_quiet.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_check_quiet.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --check=silent 选项 (失败情况)",
+            "setup_commands": [
+                "echo -e 'b\\na' > test_check_silent.txt"
+            ],
+            "args": ["--check=silent", "test_check_silent.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_check_silent.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -k 选项 (指定字段和类型)",
+            "setup_commands": [
+                "echo -e 'a 10\\na 2' > test_k_type.txt"
+            ],
+            "args": ["-k", "2n", "test_k_type.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a 2\na 10\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_k_type.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -k 选项 (指定字符位置)",
+            "setup_commands": [
+                "echo -e 'xb\\nxa' > test_k_char.txt"
+            ],
+            "args": ["-k", "1.2,1.2", "test_k_char.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "xa\nxb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_k_char.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -k 选项继承全局选项",
+            "setup_commands": [
+                "echo -e 'a 10\\na 2' > test_k_inherit.txt"
+            ],
+            "args": ["-n", "-k", "2", "test_k_inherit.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a 2\na 10\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_k_inherit.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 -k 选项覆盖全局选项 (反向)",
+            "setup_commands": [
+                "echo -e 'a 2\\na 10' > test_k_override_rev.txt"
+            ],
+            "args": ["-n", "-k", "2r", "test_k_override_rev.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a 10\na 2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f test_k_override_rev.txt"]
+        },
+        {
+            "command": "sort",
+            "description": "测试 --compress-program (使用 gzip)",
+            "setup_commands": [
+                "seq 1000 > test_compress.txt"
+            ],
+            "args": ["-S", "1K", "--compress-program=gzip", "test_compress.txt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "sort -n test_compress.txt > expected.txt && diff $CMD_STDOUT_FILE expected.txt",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": ["rm -f test_compress.txt expected.txt"]
         }
     ]
 }

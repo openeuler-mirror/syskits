@@ -531,6 +531,211 @@
             "cleanup_commands": [
                 "rm -f f1"
             ]
+        },
+        {
+            "command": "pr",
+            "description": "Custom date format (-D)",
+            "args": [
+                "-D",
+                "%Y-%m-%d",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28                          f1                           第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Date C locale",
+            "args": [
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ],
+            "env": {
+                "LC_TIME": "C"
+            }
+        },
+        {
+            "command": "pr",
+            "description": "Date Chinese locale",
+            "args": [
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ],
+            "env": {
+                "LC_TIME": "zh_CN.UTF-8"
+            }
+        },
+        {
+            "command": "pr",
+            "description": "Expand tabs (-e)",
+            "args": [
+                "-e",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a       b\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'a\tb' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Output tabs (-i)",
+            "args": [
+                "-i,",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a, b\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'a        b' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Join lines (-m -J)",
+            "args": [
+                "-m",
+                "-J",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                                                 第 1 页\n\n\nthis is line 1 for f1\tthis is line 1 for f2\nthis is line 2 for f1\tthis is line 2 for f2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'this is line 1 for f1\nthis is line 2 for f1' > f1",
+                "echo -e 'this is line 1 for f2\nthis is line 2 for f2' > f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Join lines w/ sep string (-m -J -S)",
+            "args": [
+                "-m",
+                "-J",
+                "-S||",
+                "f1",
+                "f2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                                                 第 1 页\n\n\ndoc1||doc2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'doc1' > f1",
+                "echo -e 'doc2' > f2"
+            ],
+            "cleanup_commands": [
+                "rm -f f1 f2"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Show control chars (-c)",
+            "args": [
+                "-c",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^G^H^K\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -ne '\\a\\b\\v' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Show non-printing (-v)",
+            "args": [
+                "-v",
+                "-t",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\\007\\010\\013\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -ne '\\x07\\x08\\x0b' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
         }
     ]
 }

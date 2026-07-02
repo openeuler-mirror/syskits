@@ -178,8 +178,29 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     unsafe {
         setlocale(LC_ALL, c"".as_ptr() as *const c_char);
     }
-    // 从命令行参数中解析匹配项
-    let args_match = ct_app().try_get_matches_from(args)?;
+    
+    let args_match = match ct_app().try_get_matches_from(args) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = e.print();
+            let exit_code = match e.kind() {
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
+                _ => 1,
+            };
+            std::process::exit(exit_code);
+        }
+    };
+
+    let mut sources_count = 0;
+    if args_match.contains_id(DATE_OPT_DATE) { sources_count += 1; }
+    if args_match.contains_id(DATE_OPT_FILE) { sources_count += 1; }
+    if args_match.contains_id(DATE_OPT_REFERENCE) { sources_count += 1; }
+    if args_match.contains_id(DATE_OPT_SET) { sources_count += 1; }
+    if args_match.get_flag(DATE_OPT_RESOLUTION) { sources_count += 1; }
+
+    if sources_count > 1 {
+        return Err(CtSimpleError::new(1, "multiple time sources specified".to_string()));
+    }
 
     // 如果指定了 -u/--utc/--universal，设置 TZ 环境变量为 UTC0
     if args_match.get_flag(DATE_OPT_UNIVERSAL) {
@@ -375,7 +396,7 @@ fn get_date_source(args_match: &ArgMatches) -> DateSource {
     // 根据命令行参数确定日期来源
     if args_match.get_flag(DATE_OPT_RESOLUTION) {
         DateSource::Resolution
-    } else if let Some(date) = args_match.get_one::<String>(DATE_OPT_DATE) {
+    } else if let Some(date) = args_match.get_many::<String>(DATE_OPT_DATE).and_then(|mut iter| iter.next_back()) {
         DateSource::Custom(date.into())
     } else if let Some(file) = args_match.get_one::<String>(DATE_OPT_FILE) {
         DateSource::File(file.into())
@@ -397,18 +418,21 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         }
         let form = form[1..].to_string();
         DateFormat::Custom(form)
-    } else if let Some(fmt) = args_match
-        .get_many::<String>(DATE_OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
-    {
-        DateFormat::Iso8601(fmt)
+    } else if args_match.contains_id(DATE_OPT_ISO_8601) {
+        // 【核心修复】：使用 contains_id + get_one，完美兼容 --iso-8601 和 --iso-8601=hours
+        let fmt = args_match
+            .get_one::<String>(DATE_OPT_ISO_8601)
+            .map(|s| s.as_str())
+            .unwrap_or(DATE);
+        DateFormat::Iso8601(fmt.into())
     } else if args_match.get_flag(DATE_OPT_RFC_EMAIL) {
         DateFormat::Rfc5322
-    } else if let Some(fmt) = args_match
-        .get_one::<String>(DATE_OPT_RFC_3339)
-        .map(|s| s.as_str().into())
-    {
-        DateFormat::Rfc3339(fmt)
+    } else if args_match.contains_id(DATE_OPT_RFC_3339) {
+        let fmt = args_match
+            .get_one::<String>(DATE_OPT_RFC_3339)
+            .map(|s| s.as_str())
+            .unwrap_or(DATE);
+        DateFormat::Rfc3339(fmt.into())
     } else if args_match.get_flag(DATE_OPT_RESOLUTION) {
         DateFormat::Custom("%s.%N".to_string())
     } else {
@@ -451,6 +475,7 @@ fn date_args_init() -> Vec<Arg> {
             .short('d')
             .long(DATE_OPT_DATE)
             .value_name("STRING")
+            .action(ArgAction::Append)
             .help(t!("date.clap.date_opt_date")),
         Arg::new(DATE_OPT_FILE)
             .short('f')
@@ -502,8 +527,7 @@ fn date_args_init() -> Vec<Arg> {
         Arg::new(DATE_OPT_RESOLUTION)
             .long(DATE_OPT_RESOLUTION)
             .help("output the available resolution of timestamps")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all([DATE_OPT_DATE, DATE_OPT_FILE, DATE_OPT_REFERENCE]),
+            .action(ArgAction::SetTrue),
         Arg::new(DATE_OPT_FORMAT),
     ];
     args

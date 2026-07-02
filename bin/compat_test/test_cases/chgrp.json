@@ -319,6 +319,112 @@
         ],
         "requires_root": true,
         "timeout": 30
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --changes (-c) 选项(中英文差异）",
+        "args": ["-c", "chgrp_test_group_c", "test_file"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_c",
+            "touch test_file",
+            "chgrp root test_file"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' test_file",
+                    "expected_exit": 0,
+                    "expected_stdout": "chgrp_test_group_c\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -f test_file",
+            "groupdel chgrp_test_group_c"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --changes (-c) 选项（无变更时不输出）",
+        "args": ["-c", "root", "test_file"],
+        "setup_commands": [
+            "touch test_file",
+            "chgrp root test_file"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --verbose (-v) 选项(中英文差异）",
+        "args": ["-v", "chgrp_test_group_v", "test_file"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_v",
+            "touch test_file",
+            "chgrp root test_file"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file",
+            "groupdel chgrp_test_group_v"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --verbose (-v) 选项（无变更时也输出）(中英文差异）",
+        "args": ["-v", "root", "test_file"],
+        "setup_commands": [
+            "touch test_file",
+            "chgrp root test_file"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            }
+        },
+        "cleanup_commands": [
+            "rm -f test_file"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --quiet (-f) 选项（抑制错误信息）",
+        "args": ["-f", "root", "nonexistent_file"],
+        "setup_commands": [],
+        "expectation": {
+            "execution": {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": ""
+            }
+        },
+        "cleanup_commands": [],
+        "requires_root": true
     }
   ]
 }

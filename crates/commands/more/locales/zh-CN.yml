@@ -11,3 +11,5 @@ more:
     more_files: 要读取的文件路径
   usage: more [选项] 文件...
   about: '显示文本文件的内容'
+  is_directory: "\n*** %{file}：目录 ***\n\n"
+  skipping: "...跳过"

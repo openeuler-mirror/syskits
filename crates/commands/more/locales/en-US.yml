@@ -11,3 +11,5 @@ more:
     more_files: Path to the files to be read
   usage: more [OPTIONS] FILE...
   about: Display the contents of a text file
+  is_directory: "\n*** %{file}: directory ***\n\n"
+  skipping: "...skipping"

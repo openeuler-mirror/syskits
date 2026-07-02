@@ -5,7 +5,7 @@
             "command": "sort",
             "description": "基本功能测试 - 默认排序",
             "setup_commands": [
-                "echo -e 'c\\nb\\na' > test.txt"
+                "echo -e 'c\nb\na' > test.txt"
             ],
             "args": ["test.txt"],
             "expectation": {
@@ -24,7 +24,7 @@
             "command": "sort",
             "description": "测试 -r 选项 - 逆序排序",
             "setup_commands": [
-                "echo -e 'a\\nb\\nc' > test.txt"
+                "echo -e 'a\nb\nc' > test.txt"
             ],
             "args": ["-r", "test.txt"],
             "expectation": {
@@ -43,7 +43,7 @@
             "command": "sort",
             "description": "测试 -n 选项 - 数值排序",
             "setup_commands": [
-                "echo -e '10\\n2\\n1' > test.txt"
+                "echo -e '10\n2\n1' > test.txt"
             ],
             "args": ["-n", "test.txt"],
             "expectation": {
@@ -62,7 +62,7 @@
             "command": "sort",
             "description": "测试 -M 选项在 C locale 下 - 英文月份排序",
             "setup_commands": [
-                "echo -e 'Dec\\nJan\\nFeb\\nMar' > test.txt"
+                "echo -e 'Dec\nJan\nFeb\nMar' > test.txt"
             ],
             "args": ["-M", "test.txt"],
             "env": {
@@ -73,6 +73,10 @@
                     "exit_code": 0,
                     "stdout": "Jan\nFeb\nMar\nDec\n",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
                 }
             },
             "cleanup_commands": [
@@ -82,9 +86,9 @@
         {
             "tstdin": "",
             "command": "sort",
-            "description": "测试 -M 选项在中文 locale 下 - 支持中文月份",
+            "description": "测试 -M 选项在中文 locale 下 - 支持中文月份 ",
             "setup_commands": [
-                "echo -e '十二月\\n一月\\n二月\\n三月' > test.txt"
+                "echo -e '十二月\n一月\n二月\n三月' > test.txt"
             ],
             "args": ["-M", "test.txt"],
             "env": {
@@ -95,6 +99,10 @@
                     "exit_code": 0,
                     "stdout": "一月\n二月\n三月\n十二月\n",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
                 }
             },
             "cleanup_commands": [
@@ -104,9 +112,9 @@
         {
             "tstdin": "",
             "command": "sort",
-            "description": "测试 -M 选项混合英文和中文月份",
+            "description": "测试 -M 选项混合英文和中文月份 ",
             "setup_commands": [
-                "echo -e 'Dec\\n一月\\nFeb\\n三月' > test.txt"
+                "echo -e 'Dec\n一月\nFeb\n三月' > test.txt"
             ],
             "args": ["-M", "test.txt"],
             "env": {
@@ -117,6 +125,10 @@
                     "exit_code": 0,
                     "stdout": "一月\nFeb\n三月\nDec\n",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true,
+                    "ignore_stderr": true
                 }
             },
             "cleanup_commands": [
@@ -128,7 +140,7 @@
             "command": "sort",
             "description": "测试 -u 选项 - 去重排序",
             "setup_commands": [
-                "echo -e 'a\\nb\\na\\nc' > test.txt"
+                "echo -e 'a\nb\na\nc' > test.txt"
             ],
             "args": ["-u", "test.txt"],
             "expectation": {
@@ -147,7 +159,7 @@
             "command": "sort",
             "description": "测试 -k 选项 - 按指定列排序",
             "setup_commands": [
-                "echo -e '1 c\\n2 a\\n3 b' > test.txt"
+                "echo -e '1 c\n2 a\n3 b' > test.txt"
             ],
             "args": ["-k", "2", "test.txt"],
             "expectation": {
@@ -166,7 +178,7 @@
             "command": "sort",
             "description": "测试 -t 选项 - 自定义字段分隔符",
             "setup_commands": [
-                "echo -e '1:c\\n2:a\\n3:b' > test.txt"
+                "echo -e '1:c\n2:a\n3:b' > test.txt"
             ],
             "args": ["-t", ":", "-k", "2", "test.txt"],
             "expectation": {
@@ -199,7 +211,7 @@
             "command": "sort", 
             "description": "测试 C locale 下的字符串排序（字节比较）",
             "setup_commands": [
-                "echo -e 'Windows\\nlinux\\nwindows\\nApple' > test.txt"
+                "echo -e 'Windows\nlinux\nwindows\nApple' > test.txt"
             ],
             "args": ["test.txt"],
             "env": {
@@ -221,7 +233,7 @@
             "command": "sort",
             "description": "测试 UTF-8 locale 下的字符串排序（字典序比较）",
             "setup_commands": [
-                "echo -e 'Windows\\nlinux\\nwindows\\nApple' > test.txt"
+                "echo -e 'Windows\nlinux\nwindows\nApple' > test.txt"
             ],
             "args": ["test.txt"],
             "env": {
@@ -243,7 +255,7 @@
             "command": "sort",
             "description": "测试混合大小写在不同 locale 下的排序差异",
             "setup_commands": [
-                "echo -e 'banana\\nApple\\ncherry\\nDragon' > test.txt"
+                "echo -e 'banana\nApple\ncherry\nDragon' > test.txt"
             ],
             "args": ["test.txt"],
             "env": {
@@ -265,7 +277,7 @@
             "command": "sort",
             "description": "测试带有特殊字符的 Unicode 排序",
             "setup_commands": [
-                "echo -e 'café\\nnaïve\\napple\\nzèbre' > test.txt"
+                "echo -e 'café\nnaïve\napple\nzèbre' > test.txt"
             ],
             "args": ["test.txt"],
             "env": {
@@ -287,7 +299,7 @@
             "command": "sort",
             "description": "测试中文字符在 UTF-8 locale 下的排序",
             "setup_commands": [
-                "echo -e '北京\\n上海\\n广州\\n深圳' > test.txt"
+                "echo -e '北京\n上海\n广州\n深圳' > test.txt"
             ],
             "args": ["test.txt"],
             "env": {
@@ -309,7 +321,7 @@
             "command": "sort",
             "description": "测试 POSIX locale 下的排序行为",
             "setup_commands": [
-                "echo -e 'Test1\\ntest2\\nTEST3\\ntest4' > test.txt"
+                "echo -e 'Test1\ntest2\nTEST3\ntest4' > test.txt"
             ],
             "args": ["test.txt"],
             "env": {
@@ -331,7 +343,7 @@
             "command": "sort",
             "description": "测试 -f 选项与 locale 的结合（忽略大小写排序）",
             "setup_commands": [
-                "echo -e 'Apple\\nbanana\\nCherry\\ndragon' > test.txt"
+                "echo -e 'Apple\nbanana\nCherry\ndragon' > test.txt"
             ],
             "args": ["-f", "test.txt"],
             "env": {

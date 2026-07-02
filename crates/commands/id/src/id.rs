@@ -19,17 +19,17 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::{self, Write};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use sys_locale::get_locale;
 
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{self, CtPasswd, Locate};
 use ctcore::ct_error::CTResult;
-use ctcore::ct_error::{CtSimpleError, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CtSimpleError};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::ct_show_error;
+use ctcore::Tool;
 use selinux::SecurityContext;
 use std::ffi::OsString;
 
@@ -621,7 +621,7 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("root")); // 用户名
-            // assert!(output_str.contains("0")); // 组ID
+                                                  // assert!(output_str.contains("0")); // 组ID
         }
 
         #[test]

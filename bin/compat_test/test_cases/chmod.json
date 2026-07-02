@@ -282,6 +282,266 @@
       ],
       "requires_root": false,
       "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: -c 仅在更改时报告 (已更改)",
+      "args": [
+        "-c",
+        "755",
+        "test_file_c_changed"
+      ],
+      "setup_commands": [
+        "touch test_file_c_changed",
+        "chmod 600 test_file_c_changed"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_c_changed",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_c_changed"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: -c 仅在更改时报告 (未更改)",
+      "args": [
+        "-c",
+        "600",
+        "test_file_c_unchanged"
+      ],
+      "setup_commands": [
+        "touch test_file_c_unchanged",
+        "chmod 600 test_file_c_unchanged"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_c_unchanged",
+            "expected_exit": 0,
+            "expected_stdout": "600\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_c_unchanged"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: -v 详细输出 (已更改) wrong",
+      "args": [
+        "-v",
+        "755",
+        "test_file_v_changed"
+      ],
+      "setup_commands": [
+        "touch test_file_v_changed",
+        "chmod 600 test_file_v_changed"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_v_changed",
+            "expected_exit": 0,
+            "expected_stdout": "755\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_v_changed"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: -v 详细输出 (未更改)",
+      "args": [
+        "-v",
+        "600",
+        "test_file_v_unchanged"
+      ],
+      "setup_commands": [
+        "touch test_file_v_unchanged",
+        "chmod 600 test_file_v_unchanged"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%a' test_file_v_unchanged",
+            "expected_exit": 0,
+            "expected_stdout": "600\n"
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f test_file_v_unchanged"
+      ],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: -f 抑制错误信息",
+      "args": [
+        "-f",
+        "755",
+        "non_existent_file_f"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --quiet 抑制错误信息",
+      "args": [
+        "--quiet",
+        "755",
+        "non_existent_file_q"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: 正常报错信息 (文件不存在)",
+      "args": [
+        "755",
+        "non_existent_file_normal"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
+    },
+    {
+      "command": "chmod",
+      "description": "chmod: --preserve-root 阻止递归修改根目录",
+      "args": [
+        "--preserve-root",
+        "-R",
+        "755",
+        "/"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [],
+      "requires_root": false,
+      "timeout": 30
     }
   ]
 }

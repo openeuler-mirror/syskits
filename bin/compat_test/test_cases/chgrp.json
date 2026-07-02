@@ -425,6 +425,102 @@
         },
         "cleanup_commands": [],
         "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --no-dereference (-h) 选项（修改符号链接本身）",
+        "args": ["-h", "chgrp_test_group_h", "symlink"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_h",
+            "touch target_file",
+            "ln -s target_file symlink",
+            "chgrp root target_file",
+            "chgrp -h root symlink"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' symlink",
+                    "expected_exit": 0,
+                    "expected_stdout": "chgrp_test_group_h\n"
+                },
+                {
+                    "command": "stat -c '%G' target_file",
+                    "expected_exit": 0,
+                    "expected_stdout": "root\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -f symlink target_file",
+            "groupdel chgrp_test_group_h"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --dereference 选项（显式解引用符号链接）",
+        "args": ["--dereference", "chgrp_test_group_deref", "symlink"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_deref",
+            "touch target_file",
+            "ln -s target_file symlink",
+            "chgrp root target_file"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' target_file",
+                    "expected_exit": 0,
+                    "expected_stdout": "chgrp_test_group_deref\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -f symlink target_file",
+            "groupdel chgrp_test_group_deref"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 --reference 选项",
+        "args": ["--reference=ref_file", "target_file"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_ref",
+            "touch ref_file target_file",
+            "chgrp chgrp_test_group_ref ref_file",
+            "chgrp root target_file"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' target_file",
+                    "expected_exit": 0,
+                    "expected_stdout": "chgrp_test_group_ref\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -f ref_file target_file",
+            "groupdel chgrp_test_group_ref"
+        ],
+        "requires_root": true
     }
   ]
 }

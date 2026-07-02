@@ -30,3 +30,12 @@ cksum:
     - `sha512`:  (equivalent to sha512sum)
     - `blake2b`: (equivalent to b2sum)
     - `sm3`:     (only available through cksum)
+  check:
+    ok: "OK"
+    failed: "FAILED"
+    failed_open_or_read: "FAILED open or read"
+    line_improperly_formatted: "%{count} line is improperly formatted"
+    lines_improperly_formatted: "%{count} lines are improperly formatted"
+    checksum_did_not_match: "WARNING: %{count} computed checksum did NOT match"
+    checksums_did_not_match: "WARNING: %{count} computed checksums did NOT match"
+    no_file_verified: "no file was verified"

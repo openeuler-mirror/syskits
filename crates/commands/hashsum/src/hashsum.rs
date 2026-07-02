@@ -1221,7 +1221,12 @@ fn verify_file_hash<W: Write>(
                 ctcore::ct_util_name(),
                 ck_filename
             )?;
-            writeln!(writer, "{ck_filename}: FAILED open or read")?;
+            writeln!(
+                writer,
+                "{}: {}",
+                ck_filename,
+                t!("hashsum.check.failed_open_or_read")
+            )?;
             return Ok(false);
         }
         Ok(file) => file,
@@ -1236,12 +1241,20 @@ fn verify_file_hash<W: Write>(
 
     if expected_sum == real_sum {
         if !flags.is_quiet {
-            writeln!(writer, "{prefix}{ck_filename}: OK")?;
+            writeln!(
+                writer,
+                "{prefix}{ck_filename}: {}",
+                t!("hashsum.check.ok")
+            )?;
         }
         Ok(true)
     } else {
         if !flags.is_status {
-            writeln!(writer, "{prefix}{ck_filename}: FAILED")?;
+            writeln!(
+                writer,
+                "{prefix}{ck_filename}: {}",
+                t!("hashsum.check.failed")
+            )?;
         }
         Ok(false)
     }
@@ -1320,18 +1333,20 @@ fn compute_and_output_hash<W: Write>(
 fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usize) -> CTResult<()> {
     // 根据错误统计输出最终摘要信息
     match bad_format.cmp(&1) {
-        Ordering::Equal => ct_show_warning!("{} line is improperly formatted", bad_format),
-        Ordering::Greater => ct_show_warning!("{} lines are improperly formatted", bad_format),
+        Ordering::Equal => ct_show_warning!("{}", t!("hashsum.check.line_improperly_formatted", count = bad_format)),
+        Ordering::Greater => ct_show_warning!("{}", t!("hashsum.check.lines_improperly_formatted", count = bad_format)),
         Ordering::Less => {}
     };
 
-    if failed_cksum > 0 {
-        ct_show_warning!("{} computed checksum did NOT match", failed_cksum);
+    match failed_cksum.cmp(&1) {
+        Ordering::Equal => ct_show_warning!("{}", t!("hashsum.check.checksum_did_not_match", count = failed_cksum)),
+        Ordering::Greater => ct_show_warning!("{}", t!("hashsum.check.checksums_did_not_match", count = failed_cksum)),
+        Ordering::Less => {}
     }
 
     match failed_open_file.cmp(&1) {
-        Ordering::Equal => ct_show_warning!("{} listed file could not be read", failed_open_file),
-        Ordering::Greater => ct_show_warning!("{} listed files could not be read", failed_open_file),
+        Ordering::Equal => ct_show_warning!("{}", t!("hashsum.check.file_could_not_be_read", count = failed_open_file)),
+        Ordering::Greater => ct_show_warning!("{}", t!("hashsum.check.files_could_not_be_read", count = failed_open_file)),
         Ordering::Less => {}
     }
     Ok(())

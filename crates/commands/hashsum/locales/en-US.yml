@@ -13,3 +13,13 @@ hashsum:
     no-names: Omits filenames in the output (option not present in GNU/Coreutils)
   usage: hashsum [OPTIONS] [FILE]...
   about: Compute and check message digests.
+  check:
+    ok: "OK"
+    failed: "FAILED"
+    failed_open_or_read: "FAILED open or read"
+    line_improperly_formatted: "%{count} line is improperly formatted"
+    lines_improperly_formatted: "%{count} lines are improperly formatted"
+    checksum_did_not_match: "%{count} computed checksum did NOT match"
+    checksums_did_not_match: "%{count} computed checksums did NOT match"
+    file_could_not_be_read: "%{count} listed file could not be read"
+    files_could_not_be_read: "%{count} listed files could not be read"

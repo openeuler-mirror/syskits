@@ -30,3 +30,12 @@ cksum:
     - `sha512`:  （等同于sha512sum）
     - `blake2b`: （等同于b2sum）
     - `sm3`:     （仅通过cksum可用）
+  check:
+    ok: "成功"
+    failed: "失败"
+    failed_open_or_read: "打开或读取失败"
+    line_improperly_formatted: "%{count} 行的格式不正确"
+    lines_improperly_formatted: "%{count} 行的格式不正确"
+    checksum_did_not_match: "%{count} 个校验和不匹配"
+    checksums_did_not_match: "%{count} 个校验和不匹配"
+    no_file_verified: "没有文件被验证"

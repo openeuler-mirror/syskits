@@ -18,7 +18,6 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_show_error;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs::File;
@@ -28,7 +27,7 @@ use sys_locale::get_locale;
 mod tsort_flags {
     pub const TSORT_FILE: &str = "file";
 }
-
+use ctcore::ct_show_error;
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -69,7 +68,7 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     if tokens.len() % 2 != 0 {
-         let err_message = format!(
+        let err_message = format!(
             "{}: input contains an odd number of tokens",
             input_file.maybe_quote()
         );
@@ -160,7 +159,7 @@ impl TSortGraph {
                         }
                     }
                 } else {
-                    break; 
+                    break;
                 }
             }
 
@@ -188,10 +187,10 @@ impl TSortGraph {
     // 完全重写：模拟 GNU tsort 的反向搜索 (Reverse Search) 算法
     fn detect_and_break_cycle(&mut self, filename: &str) -> Option<String> {
         let candidates: Vec<String> = self.in_edges.keys().cloned().collect();
-        
+
         // 对应 GNU 代码中的 static struct item *loop
         let mut cursor: Option<String> = None;
-        
+
         // 对应 GNU 代码中的 qlink (记录路径: key -> value 表示 key 指向 value)
         // 注意 GNU 的 qlink 是反向链表，但在 detect_loop 中它的构建方式是：
         // 找到 k 指向 loop，则 k->qlink = loop。所以这是正向的路径记录 (Predecessor -> Successor)
@@ -214,7 +213,9 @@ impl TSortGraph {
 
                 // 核心逻辑：检查 k 是否指向 curr (即 k 是 curr 的前驱)
                 // GNU: if ((*p)->suc == loop)
-                let k_points_to_curr = self.out_edges.get(k)
+                let k_points_to_curr = self
+                    .out_edges
+                    .get(k)
                     .map(|succs| succs.contains(curr))
                     .unwrap_or(false);
 
@@ -227,7 +228,7 @@ impl TSortGraph {
                         // 回溯打印环 (GNU: while (loop) ... until loop == k)
                         // 我们当前的 cursor 就是 GNU 的 loop
                         let mut loop_node = curr.clone();
-                        
+
                         // 1. 打印 loop_node
                         ct_show_error!("{}", loop_node);
 
@@ -235,13 +236,13 @@ impl TSortGraph {
                         loop {
                             // 获取路径上的下一个节点
                             let next_node = qlink.get(&loop_node).unwrap().clone();
-                            
+
                             // 打印下一个节点 (但如果是 k 就不打印了，因为 k 在循环外已经被找到了)
                             // 仔细看 GNU 逻辑：
                             // print loop->str
                             // if loop == k: break
                             // loop = loop->qlink
-                            
+
                             if loop_node == *k {
                                 // 此时 loop_node 就是 k。
                                 // GNU 在这里移除 relation: s = *p (即 k -> curr 的边)
@@ -256,7 +257,7 @@ impl TSortGraph {
                                 // 返回被释放入度的节点 (curr)
                                 return Some(curr.clone());
                             }
-                            
+
                             ct_show_error!("{}", next_node);
                             loop_node = next_node;
                         }
@@ -268,7 +269,7 @@ impl TSortGraph {
                     }
                 }
             }
-            
+
             // 如果遍历了一整圈都没找到 cursor，说明逻辑结束 (不应该发生，除非图空了)
             if cursor.is_none() {
                 return None;
@@ -355,11 +356,11 @@ mod tests {
         fn test_node_existence() {
             let mut graph = TSortGraph::new();
             graph.init_node(s("A"));
-            
+
             // 直接检查内部 BTreeMap 是否包含键
             assert!(graph.in_edges.contains_key("A"));
             assert!(!graph.in_edges.contains_key("B"));
-            
+
             // 检查出度表是否初始化
             assert!(graph.out_edges.contains_key("A"));
         }
@@ -387,7 +388,7 @@ mod tests {
         fn test_init_node() {
             let mut graph = TSortGraph::new();
             graph.init_node(s("A"));
-            
+
             assert!(graph.in_edges.contains_key("A"));
             assert!(graph.in_edges.get("A").unwrap().is_empty()); // 新初始化的节点入度为0
             assert!(graph.out_edges.get("A").unwrap().is_empty());
@@ -406,9 +407,12 @@ mod tests {
             // 注意：tsort_exe 会打印到 stdout，单元测试通常无法捕获 stdout 内容。
             // 我们主要验证：1. 返回码为 0; 2. 图被“消耗”殆尽（所有节点都被处理并移除）。
             let exit_code = graph.tsort_exe("test");
-            
+
             assert_eq!(exit_code, 0);
-            assert!(graph.in_edges.is_empty(), "Graph should be empty after successful sort");
+            assert!(
+                graph.in_edges.is_empty(),
+                "Graph should be empty after successful sort"
+            );
         }
 
         #[test]
@@ -423,9 +427,9 @@ mod tests {
             // GNU 逻辑：遇到环会报错（打印到 stderr），破环，然后继续。
             // 最终因为发现了环，返回值应该是 1。
             let exit_code = graph.tsort_exe("test");
-            
+
             assert_eq!(exit_code, 1);
-            
+
             // 即便有环，现在的逻辑也会打破它并输出所有节点，所以最终图也应该是空的
             assert!(graph.in_edges.is_empty());
         }
@@ -491,7 +495,7 @@ mod tests {
             // 验证：节点存在，但没有自环边
             assert!(graph.in_edges.contains_key("A"));
             assert!(graph.in_edges.get("A").unwrap().is_empty());
-            
+
             let exit_code = graph.tsort_exe("test");
             assert_eq!(exit_code, 0); // 自环不视为错误
         }

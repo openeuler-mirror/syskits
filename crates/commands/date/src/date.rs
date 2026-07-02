@@ -13,9 +13,7 @@ extern crate rust_i18n;
 use chrono::format::StrftimeItems;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
-#[cfg(windows)]
-use chrono::{Datelike, Timelike};
+use chrono::{Datelike, DateTime, FixedOffset, Local, Offset, TimeDelta, Timelike, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::FromIo;
@@ -24,7 +22,12 @@ use ctcore::ct_show;
 use sys_locale::get_locale;
 
 #[cfg(target_os = "linux")]
-use libc::{CLOCK_REALTIME, clock_settime, timespec};
+use libc::{
+    CLOCK_REALTIME, LC_ALL, c_char, clock_getres, clock_settime, gmtime_r, localtime_r, setlocale,
+    strftime, timespec, tm, nl_langinfo, D_T_FMT,
+};
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -34,6 +37,10 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 use ctcore::Tool;
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use std::ffi::OsString;
+#[cfg(target_os = "linux")]
+use std::mem;
+#[cfg(target_os = "linux")]
+use std::ffi::CStr;
 
 // Options
 const DATE: &str = "date";
@@ -53,6 +60,7 @@ const DATE_OPT_SET: &str = "set";
 const DATE_OPT_REFERENCE: &str = "reference";
 const DATE_OPT_UNIVERSAL: &str = "universal";
 const DATE_OPT_UNIVERSAL_2: &str = "utc";
+const DATE_OPT_RESOLUTION: &str = "resolution";
 
 // 帮助字符串
 
@@ -96,6 +104,8 @@ enum DateSource {
     Custom(String),
     File(PathBuf),
     Human(TimeDelta),
+    Resolution,
+    Reference(PathBuf),
 }
 
 enum DateIso8601Format {
@@ -166,8 +176,22 @@ impl Tool for Date {
 pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    #[cfg(target_os = "linux")]
+    unsafe {
+        setlocale(LC_ALL, b"\0".as_ptr() as *const c_char);
+    }
     // 从命令行参数中解析匹配项
     let args_match = ct_app().try_get_matches_from(args)?;
+
+    // 如果指定了 -u/--utc/--universal，设置 TZ 环境变量为 UTC0
+    if args_match.get_flag(DATE_OPT_UNIVERSAL) {
+        unsafe { std::env::set_var("TZ", "UTC0"); }
+        #[cfg(target_os = "linux")]
+        unsafe {
+            unsafe extern "C" { fn tzset(); }
+            tzset();
+        }
+    }
 
     // 根据命令行参数确定日期格式
     let date_format = match get_date_format(&args_match) {
@@ -199,6 +223,11 @@ fn date_processing(
         set_to: set_to_params,
     };
 
+    #[cfg(target_os = "linux")]
+    if matches!(date_set.format, DateFormat::Rfc5322) {
+        unsafe { libc::setlocale(libc::LC_TIME, b"C\0".as_ptr() as *const libc::c_char); }
+    }
+
     // 根据日期设置来设置系统日期时间或者显示当前日期时间
     if let Some(date) = date_set.set_to {
         // 如果需要设置时间，首先确保是UTC格式
@@ -223,7 +252,12 @@ fn date_processing(
         // 创建一个动态分发的迭代器Box<dyn Iterator<Item = _>>，用于根据不同的DateSource枚举值生成对应的日期迭代
         let dates_iterator: Box<dyn Iterator<Item = _>> = match date_set.date_source {
             DateSource::Custom(ref input) => {
-                let date = parse_date(input.clone());
+                let mut date = parse_date(input.clone());
+                if let Ok(dt) = date {
+                    if date_set.utc {
+                        date = Ok(dt.with_timezone(&Utc).into());
+                    }
+                }
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
@@ -252,11 +286,42 @@ fn date_processing(
                 let file = File::open(path)
                     .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
+                let mut iter: Box<dyn Iterator<Item = _>> = Box::new(lines.map_while(Result::ok).map(parse_date));
+                if date_set.utc {
+                    iter = Box::new(iter.map(|res| res.map(|dt| dt.with_timezone(&Utc).into())));
+                }
+                iter
             }
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
+                Box::new(iter)
+            }
+            DateSource::Resolution => {
+                let (sec, nsec) = get_clock_resolution();
+                let dt = DateTime::from_timestamp(sec, nsec as u32).unwrap();
+                let dt: DateTime<FixedOffset> = if date_set.utc {
+                    dt.with_timezone(&Utc).into()
+                } else {
+                    dt.with_timezone(&Local).into()
+                };
+                let iter = std::iter::once(Ok(dt));
+                Box::new(iter)
+            }
+            DateSource::Reference(ref path) => {
+                let metadata = std::fs::metadata(path).map_err(|e| {
+                    CtSimpleError::new(1, format!("{}: {}", path.quote(), e))
+                })?;
+                let time = metadata.modified().map_err(|e| {
+                    CtSimpleError::new(1, format!("{}: {}", path.quote(), e))
+                })?;
+                let dt: DateTime<FixedOffset> = if date_set.utc {
+                    let dt: DateTime<Utc> = time.into();
+                    dt.with_timezone(&dt.offset().fix())
+                } else {
+                    let dt: DateTime<Local> = time.into();
+                    dt.with_timezone(dt.offset())
+                };
+                let iter = std::iter::once(Ok(dt));
                 Box::new(iter)
             }
         };
@@ -268,21 +333,29 @@ fn date_processing(
         for date in dates_iterator {
             match date {
                 Ok(date) => {
-                    // 临时替换格式字符串中的 `%N` 为 `%f`，以兼容处理
-                    let format_string = &format_string.replace("%N", "%f");
-                    // 检查格式字符串是否包含无效的格式项
-                    if format_string.contains("%#z") {
-                        return Err(CtSimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
+                    #[cfg(target_os = "linux")]
+                    {
+                        let s = format_using_strftime(&date, &format_string)?;
+                        println!("{}", s);
                     }
-                    // 格式化日期并打印
-                    let formatted = date
-                        .format_with_items(StrftimeItems::new(format_string))
-                        .to_string()
-                        .replace("%f", "%N");
-                    println!("{formatted}");
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        // 临时替换格式字符串中的 `%N` 为 `%f`，以兼容处理
+                        let format_string = &format_string.replace("%N", "%f");
+                        // 检查格式字符串是否包含无效的格式项
+                        if format_string.contains("%#z") {
+                            return Err(CtSimpleError::new(
+                                1,
+                                format!("invalid format {}", format_string.replace("%f", "%N")),
+                            ));
+                        }
+                        // 格式化日期并打印
+                        let formatted = date
+                            .format_with_items(StrftimeItems::new(format_string))
+                            .to_string()
+                            .replace("%f", "%N");
+                        println!("{formatted}");
+                    }
                 }
                 Err((input, _err)) => ct_show!(CtSimpleError::new(
                     1,
@@ -311,18 +384,14 @@ fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffse
 
 fn get_date_source(args_match: &ArgMatches) -> DateSource {
     // 根据命令行参数确定日期来源
-    if let Some(date) = args_match.get_one::<String>(DATE_OPT_DATE) {
-        let ref_time = Local::now();
-        if let Ok(new_time) =
-            ctcore::ct_parse_datetime::parse_datetime_gnu_compat(date.as_str(), ref_time)
-        {
-            let duration = new_time.signed_duration_since(ref_time);
-            DateSource::Human(duration)
-        } else {
-            DateSource::Custom(date.into())
-        }
+    if args_match.get_flag(DATE_OPT_RESOLUTION) {
+        DateSource::Resolution
+    } else if let Some(date) = args_match.get_one::<String>(DATE_OPT_DATE) {
+        DateSource::Custom(date.into())
     } else if let Some(file) = args_match.get_one::<String>(DATE_OPT_FILE) {
         DateSource::File(file.into())
+    } else if let Some(file) = args_match.get_one::<String>(DATE_OPT_REFERENCE) {
+        DateSource::Reference(file.into())
     } else {
         DateSource::Now
     }
@@ -351,6 +420,8 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         .map(|s| s.as_str().into())
     {
         DateFormat::Rfc3339(fmt)
+    } else if args_match.get_flag(DATE_OPT_RESOLUTION) {
+        DateFormat::Custom("%s.%N".to_string())
     } else {
         DateFormat::Default
     };
@@ -439,47 +510,182 @@ fn date_args_init() -> Vec<Arg> {
             .alias(DATE_OPT_UNIVERSAL_2)
             .help(t!("date.clap.date_opt_universal"))
             .action(ArgAction::SetTrue),
+        Arg::new(DATE_OPT_RESOLUTION)
+            .long(DATE_OPT_RESOLUTION)
+            .help("output the available resolution of timestamps")
+            .action(ArgAction::SetTrue)
+            .conflicts_with_all([DATE_OPT_DATE, DATE_OPT_FILE, DATE_OPT_REFERENCE]),
         Arg::new(DATE_OPT_FORMAT),
     ];
     args
 }
 
 /// Return the appropriate format string for the given settings.
-fn make_format_string(date_settings: &DateSettings) -> &str {
-    // 在 Rust 中，ref 关键字用于在模式匹配中创建一个绑定（binding），这个绑定是对原始匹配值的引用（reference）。在这个上下文中，
-    // ref fmt 表示在匹配 DateFormat::Iso8601 枚举值时，不是将整个 fmt 值复制给 fmt 变量，而是创建一个指向 fmt 内部数据的引用。
-    // 这意味着 fmt 是 DateIso8601Format 类型的一个引用，而不是它的副本。
-    // 接下来的 match *fmt 则是解引用这个引用，以便进一步根据 DateIso8601Format 的具体值来决定应该选择哪个字符串格式。解引用允许我们访问 fmt 引用所指向的枚举变量的实际值，而不是引用本身。
-    // 所以，ref 的作用是确保在匹配过程中不会移动或复制枚举的内部值，而是直接操作它的引用，这样可以在后续的代码中避免不必要的拷贝，并且可以安全地修改（如果枚举是可变引用的话）或读取枚举变量的内容。
-    //
+fn make_format_string(date_settings: &DateSettings) -> String {
+    match date_settings.format {
+        DateFormat::Iso8601(ref fmt) => match *fmt {
+            DateIso8601Format::Date => "%F".to_string(),
+            DateIso8601Format::Hours => "%FT%H%:z".to_string(),
+            DateIso8601Format::Minutes => "%FT%H:%M%:z".to_string(),
+            DateIso8601Format::Seconds => "%FT%T%:z".to_string(),
+            _ => "%FT%T,%f%:z".to_string(),
+        },
+        DateFormat::Rfc5322 => "%a, %d %b %Y %H:%M:%S %z".to_string(),
+        DateFormat::Rfc3339(ref fmt) => match *fmt {
+            DateRfc3339Format::Date => "%F".to_string(),
+            DateRfc3339Format::Seconds => "%F %T%:z".to_string(),
+            _ => "%F %T.%f%:z".to_string(),
+        },
+        DateFormat::Custom(ref fmt) => fmt.clone(),
+        DateFormat::Default => get_default_format(),
+    }
+}
 
-    (if let DateFormat::Iso8601(ref fmt) = date_settings.format {
-        if let DateIso8601Format::Date = *fmt {
-            "%F"
-        } else if let DateIso8601Format::Hours = *fmt {
-            "%FT%H%:z"
-        } else if let DateIso8601Format::Minutes = *fmt {
-            "%FT%H:%M%:z"
-        } else if let DateIso8601Format::Seconds = *fmt {
-            "%FT%T%:z"
-        } else {
-            "%FT%T,%f%:z"
+#[cfg(target_os = "linux")]
+fn get_default_format() -> String {
+    // Try to detect if we are in a Chinese locale to match GNU date's default format for zh_CN.
+    // GNU date uses _DATE_FMT which is not easily accessible/stable via libc crate.
+    // For zh_CN, _DATE_FMT is usually "%Y年 %m月 %d日 %A %H:%M:%S %Z"
+    if let Ok(lang) = std::env::var("LC_TIME").or_else(|_| std::env::var("LC_ALL")).or_else(|_| std::env::var("LANG")) {
+        if lang.starts_with("zh_CN") {
+            return "%Y年 %m月 %d日 %A %H:%M:%S %Z".to_string();
         }
-    } else if let DateFormat::Rfc5322 = date_settings.format {
-        "%a, %d %h %Y %T %z"
-    } else if let DateFormat::Rfc3339(ref fmt) = date_settings.format {
-        if let DateRfc3339Format::Date = *fmt {
-            "%F"
-        } else if let DateRfc3339Format::Seconds = *fmt {
-            "%F %T%:z"
-        } else {
-            "%F %T.%f%:z"
+    }
+
+    unsafe {
+        let ptr = nl_langinfo(D_T_FMT);
+        if !ptr.is_null() {
+            let c_str = CStr::from_ptr(ptr);
+            if let Ok(s) = c_str.to_str() {
+                if !s.is_empty() {
+                    return s.to_string();
+                }
+            }
         }
-    } else if let DateFormat::Custom(ref fmt) = date_settings.format {
-        fmt
+    }
+    // Fallback if D_T_FMT is empty or invalid
+    "%a %b %e %H:%M:%S %Z %Y".to_string()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_default_format() -> String {
+    "%c".to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<String> {
+    // Handle %N by replacing it with nanoseconds
+    // Also handle %f which might be used internally in make_format_string
+    let nanos = format!("{:09}", dt.nanosecond());
+    let quarter = (dt.month0() / 3) + 1;
+    
+    let offset_secs = dt.offset().local_minus_utc();
+    let abs_secs = offset_secs.abs();
+    let hours = abs_secs / 3600;
+    let minutes = (abs_secs % 3600) / 60;
+    let seconds = abs_secs % 60;
+    let sign = if offset_secs < 0 { "-" } else { "+" };
+
+    let tz_colon = format!("{}{:02}:{:02}", sign, hours, minutes);
+    let tz_double_colon = format!("{}{:02}:{:02}:{:02}", sign, hours, minutes, seconds);
+    let tz_triple_colon = if seconds == 0 && minutes == 0 {
+        format!("{}{:02}", sign, hours)
+    } else if seconds == 0 {
+        format!("{}{:02}:{:02}", sign, hours, minutes)
     } else {
-        "%c"
-    }) as _ //占位符，依赖编译器推断出类型转换的目标类型
+        format!("{}{:02}:{:02}:{:02}", sign, hours, minutes, seconds)
+    };
+
+    // Pre-process format string to handle %-WIDTH conversion (remove width)
+    // This is to match GNU date behavior where - flag disables padding, effectively ignoring width.
+    let mut fmt_adjusted = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        fmt_adjusted.push(c);
+        if c == '%' {
+            if let Some(&next) = chars.peek() {
+                if next == '-' {
+                    chars.next(); // consume '-'
+                    fmt_adjusted.push('-');
+                    // Skip digits following '-'
+                    while let Some(&d) = chars.peek() {
+                        if d.is_ascii_digit() {
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                } else if next == '%' {
+                    chars.next();
+                    fmt_adjusted.push('%');
+                }
+            }
+        }
+    }
+
+    let fmt_final = fmt_adjusted.replace("%N", &nanos)
+        .replace("%f", &nanos)
+        .replace("%q", &quarter.to_string())
+        .replace("%:::z", &tz_triple_colon)
+        .replace("%::z", &tz_double_colon)
+        .replace("%:z", &tz_colon);
+
+    let c_fmt =
+        CString::new(fmt_final).map_err(|_| CtSimpleError::new(1, "Invalid format string"))?;
+
+    let ts = dt.timestamp();
+    let mut tm_val: tm = unsafe { mem::zeroed() };
+    let mut use_tm = false;
+
+    // Try localtime if offset matches
+    unsafe {
+        let mut tmp_tm: tm = mem::zeroed();
+        if localtime_r(&ts, &mut tmp_tm) != std::ptr::null_mut() {
+            if tmp_tm.tm_gmtoff as i32 == dt.offset().local_minus_utc() {
+                tm_val = tmp_tm;
+                use_tm = true;
+            }
+        }
+    }
+
+    if !use_tm && dt.offset().local_minus_utc() == 0 {
+        unsafe {
+            if gmtime_r(&ts, &mut tm_val) != std::ptr::null_mut() {
+                use_tm = true;
+            }
+        }
+    }
+
+    if !use_tm {
+        tm_val.tm_sec = dt.second() as i32;
+        tm_val.tm_min = dt.minute() as i32;
+        tm_val.tm_hour = dt.hour() as i32;
+        tm_val.tm_mday = dt.day() as i32;
+        tm_val.tm_mon = dt.month0() as i32;
+        tm_val.tm_year = dt.year() as i32 - 1900;
+        tm_val.tm_wday = dt.weekday().num_days_from_sunday() as i32;
+        tm_val.tm_yday = dt.ordinal0() as i32;
+        tm_val.tm_isdst = -1;
+        tm_val.tm_gmtoff = dt.offset().local_minus_utc() as i64;
+    }
+
+    let mut buf = vec![0u8; 256];
+    loop {
+        let res = unsafe {
+            strftime(buf.as_mut_ptr() as *mut c_char, buf.len(), c_fmt.as_ptr(), &tm_val)
+        };
+        if res > 0 {
+            let s = String::from_utf8_lossy(&buf[..res]);
+            return Ok(s.to_string());
+        }
+        if buf.len() > 65536 {
+            if c_fmt.as_bytes().is_empty() {
+                return Ok(String::new());
+            }
+            return Err(CtSimpleError::new(1, "strftime failed"));
+        }
+        buf.resize(buf.len() * 2, 0);
+    }
 }
 
 fn parse_date<S: AsRef<str> + Clone>(
@@ -488,10 +694,29 @@ fn parse_date<S: AsRef<str> + Clone>(
     // TODO: The GNU date command can parse a wide variety of inputs.
 
     let input = s.as_ref();
+    let ref_time = Local::now().with_nanosecond(0).unwrap();
+    if let Ok(dt) = ctcore::ct_parse_datetime::parse_datetime_gnu_compat(input, ref_time) {
+        return Ok(dt.into());
+    }
     match input.parse() {
         Ok(date) => Ok(date),
         Err(e) => Err((input.into(), e)),
     }
+}
+
+#[cfg(target_os = "linux")]
+fn get_clock_resolution() -> (i64, i64) {
+    let mut ts = timespec { tv_sec: 0, tv_nsec: 0 };
+    if unsafe { clock_getres(CLOCK_REALTIME, &mut ts) } == 0 {
+        (ts.tv_sec as i64, ts.tv_nsec as i64)
+    } else {
+        (0, 1)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_clock_resolution() -> (i64, i64) {
+    (0, 1)
 }
 
 #[cfg(target_os = "linux")]

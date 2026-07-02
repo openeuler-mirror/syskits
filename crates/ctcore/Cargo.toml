@@ -23,6 +23,7 @@ dunce = { version = "1.0.4", optional = true }
 wild = "2.2"
 glob = { workspace = true }
 thiserror = { workspace = true, optional = true }
+rust-i18n = { workspace = true }
 time = { workspace = true, optional = true, features = [
     "formatting",
     "local-offset",

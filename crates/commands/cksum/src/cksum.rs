@@ -10,17 +10,17 @@
  */
 
 extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
-use clap::{Arg, ArgAction, Command, crate_version, value_parser};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
-    ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code},
+    ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo},
     ct_show,
     ct_sum::{
-        BSD, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1, Sha224, Sha256,
-        Sha384, Sha512, div_ceil,
+        div_ceil, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224, Sha256,
+        Sha384, Sha512, BSD, SYSV,
     },
 };
 use hex::decode;
@@ -30,7 +30,7 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
+use std::io::{self, stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -154,6 +154,7 @@ struct CksumOptions {
     length: Option<usize>,
     output_format: CksumOutputFormat,
     zero: bool,
+    binary: bool,
 }
 
 /// Calculate checksum
@@ -240,7 +241,8 @@ where
             _ => {
                 // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
-                    print!("{sum}  -{line_end}");
+                    let marker = if cksum_opts.binary { "*" } else { " " };
+                    print!("{sum} {marker}-{line_end}");
                 } else {
                     print!(
                         "{} (-) = {sum}{}",
@@ -362,7 +364,8 @@ where
             _ => {
                 // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
-                    print!("{sum}  {}{}", filename.display(), line_end);
+                    let marker = if cksum_opts.binary { "*" } else { " " };
+                    print!("{sum} {marker}{}{}", filename.display(), line_end);
                 } else {
                     print!(
                         "{} ({}) = {sum}{}",
@@ -419,6 +422,8 @@ mod opt_flags {
     pub const STRICT: &str = "strict";
     pub const WARN: &str = "warn";
     pub const ZERO: &str = "zero";
+    pub const TEXT: &str = "text";
+    pub const BINARY: &str = "binary";
 }
 
 #[derive(Default)]
@@ -510,6 +515,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         untagged: matches.get_flag(opt_flags::UNTAGGED),
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
+        binary: matches.get_flag(opt_flags::BINARY),
     };
 
     if matches.get_flag(opt_flags::CHECK) {
@@ -862,6 +868,18 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::ZERO)
             .help(t!("cksum.clap.zero", default = "end each output line with NUL, not newline, and disable file name escaping"))
             .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::TEXT)
+            .short('t')
+            .long(opt_flags::TEXT)
+            .help(t!("cksum.clap.text", default = "read in text mode"))
+            .action(ArgAction::SetTrue)
+            .overrides_with(opt_flags::BINARY),
+        Arg::new(opt_flags::BINARY)
+            .short('b')
+            .long(opt_flags::BINARY)
+            .help(t!("cksum.clap.binary", default = "read in binary mode"))
+            .action(ArgAction::SetTrue)
+            .overrides_with(opt_flags::TEXT),
         Arg::new("help")
             .short('h')
             .long("help")
@@ -2477,6 +2495,7 @@ mod tests {
 
     #[cfg(test)]
     mod tests_detect_algo {
+        use crate::cksum_detect_algo;
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
@@ -2488,7 +2507,6 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::cksum_detect_algo;
 
         #[test]
         fn test_detect_algo_sysv() {
@@ -2601,7 +2619,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::{CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, ct_app, opt_flags};
+        use crate::{cksum, cksum_detect_algo, ct_app, opt_flags, CksumOptions, CksumOutputFormat};
         use std::ffi::OsStr;
         use std::fs;
         use std::fs::File;
@@ -2640,6 +2658,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2689,6 +2708,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2738,6 +2758,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2786,6 +2807,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2835,6 +2857,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2884,6 +2907,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2933,6 +2957,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -2982,6 +3007,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3031,6 +3057,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3080,6 +3107,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3129,6 +3157,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3178,6 +3207,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3227,6 +3257,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3276,6 +3307,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3326,6 +3358,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3375,6 +3408,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3424,6 +3458,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3473,6 +3508,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3522,6 +3558,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3571,6 +3608,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3620,6 +3658,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3669,6 +3708,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3718,6 +3758,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3768,6 +3809,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3817,6 +3859,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3866,6 +3909,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3916,6 +3960,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -3965,6 +4010,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -4014,6 +4060,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -4064,6 +4111,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -4113,6 +4161,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -4162,6 +4211,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results
@@ -4212,6 +4262,7 @@ mod tests {
                 untagged: false,
                 output_format,
                 zero: false,
+                binary: false,
             };
 
             match results

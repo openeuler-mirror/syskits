@@ -291,6 +291,246 @@
             "cleanup_commands": [
                 "rm -f f1"
             ]
+        },
+        {
+            "command": "pr",
+            "description": "Number lines (-n)",
+            "args": [
+                "-n",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\n    1\tl1\n    2\tl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Number lines custom sep/digits (-n)",
+            "args": [
+                "-n:3",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\n  1:l1\n  2:l2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "First line number (-N)",
+            "args": [
+                "-n",
+                "-N",
+                "5",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\n    5\tl1\n    6\tl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Indent offset (-o) wrong",
+            "args": [
+                "-o",
+                "5",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "     \n\n     2026-02-28 14:28                       f1                        第 1 页\n\n\n     l1\n     l2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Width truncation (-w)",
+            "args": [
+                "-w",
+                "10",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28 f1 第 1 页\n\n\nthis seco\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'this is a very long line\nsecond long line' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Page width truncation (-W)",
+            "args": [
+                "-W",
+                "15",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28 f1 第 1 页\n\n\nthis is a very \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'this is a very long line' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Separator (-s)",
+            "args": [
+                "-s,",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1,l3\nl2,l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "String divider (-S)",
+            "args": [
+                "-S--",
+                "-2",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\t\t\t\t   --l3\nl2\t\t\t\t   --l4\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2\nl3\nl4' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Form feed (-f)",
+            "args": [
+                "-f",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\f",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Form feed (-F)",
+            "args": [
+                "-F",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                       f1                        第 1 页\n\n\nl1\nl2\n\f",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
+        },
+        {
+            "command": "pr",
+            "description": "Custom header (-h)",
+            "args": [
+                "-h",
+                "CUSTOM_TITLE",
+                "f1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n\n2026-02-28 14:28                  CUSTOM_TITLE                   第 1 页\n\n\nl1\nl2\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "echo -e 'l1\nl2' > f1"
+            ],
+            "cleanup_commands": [
+                "rm -f f1"
+            ]
         }
     ]
 }

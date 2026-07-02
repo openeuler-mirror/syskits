@@ -228,6 +228,7 @@ impl Display for LsError {
             }
             LsError::LsIOError(e) => write!(formatter, "general io error: {e}"),
             LsError::LsIOErrorContext(e, p, _) => {
+                let path_str = p.to_string_lossy().to_string();
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
 
@@ -235,8 +236,8 @@ impl Display for LsError {
                     ErrorKind::NotFound => {
                         write!(
                             formatter,
-                            "cannot access '{}': No such file or directory",
-                            p.to_string_lossy(),
+                            "{}",
+                            t!("ls.errors.no_such_file", path = path_str.as_str())
                         )
                     }
                     // Permission denied and Operation not permitted
@@ -247,23 +248,23 @@ impl Display for LsError {
                             1i32 => {
                                 write!(
                                     formatter,
-                                    "cannot access '{}': Operation not permitted",
-                                    p.to_string_lossy(),
+                                    "{}",
+                                    t!("ls.errors.operation_not_permitted", path = path_str.as_str())
                                 )
                             }
                             13i32 | _ => match p.is_dir() {
                                 true => {
                                     write!(
                                         formatter,
-                                        "cannot open directory '{}': Permission denied",
-                                        p.to_string_lossy(),
+                                        "{}",
+                                        t!("ls.errors.permission_denied_dir", path = path_str.as_str())
                                     )
                                 }
                                 false => {
                                     write!(
                                         formatter,
-                                        "cannot open file '{}': Permission denied",
-                                        p.to_string_lossy(),
+                                        "{}",
+                                        t!("ls.errors.permission_denied_file", path = path_str.as_str())
                                     )
                                 }
                             },
@@ -273,8 +274,8 @@ impl Display for LsError {
                         if 9i32 == errno {
                             write!(
                                 formatter,
-                                "cannot open directory '{}': Bad file descriptor",
-                                p.to_string_lossy(),
+                                "{}",
+                                t!("ls.errors.bad_file_descriptor", path = path_str.as_str())
                             )
                         } else {
                             write!(
@@ -290,8 +291,9 @@ impl Display for LsError {
             LsError::LsAlreadyListedError(path) => {
                 write!(
                     formatter,
-                    "{}: not listing already-listed directory",
-                    path.to_string_lossy()
+                    "{}: {}",
+                    path.to_string_lossy(),
+                    t!("ls.errors.already_listed")
                 )
             }
         }
@@ -2494,11 +2496,7 @@ fn return_total<W: Write>(
         LsSizeFormat::Binary | LsSizeFormat::Decimal => total_size,
         LsSizeFormat::Bytes => (total_size + ls_config.block_size - 1) / ls_config.block_size,
     };
-    let total_str = if rust_i18n::locale().starts_with("zh") {
-        "总计"
-    } else {
-        "total"
-    };
+    let total_str = t!("ls.total");
     Ok(format!(
         "{} {}{}",
         total_str,
@@ -3148,7 +3146,7 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                 LsTimeStyle::LsIso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
                 LsTimeStyle::LsLocale => {
                     if rust_i18n::locale().starts_with("zh") {
-                        let fmt = if recent { "%_m月%d日 %H:%M" } else { "%Y年%_m月%d日" };
+                        let fmt = if recent { "%_m月%e日 %H:%M" } else { "%Y年%_m月%e日" };
                         time.format(fmt)
                     } else {
                         let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };

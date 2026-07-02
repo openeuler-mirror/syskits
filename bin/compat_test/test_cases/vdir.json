@@ -1649,6 +1649,248 @@
             "cleanup_commands": [
                 "rm -rf test_vdir_scc"
             ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --sort=none",
+            "setup_commands": [
+                "mkdir -p test_vdir_sort_none",
+                "touch test_vdir_sort_none/a test_vdir_sort_none/b"
+            ],
+            "args": ["--sort=none", "test_vdir_sort_none"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_sort_none"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --sort=size",
+            "setup_commands": [
+                "mkdir -p test_vdir_sort_size",
+                "dd if=/dev/zero of=test_vdir_sort_size/small bs=1 count=1 2>/dev/null",
+                "dd if=/dev/zero of=test_vdir_sort_size/large bs=1024 count=1 2>/dev/null"
+            ],
+            "args": ["--sort=size", "-1", "test_vdir_sort_size"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "large\nsmall\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_sort_size"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --sort=time",
+            "setup_commands": [
+                "mkdir -p test_vdir_sort_time",
+                "touch test_vdir_sort_time/old",
+                "sleep 1",
+                "touch test_vdir_sort_time/new"
+            ],
+            "args": ["--sort=time", "-1", "test_vdir_sort_time"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "new\nold\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_sort_time"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --sort=version",
+            "setup_commands": [
+                "mkdir -p test_vdir_sort_ver",
+                "touch test_vdir_sort_ver/file1 test_vdir_sort_ver/file10 test_vdir_sort_ver/file2"
+            ],
+            "args": ["--sort=version", "-1", "test_vdir_sort_ver"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "file1\nfile2\nfile10\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_sort_ver"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --sort=extension",
+            "setup_commands": [
+                "mkdir -p test_vdir_sort_ext",
+                "touch test_vdir_sort_ext/b.txt test_vdir_sort_ext/a.doc"
+            ],
+            "args": ["--sort=extension", "-1", "test_vdir_sort_ext"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a.doc\nb.txt\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_sort_ext"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time=access",
+            "setup_commands": [
+                "mkdir -p test_vdir_time_access",
+                "touch test_vdir_time_access/1",
+                "sleep 1",
+                "touch test_vdir_time_access/2",
+                "cat test_vdir_time_access/1 > /dev/null"
+            ],
+            "args": ["--time=access", "-t", "-1", "test_vdir_time_access"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_time_access"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time=status",
+            "setup_commands": [
+                "mkdir -p test_vdir_time_status",
+                "touch test_vdir_time_status/1",
+                "sleep 1",
+                "touch test_vdir_time_status/2"
+            ],
+            "args": ["--time=status", "-t", "-1", "test_vdir_time_status"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n1\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_time_status"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time=birth",
+            "setup_commands": [
+                "mkdir -p test_vdir_time_birth",
+                "touch test_vdir_time_birth/file"
+            ],
+            "args": ["--time=birth", "test_vdir_time_birth"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_time_birth"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time-style=full-iso",
+            "setup_commands": [
+                "mkdir -p test_vdir_ts_full",
+                "touch test_vdir_ts_full/file"
+            ],
+            "args": ["--time-style=full-iso", "test_vdir_ts_full"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ts_full"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time-style=iso",
+            "setup_commands": [
+                "mkdir -p test_vdir_ts_iso",
+                "touch test_vdir_ts_iso/file"
+            ],
+            "args": ["--time-style=iso", "test_vdir_ts_iso"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ts_iso"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --time-style=+FORMAT",
+            "setup_commands": [
+                "mkdir -p test_vdir_ts_fmt",
+                "touch test_vdir_ts_fmt/file"
+            ],
+            "args": ["--time-style=+%Y", "test_vdir_ts_fmt"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "vdir --time-style=+%Y test_vdir_ts_fmt | grep -E ' [0-9]{4} '",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_ts_fmt"
+            ]
+        },
+        {
+            "command": "vdir",
+            "description": "vdir: --color=always",
+            "setup_commands": [
+                "mkdir -p test_vdir_color_always",
+                "touch test_vdir_color_always/file"
+            ],
+            "args": ["--color=always", "test_vdir_color_always"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf test_vdir_color_always"
+            ]
         }
     ]
 }

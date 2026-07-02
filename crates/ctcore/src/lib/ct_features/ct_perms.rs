@@ -12,6 +12,7 @@
 //! Common functions to manage permissions
 
 use crate::ct_display::Quotable;
+use rust_i18n::t;
 use crate::ct_error::{CTResult, CtSimpleError, strip_errno};
 pub use crate::ct_features::ct_entries;
 use crate::ct_show_error;
@@ -72,12 +73,42 @@ pub fn wrap_chown<P: AsRef<Path>>(
     follow: bool,
     verbosity: Verbosity,
 ) -> Result<String, String> {
-    let dest_uid = dest_uid.unwrap_or_else(|| meta.uid());
-    let dest_gid = dest_gid.unwrap_or_else(|| meta.gid());
+    let dest_uid_val = dest_uid.unwrap_or_else(|| meta.uid());
+    let dest_gid_val = dest_gid.unwrap_or_else(|| meta.gid());
     let path = path.as_ref();
     let mut out: String = String::new();
 
-    if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
+    let uid = meta.uid();
+    let gid = meta.gid();
+
+    let (old_str, new_str) = if verbosity.groups_only {
+        (
+            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+            ct_entries::gid2grp(dest_gid_val).unwrap_or_else(|_| dest_gid_val.to_string())
+        )
+    } else {
+        match (dest_uid, dest_gid) {
+            (Some(_), Some(_)) => (
+                format!("{}:{}", ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()), ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())),
+                format!("{}:{}", ct_entries::uid2usr(dest_uid_val).unwrap_or_else(|_| dest_uid_val.to_string()), ct_entries::gid2grp(dest_gid_val).unwrap_or_else(|_| dest_gid_val.to_string()))
+            ),
+            (Some(_), None) => (
+                ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                ct_entries::uid2usr(dest_uid_val).unwrap_or_else(|_| dest_uid_val.to_string())
+            ),
+            (None, Some(_)) => (
+                format!("{}:{}", ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()), ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())),
+                format!(":{}", ct_entries::gid2grp(dest_gid_val).unwrap_or_else(|_| dest_gid_val.to_string()))
+            ),
+            (None, None) => (
+                ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                ct_entries::uid2usr(dest_uid_val).unwrap_or_else(|_| dest_uid_val.to_string())
+            )
+        }
+    };
+    let path_str = path.quote().to_string();
+
+    if let Err(e) = chown(path, dest_uid_val, dest_gid_val, follow) {
         match verbosity.level {
             CtVerbosityLevel::Silent => (),
             level => {
@@ -88,78 +119,37 @@ pub fn wrap_chown<P: AsRef<Path>>(
                     } else {
                         "ownership"
                     },
-                    path.quote(),
+                    path_str,
                     e
                 );
                 if level == CtVerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
-                        let gid = meta.gid();
-                        format!(
-                            "{}\nfailed to change group of {} from {} to {}",
-                            out,
-                            path.quote(),
-                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
+                        format!("{}\n{}", out, t!("ctcore.chgrp.failed_change", file = path_str, old = old_str, new = new_str))
                     } else {
-                        let uid = meta.uid();
-                        let gid = meta.gid();
-                        format!(
-                            "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
-                            out,
-                            path.quote(),
-                            ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            ct_entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
+                        format!("{}\n{}", out, t!("ctcore.chown.failed_change", file = path_str, old = old_str, new = new_str))
                     };
                 };
             }
         }
         return Err(out);
     } else {
-        let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
+        let changed = dest_uid_val != meta.uid() || dest_gid_val != meta.gid();
         if changed {
             match verbosity.level {
                 CtVerbosityLevel::Changes | CtVerbosityLevel::Verbose => {
-                    let gid = meta.gid();
                     out = if verbosity.groups_only {
-                        format!(
-                            "changed group of {} from {} to {}",
-                            path.quote(),
-                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
+                        t!("ctcore.chgrp.changed_group", file = path_str, old = old_str, new = new_str).to_string()
                     } else {
-                        let gid = meta.gid();
-                        let uid = meta.uid();
-                        format!(
-                            "changed ownership of {} from {}:{} to {}:{}",
-                            path.quote(),
-                            ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                            ct_entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                            ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                        )
+                        t!("ctcore.chown.changed_ownership", file = path_str, old = old_str, new = new_str).to_string()
                     };
                 }
                 _ => (),
             };
         } else if verbosity.level == CtVerbosityLevel::Verbose {
             out = if verbosity.groups_only {
-                format!(
-                    "group of {} retained as {}",
-                    path.quote(),
-                    ct_entries::gid2grp(dest_gid).unwrap_or_default()
-                )
+                t!("ctcore.chgrp.retained_group", file = path_str, old = old_str).to_string()
             } else {
-                format!(
-                    "ownership of {} retained as {}:{}",
-                    path.quote(),
-                    ct_entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
-                    ct_entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
-                )
+                t!("ctcore.chown.retained_ownership", file = path_str, old = old_str).to_string()
             };
         }
     }
@@ -455,29 +445,20 @@ impl CtChownExecutor {
 
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
         if self.verbosity.level == CtVerbosityLevel::Verbose {
-            match (self.dest_uid, self.dest_gid, gid) {
-                (Some(_), Some(_), Some(gid)) => {
-                    println!(
-                        "ownership of {} retained as {}:{}",
-                        path.quote(),
-                        ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
-                }
-                (None, Some(_), Some(gid)) => {
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
-                }
-                (_, _, _) => {
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                    );
-                }
+            let path_str = path.quote().to_string();
+            if self.verbosity.groups_only {
+                let gid_val = gid.unwrap_or(0);
+                let old_str = ct_entries::gid2grp(gid_val).unwrap_or_else(|_| gid_val.to_string());
+                println!("{}", t!("ctcore.chgrp.retained_group", file = path_str, old = old_str));
+            } else {
+                let old_str = match (self.dest_uid, self.dest_gid) {
+                    (Some(_), Some(_)) | (None, Some(_)) => {
+                        let gid_val = gid.unwrap_or(0);
+                        format!("{}:{}", ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()), ct_entries::gid2grp(gid_val).unwrap_or_else(|_| gid_val.to_string()))
+                    },
+                    (Some(_), None) | (None, None) => ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                };
+                println!("{}", t!("ctcore.chown.retained_ownership", file = path_str, old = old_str));
             }
         }
     }

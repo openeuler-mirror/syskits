@@ -249,7 +249,10 @@ impl Display for LsError {
                                 write!(
                                     formatter,
                                     "{}",
-                                    t!("ls.errors.operation_not_permitted", path = path_str.as_str())
+                                    t!(
+                                        "ls.errors.operation_not_permitted",
+                                        path = path_str.as_str()
+                                    )
                                 )
                             }
                             13i32 | _ => match p.is_dir() {
@@ -257,14 +260,20 @@ impl Display for LsError {
                                     write!(
                                         formatter,
                                         "{}",
-                                        t!("ls.errors.permission_denied_dir", path = path_str.as_str())
+                                        t!(
+                                            "ls.errors.permission_denied_dir",
+                                            path = path_str.as_str()
+                                        )
                                     )
                                 }
                                 false => {
                                     write!(
                                         formatter,
                                         "{}",
-                                        t!("ls.errors.permission_denied_file", path = path_str.as_str())
+                                        t!(
+                                            "ls.errors.permission_denied_file",
+                                            path = path_str.as_str()
+                                        )
                                     )
                                 }
                             },
@@ -953,17 +962,19 @@ impl LsConfig {
             OsString::from("")
         };
 
-        let (file_size_block_size, block_size) =
-            if !is_opt_si && !is_opt_hr && !raw_block_size.is_empty() {
-                match parse_size_u64(&raw_block_size.to_string_lossy()) {
-                    Ok(size) => {
-                        let s_str = raw_block_size.to_string_lossy();
-                        if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
-                            if let Some(first_non_digit) = s_str.find(|c: char| !c.is_ascii_digit()) {
-                                size_suffix = s_str[first_non_digit..].to_string();
-                            }
+        let (file_size_block_size, block_size) = if !is_opt_si
+            && !is_opt_hr
+            && !raw_block_size.is_empty()
+        {
+            match parse_size_u64(&raw_block_size.to_string_lossy()) {
+                Ok(size) => {
+                    let s_str = raw_block_size.to_string_lossy();
+                    if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
+                        if let Some(first_non_digit) = s_str.find(|c: char| !c.is_ascii_digit()) {
+                            size_suffix = s_str[first_non_digit..].to_string();
                         }
-                        match (is_env_var_blocksize, opt_kb) {
+                    }
+                    match (is_env_var_blocksize, opt_kb) {
                         (true, true) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE),
                         (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
                         (false, true) => {
@@ -976,36 +987,36 @@ impl LsConfig {
                         }
                         (false, false) => (size, size),
                     }
-                    },
-                    Err(_) => {
-                        // 只有在使用 --block-size 指定了无效的块大小时才会失败、
-                        // 忽略环境变量中的无效块大小
-                        if let Some(invalid_block_size) = opt_block_size {
-                            return Err(Box::new(LsError::LsBlockSizeParseError(
-                                invalid_block_size.clone(),
-                            )));
-                        }
-                        if is_env_var_blocksize {
-                            (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-                        } else {
-                            (LS_DEFAULT_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-                        }
+                }
+                Err(_) => {
+                    // 只有在使用 --block-size 指定了无效的块大小时才会失败、
+                    // 忽略环境变量中的无效块大小
+                    if let Some(invalid_block_size) = opt_block_size {
+                        return Err(Box::new(LsError::LsBlockSizeParseError(
+                            invalid_block_size.clone(),
+                        )));
+                    }
+                    if is_env_var_blocksize {
+                        (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+                    } else {
+                        (LS_DEFAULT_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
                     }
                 }
-            } else if env_var_posixly_correct.is_some() {
-                if opt_kb {
-                    (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-                } else {
-                    (
-                        LS_DEFAULT_FILE_SIZE_BLOCK_SIZE,
-                        LS_POSIXLY_CORRELS_BLOCK_SIZE,
-                    )
-                }
-            } else if is_opt_si {
-                (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
-            } else {
+            }
+        } else if env_var_posixly_correct.is_some() {
+            if opt_kb {
                 (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-            };
+            } else {
+                (
+                    LS_DEFAULT_FILE_SIZE_BLOCK_SIZE,
+                    LS_POSIXLY_CORRELS_BLOCK_SIZE,
+                )
+            }
+        } else if is_opt_si {
+            (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
+        } else {
+            (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+        };
 
         let long = {
             let is_author = options.get_flag(ls_flags::LS_AUTHOR);
@@ -1102,7 +1113,7 @@ impl LsConfig {
                 ls_flags::sort::LS_VERSION,
                 ls_flags::sort::LS_EXTENSION,
             ];
-            
+
             if f_index > sort_flags.iter().map(|&f| get_last(f)).max().unwrap_or(0) {
                 ls_sort = LsSort::None;
             }
@@ -3146,7 +3157,11 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                 LsTimeStyle::LsIso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
                 LsTimeStyle::LsLocale => {
                     if rust_i18n::locale().starts_with("zh") {
-                        let fmt = if recent { "%_m月%e日 %H:%M" } else { "%Y年%_m月%e日" };
+                        let fmt = if recent {
+                            "%_m月%e日 %H:%M"
+                        } else {
+                            "%Y年%_m月%e日"
+                        };
                         time.format(fmt)
                     } else {
                         let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
@@ -3440,7 +3455,9 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
                         if path.p_buf.is_absolute() {
                             path.p_buf.clone()
                         } else {
-                            std::env::current_dir().unwrap_or_default().join(&path.p_buf)
+                            std::env::current_dir()
+                                .unwrap_or_default()
+                                .join(&path.p_buf)
                         }
                     }
                 }
@@ -3448,7 +3465,9 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
                 if path.p_buf.is_absolute() {
                     path.p_buf.clone()
                 } else {
-                    std::env::current_dir().unwrap_or_default().join(&path.p_buf)
+                    std::env::current_dir()
+                        .unwrap_or_default()
+                        .join(&path.p_buf)
                 }
             }
         }

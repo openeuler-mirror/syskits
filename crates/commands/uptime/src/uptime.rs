@@ -62,7 +62,7 @@ fn uptime_print_uptime(up_secs: i64) -> String {
             } else {
                 format!("up {:2}:{:02},  ", up_hours, up_mins)
             }
-        },
+        }
     }
 }
 

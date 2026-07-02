@@ -126,8 +126,14 @@ impl DefaultError {
     }
 
     /// 创建 InvalidSecurityContext 错误
-    pub(crate) fn from_invalid_security_context(operand1: impl Into<OsString>, source: io::Error) -> Self {
-        Self::InvalidSecurityContext { operand1: operand1.into(), source }
+    pub(crate) fn from_invalid_security_context(
+        operand1: impl Into<OsString>,
+        source: io::Error,
+    ) -> Self {
+        Self::InvalidSecurityContext {
+            operand1: operand1.into(),
+            source,
+        }
     }
 
     /// 创建 SELinux 错误

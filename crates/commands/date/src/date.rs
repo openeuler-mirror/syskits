@@ -13,7 +13,7 @@ extern crate rust_i18n;
 use chrono::format::StrftimeItems;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use chrono::{Datelike, DateTime, FixedOffset, Local, Offset, TimeDelta, Timelike, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Local, Offset, TimeDelta, Timelike, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::FromIo;
@@ -23,8 +23,8 @@ use sys_locale::get_locale;
 
 #[cfg(target_os = "linux")]
 use libc::{
-    CLOCK_REALTIME, LC_ALL, c_char, clock_getres, clock_settime, gmtime_r, localtime_r, setlocale,
-    strftime, timespec, tm, nl_langinfo, D_T_FMT,
+    CLOCK_REALTIME, D_T_FMT, LC_ALL, c_char, clock_getres, clock_settime, gmtime_r, localtime_r,
+    nl_langinfo, setlocale, strftime, timespec, tm,
 };
 #[cfg(target_os = "linux")]
 use std::ffi::CString;
@@ -36,11 +36,11 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 
 use ctcore::Tool;
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
+#[cfg(target_os = "linux")]
+use std::ffi::CStr;
 use std::ffi::OsString;
 #[cfg(target_os = "linux")]
 use std::mem;
-#[cfg(target_os = "linux")]
-use std::ffi::CStr;
 
 // Options
 const DATE: &str = "date";
@@ -185,10 +185,14 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 如果指定了 -u/--utc/--universal，设置 TZ 环境变量为 UTC0
     if args_match.get_flag(DATE_OPT_UNIVERSAL) {
-        unsafe { std::env::set_var("TZ", "UTC0"); }
+        unsafe {
+            std::env::set_var("TZ", "UTC0");
+        }
         #[cfg(target_os = "linux")]
         unsafe {
-            unsafe extern "C" { fn tzset(); }
+            unsafe extern "C" {
+                fn tzset();
+            }
             tzset();
         }
     }
@@ -225,7 +229,9 @@ fn date_processing(
 
     #[cfg(target_os = "linux")]
     if matches!(date_set.format, DateFormat::Rfc5322) {
-        unsafe { libc::setlocale(libc::LC_TIME, b"C\0".as_ptr() as *const libc::c_char); }
+        unsafe {
+            libc::setlocale(libc::LC_TIME, b"C\0".as_ptr() as *const libc::c_char);
+        }
     }
 
     // 根据日期设置来设置系统日期时间或者显示当前日期时间
@@ -286,7 +292,8 @@ fn date_processing(
                 let file = File::open(path)
                     .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
-                let mut iter: Box<dyn Iterator<Item = _>> = Box::new(lines.map_while(Result::ok).map(parse_date));
+                let mut iter: Box<dyn Iterator<Item = _>> =
+                    Box::new(lines.map_while(Result::ok).map(parse_date));
                 if date_set.utc {
                     iter = Box::new(iter.map(|res| res.map(|dt| dt.with_timezone(&Utc).into())));
                 }
@@ -308,12 +315,11 @@ fn date_processing(
                 Box::new(iter)
             }
             DateSource::Reference(ref path) => {
-                let metadata = std::fs::metadata(path).map_err(|e| {
-                    CtSimpleError::new(1, format!("{}: {}", path.quote(), e))
-                })?;
-                let time = metadata.modified().map_err(|e| {
-                    CtSimpleError::new(1, format!("{}: {}", path.quote(), e))
-                })?;
+                let metadata = std::fs::metadata(path)
+                    .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
+                let time = metadata
+                    .modified()
+                    .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
                 let dt: DateTime<FixedOffset> = if date_set.utc {
                     let dt: DateTime<Utc> = time.into();
                     dt.with_timezone(&dt.offset().fix())
@@ -546,7 +552,10 @@ fn get_default_format() -> String {
     // Try to detect if we are in a Chinese locale to match GNU date's default format for zh_CN.
     // GNU date uses _DATE_FMT which is not easily accessible/stable via libc crate.
     // For zh_CN, _DATE_FMT is usually "%Y年 %m月 %d日 %A %H:%M:%S %Z"
-    if let Ok(lang) = std::env::var("LC_TIME").or_else(|_| std::env::var("LC_ALL")).or_else(|_| std::env::var("LANG")) {
+    if let Ok(lang) = std::env::var("LC_TIME")
+        .or_else(|_| std::env::var("LC_ALL"))
+        .or_else(|_| std::env::var("LANG"))
+    {
         if lang.starts_with("zh_CN") {
             return "%Y年 %m月 %d日 %A %H:%M:%S %Z".to_string();
         }
@@ -578,7 +587,7 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
     // Also handle %f which might be used internally in make_format_string
     let nanos = format!("{:09}", dt.nanosecond());
     let quarter = (dt.month0() / 3) + 1;
-    
+
     let offset_secs = dt.offset().local_minus_utc();
     let abs_secs = offset_secs.abs();
     let hours = abs_secs / 3600;
@@ -623,7 +632,8 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
         }
     }
 
-    let fmt_final = fmt_adjusted.replace("%N", &nanos)
+    let fmt_final = fmt_adjusted
+        .replace("%N", &nanos)
         .replace("%f", &nanos)
         .replace("%q", &quarter.to_string())
         .replace("%:::z", &tz_triple_colon)
@@ -672,7 +682,12 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
     let mut buf = vec![0u8; 256];
     loop {
         let res = unsafe {
-            strftime(buf.as_mut_ptr() as *mut c_char, buf.len(), c_fmt.as_ptr(), &tm_val)
+            strftime(
+                buf.as_mut_ptr() as *mut c_char,
+                buf.len(),
+                c_fmt.as_ptr(),
+                &tm_val,
+            )
         };
         if res > 0 {
             let s = String::from_utf8_lossy(&buf[..res]);
@@ -706,7 +721,10 @@ fn parse_date<S: AsRef<str> + Clone>(
 
 #[cfg(target_os = "linux")]
 fn get_clock_resolution() -> (i64, i64) {
-    let mut ts = timespec { tv_sec: 0, tv_nsec: 0 };
+    let mut ts = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
     if unsafe { clock_getres(CLOCK_REALTIME, &mut ts) } == 0 {
         (ts.tv_sec as i64, ts.tv_nsec as i64)
     } else {

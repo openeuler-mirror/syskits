@@ -628,7 +628,10 @@ fn chcon_process_file(
         if chcon_options.verbose {
             println!(
                 "{}",
-                t!("chcon.errors.changing_context", file = format!("{}", file_path_name.quote()))
+                t!(
+                    "chcon.errors.changing_context",
+                    file = format!("{}", file_path_name.quote())
+                )
             );
         }
 

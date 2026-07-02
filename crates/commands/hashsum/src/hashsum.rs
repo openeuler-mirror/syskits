@@ -59,7 +59,7 @@ pub mod hashsum_flags {
 }
 
 /// hashsum 命令的配置结构体
-/// 
+///
 /// 此结构体包含所有与哈希计算相关的配置选项，包括使用的算法、
 /// 输出格式、文件处理方式等。它用于在程序执行过程中保存和传递
 /// 命令行参数解析后的配置信息。
@@ -130,7 +130,7 @@ impl HashsumFlags {
     /// * `CTResult<Self>` - 包含解析后的标志或错误的 Result
     fn new(matches: ArgMatches, program: &str) -> CTResult<Self> {
         let (algoname, digest, output_bits) = detect_algo(program, &matches)?;
-        
+
         // 确定二进制模式：
         // 1. 如果明确指定了二进制模式，则使用二进制模式
         // 2. 如果明确指定了文本模式，则使用文本模式
@@ -475,8 +475,12 @@ fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
 #[derive(Default)]
 pub struct Hashsum;
 impl Tool for Hashsum {
-    fn name(&self) -> &'static str { "hashsum" }
-    fn command(&self) -> Command { create_custom_command() }
+    fn name(&self) -> &'static str {
+        "hashsum"
+    }
+    fn command(&self) -> Command {
+        create_custom_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -487,8 +491,12 @@ impl Tool for Hashsum {
 #[derive(Default)]
 pub struct Md5sum;
 impl Tool for Md5sum {
-    fn name(&self) -> &'static str { "md5sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "md5sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -498,8 +506,12 @@ impl Tool for Md5sum {
 #[derive(Default)]
 pub struct Sha1sum;
 impl Tool for Sha1sum {
-    fn name(&self) -> &'static str { "sha1sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha1sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -509,8 +521,12 @@ impl Tool for Sha1sum {
 #[derive(Default)]
 pub struct Sha224sum;
 impl Tool for Sha224sum {
-    fn name(&self) -> &'static str { "sha224sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha224sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -520,8 +536,12 @@ impl Tool for Sha224sum {
 #[derive(Default)]
 pub struct Sha256sum;
 impl Tool for Sha256sum {
-    fn name(&self) -> &'static str { "sha256sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha256sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -531,8 +551,12 @@ impl Tool for Sha256sum {
 #[derive(Default)]
 pub struct Sha384sum;
 impl Tool for Sha384sum {
-    fn name(&self) -> &'static str { "sha384sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha384sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -542,8 +566,12 @@ impl Tool for Sha384sum {
 #[derive(Default)]
 pub struct Sha512sum;
 impl Tool for Sha512sum {
-    fn name(&self) -> &'static str { "sha512sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha512sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -553,8 +581,12 @@ impl Tool for Sha512sum {
 #[derive(Default)]
 pub struct Sha3_224sum;
 impl Tool for Sha3_224sum {
-    fn name(&self) -> &'static str { "sha3-224sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha3-224sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -564,8 +596,12 @@ impl Tool for Sha3_224sum {
 #[derive(Default)]
 pub struct Sha3_256sum;
 impl Tool for Sha3_256sum {
-    fn name(&self) -> &'static str { "sha3-256sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha3-256sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -575,8 +611,12 @@ impl Tool for Sha3_256sum {
 #[derive(Default)]
 pub struct Sha3_384sum;
 impl Tool for Sha3_384sum {
-    fn name(&self) -> &'static str { "sha3-384sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha3-384sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -586,8 +626,12 @@ impl Tool for Sha3_384sum {
 #[derive(Default)]
 pub struct Sha3_512sum;
 impl Tool for Sha3_512sum {
-    fn name(&self) -> &'static str { "sha3-512sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "sha3-512sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -597,8 +641,12 @@ impl Tool for Sha3_512sum {
 #[derive(Default)]
 pub struct B2sum;
 impl Tool for B2sum {
-    fn name(&self) -> &'static str { "b2sum" }
-    fn command(&self) -> Command { create_common_command() }
+    fn name(&self) -> &'static str {
+        "b2sum"
+    }
+    fn command(&self) -> Command {
+        create_common_command()
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -608,8 +656,12 @@ impl Tool for B2sum {
 #[derive(Default)]
 pub struct Sha3sum;
 impl Tool for Sha3sum {
-    fn name(&self) -> &'static str { "sha3sum" }
-    fn command(&self) -> Command { add_bits_option(create_common_command()) }
+    fn name(&self) -> &'static str {
+        "sha3sum"
+    }
+    fn command(&self) -> Command {
+        add_bits_option(create_common_command())
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -619,8 +671,12 @@ impl Tool for Sha3sum {
 #[derive(Default)]
 pub struct Shake128sum;
 impl Tool for Shake128sum {
-    fn name(&self) -> &'static str { "shake128sum" }
-    fn command(&self) -> Command { add_bits_option(create_common_command()) }
+    fn name(&self) -> &'static str {
+        "shake128sum"
+    }
+    fn command(&self) -> Command {
+        add_bits_option(create_common_command())
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -630,8 +686,12 @@ impl Tool for Shake128sum {
 #[derive(Default)]
 pub struct Shake256sum;
 impl Tool for Shake256sum {
-    fn name(&self) -> &'static str { "shake256sum" }
-    fn command(&self) -> Command { add_bits_option(create_common_command()) }
+    fn name(&self) -> &'static str {
+        "shake256sum"
+    }
+    fn command(&self) -> Command {
+        add_bits_option(create_common_command())
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -641,8 +701,12 @@ impl Tool for Shake256sum {
 #[derive(Default)]
 pub struct B3sum;
 impl Tool for B3sum {
-    fn name(&self) -> &'static str { "b3sum" }
-    fn command(&self) -> Command { add_b3sum_options(create_common_command()) }
+    fn name(&self) -> &'static str {
+        "b3sum"
+    }
+    fn command(&self) -> Command {
+        add_b3sum_options(create_common_command())
+    }
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
@@ -718,17 +782,17 @@ fn ct_app(binary_name: &str) -> Command {
 
         // b2sum 需要长度选项
         "b2sum" => AppConfigType::Length,
-        
+
         // 这些算法需要位数选项
         "sha3sum" | "shake128sum" | "shake256sum" => AppConfigType::Bits,
-        
+
         // b3sum 有自己的特殊选项
         "b3sum" => AppConfigType::B3sum,
-        
+
         // 默认提供全部选项
         _ => AppConfigType::Custom,
     };
-    
+
     // 根据配置类型创建命令
     create_command_by_type(config_type)
 }
@@ -916,8 +980,14 @@ fn create_custom_command() -> Command {
         ("sha3-256", "work with SHA3-256"),
         ("sha3-384", "work with SHA3-384"),
         ("sha3-512", "work with SHA3-512"),
-        ("shake128", "work with SHAKE128 using BITS for the output size"),
-        ("shake256", "work with SHAKE256 using BITS for the output size"),
+        (
+            "shake128",
+            "work with SHAKE128 using BITS for the output size",
+        ),
+        (
+            "shake256",
+            "work with SHAKE256 using BITS for the output size",
+        ),
         ("b2sum", "work with BLAKE2"),
         ("b3sum", "work with BLAKE3"),
     ];
@@ -1046,7 +1116,7 @@ fn check_hash_file<W: Write>(
             Ok(l) => l,
             Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
         };
-        
+
         // 尝试匹配哈希行格式
         let parse_result =
             parse_hash_line(line, &mut gnu_re, &bsd_re, &bytes_marker, &mut bsd_reversed);
@@ -1171,7 +1241,12 @@ fn handle_captures(
 ) -> Result<(String, String, bool, bool), HashsumError> {
     if bsd_reversed.is_none() {
         let is_bsd_reversed = caps.name("binary").is_none();
-        let format_marker = if is_bsd_reversed { "" } else { r"(?P<binary>[ \*])" }.to_string();
+        let format_marker = if is_bsd_reversed {
+            ""
+        } else {
+            r"(?P<binary>[ \*])"
+        }
+        .to_string();
         *bsd_reversed = Some(is_bsd_reversed);
         *gnu_re = gnu_re_template(bytes_marker, &format_marker)?;
     }
@@ -1233,7 +1308,7 @@ fn verify_file_hash<W: Write>(
     };
 
     let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
-    
+
     // 计算实际哈希值
     let real_sum = digest_reader(&mut flags.digest, &mut ckf, binary_check, flags.output_bits)
         .map_err_context(|| "failed to read input".to_string())?
@@ -1241,11 +1316,7 @@ fn verify_file_hash<W: Write>(
 
     if expected_sum == real_sum {
         if !flags.is_quiet {
-            writeln!(
-                writer,
-                "{prefix}{ck_filename}: {}",
-                t!("hashsum.check.ok")
-            )?;
+            writeln!(writer, "{prefix}{ck_filename}: {}", t!("hashsum.check.ok"))?;
         }
         Ok(true)
     } else {
@@ -1320,9 +1391,7 @@ fn compute_and_output_hash<W: Write>(
             // 1. 转义文件名
             // 2. \n 结尾
             let (escaped_filename, prefix) = escape_filename(filename);
-            writeln!(
-                writer,
-                "{prefix}{sum} {binary_marker}{escaped_filename}")?;
+            writeln!(writer, "{prefix}{sum} {binary_marker}{escaped_filename}")?;
         }
     }
 
@@ -1333,20 +1402,53 @@ fn compute_and_output_hash<W: Write>(
 fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usize) -> CTResult<()> {
     // 根据错误统计输出最终摘要信息
     match bad_format.cmp(&1) {
-        Ordering::Equal => ct_show_warning!("{}", t!("hashsum.check.line_improperly_formatted", count = bad_format)),
-        Ordering::Greater => ct_show_warning!("{}", t!("hashsum.check.lines_improperly_formatted", count = bad_format)),
+        Ordering::Equal => ct_show_warning!(
+            "{}",
+            t!(
+                "hashsum.check.line_improperly_formatted",
+                count = bad_format
+            )
+        ),
+        Ordering::Greater => ct_show_warning!(
+            "{}",
+            t!(
+                "hashsum.check.lines_improperly_formatted",
+                count = bad_format
+            )
+        ),
         Ordering::Less => {}
     };
 
     match failed_cksum.cmp(&1) {
-        Ordering::Equal => ct_show_warning!("{}", t!("hashsum.check.checksum_did_not_match", count = failed_cksum)),
-        Ordering::Greater => ct_show_warning!("{}", t!("hashsum.check.checksums_did_not_match", count = failed_cksum)),
+        Ordering::Equal => ct_show_warning!(
+            "{}",
+            t!("hashsum.check.checksum_did_not_match", count = failed_cksum)
+        ),
+        Ordering::Greater => ct_show_warning!(
+            "{}",
+            t!(
+                "hashsum.check.checksums_did_not_match",
+                count = failed_cksum
+            )
+        ),
         Ordering::Less => {}
     }
 
     match failed_open_file.cmp(&1) {
-        Ordering::Equal => ct_show_warning!("{}", t!("hashsum.check.file_could_not_be_read", count = failed_open_file)),
-        Ordering::Greater => ct_show_warning!("{}", t!("hashsum.check.files_could_not_be_read", count = failed_open_file)),
+        Ordering::Equal => ct_show_warning!(
+            "{}",
+            t!(
+                "hashsum.check.file_could_not_be_read",
+                count = failed_open_file
+            )
+        ),
+        Ordering::Greater => ct_show_warning!(
+            "{}",
+            t!(
+                "hashsum.check.files_could_not_be_read",
+                count = failed_open_file
+            )
+        ),
         Ordering::Less => {}
     }
     Ok(())
@@ -1360,7 +1462,10 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
 ///
 /// 返回去除转义后的文件名
 fn unescape_filename(filename: &str) -> String {
-    filename.replace("\\\\", "\\").replace("\\n", "\n").replace("\\r", "\r")
+    filename
+        .replace("\\\\", "\\")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
 }
 
 /// 对文件名进行转义处理
@@ -1372,7 +1477,10 @@ fn unescape_filename(filename: &str) -> String {
 /// 返回一个元组，包含转义后的文件名和一个前缀标志（用于指示是否进行了转义处理）
 fn escape_filename(filename: &Path) -> (String, &'static str) {
     let original = filename.as_os_str().to_string_lossy();
-    let escaped = original.replace('\\', "\\\\").replace('\n', "\\n").replace('\r', "\\r");
+    let escaped = original
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
     let prefix = if escaped == original { "" } else { "\\" };
     (escaped, prefix)
 }
@@ -1412,7 +1520,6 @@ fn digest_reader<T: Read>(
     binary: bool,
     output_bits: usize,
 ) -> io::Result<String> {
-
     // 从 `reader` 读取字节并将这些字节写入 `digest`
     //
     // 如果 `binary` 为 `false` 且操作系统是 Windows，则 `DigestWriter` 在将字节写入 `digest` 之前

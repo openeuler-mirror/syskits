@@ -106,9 +106,7 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
             get_plain_context(context)
                 .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(|e: DefaultError| match e {
-                    DefaultError::InvalidSecurityContext { .. } => {
-                        RunconError::with_code(125, e)
-                    }
+                    DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
             runcon_exec(command, &settings.arguments)
@@ -135,9 +133,7 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                 )
                 .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(|e| match e {
-                    DefaultError::InvalidSecurityContext { .. } => {
-                        RunconError::with_code(125, e)
-                    }
+                    DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
                 runcon_exec(command, &settings.arguments)

@@ -179,9 +179,12 @@ where
     let implicit_stdin = f.is_empty();
     if implicit_stdin {
         let mut stdin_buffer = BufReader::new(stdin());
-        let (sum_hex, sz) =
-        cksum_digest_read(&mut cksum_opts.digest, &mut stdin_buffer, cksum_opts.output_bits)
-            .map_err_context(|| "failed to read input".to_string())?;
+        let (sum_hex, sz) = cksum_digest_read(
+            &mut cksum_opts.digest,
+            &mut stdin_buffer,
+            cksum_opts.output_bits,
+        )
+        .map_err_context(|| "failed to read input".to_string())?;
 
         let line_end = if cksum_opts.zero { "\0" } else { "\n" };
 
@@ -346,7 +349,12 @@ where
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
-                    print!("BLAKE2b-{} ({}) = {sum}{}", length * 8, filename.display(), line_end);
+                    print!(
+                        "BLAKE2b-{} ({}) = {sum}{}",
+                        length * 8,
+                        filename.display(),
+                        line_end
+                    );
                 } else {
                     print!("BLAKE2b ({}) = {sum}{}", filename.display(), line_end);
                 }
@@ -568,15 +576,15 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
             let (digest_str, filename_str) = match parse_check_line(&line) {
                 Some((d, f)) => (d, f),
                 None => {
-                bad_format += 1;
-                if warn {
-                    ctcore::ct_show_error!(
-                        "{}: {}: improperly formatted checksum line",
-                        f_name.display(),
-                        line_num + 1
-                    );
-                }
-                continue;
+                    bad_format += 1;
+                    if warn {
+                        ctcore::ct_show_error!(
+                            "{}: {}: improperly formatted checksum line",
+                            f_name.display(),
+                            line_num + 1
+                        );
+                    }
+                    continue;
                 }
             };
 
@@ -595,9 +603,9 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
                     let bytes = (opts.output_bits + 7) / 8;
                     let expected_len = (bytes + 2) / 3 * 4;
                     digest_str.len() == expected_len
-                        && digest_str.chars().all(|c| {
-                            c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
-                        })
+                        && digest_str
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
                 }
                 CksumOutputFormat::Raw => true,
             };
@@ -605,7 +613,11 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
             if !is_valid_format {
                 bad_format += 1;
                 if warn {
-                    ctcore::ct_show_error!("{}: {}: improperly formatted checksum line", f_name.display(), line_num + 1);
+                    ctcore::ct_show_error!(
+                        "{}: {}: improperly formatted checksum line",
+                        f_name.display(),
+                        line_num + 1
+                    );
                 }
                 continue;
             };
@@ -617,7 +629,11 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
                 Err(_) => {
                     if !ignore_missing {
                         if !status {
-                            println!("{}: {}", filename_str, t!("cksum.check.failed_open_or_read"));
+                            println!(
+                                "{}: {}",
+                                filename_str,
+                                t!("cksum.check.failed_open_or_read")
+                            );
                         }
                         missing_files += 1;
                     }
@@ -637,7 +653,11 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
                 Err(_) => {
                     if !ignore_missing {
                         if !status {
-                            println!("{}: {}", filename_str, t!("cksum.check.failed_open_or_read"));
+                            println!(
+                                "{}: {}",
+                                filename_str,
+                                t!("cksum.check.failed_open_or_read")
+                            );
                         }
                         missing_files += 1;
                     }
@@ -659,7 +679,11 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
 
         if ignore_missing && n_properly_formatted_this_file > 0 && n_verified_this_file == 0 {
             if !status {
-                ctcore::ct_show_error!("{}: {}", f_name.display(), t!("cksum.check.no_file_verified"));
+                ctcore::ct_show_error!(
+                    "{}: {}",
+                    f_name.display(),
+                    t!("cksum.check.no_file_verified")
+                );
             }
             no_file_verified = true;
         }
@@ -668,9 +692,15 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
     if bad_checksum > 0 {
         if !status {
             if bad_checksum == 1 {
-                ctcore::ct_show_error!("{}", t!("cksum.check.checksum_did_not_match", count = bad_checksum));
+                ctcore::ct_show_error!(
+                    "{}",
+                    t!("cksum.check.checksum_did_not_match", count = bad_checksum)
+                );
             } else {
-                ctcore::ct_show_error!("{}", t!("cksum.check.checksums_did_not_match", count = bad_checksum));
+                ctcore::ct_show_error!(
+                    "{}",
+                    t!("cksum.check.checksums_did_not_match", count = bad_checksum)
+                );
             }
         }
         return Ok(1);
@@ -678,9 +708,15 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
     if bad_format > 0 {
         if !status {
             if bad_format == 1 {
-                ctcore::ct_show_error!("{}", t!("cksum.check.line_improperly_formatted", count = bad_format));
+                ctcore::ct_show_error!(
+                    "{}",
+                    t!("cksum.check.line_improperly_formatted", count = bad_format)
+                );
             } else {
-                ctcore::ct_show_error!("{}", t!("cksum.check.lines_improperly_formatted", count = bad_format));
+                ctcore::ct_show_error!(
+                    "{}",
+                    t!("cksum.check.lines_improperly_formatted", count = bad_format)
+                );
             }
         }
         if strict {

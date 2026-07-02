@@ -512,7 +512,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
             // 如果没有读到数据，说明到达文件末尾
             if length == 0 {
                 if !input_decoder.has_error() {
-                    input_offset.print_final_offset();   
+                    input_offset.print_final_offset();
                 }
                 return Ok(LineProcessResult::EndOfFile);
             }

@@ -195,13 +195,27 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             na = a.read_line(ra);
             if let Ok(size) = na {
                 if size > 0 {
-                    check_order(&prev_ra, ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_ra,
+                        ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                     prev_prev_ra.clear();
                     prev_prev_ra.extend_from_slice(&prev_ra);
                     prev_ra.clear();
                     prev_ra.extend_from_slice(ra);
                 } else if !prev_prev_ra.is_empty() {
-                    check_order(&prev_prev_ra, &prev_ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_prev_ra,
+                        &prev_ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                 }
             }
             total_col_1 += 1;
@@ -214,13 +228,27 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             nb = b.read_line(rb);
             if let Ok(size) = nb {
                 if size > 0 {
-                    check_order(&prev_rb, rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_rb,
+                        rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                     prev_prev_rb.clear();
                     prev_prev_rb.extend_from_slice(&prev_rb);
                     prev_rb.clear();
                     prev_rb.extend_from_slice(rb);
                 } else if !prev_prev_rb.is_empty() {
-                    check_order(&prev_prev_rb, &prev_rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_prev_rb,
+                        &prev_rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                 }
             }
             total_col_2 += 1;
@@ -233,25 +261,53 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             na = a.read_line(ra);
             if let Ok(size) = na {
                 if size > 0 {
-                    check_order(&prev_ra, ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_ra,
+                        ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                     prev_prev_ra.clear();
                     prev_prev_ra.extend_from_slice(&prev_ra);
                     prev_ra.clear();
                     prev_ra.extend_from_slice(ra);
                 } else if !prev_prev_ra.is_empty() {
-                    check_order(&prev_prev_ra, &prev_ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_prev_ra,
+                        &prev_ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                 }
             }
             nb = b.read_line(rb);
             if let Ok(size) = nb {
                 if size > 0 {
-                    check_order(&prev_rb, rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_rb,
+                        rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                     prev_prev_rb.clear();
                     prev_prev_rb.extend_from_slice(&prev_rb);
                     prev_rb.clear();
                     prev_rb.extend_from_slice(rb);
                 } else if !prev_prev_rb.is_empty() {
-                    check_order(&prev_prev_rb, &prev_rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    check_order(
+                        &prev_prev_rb,
+                        &prev_rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    )?;
                 }
             }
             total_col_3 += 1;
@@ -266,9 +322,11 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             .get_one::<String>(opt_flags::DELIMITER)
             .map(|s| s.as_str())
             .unwrap_or("\t");
-        print!("{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}");
+        print!(
+            "{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}"
+        );
     }
-    
+
     if issued_warning[0] || issued_warning[1] {
         return Err(ctcore::ct_error::CtSimpleError::new(
             1,
@@ -312,7 +370,10 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
 
     if tmp_file1 == "-" && tmp_file2 == "-" {
-        return Err(ctcore::ct_error::CtSimpleError::new(1, t!("comm.messages.both_stdin")));
+        return Err(ctcore::ct_error::CtSimpleError::new(
+            1,
+            t!("comm.messages.both_stdin"),
+        ));
     }
 
     let mut f1 = open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?;

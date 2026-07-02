@@ -850,13 +850,41 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
-    // TODO: The GNU date command can parse a wide variety of inputs.
 
     let input = s.as_ref();
     let ref_time = Local::now().with_nanosecond(0).unwrap();
     if let Ok(dt) = ctcore::ct_parse_datetime::parse_datetime_gnu_compat(input, ref_time) {
         return Ok(dt.into());
     }
+
+    let today_str = ref_time.format("%Y-%m-%d").to_string();
+    let input_with_date = format!("{today_str} {input}");
+
+    if let Ok(dt) = DateTime::parse_from_str(&input_with_date, "%Y-%m-%d %H:%M %z") {
+        return Ok(dt);
+    }
+    if let Ok(dt) = DateTime::parse_from_str(&input_with_date, "%Y-%m-%d %H:%M:%S %z") {
+        return Ok(dt);
+    }
+
+    use chrono::{NaiveDateTime, TimeZone};
+    let naive_formats = [
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+    ];
+    for fmt in &naive_formats {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(input, fmt) {
+            // 将纯净时间绑定为本地时区
+            match Local.from_local_datetime(&naive) {
+                chrono::LocalResult::Single(dt) => return Ok(dt.into()),
+                chrono::LocalResult::Ambiguous(dt, _) => return Ok(dt.into()), // 夏令时重叠时取一个
+                chrono::LocalResult::None => {} // 不存在的时间直接跳过
+            }
+        }
+    }
+
     match input.parse() {
         Ok(date) => Ok(date),
         Err(e) => Err((input.into(), e)),

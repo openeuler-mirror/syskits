@@ -1,4 +1,5 @@
 pr:
+  page: "Page %{page}"
   clap:
     pr_pages: Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]
     pr_first_line_number: start counting with NUMBER at 1st line of first page printed

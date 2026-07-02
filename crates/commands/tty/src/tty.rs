@@ -53,7 +53,7 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
         Ok(name) => writeln!(stdout, "{}", name.display()),
         Err(_) => {
             set_ct_exit_code(1);
-            writeln!(stdout, "not a tty")
+            writeln!(stdout, "{}", t!("tty.not_a_tty"))
         }
     };
 

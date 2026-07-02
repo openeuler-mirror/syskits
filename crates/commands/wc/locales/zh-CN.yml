@@ -12,6 +12,7 @@ wc:
     max_line_length: "显示最大显示宽度"
     files0_from: "从文件F中读取以NUL结尾的文件名作为输入"
     total: "控制何时打印总计（never/auto/always/only）"
+  total_row: "总计"
   errors:
     system: "系统错误"
     unknown: "未知错误"

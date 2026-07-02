@@ -521,6 +521,101 @@
             "groupdel chgrp_test_group_ref"
         ],
         "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 -R -H 选项（遍历命令行指定的目录符号链接）",
+        "args": ["-R", "-H", "chgrp_test_group_H", "link_to_dir"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_H",
+            "mkdir -p test_dir/subdir",
+            "touch test_dir/subdir/file",
+            "ln -s test_dir link_to_dir",
+            "chgrp -R root test_dir"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' test_dir/subdir/file",
+                    "expected_exit": 0,
+                    "expected_stdout": "chgrp_test_group_H\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir link_to_dir",
+            "groupdel chgrp_test_group_H"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 -R -L 选项（遍历所有目录符号链接）",
+        "args": ["-R", "-L", "chgrp_test_group_L", "test_dir"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_L",
+            "mkdir test_dir",
+            "mkdir other_dir",
+            "touch other_dir/file",
+            "ln -s other_dir test_dir/link",
+            "chgrp -R root test_dir other_dir"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' other_dir/file",
+                    "expected_exit": 0,
+                    "expected_stdout": "chgrp_test_group_L\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir other_dir",
+            "groupdel chgrp_test_group_L"
+        ],
+        "requires_root": true
+    },
+    {
+        "command": "chgrp",
+        "description": "chgrp: 测试 -R -P 选项（不遍历符号链接，默认行为）",
+        "args": ["-R", "-P", "chgrp_test_group_P", "test_dir"],
+        "setup_commands": [
+            "groupadd chgrp_test_group_P",
+            "mkdir test_dir",
+            "mkdir other_dir",
+            "touch other_dir/file",
+            "ln -s other_dir test_dir/link",
+            "chgrp -R root test_dir other_dir"
+        ],
+        "expectation": {
+            "execution": {
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": ""
+            },
+            "verifications": [
+                {
+                    "command": "stat -c '%G' other_dir/file",
+                    "expected_exit": 0,
+                    "expected_stdout": "root\n"
+                }
+            ]
+        },
+        "cleanup_commands": [
+            "rm -rf test_dir other_dir",
+            "groupdel chgrp_test_group_P"
+        ],
+        "requires_root": true
     }
   ]
 }

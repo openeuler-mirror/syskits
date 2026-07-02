@@ -24,7 +24,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - next Friday",
-      "args": ["-d", "next Friday"],
+      "args": [
+        "-d",
+        "next Friday"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -43,8 +46,11 @@
     {
       "tstdin": "",
       "command": "date",
-      "description": "日期解析 - last Monday", 
-      "args": ["-d", "last Monday"],
+      "description": "日期解析 - last Monday",
+      "args": [
+        "-d",
+        "last Monday"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -64,7 +70,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - this Wednesday",
-      "args": ["-d", "this Wednesday"],
+      "args": [
+        "-d",
+        "this Wednesday"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -84,7 +93,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - 纯星期几名称 Friday",
-      "args": ["-d", "Friday"],
+      "args": [
+        "-d",
+        "Friday"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -104,7 +116,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - 大小写不敏感 FRIDAY",
-      "args": ["-d", "FRIDAY"],
+      "args": [
+        "-d",
+        "FRIDAY"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -124,7 +139,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - 星期几缩写 tues",
-      "args": ["-d", "tues"],
+      "args": [
+        "-d",
+        "tues"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -144,7 +162,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - 相对时间 tomorrow",
-      "args": ["-d", "tomorrow"],
+      "args": [
+        "-d",
+        "tomorrow"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -164,7 +185,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - 相对时间 yesterday",
-      "args": ["-d", "yesterday"],
+      "args": [
+        "-d",
+        "yesterday"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -184,7 +208,10 @@
       "tstdin": "",
       "command": "date",
       "description": "日期解析 - ISO 8601格式",
-      "args": ["-d", "2025-08-15"],
+      "args": [
+        "-d",
+        "2025-08-15"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,
@@ -199,6 +226,716 @@
         ]
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -u 选项 (UTC 显示)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-01 12:00:00"
+      ],
+      "env": {
+        "LC_ALL": "C"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Mon Jan  1 12:00:00 UTC 2024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -f 选项 (从文件读取日期)",
+      "setup_commands": [
+        "echo '2024-01-01' > date_file.txt",
+        "echo '2024-02-01' >> date_file.txt"
+      ],
+      "args": [
+        "-f",
+        "date_file.txt",
+        "+%Y-%m-%d"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n2024-02-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f date_file.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -I 选项 (ISO-8601 日期)",
+      "args": [
+        "-I",
+        "-d",
+        "2024-01-01"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -Iseconds 选项 (ISO-8601 秒)",
+      "args": [
+        "-Iseconds",
+        "-d",
+        "2024-01-01 12:00:00+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01T12:00:00+00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -R 选项 (RFC 5322)",
+      "args": [
+        "-R",
+        "-d",
+        "2024-01-01 12:00:00+00:00"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Mon, 01 Jan 2024 12:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --rfc-3339=seconds 选项",
+      "args": [
+        "--rfc-3339=seconds",
+        "-d",
+        "2024-01-01 12:00:00+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 12:00:00+00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -r 选项 (显示文件最后修改时间)",
+      "setup_commands": [
+        "touch -d '2024-01-01 12:00:00' ref_file"
+      ],
+      "args": [
+        "-r",
+        "ref_file",
+        "+%Y-%m-%d %H:%M:%S"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 12:00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ref_file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试自定义格式 (+FORMAT)",
+      "args": [
+        "-d",
+        "2024-01-01 12:34:56",
+        "+Year:%Y Month:%m Day:%d"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Year:2024 Month:01 Day:01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --resolution 选项",
+      "args": [
+        "--resolution"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "grep -E '^0\\.000000001$' $CMD_STDOUT_FILE",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --help 选项",
+      "args": [
+        "--help"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stdout": true,
+          "ignore_stderr": true
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --version 选项",
+      "args": [
+        "--version"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stdout": true,
+          "ignore_stderr": true
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试无效的日期字符串 (错误处理)",
+      "args": [
+        "-d",
+        "invalid_date_string"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stderr": true
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --debug 选项",
+      "args": [
+        "--debug",
+        "-d",
+        "tomorrow"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test -n \"$CMD_STDERR\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -Ihours 选项",
+      "args": [
+        "-Ihours",
+        "-d",
+        "2024-01-01 12:34:56+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01T12+00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -Iminutes 选项",
+      "args": [
+        "-Iminutes",
+        "-d",
+        "2024-01-01 12:34:56+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01T12:34+00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -Ins 选项",
+      "args": [
+        "-Ins",
+        "-d",
+        "2024-01-01 12:34:56.123456789+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 -Idate 选项",
+      "args": [
+        "-Idate",
+        "-d",
+        "2024-01-01 12:34:56+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --rfc-3339=date 选项",
+      "args": [
+        "--rfc-3339=date",
+        "-d",
+        "2024-01-01 12:34:56+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --rfc-3339=ns 选项",
+      "args": [
+        "--rfc-3339=ns",
+        "-d",
+        "2024-01-01 12:34:56.123456789+00:00"
+      ],
+      "env": {
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 12:34:56.123456789+00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试所有格式符 (第一部分: %a 到 %h)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 15:04:05",
+        "+%a|%A|%b|%B|%c|%C|%d|%D|%e|%F|%g|%G|%h"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Tue|Tuesday|Jan|January|Tue Jan  2 15:04:05 2024|20|02|01/02/24| 2|2024-01-02|24|2024|Jan\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试所有格式符 (第二部分: %H 到 %R)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 15:04:05",
+        "+%H|%I|%j|%k|%l|%m|%M|%N|%p|%P|%q|%r|%R"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "15|03|002|15| 3|01|04|000000000|PM|pm|1|03:04:05 PM|15:04\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试所有格式符 (第三部分: %s 到 %Z, %%)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 15:04:05",
+        "+%s|%S|%t|%T|%u|%U|%V|%w|%W|%x|%X|%y|%Y|%z|%:z|%::z|%:::z|%Z|%%"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1704207845|05|\t|15:04:05|2|00|01|2|01|01/02/24|15:04:05|24|2024|+0000|+00:00|+00:00:00|+00|UTC|%\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试修饰符 (E, O)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 15:04:05",
+        "+%Ec|%EC|%Ex|%EX|%Ey|%EY|%Od|%Oe|%OH|%OI|%Om|%OM|%OS|%Ou|%OU|%OV|%Ow|%OW|%Oy"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Tue Jan  2 15:04:05 2024|20|01/02/24|15:04:05|24|2024|02| 2|15|03|01|04|05|2|00|01|2|01|24\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试格式控制标志 (- _ 0)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 03:04:05",
+        "+%-d|%_d|%0d|%-H|%_H|%0H|%_Y"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2| 2|02|3| 3|03|2024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试大小写控制标志 (^ #)",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 15:04:05",
+        "+%^a|%^A|%^b|%^B|%#p|%#Z"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "TUE|TUESDAY|JAN|JANUARY|pm|utc\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试带有可选字段宽度的格式符",
+      "args": [
+        "-u",
+        "-d",
+        "2024-01-02 15:04:05",
+        "+%5d|%_5d|%05d|%-5d"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "00002|    2|00002|2\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --utc 选项",
+      "args": [
+        "--utc",
+        "-d",
+        "2024-01-01 12:00:00"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Mon Jan  1 12:00:00 UTC 2024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --universal 选项",
+      "args": [
+        "--universal",
+        "-d",
+        "2024-01-01 12:00:00"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Mon Jan  1 12:00:00 UTC 2024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --date 选项",
+      "args": [
+        "--date=2024-01-01 12:00:00"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Mon Jan  1 12:00:00 UTC 2024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --file 选项",
+      "setup_commands": [
+        "echo '2024-01-01' > date_file_long.txt",
+        "echo '2024-02-01' >> date_file_long.txt"
+      ],
+      "args": [
+        "--file=date_file_long.txt",
+        "+%Y-%m-%d"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n2024-02-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f date_file_long.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --iso-8601 选项",
+      "args": [
+        "--iso-8601",
+        "-d",
+        "2024-01-01"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --rfc-email 选项",
+      "args": [
+        "--rfc-email",
+        "-d",
+        "2024-01-01 12:00:00+00:00"
+      ],
+      "env": {
+        "LC_ALL": "C",
+        "TZ": "UTC"
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Mon, 01 Jan 2024 12:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "测试 --reference 选项",
+      "setup_commands": [
+        "touch -d '2024-01-01 12:00:00' ref_file_long"
+      ],
+      "args": [
+        "--reference=ref_file_long",
+        "+%Y-%m-%d %H:%M:%S"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 12:00:00\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f ref_file_long"
+      ]
     }
   ]
 }

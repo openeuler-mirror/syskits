@@ -277,7 +277,7 @@ fn shuf_find_seps(data: &mut Vec<&[u8]>, sep: u8) {
             let slice = data.swap_remove(i);
 
             // 收集所有分隔符的位置
-            let mut positions: Vec<_> = memchr_iter(sep, slice).collect();
+            let positions: Vec<_> = memchr_iter(sep, slice).collect();
 
             // 根据分隔符位置分割数据
             let mut start = 0;

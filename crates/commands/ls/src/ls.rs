@@ -179,7 +179,6 @@ enum LsError {
     LsIOError(std::io::Error),
     LsIOErrorContext(std::io::Error, PathBuf, bool),
     LsBlockSizeParseError(String),
-    LsConflictingArgumentDired,
     LsDiredAndZeroAreIncompatible,
     LsAlreadyListedError(PathBuf),
     LsTimeStyleParseError(String, Vec<String>),
@@ -193,7 +192,6 @@ impl CTError for LsError {
             Self::LsIOErrorContext(_, _, false) => 1,
             Self::LsIOErrorContext(_, _, true) => 2,
             Self::LsBlockSizeParseError(_) => 2,
-            Self::LsConflictingArgumentDired => 1,
             Self::LsDiredAndZeroAreIncompatible => 2,
             Self::LsAlreadyListedError(_) => 2,
             Self::LsTimeStyleParseError(_, _) => 2,
@@ -208,9 +206,6 @@ impl Display for LsError {
         match self {
             LsError::LsBlockSizeParseError(s) => {
                 write!(formatter, "invalid --block-size argument {}", s.quote())
-            }
-            LsError::LsConflictingArgumentDired => {
-                write!(formatter, "--dired requires --format=long")
             }
             LsError::LsDiredAndZeroAreIncompatible => {
                 write!(formatter, "--dired and --zero are incompatible")
@@ -2505,7 +2500,7 @@ fn return_total<W: Write>(
     }
     let display_total = match ls_config.size_format {
         LsSizeFormat::Binary | LsSizeFormat::Decimal => total_size,
-        LsSizeFormat::Bytes => (total_size + ls_config.block_size - 1) / ls_config.block_size,
+        LsSizeFormat::Bytes => total_size.div_ceil(ls_config.block_size),
     };
     let total_str = t!("ls.total");
     Ok(format!(
@@ -2699,7 +2694,7 @@ fn get_block_size(md: &Metadata, config: &LsConfig) -> u64 {
     let raw_blocks = get_raw_block_size(md);
     match config.size_format {
         LsSizeFormat::Binary | LsSizeFormat::Decimal => raw_blocks,
-        LsSizeFormat::Bytes => (raw_blocks + config.block_size - 1) / config.block_size,
+        LsSizeFormat::Bytes => raw_blocks.div_ceil(config.block_size),
     }
 }
 
@@ -3461,14 +3456,12 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
                         }
                     }
                 }
+            } else if path.p_buf.is_absolute() {
+                path.p_buf.clone()
             } else {
-                if path.p_buf.is_absolute() {
-                    path.p_buf.clone()
-                } else {
-                    std::env::current_dir()
-                        .unwrap_or_default()
-                        .join(&path.p_buf)
-                }
+                std::env::current_dir()
+                    .unwrap_or_default()
+                    .join(&path.p_buf)
             }
         }
     };

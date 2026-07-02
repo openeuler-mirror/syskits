@@ -1067,14 +1067,13 @@ where
         output_summary(bad_format, failed_cksum, failed_open_file)?;
     }
 
-    if flags.is_check {
-        if (bad_format > 0 && flags.is_strict)
+    if flags.is_check
+        && ((bad_format > 0 && flags.is_strict)
             || failed_cksum > 0
             || failed_open_file > 0
-            || no_valid_lines
-        {
-            return Err(CtSimpleError::new(1, ""));
-        }
+            || no_valid_lines)
+    {
+        return Err(CtSimpleError::new(1, ""));
     }
 
     if missing_file > 0 {

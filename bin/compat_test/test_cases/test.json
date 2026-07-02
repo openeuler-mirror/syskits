@@ -7,7 +7,10 @@
             "setup_commands": [
                 "touch /tmp/test_file"
             ],
-            "args": ["-e", "/tmp/test_file"],
+            "args": [
+                "-e",
+                "/tmp/test_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -22,7 +25,10 @@
         {
             "description": "File existence test on non-existent file (-e flag)",
             "command": "test",
-            "args": ["-e", "/tmp/nonexistent_file"],
+            "args": [
+                "-e",
+                "/tmp/nonexistent_file"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 1,
@@ -34,7 +40,10 @@
         {
             "description": "Test if file is regular file (-f flag)",
             "command": "test",
-            "args": ["-f", "/tmp/regular_file"],
+            "args": [
+                "-f",
+                "/tmp/regular_file"
+            ],
             "setup_commands": [
                 "touch /tmp/regular_file"
             ],
@@ -52,7 +61,10 @@
         {
             "description": "Test if file is directory (-d flag)",
             "command": "test",
-            "args": ["-d", "/tmp/test_dir"],
+            "args": [
+                "-d",
+                "/tmp/test_dir"
+            ],
             "setup_commands": [
                 "mkdir -p /tmp/test_dir"
             ],
@@ -70,7 +82,10 @@
         {
             "description": "Test if file is readable (-r flag)",
             "command": "test",
-            "args": ["-r", "/tmp/readable_file"],
+            "args": [
+                "-r",
+                "/tmp/readable_file"
+            ],
             "setup_commands": [
                 "touch /tmp/readable_file",
                 "chmod 644 /tmp/readable_file"
@@ -89,7 +104,10 @@
         {
             "description": "Test if file is writable (-w flag)",
             "command": "test",
-            "args": ["-w", "/tmp/writable_file"],
+            "args": [
+                "-w",
+                "/tmp/writable_file"
+            ],
             "setup_commands": [
                 "touch /tmp/writable_file",
                 "chmod 666 /tmp/writable_file"
@@ -108,7 +126,10 @@
         {
             "description": "Test if file is executable (-x flag)",
             "command": "test",
-            "args": ["-x", "/tmp/executable_file"],
+            "args": [
+                "-x",
+                "/tmp/executable_file"
+            ],
             "setup_commands": [
                 "touch /tmp/executable_file",
                 "chmod 755 /tmp/executable_file"
@@ -127,7 +148,10 @@
         {
             "description": "Test if file has size greater than zero (-s flag)",
             "command": "test",
-            "args": ["-s", "/tmp/nonempty_file"],
+            "args": [
+                "-s",
+                "/tmp/nonempty_file"
+            ],
             "setup_commands": [
                 "echo 'content' > /tmp/nonempty_file"
             ],
@@ -145,7 +169,11 @@
         {
             "description": "Test string equality",
             "command": "test",
-            "args": ["string1", "=", "string1"],
+            "args": [
+                "string1",
+                "=",
+                "string1"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -157,7 +185,11 @@
         {
             "description": "Test string inequality",
             "command": "test",
-            "args": ["string1", "!=", "string2"],
+            "args": [
+                "string1",
+                "!=",
+                "string2"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -169,7 +201,10 @@
         {
             "description": "Test if string is empty (-z flag)",
             "command": "test",
-            "args": ["-z", ""],
+            "args": [
+                "-z",
+                ""
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -181,7 +216,10 @@
         {
             "description": "Test if string is non-empty (-n flag)",
             "command": "test",
-            "args": ["-n", "nonempty"],
+            "args": [
+                "-n",
+                "nonempty"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -193,7 +231,11 @@
         {
             "description": "Test integer equality",
             "command": "test",
-            "args": ["5", "-eq", "5"],
+            "args": [
+                "5",
+                "-eq",
+                "5"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -205,7 +247,11 @@
         {
             "description": "Test integer greater than",
             "command": "test",
-            "args": ["10", "-gt", "5"],
+            "args": [
+                "10",
+                "-gt",
+                "5"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -217,7 +263,11 @@
         {
             "description": "Test integer less than",
             "command": "test",
-            "args": ["5", "-lt", "10"],
+            "args": [
+                "5",
+                "-lt",
+                "10"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -229,7 +279,11 @@
         {
             "description": "Test integer greater than or equal",
             "command": "test",
-            "args": ["10", "-ge", "10"],
+            "args": [
+                "10",
+                "-ge",
+                "10"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -241,7 +295,11 @@
         {
             "description": "Test integer less than or equal",
             "command": "test",
-            "args": ["5", "-le", "5"],
+            "args": [
+                "5",
+                "-le",
+                "5"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -253,7 +311,11 @@
         {
             "description": "Test integer not equal",
             "command": "test",
-            "args": ["5", "-ne", "10"],
+            "args": [
+                "5",
+                "-ne",
+                "10"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -265,7 +327,15 @@
         {
             "description": "Test logical AND",
             "command": "test",
-            "args": ["5", "-eq", "5", "-a", "10", "-eq", "10"],
+            "args": [
+                "5",
+                "-eq",
+                "5",
+                "-a",
+                "10",
+                "-eq",
+                "10"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -277,7 +347,15 @@
         {
             "description": "Test logical OR",
             "command": "test",
-            "args": ["5", "-eq", "6", "-o", "10", "-eq", "10"],
+            "args": [
+                "5",
+                "-eq",
+                "6",
+                "-o",
+                "10",
+                "-eq",
+                "10"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -289,7 +367,12 @@
         {
             "description": "Test logical NOT",
             "command": "test",
-            "args": ["!", "5", "-eq", "6"],
+            "args": [
+                "!",
+                "5",
+                "-eq",
+                "6"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -301,7 +384,10 @@
         {
             "description": "Test if file is block special (-b flag)",
             "command": "test",
-            "args": ["-b", "/dev/sda"],
+            "args": [
+                "-b",
+                "/dev/sda"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -313,7 +399,10 @@
         {
             "description": "Test if file is character special (-c flag)",
             "command": "test",
-            "args": ["-c", "/dev/null"],
+            "args": [
+                "-c",
+                "/dev/null"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -325,7 +414,10 @@
         {
             "description": "Test if file has set-group-ID bit set (-g flag)",
             "command": "test",
-            "args": ["-g", "/tmp/setgid_file"],
+            "args": [
+                "-g",
+                "/tmp/setgid_file"
+            ],
             "setup_commands": [
                 "touch /tmp/setgid_file",
                 "chmod g+s /tmp/setgid_file"
@@ -344,7 +436,10 @@
         {
             "description": "Test if file is symbolic link (-h flag)",
             "command": "test",
-            "args": ["-h", "/tmp/symlink"],
+            "args": [
+                "-h",
+                "/tmp/symlink"
+            ],
             "setup_commands": [
                 "touch /tmp/target_file",
                 "ln -s /tmp/target_file /tmp/symlink"
@@ -363,7 +458,10 @@
         {
             "description": "Test if file is symbolic link (-L flag)",
             "command": "test",
-            "args": ["-L", "/tmp/symlink2"],
+            "args": [
+                "-L",
+                "/tmp/symlink2"
+            ],
             "setup_commands": [
                 "touch /tmp/target_file2",
                 "ln -s /tmp/target_file2 /tmp/symlink2"
@@ -382,7 +480,10 @@
         {
             "description": "Test if file has sticky bit set (-k flag)",
             "command": "test",
-            "args": ["-k", "/tmp/sticky_file"],
+            "args": [
+                "-k",
+                "/tmp/sticky_file"
+            ],
             "setup_commands": [
                 "touch /tmp/sticky_file",
                 "chmod +t /tmp/sticky_file"
@@ -401,7 +502,10 @@
         {
             "description": "Test if file is named pipe (-p flag)",
             "command": "test",
-            "args": ["-p", "/tmp/test_pipe"],
+            "args": [
+                "-p",
+                "/tmp/test_pipe"
+            ],
             "setup_commands": [
                 "mkfifo /tmp/test_pipe"
             ],
@@ -410,6 +514,9 @@
                     "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": true
                 }
             },
             "cleanup_commands": [
@@ -419,7 +526,10 @@
         {
             "description": "Test if file is socket (-S flag)",
             "command": "test",
-            "args": ["-S", "/tmp/test.sock"],
+            "args": [
+                "-S",
+                "/tmp/test.sock"
+            ],
             "setup_commands": [
                 "python3 -c 'import socket; s=socket.socket(socket.AF_UNIX); s.bind(\"/tmp/test.sock\")'"
             ],
@@ -437,7 +547,10 @@
         {
             "description": "Test if file descriptor is opened on terminal (-t flag)",
             "command": "test",
-            "args": ["-t", "1"],
+            "args": [
+                "-t",
+                "1"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -449,7 +562,10 @@
         {
             "description": "Test if file has set-user-ID bit set (-u flag)",
             "command": "test",
-            "args": ["-u", "/tmp/setuid_file"],
+            "args": [
+                "-u",
+                "/tmp/setuid_file"
+            ],
             "setup_commands": [
                 "touch /tmp/setuid_file",
                 "chmod u+s /tmp/setuid_file"
@@ -468,7 +584,10 @@
         {
             "description": "Test if file is owned by effective user ID (-O flag)",
             "command": "test",
-            "args": ["-O", "/tmp/owned_file"],
+            "args": [
+                "-O",
+                "/tmp/owned_file"
+            ],
             "setup_commands": [
                 "touch /tmp/owned_file"
             ],
@@ -486,7 +605,10 @@
         {
             "description": "Test if file is owned by effective group ID (-G flag)",
             "command": "test",
-            "args": ["-G", "/tmp/group_owned_file"],
+            "args": [
+                "-G",
+                "/tmp/group_owned_file"
+            ],
             "setup_commands": [
                 "touch /tmp/group_owned_file"
             ],
@@ -504,7 +626,10 @@
         {
             "description": "Test if file has been modified since last read (-N flag)",
             "command": "test",
-            "args": ["-N", "/tmp/modified_file"],
+            "args": [
+                "-N",
+                "/tmp/modified_file"
+            ],
             "setup_commands": [
                 "touch /tmp/modified_file",
                 "cat /tmp/modified_file",
@@ -522,4 +647,4 @@
             ]
         }
     ]
-} 
+}

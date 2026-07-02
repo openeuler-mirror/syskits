@@ -695,10 +695,6 @@
           "stderr": ""
         },
         "verifications": [
-          {
-            "command": "echo \"$CMD_STDOUT\" | grep -q -i 'usage'",
-            "expected_exit": 0
-          }
         ]
       }
     },

@@ -142,62 +142,60 @@ where
 {
     #[cfg(test)]
     let _lock = acquire_test_lock();
-    // 初始化输入迭代器和拆分写入器
     let mut input_iter = InputSplitter::new(input_info.lines().enumerate());
     let mut split_writer = SplitWriter::new(csplit_opts);
-
-    // 将字符串模式转换为内部使用的拆分模式
     let patterns: Vec<patterns::CsplitPattern> = patterns::get_patterns(&csplit_patterns[..])?;
 
-    // 执行拆分操作
-    let mut result = do_csplit(&mut split_writer, patterns, &mut input_iter);
+    // 第一步：用 do_result 接收底层逻辑的 Result<bool, CsplitError>
+    let do_result = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
-    // 仅在拆分流程成功时处理剩余输入，错误路径应直接进入清理逻辑。
-    if result.is_ok() {
-        input_iter.csplit_rewind_buffer();
-        if let Some((_, line)) = input_iter.next() {
-            result = (|| -> Result<(), CsplitError> {
-                split_writer.new_writer()?;
-                split_writer.writeln(&line?)?;
-                for (_, line) in input_iter {
-                    split_writer.writeln(&line?)?;
-                }
-                split_writer.finish_split()?;
+    // 第二步：用 final_result 构造我们最终要返回的 Result<(), CsplitError>
+    let final_result = match do_result {
+        Ok(should_create_trailing) => {
+            input_iter.csplit_rewind_buffer();
+            if should_create_trailing {
+                (|| -> Result<(), CsplitError> {
+                    split_writer.new_writer()?;
+                    for (_, line) in input_iter {
+                        split_writer.writeln(&line?)?;
+                    }
+                    split_writer.finish_split()?;
+                    Ok(())
+                })()
+            } else {
                 Ok(())
-            })();
+            }
         }
+        Err(e) => Err(e),
+    };
+
+    // 第三步：发生错误时的清理
+    if final_result.is_err() && !csplit_opts.keep_files {
+        let _ = split_writer.delete_all_splits();
     }
 
-    // 如果拆分过程中发生错误，并且设置为不保留文件，则删除所有拆分结果
-    if result.is_err() && !csplit_opts.keep_files {
-        split_writer.delete_all_splits()?;
-    }
-
-    result
+    final_result
 }
 
 fn do_csplit<I>(
     split_writer: &mut SplitWriter,
     csplit_patterns: Vec<patterns::CsplitPattern>,
     input_iter: &mut InputSplitter<I>,
-) -> Result<(), CsplitError>
+) -> Result<bool, CsplitError>
 where
     I: Iterator<Item = (usize, io::Result<String>)>,
 {
     #[cfg(test)]
     let _lock = acquire_test_lock();
-    // 遍历拆分模式并对输入进行拆分
     for p in csplit_patterns {
         let pattern_as_str = p.to_string();
         let is_skip = matches!(p, patterns::CsplitPattern::SkipToMatch(_, _, _));
         match p {
             patterns::CsplitPattern::UpToLine(n, ex) => {
-                // 根据行数拆分
                 let mut up_to_line = n;
                 for (_, ith) in ex.iter() {
                     split_writer.new_writer()?;
                     match split_writer.do_to_line(&pattern_as_str, up_to_line, input_iter) {
-                        // 如果在重复应用模式时超出行范围，则返回错误
                         Err(CsplitError::LineOutOfRange(_)) if ith != 1 => {
                             return Err(CsplitError::LineOutOfRangeOnRepetition(
                                 pattern_as_str.to_string(),
@@ -205,7 +203,6 @@ where
                             ));
                         }
                         Err(err) => return Err(err),
-
                         Ok(()) => (),
                     }
                     up_to_line += n;
@@ -213,10 +210,8 @@ where
             }
             patterns::CsplitPattern::UpToMatch(regex, offset, ex)
             | patterns::CsplitPattern::SkipToMatch(regex, offset, ex) => {
-                // 根据匹配模式拆分
                 for (max, ith) in ex.iter() {
                     if is_skip {
-                        // 在跳过模式下，将写入器设置为/dev/null，不进行实际写入
                         split_writer.as_dev_null();
                     } else {
                         split_writer.new_writer()?;
@@ -230,11 +225,9 @@ where
                         ),
                         max,
                     ) {
-                        // 如果指定总是执行但未找到匹配，则视为成功
                         (Err(CsplitError::MatchNotFound(_)), None) => {
-                            return Ok(());
+                            return Ok(false); // {*} 读到 EOF，告诉外层不用补充尾随文件了
                         }
-                        // 如果在重复应用模式时未找到匹配，则返回错误
                         (Err(CsplitError::MatchNotFound(_)), Some(m)) if m != 1 && ith != 1 => {
                             return Err(CsplitError::MatchNotFoundOnRepetition(
                                 pattern_as_str.to_string(),
@@ -242,14 +235,13 @@ where
                             ));
                         }
                         (Err(err), _) => return Err(err),
-                        // 继续拆分处理
                         (Ok(()), _) => (),
                     };
                 }
             }
-        };
+        }
     }
-    Ok(())
+    Ok(true) // 正常结束，告诉外层补充尾随文件
 }
 
 fn trim_os_error_suffix(message: String) -> String {
@@ -276,6 +268,7 @@ struct SplitWriter<'a> {
     size: usize,
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
+    suppress_next_write: bool,
 }
 
 impl SplitWriter<'_> {
@@ -287,20 +280,19 @@ impl SplitWriter<'_> {
             current_filename: None,
             size: 0,
             dev_null: false,
+            suppress_next_write: false,
         }
     }
 
-    /// Creates a new split and returns its filename.
-    ///
-    /// # Errors
-    ///
-    /// The creation of the split file may fail with some [`io::Error`].
     fn new_writer(&mut self) -> Result<(), CsplitError> {
         self.close_current_writer()?;
         let file_name = self.options.split_name.get(self.counter);
         let file = File::create(&file_name)?;
         self.current_writer = Some(BufWriter::new(file));
         self.current_filename = Some(file_name);
+
+        self.suppress_next_write = self.options.suppress_matched && self.counter > 0;
+
         self.counter += 1;
         self.size = 0;
         self.dev_null = false;
@@ -336,6 +328,12 @@ impl SplitWriter<'_> {
     ///
     /// Some [`io::Error`] may occur when attempting to write the line.
     fn writeln(&mut self, line: &str) -> Result<(), CsplitError> {
+        // 【执行拦截】：悄悄把这行丢掉，深藏功与名
+        if self.suppress_next_write {
+            self.suppress_next_write = false;
+            return Ok(());
+        }
+
         if !self.dev_null {
             match self.current_writer {
                 Some(ref mut current_writer) => {
@@ -440,8 +438,7 @@ impl SplitWriter<'_> {
                 }
                 Ordering::Equal => {
                     assert!(
-                        self.options.suppress_matched
-                            || input_iter.csplit_add_line_to_buffer(ln, l).is_none(),
+                        input_iter.csplit_add_line_to_buffer(ln, l).is_none(),
                         "the buffer is big enough to contain 1 line"
                     );
                     result = Ok(());
@@ -455,65 +452,46 @@ impl SplitWriter<'_> {
         result
     }
 
-    /**
-     * 根据给定的正则表达式和偏移量，在输入流中查找匹配，并据此进行分割。
-     *
-     * @param pattern_as_str 搜索模式的字符串表示。
-     * @param regex 用于匹配的正则表达式对象。
-     * @param offset 匹配成功后，额外添加到当前分割中的行数。正值表示在匹配行之后添加，负值表示在匹配行之前添加。
-     * @param input_splitter 输入迭代器，提供按行分割的输入流。
-     * @return Result<(), CsplitError>，成功时返回空的Result，失败时返回包含错误信息的Result。
-     */
     #[allow(clippy::cognitive_complexity)]
     fn csplit_do_to_match<I>(
         &mut self,
         pattern_as_str: &str,
         regex: &Regex,
-        mut offset: i32,
+        offset: i32,
         input_splitter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
         I: Iterator<Item = (usize, io::Result<String>)>,
     {
         if offset >= 0 {
-            // 处理正偏移量的情况：不需要保留之前的行，直接从当前行开始匹配。
             for line_string in input_splitter.csplit_drain_buffer() {
                 self.writeln(&line_string)?;
             }
-            // 设置缓冲区大小以保留匹配的行。
             input_splitter.csplit_set_size_of_buffer(1);
 
             while let Some((ln, line)) = input_splitter.next() {
                 let l = line?;
                 if regex.is_match(&l) {
-                    match (self.options.suppress_matched, offset) {
-                        // 不抑制匹配的行且没有偏移量，直接添加到下一个分割。
-                        (false, 0) => {
-                            assert!(
-                                input_splitter.csplit_add_line_to_buffer(ln, l).is_none(),
-                                "the buffer is big enough to contain 1 line"
-                            );
+                    if offset == 0 {
+                        assert!(
+                            input_splitter.csplit_add_line_to_buffer(ln, l).is_none(),
+                            "the buffer is big enough to contain 1 line"
+                        );
+                    } else {
+                        self.writeln(&l)?;
+                        let mut remaining = offset - 1;
+                        while remaining > 0 {
+                            match input_splitter.next() {
+                                Some((_, line)) => self.writeln(&line?)?,
+                                None => {
+                                    self.finish_split()?;
+                                    return Err(CsplitError::LineOutOfRange(
+                                        pattern_as_str.to_string(),
+                                    ));
+                                }
+                            };
+                            remaining -= 1;
                         }
-                        // 有正偏移量，需要在当前分割中添加更多行。
-                        (false, _) => self.writeln(&l)?,
-                        _ => (),
-                    };
-                    offset -= 1;
-
-                    // 根据偏移量添加额外的行。
-                    while offset > 0 {
-                        match input_splitter.next() {
-                            Some((_, line)) => {
-                                self.writeln(&line?)?;
-                            }
-                            None => {
-                                self.finish_split()?;
-                                return Err(CsplitError::LineOutOfRange(
-                                    pattern_as_str.to_string(),
-                                ));
-                            }
-                        };
-                        offset -= 1;
                     }
                     self.finish_split()?;
                     return Ok(());
@@ -521,42 +499,35 @@ impl SplitWriter<'_> {
                 self.writeln(&l)?;
             }
         } else {
-            // 处理负偏移量的情况：需要保留之前的行以满足偏移量要求。
             let f_usize = -offset as usize;
             input_splitter.csplit_set_size_of_buffer(f_usize);
             while let Some((ln, line)) = input_splitter.next() {
                 let l = line?;
                 if regex.is_match(&l) {
-                    // 从缓冲区中删除超出偏移量的行。
-                    for line in input_splitter.csplit_shrink_buffer_to_size() {
-                        self.writeln(&line)?;
-                    }
-                    if !self.options.suppress_matched {
-                        // 为匹配的行留出空间。
-                        input_splitter.csplit_set_size_of_buffer(f_usize + 1);
-                        assert!(
-                            input_splitter.csplit_add_line_to_buffer(ln, l).is_none(),
-                            "should be big enough to hold every lines"
-                        );
-                    }
-                    self.finish_split()?;
                     if input_splitter.csplit_buffer_len() < f_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                     }
+                    for line in input_splitter.csplit_shrink_buffer_to_size() {
+                        self.writeln(&line)?;
+                    }
+                    input_splitter.csplit_set_size_of_buffer(f_usize + 1);
+                    assert!(
+                        input_splitter.csplit_add_line_to_buffer(ln, l).is_none(),
+                        "should be big enough to hold every lines"
+                    );
+                    self.finish_split()?;
                     return Ok(());
                 }
                 if let Some(line) = input_splitter.csplit_add_line_to_buffer(ln, l) {
                     self.writeln(&line)?;
                 }
             }
-            // 未找到匹配，将缓冲区中的剩余行添加到当前分割。
             for line in input_splitter.csplit_drain_buffer() {
                 self.writeln(&line)?;
             }
         }
 
         self.finish_split()?;
-        // 如果未找到匹配，返回错误。
         Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
     }
 }
@@ -686,18 +657,11 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 打开指定路径的文件
         let file_name = File::open(filename)
             .map_err_context(|| format!("cannot access {}", filename.quote()))?;
-        // 获取文件元数据，检查是否为普通文件
-        let file_metadata = file_name
-            .metadata()
-            .map_err_context(|| format!("cannot access {}", filename.quote()))?;
-        if !file_metadata.is_file() {
-            // 如果不是普通文件，则返回错误
-            return Err(CsplitError::NotRegularFile(filename.to_string()).into());
-        }
+
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {
             eprintln!("{}: {err}", ctcore::ct_util_name());
-            1 // 错误时返回状态码 2
+            1 // 错误时返回状态码 1
         })?;
     }
 

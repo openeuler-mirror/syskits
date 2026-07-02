@@ -4,217 +4,230 @@
             "command": "tty",
             "description": "tty: 基本功能测试（无参数）",
             "args": [],
-            "setup_commands": [
-            ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: -s 选项测试",
-            "args": ["-s"],
-            "setup_commands": [
+            "args": [
+                "-s"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: --silent 选项测试",
-            "args": ["--silent"],
-            "setup_commands": [
+            "args": [
+                "--silent"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: --quiet 选项测试",
-            "args": ["--quiet"],
-            "setup_commands": [
+            "args": [
+                "--quiet"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: 多余参数测试",
-            "args": ["extra_arg"],
-            "setup_commands": [
+            "args": [
+                "extra_arg"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 2,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: -s 与多余参数组合测试",
-            "args": ["-s", "extra_arg"],
-            "setup_commands": [
+            "args": [
+                "-s",
+                "extra_arg"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 2,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: 非法参数测试",
-            "args": ["--badFlag"],
-            "setup_commands": [
+            "args": [
+                "--badFlag"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 2,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": false,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: --help",
-            "args": ["--help"],
-            "setup_commands": [
+            "args": [
+                "--help"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
         },
         {
             "command": "tty",
             "description": "tty: --version",
-            "args": ["--version"],
-            "setup_commands": [
+            "args": [
+                "--version"
             ],
+            "setup_commands": [],
             "expectation": {
                 "execution": {
-                "exit_code": 0,
-                "stdout": "",
-                "stderr": ""
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
                 },
-                "verifications": [
-                ],
+                "verifications": [],
                 "ignore_fields": {
-                "ignore_exit_code": false,
-                "ignore_stdout": true,
-                "ignore_stderr": false,
-                "ignore_function": false
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
                 }
             },
-            "cleanup_commands": [
-            ]
+            "cleanup_commands": []
+        },
+        {
+            "command": "tty",
+            "description": "tty: --help",
+            "args": [
+                "--help"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": true,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

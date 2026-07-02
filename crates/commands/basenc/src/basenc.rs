@@ -101,11 +101,11 @@ impl Tool for Basenc {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        basenc_main(args.iter().cloned()).map(|_| ())
+        basenc_main(args.iter().cloned(), &mut std::io::stdout().lock())
     }
 }
 
-pub fn basenc_main(args: impl ctcore::Args) -> CTResult<String> {
+pub fn basenc_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let (config_mod, format_mod) = basenc_parse_cmd_args(args)?;
@@ -116,6 +116,7 @@ pub fn basenc_main(args: impl ctcore::Args) -> CTResult<String> {
 
     base_common::handle_base_input(
         &mut ct_input,
+        &mut writer,
         format_mod,
         config_mod.base_wrap_cols,
         config_mod.base_ignore_garbage,
@@ -175,7 +176,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base16", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -186,8 +188,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -214,7 +217,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base32", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -224,8 +228,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -251,7 +256,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "--base32hex", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -261,8 +267,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -288,7 +295,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "--base64", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -299,8 +307,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -328,7 +337,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "--base64url", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -338,8 +348,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -366,7 +377,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "-d", "--base16", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -377,8 +389,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -403,15 +416,17 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "-d", "--base16", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         match result {
             Err(output) => {
                 println!("Error code: {}", output.code());
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
         match base_delete_file(filename) {
@@ -441,7 +456,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -451,8 +467,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -479,7 +496,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "-d", "--base32", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -489,8 +507,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -523,7 +542,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -533,8 +553,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -560,7 +581,8 @@ mod test {
 
         // 测试用例1：有效输入
         let args = [ctcore::ct_util_name(), "-d", "--base32hex", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -571,8 +593,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -604,7 +627,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -615,8 +639,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -641,7 +666,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "-d", "--base64", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -651,8 +677,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -683,7 +710,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -693,8 +721,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -720,7 +749,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "-d", "--base64url", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -730,8 +760,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -763,7 +794,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -773,8 +805,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -800,7 +833,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base2lsbf", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -810,8 +844,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -837,7 +872,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base2msbf", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -848,8 +884,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -875,7 +912,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base2lsbf", "--wrap=8", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -885,8 +923,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -912,7 +951,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base2msbf", "--wrap=8", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -923,8 +963,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -950,7 +991,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--decode", "--base2lsbf", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -961,8 +1003,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -988,7 +1031,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--decode", "--base2msbf", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -999,8 +1043,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1032,7 +1077,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1043,8 +1089,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1076,7 +1123,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1087,8 +1135,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1114,7 +1163,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--z85", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1125,8 +1175,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1152,7 +1203,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--wrap=6", "--z85", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1162,8 +1214,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1189,7 +1242,8 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--decode", "--z85", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1199,8 +1253,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -1232,7 +1287,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1242,8 +1298,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -1260,7 +1317,8 @@ mod test {
     fn test_basenc_h_ctmain() {
         {
             let args = ["--help", ""];
-            let result = basenc_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = basenc_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
         {
@@ -1277,7 +1335,8 @@ mod test {
     fn test_basenc_hh_ctmain() {
         {
             let args = ["-h", ""];
-            let result = basenc_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = basenc_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
 
@@ -1296,7 +1355,8 @@ mod test {
     fn test_basenc_v_ctmain() {
         {
             let args = ["--version", ""];
-            let result = basenc_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = basenc_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
         {
@@ -1314,7 +1374,8 @@ mod test {
     fn test_basenc_vv_ctmain() {
         {
             let args = ["-V", ""];
-            let result = basenc_main(args.iter().map(OsString::from));
+            let mut output = Vec::new();
+            let result = basenc_main(args.iter().map(OsString::from), &mut output);
             assert!(result.is_err());
         }
         {
@@ -1345,7 +1406,8 @@ mod test {
             "--base16",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1356,8 +1418,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1389,7 +1452,8 @@ mod test {
             "--base32",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1399,8 +1463,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1431,7 +1496,8 @@ mod test {
             "--base32hex",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1441,8 +1507,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1473,7 +1540,8 @@ mod test {
             "--base64",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1484,8 +1552,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1518,7 +1587,8 @@ mod test {
             "--base64url",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1528,8 +1598,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1562,7 +1633,8 @@ mod test {
             "--base16",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1573,8 +1645,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1608,7 +1681,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1618,8 +1692,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1652,7 +1727,8 @@ mod test {
             "--base32",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1662,8 +1738,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1697,7 +1774,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1707,8 +1785,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1740,7 +1819,8 @@ mod test {
             "--base32hex",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1751,8 +1831,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1785,7 +1866,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -1796,8 +1878,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1828,7 +1911,8 @@ mod test {
             "--base64",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1838,8 +1922,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1871,7 +1956,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1881,8 +1967,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1914,7 +2001,8 @@ mod test {
             "--base64url",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1924,8 +2012,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -1958,7 +2047,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -1968,8 +2058,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 println!("{expected_output}");
             }
@@ -2000,7 +2091,8 @@ mod test {
             "--base2lsbf",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -2010,8 +2102,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -2042,7 +2135,8 @@ mod test {
             "--base2msbf",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2053,8 +2147,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -2086,7 +2181,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -2096,8 +2192,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -2129,7 +2226,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2140,8 +2238,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -2173,7 +2272,8 @@ mod test {
             "--base2lsbf",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2184,8 +2284,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -2217,7 +2318,8 @@ mod test {
             "--base2msbf",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2228,8 +2330,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -2262,7 +2365,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2273,8 +2377,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -2307,7 +2412,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2318,8 +2424,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -2350,7 +2457,8 @@ mod test {
             "--z85",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         // 使用模式匹配提取字段值
@@ -2361,8 +2469,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -2394,7 +2503,8 @@ mod test {
             "--z85",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -2404,8 +2514,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -2437,7 +2548,8 @@ mod test {
             "--z85",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -2447,8 +2559,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 println!("result:{s}");
                 // println!("{}", expected_output);
             }
@@ -2481,7 +2594,8 @@ mod test {
             "--wrap=8",
             filename,
         ];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
         // 使用模式匹配提取字段值
         match result {
@@ -2491,8 +2605,9 @@ mod test {
                 println!("Error code: {code}");
                 println!("Error message: {message}");
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
                 // println!("result:{}", s);
                 // println!("{}", expected_output);
             }
@@ -2516,15 +2631,17 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "--base58", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         match result {
             Err(output) => {
                 println!("Error code: {}", output.code());
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
         match base_delete_file(filename) {
@@ -2546,15 +2663,17 @@ mod test {
         }
 
         let args = [ctcore::ct_util_name(), "-d", "--base58", filename];
-        let result = basenc_main(args.iter().map(OsString::from));
+        let mut output = Vec::new();
+        let result = basenc_main(args.iter().map(OsString::from), &mut output);
         let mut s = String::new();
 
         match result {
             Err(output) => {
                 println!("Error code: {}", output.code());
             }
-            Ok(output) => {
-                s = output.to_string();
+            Ok(_) => {
+                s = String::from_utf8(output.clone()).unwrap();
+                s = s.replace("\n", "");
             }
         }
         match base_delete_file(filename) {

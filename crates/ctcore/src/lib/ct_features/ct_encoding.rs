@@ -26,6 +26,8 @@ pub enum CtDecodeError {
     #[error("{}", _0)]
     DecodeZ85(#[from] z85::DecodeError),
     #[error("{}", _0)]
+    DecodeBase58(#[from] bs58::decode::Error),
+    #[error("{}", _0)]
     Io(#[from] io::Error),
 }
 
@@ -46,6 +48,7 @@ pub enum Format {
     Base16,
     Base2Lsbf,
     Base2Msbf,
+    Base58,
     Z85,
 }
 use self::Format::*;
@@ -68,6 +71,7 @@ pub fn encode(f: Format, input: &[u8]) -> Result<String, CtEncodeError> {
         Base16 => HEXUPPER.encode(input),
         Base2Lsbf => BASE2LSBF.encode(input),
         Base2Msbf => BASE2MSBF.encode(input),
+        Base58 => bs58::encode(input).into_string(),
         Z85 => {
             // 根据规范，我们不应接受长度不是4的倍数的输入。
             // 但是，z85库实现了填充编码并接受此类输入。我们必须手动检查它们。
@@ -89,6 +93,7 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
         Base16 => HEXUPPER.decode(input)?,
         Base2Lsbf => BASE2LSBF.decode(input)?,
         Base2Msbf => BASE2MSBF.decode(input)?,
+        Base58 => bs58::decode(input).into_vec()?,
         Z85 => {
             // z85 库通过使用一个不允许出现的首字符 '#' 来实现带填充的编码。
             // 我们手动检查是否有首字符 '#'，并自行返回错误。
@@ -117,13 +122,14 @@ impl<R: Read> Data<R> {
             input,
             format,
             alphabet: match format {
-                Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
+                Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz234567=",
                 Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
                 Base64Url => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
-                Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
-                Base16 => b"0123456789ABCDEF",
+                Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUVabcdefghijklmnopqrstuv=",
+                Base16 => b"0123456789ABCDEFabcdef",
                 Base2Lsbf => b"01",
                 Base2Msbf => b"01",
+                Base58 => b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",
                 Z85 => b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#",
             },
         }
@@ -149,6 +155,10 @@ impl<R: Read> Data<R> {
         } else {
             buf.retain(|&c| c != b'\r' && c != b'\n');
         };
+        match self.format {
+            Base16 | Base32 | Base32Hex => buf.make_ascii_uppercase(),
+            _ => {}
+        }
         decode(self.format, &buf)
     }
 
@@ -271,7 +281,17 @@ mod test {
         assert_eq!(result.unwrap(), expected);
     }
 
-    // #[test]
+    #[test]
+    fn test_encode_base58() {
+        let input = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let expected = "JxF12TrwUP45BMd";
+
+        let result = encode(Format::Base58, &input);
+
+        assert_eq!(result.unwrap(), expected);
+    }
     // fn test_encode_base_z85() {
     //     let input = [
     //         0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
@@ -367,6 +387,17 @@ mod test {
         let input = "0100100001100101011011000110110001101111001000000101011101101111011100100110110001100100";
 
         let result = decode(Format::Base2Msbf, (&input).as_ref());
+
+        assert_eq!(result.unwrap(), expected);
+    }
+    #[test]
+    fn test_decode_base58() {
+        let expected = [
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64,
+        ];
+        let input = "JxF12TrwUP45BMd";
+
+        let result = decode(Format::Base58, (&input).as_ref());
 
         assert_eq!(result.unwrap(), expected);
     }

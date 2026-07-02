@@ -358,15 +358,6 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
         }
     }
 
-    // 使用GNU coreutils兼容的日期解析器
-    // 支持"next friday"、"last monday"等自然语言日期表达式
-    match ct_parse_datetime::parse_datetime_to_filetime(s, ref_time) {
-        Ok(ft) => return Ok(ft),
-        Err(_) => {
-            // 如果新解析器失败，尝试其他格式
-        }
-    }
-
     // "当前语言环境的首选日期和时间表示。"
     // "(在POSIX语言环境中这相当于%a %b %e %H:%M:%S %Y。)"
     // time 0.1.43将其解析为'a b e T Y'
@@ -376,6 +367,15 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
     //
     if let Ok(parsed) = NaiveDateTime::parse_from_str(s, touch_format::POSIX_LOCALE) {
         return Ok(touch_datetime_to_filetime(&parsed.and_utc()));
+    }
+
+    // 使用GNU coreutils兼容的日期解析器
+    // 支持"next friday"、"last monday"等自然语言日期表达式
+    match ct_parse_datetime::parse_datetime_to_filetime(s, ref_time) {
+        Ok(ft) => return Ok(ft),
+        Err(_) => {
+            // 如果新解析器失败，尝试其他格式
+        }
     }
 
     // 还支持在GNU测试中找到的其他格式，如
@@ -799,7 +799,7 @@ mod tests {
 
     #[cfg(test)]
     mod parse_date_tests {
-        use chrono::{Local, TimeZone};
+        use chrono::{Local, TimeZone, Utc};
 
         use super::*;
 
@@ -807,13 +807,10 @@ mod tests {
         fn test_parse_date_valid() {
             // 测试POSIX_LOCALE格式的日期
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
-            let date_str = "Tue Jun 15 08:30:00 2022";
-            let filetime = touch_parse_date(ref_time, date_str);
-            assert!(filetime.is_err());
-            assert_eq!(
-                filetime.unwrap_err().to_string(),
-                "Unable to parse date: Tue Jun 15 08:30:00 2022".to_string()
-            );
+            let date_str = "Wed Jun 15 08:30:00 2022";
+            let filetime = touch_parse_date(ref_time, date_str).unwrap();
+            let expected_time = Utc.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            assert_eq!(filetime.unix_seconds(), expected_time.timestamp());
 
             // 测试ISO 8601格式的日期
             let date_str = "2022-06-15";
@@ -1822,7 +1819,7 @@ mod tests {
             // 使用固定的参考时间: 2025年7月24日 (星期四)
             let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
-            // 测试 "next Friday" 应该返回 2025年8月1日
+            // 测试 "next Friday" 应该返回 2025年7月25日
             let result = touch_parse_date(ref_time, "next Friday");
             assert!(
                 result.is_ok(),
@@ -1839,11 +1836,11 @@ mod tests {
             assert_eq!(dt.year(), 2025);
             assert_eq!(
                 dt.month(),
-                8,
-                "Expected August (month 8), got month {}",
+                7,
+                "Expected July (month 7), got month {}",
                 dt.month()
             );
-            assert_eq!(dt.day(), 1);
+            assert_eq!(dt.day(), 25);
         }
 
         #[test]

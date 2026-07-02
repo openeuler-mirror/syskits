@@ -72,6 +72,44 @@ impl CommLineReader {
         result
     }
 }
+#[derive(PartialEq, Debug)]
+enum CheckOrderOption {
+    Enabled,
+    Disabled,
+    Default,
+}
+
+fn check_order(
+    prev: &[u8],
+    current: &[u8],
+    file_idx: usize,
+    check_opt: &CheckOrderOption,
+    issued_warning: &mut [bool; 2],
+    seen_unpairable: bool,
+) -> CTResult<()> {
+    if *check_opt != CheckOrderOption::Disabled
+        && (*check_opt == CheckOrderOption::Enabled || seen_unpairable)
+    {
+        if !issued_warning[file_idx - 1] {
+            // Drop trailing newlines for comparison
+            let prev_cmp = &prev[..prev.len().saturating_sub(1)];
+            let curr_cmp = &current[..current.len().saturating_sub(1)];
+            let order = strcoll_compare(prev_cmp, curr_cmp, false);
+
+            if order == Ordering::Greater {
+                let msg = t!("comm.messages.not_sorted", file_num = file_idx);
+                if *check_opt == CheckOrderOption::Enabled {
+                    return Err(ctcore::ct_error::CtSimpleError::new(1, format!("{}", msg)));
+                } else {
+                    ctcore::ct_show_error!("{}", msg);
+                    issued_warning[file_idx - 1] = true;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /**
  * 对两个命令行读取器中的数据行进行比较，并根据选项输出结果。
  *
@@ -79,7 +117,7 @@ impl CommLineReader {
  * @param b 第二个命令行读取器的引用，用于读取第二组数据。
  * @param opts 包含各种选项的参数匹配器，用于定制比较和输出的行为。
  */
-fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
+fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CTResult<()> {
     // 根据选项获取分隔符
     let delim = comm_get_del_im(opts);
 
@@ -91,11 +129,38 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
+    // 获取检查顺序的选项
+    let check_opt = if opts.get_flag("check_order") {
+        CheckOrderOption::Enabled
+    } else if opts.get_flag("nocheck_order") {
+        CheckOrderOption::Disabled
+    } else {
+        CheckOrderOption::Default
+    };
+
+    let mut seen_unpairable = false;
+    let mut issued_warning = [false, false];
+
     // 初始化用于读取数据的缓冲区及读取状态
     let ra = &mut Vec::new();
     let mut na = a.read_line(ra);
+    let mut prev_ra = Vec::new();
+    if let Ok(size) = na {
+        if size > 0 {
+            prev_ra.extend_from_slice(ra);
+        }
+    }
+
     let rb = &mut Vec::new();
     let mut nb = b.read_line(rb);
+    let mut prev_rb = Vec::new();
+    let mut prev_prev_ra = Vec::new();
+    let mut prev_prev_rb = Vec::new();
+    if let Ok(size) = nb {
+        if size > 0 {
+            prev_rb.extend_from_slice(rb);
+        }
+    }
 
     // 初始化用于计数的变量
     let mut total_col_1 = 0;
@@ -122,18 +187,42 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
 
         // 根据比较结果输出相应行数据，并准备下一次读取
         if ord == Ordering::Less {
+            seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_1) {
                 print!("{}", String::from_utf8_lossy(ra));
             }
             ra.clear();
             na = a.read_line(ra);
+            if let Ok(size) = na {
+                if size > 0 {
+                    check_order(&prev_ra, ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    prev_prev_ra.clear();
+                    prev_prev_ra.extend_from_slice(&prev_ra);
+                    prev_ra.clear();
+                    prev_ra.extend_from_slice(ra);
+                } else if !prev_prev_ra.is_empty() {
+                    check_order(&prev_prev_ra, &prev_ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                }
+            }
             total_col_1 += 1;
         } else if ord == Ordering::Greater {
+            seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
                 print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
             }
             rb.clear();
             nb = b.read_line(rb);
+            if let Ok(size) = nb {
+                if size > 0 {
+                    check_order(&prev_rb, rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    prev_prev_rb.clear();
+                    prev_prev_rb.extend_from_slice(&prev_rb);
+                    prev_rb.clear();
+                    prev_rb.extend_from_slice(rb);
+                } else if !prev_prev_rb.is_empty() {
+                    check_order(&prev_prev_rb, &prev_rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                }
+            }
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
@@ -142,7 +231,29 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
             ra.clear();
             rb.clear();
             na = a.read_line(ra);
+            if let Ok(size) = na {
+                if size > 0 {
+                    check_order(&prev_ra, ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    prev_prev_ra.clear();
+                    prev_prev_ra.extend_from_slice(&prev_ra);
+                    prev_ra.clear();
+                    prev_ra.extend_from_slice(ra);
+                } else if !prev_prev_ra.is_empty() {
+                    check_order(&prev_prev_ra, &prev_ra, 1, &check_opt, &mut issued_warning, seen_unpairable)?;
+                }
+            }
             nb = b.read_line(rb);
+            if let Ok(size) = nb {
+                if size > 0 {
+                    check_order(&prev_rb, rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                    prev_prev_rb.clear();
+                    prev_prev_rb.extend_from_slice(&prev_rb);
+                    prev_rb.clear();
+                    prev_rb.extend_from_slice(rb);
+                } else if !prev_prev_rb.is_empty() {
+                    check_order(&prev_prev_rb, &prev_rb, 2, &check_opt, &mut issued_warning, seen_unpairable)?;
+                }
+            }
             total_col_3 += 1;
         }
     }
@@ -150,8 +261,22 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) {
     // 根据选项输出总计数行
     if opts.get_flag(opt_flags::TOTAL) {
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
-        print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
+        let total_str = t!("comm.messages.total");
+        let col_sep = opts
+            .get_one::<String>(opt_flags::DELIMITER)
+            .map(|s| s.as_str())
+            .unwrap_or("\t");
+        print!("{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}");
     }
+    
+    if issued_warning[0] || issued_warning[1] {
+        return Err(ctcore::ct_error::CtSimpleError::new(
+            1,
+            format!("{}", t!("comm.messages.input_not_sorted")),
+        ));
+    }
+
+    Ok(())
 }
 
 fn comm_get_del_im(options: &ArgMatches) -> &str {
@@ -185,10 +310,15 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
+
+    if tmp_file1 == "-" && tmp_file2 == "-" {
+        return Err(ctcore::ct_error::CtSimpleError::new(1, t!("comm.messages.both_stdin")));
+    }
+
     let mut f1 = open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?;
     let mut f2 = open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?;
 
-    comm(&mut f1, &mut f2, &matches);
+    comm(&mut f1, &mut f2, &matches)?;
     Ok(0)
 }
 
@@ -212,16 +342,6 @@ pub fn ct_app() -> Command {
 
 fn args_init() -> Vec<Arg> {
     let args = vec![
-        Arg::new("help")
-            .short('h')
-            .long("help")
-            .help(t!("comm.clap.help"))
-            .action(ArgAction::Help),
-        Arg::new("version")
-            .short('V')
-            .long("version")
-            .help(t!("comm.clap.version"))
-            .action(ArgAction::Version),
         Arg::new(opt_flags::COLUMN_1)
             .short('1')
             .help(t!("comm.clap.column_1"))
@@ -233,6 +353,14 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::COLUMN_3)
             .short('3')
             .help(t!("comm.clap.column_3"))
+            .action(ArgAction::SetTrue),
+        Arg::new("check_order")
+            .long("check-order")
+            .help(t!("comm.clap.check_order"))
+            .action(ArgAction::SetTrue),
+        Arg::new("nocheck_order")
+            .long("nocheck-order")
+            .help(t!("comm.clap.nocheck_order"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DELIMITER)
             .long(opt_flags::DELIMITER)
@@ -256,6 +384,16 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::TOTAL)
             .help(t!("comm.clap.total"))
             .action(ArgAction::SetTrue),
+        Arg::new("help")
+            .long("help")
+            .short('h')
+            .help(t!("comm.clap.help"))
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .long("version")
+            .short('V')
+            .help(t!("comm.clap.version"))
+            .action(ArgAction::Version),
     ];
     args
 }

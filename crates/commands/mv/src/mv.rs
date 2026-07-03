@@ -29,11 +29,10 @@ use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
-use ctcore::Tool;
+use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
@@ -42,14 +41,16 @@ use ctcore::ct_fs::{
 use ctcore::ct_fsxattr;
 use ctcore::ct_update_control;
 use ctcore::libc;
+use ctcore::Tool;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
+use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
@@ -60,8 +61,8 @@ pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMod
 use ctcore::{ct_prompt_yes, ct_show};
 
 use fs_extra::dir::{
-    CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
-    move_dir, move_dir_with_progress,
+    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
+    TransitProcess, TransitProcessResult,
 };
 
 use crate::error::MvError;
@@ -971,81 +972,27 @@ fn mv_rename_with_fallback(
                 );
                 return Err(io::Error::other(message));
             }
-            // 如果启用了调试模式，说明正在处理目录
             if options.debug {
                 let message = format!("copying directory {} to {}", from.quote(), to.quote());
                 match multi_progress {
-                    Some(pb) => pb.suspend(|| {
-                        println!("mv: {message}");
-                    }),
+                    Some(pb) => pb.suspend(|| println!("mv: {message}")),
                     None => println!("mv: {message}"),
                 };
             }
 
-            // 如果目标路径存在，则删除该目录，以匹配 `fs::rename` 的行为。
             if to.exists() {
                 fs::remove_dir_all(to)?;
             }
 
-            // 配置目录复制选项。
-            let dir_copy_opts = DirCopyOptions {
-                copy_inside: true,
-                ..DirCopyOptions::new()
-            };
-
-            // 尝试计算目录的总大小，用于进度条显示。
-            let dir_total_size = dir_get_size(from).ok();
-
-            // 根据是否提供了多进度条以及目录大小，创建或不创建进度条。
-            let is_progress_bar = if let (Some(multi_progress), Some(total_size)) =
-                (multi_progress, dir_total_size)
-            {
-                let bar = ProgressBar::new(total_size).with_style(
-                    ProgressStyle::with_template(
-                        "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                    )
-                    .unwrap(),
-                );
-
-                Some(multi_progress.add(bar))
-            } else {
-                None
-            };
-
-            // 仅在linux系统上，收集源文件的扩展属性。
-            #[cfg(target_os = "linux")]
-            let fsxattrs = ct_fsxattr::ct_retrieve_xattrs(from)
-                .unwrap_or_else(|_| std::collections::HashMap::new());
-
-            // 使用进度条信息复制目录，如果未提供进度条，则无进度显示地复制。
-            let result = if let Some(ref pb) = is_progress_bar {
-                move_dir_with_progress(from, to, &dir_copy_opts, |process_info: TransitProcess| {
-                    pb.set_position(process_info.copied_bytes);
-                    pb.set_message(process_info.file_name);
-                    TransitProcessResult::ContinueOrAbort
-                })
-            } else {
-                move_dir(from, to, &dir_copy_opts)
-            };
-
-            // 在linux系统上，将收集到的扩展属性应用到目标文件。
-            #[cfg(target_os = "linux")]
-            ct_fsxattr::ct_apply_xattrs(to, fsxattrs).unwrap();
-
-            // 处理复制过程中可能出现的错误。
-            if let Err(err) = result {
-                return match err.kind {
-                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "Permission denied",
-                    )),
-                    _ => Err(io::Error::other(format!("{err:?}"))),
-                };
+            // 使用自定义的、带有硬链接记忆表的递归转移函数替代第三方库
+            let mut inode_map = HashMap::new();
+            if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map) {
+                return Err(io::Error::other(format!("{:?}", e)));
             }
         } else {
-            // 如果启用了调试模式，说明正在处理常规文件
+            // 如果启用了调试模式，说明正在处理常规文件或特殊文件
             if options.debug {
-                let message = format!("copying file {} to {}", from.quote(), to.quote());
+                let message = format!("copying file/special {} to {}", from.quote(), to.quote());
                 match multi_progress {
                     Some(pb) => pb.suspend(|| {
                         println!("mv: {message}");
@@ -1054,12 +1001,68 @@ fn mv_rename_with_fallback(
                 };
             }
 
-            // 对于非目录类型的文件，在linux系统上复制文件并保留扩展属性，其他情况下只复制文件。
+            // 在复制或重建之前，如果目标已经存在（例如是一个符号链接），必须先删除它！
+            // 否则 fs::copy 会跟随符号链接写入，或者 mkfifo/mknod 会报 EEXIST。
+            if to.symlink_metadata().is_ok() {
+                let _ = fs::remove_file(to);
+            }
+
+            // 检查是否为特殊文件（FIFO, 设备节点等），如果是则必须重建而不是读取！
+            #[cfg(unix)]
+            {
+                use std::ffi::CString;
+                use std::os::unix::ffi::OsStrExt;
+                use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+
+                let is_special = file_type.is_fifo()
+                    || file_type.is_block_device()
+                    || file_type.is_char_device()
+                    || file_type.is_socket();
+
+                if is_special {
+                    let mode = symlink_metadata.permissions().mode() as libc::mode_t;
+                    let c_to = CString::new(to.as_os_str().as_bytes()).unwrap();
+
+                    unsafe {
+                        if file_type.is_fifo() {
+                            if libc::mkfifo(c_to.as_ptr(), mode) != 0 {
+                                return Err(std::io::Error::last_os_error());
+                            }
+                        } else if file_type.is_char_device() || file_type.is_block_device() {
+                            let rdev = symlink_metadata.rdev();
+                            let s_fmt = if file_type.is_char_device() {
+                                libc::S_IFCHR
+                            } else {
+                                libc::S_IFBLK
+                            };
+                            if libc::mknod(c_to.as_ptr(), mode | s_fmt, rdev) != 0 {
+                                return Err(std::io::Error::last_os_error());
+                            }
+                        } else {
+                            // Socket 跨文件系统移动通常不支持或不需要
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                "cannot move socket across file systems",
+                            ));
+                        }
+                    }
+
+                    // 特殊文件在目标分区重建成功后，删除原分区文件
+                    fs::remove_file(from)?;
+                    return Ok(());
+                }
+            }
+
+            // 如果不是特殊文件，执行常规的跨设备复制并删除
             #[cfg(target_os = "linux")]
             fs::copy(from, to)
                 .and_then(|_| ct_fsxattr::ct_copy_xattrs(&from, &to))
                 .and_then(|_| fs::remove_file(from))?;
+
             #[cfg(target_os = "windows")]
+            fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
+
+            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
     }
@@ -1072,6 +1075,10 @@ fn mv_rename_with_fallback(
 fn mv_rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     // 读取符号链接指向的路径
     let symlink_points_to_path = fs::read_link(from)?;
+
+    if to.symlink_metadata().is_ok() {
+        let _ = fs::remove_file(to);
+    }
 
     // 针对不同的操作系统，执行相应的重命名和删除操作
     #[cfg(unix)]
@@ -1126,6 +1133,84 @@ fn is_empty_dir(path: &Path) -> bool {
         // 如果读取失败，认为目录不为空
         Err(_e) => false,
     }
+}
+
+fn move_dir_cross_device_with_links(
+    src_dir: &Path,
+    dest_dir: &Path,
+    options: &MvOpts,
+    inode_map: &mut HashMap<u64, PathBuf>,
+) -> io::Result<()> {
+    // 确保目标目录存在
+    if !dest_dir.exists() {
+        fs::create_dir_all(dest_dir)?;
+    }
+
+    #[cfg(target_os = "linux")]
+    let dir_fsxattrs = ct_fsxattr::ct_retrieve_xattrs(src_dir).unwrap_or_default();
+
+    for entry in fs::read_dir(src_dir)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest_dir.join(entry.file_name());
+
+        if options.verbose {
+            println!("renamed {} -> {}", src_path.quote(), dest_path.quote());
+        }
+
+        let file_type = entry.file_type()?;
+
+        if file_type.is_dir() {
+            // 递归处理子目录
+            move_dir_cross_device_with_links(&src_path, &dest_path, options, inode_map)?;
+        } else if file_type.is_symlink() {
+            // 符号链接直接转移
+            mv_rename_symlink_fallback(&src_path, &dest_path)?;
+        } else {
+            // 处理普通文件，并尝试追踪硬链接
+            #[cfg(unix)]
+            {
+                if let Ok(meta) = fs::symlink_metadata(&src_path) {
+                    let inode = meta.ino();
+                    let nlink = meta.nlink();
+
+                    // 只有当文件的硬链接数大于 1 时，才有必要去查表和建表
+                    if nlink > 1 {
+                        if let Some(existing_dest) = inode_map.get(&inode) {
+                            // 直接在目标分区创建硬链接，绝不重复拷贝数据
+                            fs::hard_link(existing_dest, &dest_path)?;
+                            // 原文件使命达成，可以删除了
+                            fs::remove_file(&src_path)?;
+                            continue;
+                        } else {
+                            // 第一次遇到这个多链接文件，把它存入记忆表
+                            inode_map.insert(inode, dest_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // 执行常规的复制和删除
+            #[cfg(target_os = "linux")]
+            {
+                fs::copy(&src_path, &dest_path)
+                    .and_then(|_| ct_fsxattr::ct_copy_xattrs(&src_path, &dest_path))
+                    .and_then(|_| fs::remove_file(&src_path))?;
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                fs::copy(&src_path, &dest_path).and_then(|_| fs::remove_file(&src_path))?;
+            }
+        }
+    }
+
+    // 恢复目录的扩展属性
+    #[cfg(target_os = "linux")]
+    let _ = ct_fsxattr::ct_apply_xattrs(dest_dir, dir_fsxattrs);
+
+    // 目录内部清空后，删除原始空目录
+    fs::remove_dir(src_dir)?;
+    Ok(())
 }
 
 #[derive(Default)]

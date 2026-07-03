@@ -12,15 +12,15 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
 use ctcore::ct_show;
+use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::{BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use sys_locale::get_locale;
@@ -43,7 +43,6 @@ mod head_flags {
 mod parse;
 mod take;
 use take::take_all_but;
-use take::take_lines;
 
 pub fn ct_app() -> Command {
     let args = vec![
@@ -227,57 +226,79 @@ impl HeadOptions {
     }
 }
 
-fn read_n_bytes<R>(input: R, n: u64, buffer: Option<&mut Vec<u8>>) -> std::io::Result<()>
+fn read_n_bytes<R>(mut input: R, n: u64, mut buffer: Option<&mut Vec<u8>>) -> std::io::Result<u64>
 where
     R: Read,
 {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
-    let mut local_buffer = Vec::new();
-
-    // Read bytes into buffer
-    reader.read_to_end(&mut local_buffer)?;
-
-    // Write those bytes to `stdout`.
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
-    stdout.write_all(&local_buffer)?;
 
-    // If a buffer was provided, copy the bytes into it
-    if let Some(buf) = buffer {
-        buf.extend_from_slice(&local_buffer);
+    let mut total_written = 0;
+    let mut buf = [0u8; BUF_SIZE];
+    loop {
+        let read = match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+        stdout.write_all(&buf[..read])?;
+        if let Some(ref mut b) = buffer {
+            b.extend_from_slice(&buf[..read]);
+        }
+        total_written += read as u64;
     }
-
-    Ok(())
+    Ok(total_written)
 }
 
 fn read_n_lines(
     input: &mut impl std::io::BufRead,
     n: u64,
     separator: u8,
-    buffer: Option<&mut Vec<u8>>,
-) -> std::io::Result<()> {
-    // Read the first `n` lines from the `input` reader.
-    let mut reader = take_lines(input, n, separator);
-
-    // Write those bytes to `stdout`.
+    mut buffer: Option<&mut Vec<u8>>,
+) -> std::io::Result<u64> {
     let stdout = std::io::stdout();
     let stdout = stdout.lock();
     let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout);
 
-    // Read into a local buffer first
-    let mut local_buffer = Vec::new();
-    reader.read_to_end(&mut local_buffer)?;
+    let mut lines_read = 0;
+    let mut total_written = 0;
 
-    // Write to stdout
-    writer.write_all(&local_buffer)?;
-
-    // If a buffer was provided, copy the bytes into it
-    if let Some(buf) = buffer {
-        buf.extend_from_slice(&local_buffer);
+    while lines_read < n {
+        let (consumed, lines_in_chunk, eof) = {
+            let buf = input.fill_buf()?;
+            if buf.is_empty() {
+                (0, 0, true)
+            } else {
+                let mut consumed = 0;
+                let mut count = 0;
+                for &b in buf {
+                    consumed += 1;
+                    if b == separator {
+                        count += 1;
+                        if lines_read + count == n {
+                            break;
+                        }
+                    }
+                }
+                writer.write_all(&buf[..consumed])?;
+                if let Some(ref mut b) = buffer {
+                    b.extend_from_slice(&buf[..consumed]);
+                }
+                (consumed, count, false)
+            }
+        };
+        input.consume(consumed);
+        total_written += consumed as u64;
+        lines_read += lines_in_chunk;
+        if eof {
+            break;
+        }
     }
-
-    Ok(())
+    writer.flush()?;
+    Ok(total_written)
 }
 
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
@@ -299,8 +320,8 @@ fn read_but_last_n_bytes(
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     if n == 0 {
-        //prints everything
-        return read_n_bytes(input, u64::MAX, buffer);
+        let _ = read_n_bytes(input, u64::MAX, buffer)?;
+        return Ok(());
     }
 
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
@@ -539,18 +560,32 @@ fn head_backwards_on_seekable_file(
 }
 
 fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    let seekable = !options.presume_input_pipe && is_seekable(input);
+    let start_pos = if seekable {
+        input.stream_position().unwrap_or(0)
+    } else {
+        0
+    };
+
     match options.mode {
-        Mode::FirstBytes(n) => read_n_bytes(
-            &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
-            n,
-            None,
-        ),
-        Mode::FirstLines(n) => read_n_lines(
-            &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
-            n,
-            options.line_ending.into(),
-            None,
-        ),
+        Mode::FirstBytes(n) => {
+            let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+            let written = read_n_bytes(&mut reader, n, None)?;
+            drop(reader);
+            if seekable {
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
+            Ok(())
+        }
+        Mode::FirstLines(n) => {
+            let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+            let written = read_n_lines(&mut reader, n, options.line_ending.into(), None)?;
+            drop(reader);
+            if seekable {
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
+            Ok(())
+        }
         Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => head_backwards_file(input, options),
     }
 }
@@ -627,13 +662,18 @@ fn handle_stdin(options: &HeadOptions) -> std::io::Result<()> {
     let mut stdin = stdin.lock();
 
     match options.mode {
-        Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n, None),
-        Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n, None),
-        Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into(), None),
+        Mode::FirstBytes(n) => {
+            let _ = read_n_bytes(&mut stdin, n, None)?;
+        }
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n, None)?,
+        Mode::FirstLines(n) => {
+            let _ = read_n_lines(&mut stdin, n, options.line_ending.into(), None)?;
+        }
         Mode::AllButLastLines(n) => {
-            read_but_last_n_lines(&mut stdin, n, options.line_ending.into(), None)
+            read_but_last_n_lines(&mut stdin, n, options.line_ending.into(), None)?
         }
     }
+    Ok(())
 }
 
 #[derive(Default)]

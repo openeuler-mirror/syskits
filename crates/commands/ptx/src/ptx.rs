@@ -23,12 +23,12 @@
 //! - 提供引用和上下文显示
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::Tool;
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -36,7 +36,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use sys_locale::get_locale;
 
@@ -251,8 +251,7 @@ struct WordRef {
     position: usize,
     /// 单词在行中的结束位置
     position_end: usize,
-    /// 所在文件名
-    filename: String,
+    file_index: usize,
 }
 
 #[derive(Debug)]
@@ -366,6 +365,8 @@ fn compile_regex_lossy(pattern: &str) -> Regex {
 /// 存储文件的行内容和字符级表示
 #[derive(Debug)]
 struct FileContent {
+    /// 文件名 (从 Map 键移入内部)
+    filename: String,
     /// 文件的所有行
     lines: Vec<String>,
     /// 每行的字符数组表示，用于快速索引
@@ -374,7 +375,7 @@ struct FileContent {
     offset: usize,
 }
 
-type FileMap = HashMap<String, FileContent>;
+type FileMap = Vec<FileContent>;
 
 /// 从输入文件读取内容并构建文件映射
 ///
@@ -385,29 +386,26 @@ type FileMap = HashMap<String, FileContent>;
 /// # 返回值
 /// 返回一个 HashMap，键为文件名，值为文件内容和偏移量
 fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result<FileMap> {
-    // 初始化文件映射
-    let mut file_map: FileMap = HashMap::new();
+    // 初始化文件数组
+    let mut file_map: FileMap = Vec::new();
     let mut files = Vec::new();
 
-    // 确定要处理的文件列表
     if input_files.is_empty() {
-        files.push("-"); // 标准输入
+        files.push("-");
     } else if config.is_gnu_ext {
-        files.extend(input_files.iter().map(|s| s.as_str())); // GNU 模式：处理所有文件
+        files.extend(input_files.iter().map(|s| s.as_str()));
     } else {
-        files.push(&input_files[0]); // 传统模式：只处理第一个文件
+        files.push(&input_files[0]);
     }
 
     let mut offset: usize = 0;
     for filename in files {
-        // 创建文件或标准输入的读取器
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
             Box::new(File::open(filename)?)
         });
 
-        // 读取所有行并转换为字符向量
         let lines: Vec<String> = if config.is_gnu_ext && !config.is_input_ref {
             let all_lines = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
             vec![all_lines.join(" ")]
@@ -417,14 +415,13 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
 
         let size = lines.len();
-        file_map.insert(
-            filename.to_owned(),
-            FileContent {
-                lines,
-                chars_lines,
-                offset,
-            },
-        );
+        // 直接 Push 到数组尾部
+        file_map.push(FileContent {
+            filename: filename.to_owned(),
+            lines,
+            chars_lines,
+            offset,
+        });
         offset += size;
     }
     Ok(file_map)
@@ -444,48 +441,40 @@ fn ptx_create_word_set(
     filter: &WordFilter,
     file_map: &FileMap,
 ) -> BTreeSet<WordRef> {
-    // 编译正则表达式
     let reg = compile_regex_lossy(&filter.word_regex);
     let ref_reg = compile_regex_lossy(&config.context_regex);
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
 
-    // 遍历每个文件的每一行
-    for (file, lines) in file_map {
+    // 使用 enumerate 获取文件索引
+    for (file_idx, content) in file_map.iter().enumerate() {
         let mut count: usize = 0;
-        let offs = lines.offset;
-        for line in &lines.lines {
-            // 获取引用范围（如果启用了输入引用）
+        let offs = content.offset;
+        for line in &content.lines {
             let (ref_beg, ref_end) = match ref_reg.find(line) {
                 Some(x) => (x.start(), x.end()),
                 None => (0, 0),
             };
 
-            // 查找所有匹配的单词
             for mat in reg.find_iter(line) {
                 let (beg, end) = (mat.start(), mat.end());
-                // 跳过作为引用的单词
                 if config.is_input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;
                 }
 
                 let mut word = line[beg..end].to_owned();
-                // 应用过滤规则
                 if filter.is_only_specified && !filter.only_set.contains(&word) {
                     continue;
                 }
                 if filter.is_ignore_specified && filter.ignore_set.contains(&word) {
                     continue;
                 }
-
-                // 处理大小写
                 if config.is_ignore_case {
                     word = word.to_lowercase();
                 }
 
-                // 创建并添加单词引用
                 word_set.insert(WordRef {
                     word,
-                    filename: file.clone(),
+                    file_index: file_idx, // 记录索引
                     global_line_nr: offs + count,
                     local_line_nr: count,
                     position: beg,
@@ -511,18 +500,13 @@ fn ptx_create_word_set(
 fn ptx_get_reference(
     config: &PtxConfig,
     word_ref: &WordRef,
+    file_name: &str,
     line: &str,
     context_reg: &Regex,
 ) -> String {
     if config.is_auto_ref {
-        // 自动引用：文件名:行号
-        format!(
-            "{}:{}",
-            word_ref.filename.maybe_quote(),
-            word_ref.local_line_nr + 1
-        )
+        format!("{}:{}", file_name.maybe_quote(), word_ref.local_line_nr + 1)
     } else if config.is_input_ref {
-        // 输入引用：使用正则表达式匹配的内容
         match context_reg.find(line) {
             Some(x) => line[x.start()..x.end()].to_string(),
             None => String::new(),
@@ -1059,14 +1043,13 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
     {
         for word_ref in &settings.words {
-            let file_map_value = settings
-                .file_map
-                .get(&word_ref.filename)
-                .expect("Missing file in file map");
+            // 通过索引直接获取文件内容
+            let content = &settings.file_map[word_ref.file_index];
             let reference = ptx_get_reference(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
+                &content.filename, // 传入提取到的文件名
+                &content.lines[word_ref.local_line_nr],
                 &context_reg,
             );
             reference_max_width = reference_max_width.max(str_cols(&reference));
@@ -1074,15 +1057,14 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     }
 
     for word_ref in &settings.words {
-        let file_map_value = settings
-            .file_map
-            .get(&word_ref.filename)
-            .expect("Missing file in file map");
+        // 通过索引直接获取文件内容
+        let content = &settings.file_map[word_ref.file_index];
 
         let reference = ptx_get_reference(
             &settings.config,
             word_ref,
-            &file_map_value.lines[word_ref.local_line_nr],
+            &content.filename, // 传入提取到的文件名
+            &content.lines[word_ref.local_line_nr],
             &context_reg,
         );
 
@@ -1090,24 +1072,24 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
             OutFormat::Tex => ptx_format_tex_line(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &content.lines[word_ref.local_line_nr],
+                &content.chars_lines[word_ref.local_line_nr],
                 &context_reg,
                 &reference,
             ),
             OutFormat::Roff => ptx_format_roff_line(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &content.lines[word_ref.local_line_nr],
+                &content.chars_lines[word_ref.local_line_nr],
                 &context_reg,
                 &reference,
             ),
             OutFormat::Dumb => ptx_format_dumb_line(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &content.lines[word_ref.local_line_nr],
+                &content.chars_lines[word_ref.local_line_nr],
                 &context_reg,
                 &reference,
                 reference_max_width,

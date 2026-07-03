@@ -12,7 +12,7 @@
 use crate::{
     ct_error::set_ct_exit_code,
     ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
-    ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name},
+    ct_quoting_style::{escape_name, CtQuotes, CtQuotingStyle},
     ct_show_error, ct_show_warning,
 };
 use os_display::Quotable;
@@ -24,8 +24,6 @@ use std::ffi::OsStr;
 ///
 /// FormatArgument::Unparsed 变体包含一个可以解析为其他类型的字符串。
 /// 这是由 printf 工具使用的。
-///
-///
 #[derive(Clone, Debug)]
 pub enum FormatArgument {
     Char(char),
@@ -37,18 +35,49 @@ pub enum FormatArgument {
     Unparsed(String),
 }
 
-pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
-    fn get_char(&mut self) -> u8;
-    fn get_i64(&mut self) -> i64;
-    fn get_u64(&mut self) -> u64;
-    fn get_f64(&mut self) -> f64;
-    fn get_str(&mut self) -> &'a str;
+/// 支持随机索引访问的参数游标
+pub struct ArgCursor<'a> {
+    args: &'a [FormatArgument],
+    seq_index: usize,
+    max_accessed: usize,
 }
 
-impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
-    fn get_char(&mut self) -> u8 {
-        if let Some(next) = self.next() {
-            match next {
+impl<'a> ArgCursor<'a> {
+    pub fn new(args: &'a [FormatArgument]) -> Self {
+        Self {
+            args,
+            seq_index: 0,
+            max_accessed: 0,
+        }
+    }
+
+    /// 根据是否有明确索引来提取参数，并记录最大读取位置
+    fn fetch(&mut self, explicit_index: Option<usize>) -> Option<&'a FormatArgument> {
+        let idx = match explicit_index {
+            Some(i) => {
+                if i > 0 {
+                    i - 1
+                } else {
+                    return None;
+                }
+            }
+            None => {
+                let i = self.seq_index;
+                self.seq_index += 1;
+                i
+            }
+        };
+
+        if idx + 1 > self.max_accessed {
+            self.max_accessed = idx + 1;
+        }
+
+        self.args.get(idx)
+    }
+
+    pub fn get_char(&mut self, idx: Option<usize>) -> u8 {
+        if let Some(arg) = self.fetch(idx) {
+            match arg {
                 FormatArgument::Unparsed(s) => {
                     let v = s.bytes().next();
                     v.unwrap_or(b'\0')
@@ -61,9 +90,9 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         }
     }
 
-    fn get_u64(&mut self) -> u64 {
-        if let Some(next) = self.next() {
-            match next {
+    pub fn get_u64(&mut self, idx: Option<usize>) -> u64 {
+        if let Some(arg) = self.fetch(idx) {
+            match arg {
                 FormatArgument::Unparsed(s) => {
                     let v = ParsedNumber::parse_u64(s);
                     extract_value(v, s)
@@ -76,10 +105,9 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         }
     }
 
-    fn get_i64(&mut self) -> i64 {
-        let result = self.next();
-        if let Some(next) = result {
-            match next {
+    pub fn get_i64(&mut self, idx: Option<usize>) -> i64 {
+        if let Some(arg) = self.fetch(idx) {
+            match arg {
                 FormatArgument::Unparsed(s) => {
                     let v = ParsedNumber::parse_i64(s);
                     extract_value(v, s)
@@ -92,10 +120,9 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         }
     }
 
-    fn get_f64(&mut self) -> f64 {
-        let result = self.next();
-        if let Some(next) = result {
-            match next {
+    pub fn get_f64(&mut self, idx: Option<usize>) -> f64 {
+        if let Some(arg) = self.fetch(idx) {
+            match arg {
                 FormatArgument::Unparsed(s) => {
                     let v = ParsedNumber::parse_f64(s);
                     extract_value(v, s)
@@ -108,13 +135,17 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         }
     }
 
-    fn get_str(&mut self) -> &'a str {
-        let result = self.next();
-        if let Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) = result {
+    pub fn get_str(&mut self, idx: Option<usize>) -> &'a str {
+        if let Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) = self.fetch(idx) {
             s
         } else {
             ""
         }
+    }
+
+    /// 返回当前批次中最多消耗了几个参数
+    pub fn consumed_count(&self) -> usize {
+        self.max_accessed
     }
 }
 

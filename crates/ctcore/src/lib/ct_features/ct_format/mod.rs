@@ -28,18 +28,18 @@ pub mod num_parser;
 mod spec;
 
 pub use argument::*;
-use spec::Spec;
+use spec::IndexedSpec; // 引入包装后的 IndexedSpec
 use std::{
     error::Error,
     fmt::Display,
-    io::{Write, stdout},
+    io::{stdout, Write},
     ops::ControlFlow,
 };
 
 use crate::ct_error::CTError;
 
 use self::{
-    escape::{EscapedChar, parse_escape_code},
+    escape::{parse_escape_code, EscapedChar},
     num_format::Formatter,
 };
 
@@ -63,56 +63,44 @@ impl From<std::io::Error> for FormatError {
     }
 }
 
-/**
- * 实现 `Display` trait 用于 `FormatError` 类型，以便错误可以被格式化并显示。
- *
- * `fmt` 函数根据 `FormatError` 的具体类型，生成对应的错误信息，并尝试将其格式化到给定的 `Formatter` 中。
- *
- * @param self `FormatError` 的引用，表示当前发生的错误。
- * @param f `Formatter` 的可变引用，用于指定错误信息的输出格式。
- * @return `std::fmt::Result`，表示格式化操作的结果，成功为 `Ok(())`，失败为 `Err(_)`。
- */
 impl Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // 根据 `FormatError` 的具体类型，选择错误信息模板
         match self {
             Self::SpecError(s) => write!(
                 f,
                 "%{}: invalid conversion specification",
                 String::from_utf8_lossy(s)
-            ), // 当错误为规格说明错误时，提供详细的错误信息
+            ),
             Self::TooManySpecs(s) => write!(
                 f,
                 "format '{}' has too many % directives",
                 String::from_utf8_lossy(s)
-            ), // 当错误为规格说明数量过多时，提示用户格式字符串中有过多的 `%` 指令
+            ),
             Self::NeedAtLeastOneSpec(s) => write!(
                 f,
                 "format '{}' has no % directive",
                 String::from_utf8_lossy(s)
-            ), // 当错误为缺少规格说明时，提示用户格式字符串中缺少 `%` 指令
-            Self::WrongSpecType => write!(f, "wrong % directive type was given"), // 当错误为规格说明类型错误时，提示用户给出了错误的 `%` 指令类型
-            Self::IoError(_) => write!(f, "io error"), // 当错误为I/O错误时，简单提示用户发生了I/O错误
-            Self::NoMoreArguments => write!(f, "no more arguments"), // 当错误为没有更多参数时，提示用户没有提供足够的参数
-            Self::InvalidArgument(_) => write!(f, "invalid argument"), // 当错误为参数无效时，简单提示用户参数无效
+            ),
+            Self::WrongSpecType => write!(f, "wrong % directive type was given"),
+            Self::IoError(_) => write!(f, "io error"),
+            Self::NoMoreArguments => write!(f, "no more arguments"),
+            Self::InvalidArgument(_) => write!(f, "invalid argument"),
         }
     }
 }
+
 /// 定义了一个格式化项，可以是一个格式规范或单个字符。
 pub enum FormatItem<C: FormatChar> {
-    /// 一个格式规范。
-    Spec(Spec),
+    /// 一个格式规范 (替换为了支持索引的 IndexedSpec)
+    Spec(IndexedSpec),
     /// 单个字符。
     Char(C),
 }
 
-/// 定义了格式化字符的 trait，要求实现写入方法。
 pub trait FormatChar {
-    /// 将格式化字符写入给定的写入器。
     fn write(&self, writer: impl Write) -> std::io::Result<ControlFlow<()>>;
 }
 
-/// `u8` 类型实现了 `FormatChar`，将单个 `u8` 字节写入写入器。
 impl FormatChar for u8 {
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
         writer.write_all(&[*self])?;
@@ -120,7 +108,6 @@ impl FormatChar for u8 {
     }
 }
 
-/// `EscapedChar` 类型实现了 `FormatChar`，可以处理转义字符的写入。
 impl FormatChar for EscapedChar {
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
         match self {
@@ -139,27 +126,23 @@ impl FormatChar for EscapedChar {
     }
 }
 
-/// `FormatItem` 的实现，提供了将格式化项写入指定写入器的方法。
 impl<C: FormatChar> FormatItem<C> {
-    /// 将格式化项写入给定的写入器，可能需要迭代格式化参数。
     pub fn write<'a>(
         &self,
         writer: impl Write,
-        args: &mut impl Iterator<Item = &'a FormatArgument>,
+        cursor: &mut ArgCursor<'a>, // <--- 改用游标传递
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
-            Self::Spec(spec) => spec.write(writer, args)?,
+            Self::Spec(spec) => spec.write(writer, cursor)?,
             Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
         };
         Ok(ControlFlow::Continue(()))
     }
 }
 
-/// 解析包含 % 指令和转义序列的格式字符串。
 pub fn parse_spec_and_escape(
     fmt: &[u8],
 ) -> impl Iterator<Item = Result<FormatItem<EscapedChar>, FormatError>> + '_ {
-    // 根据格式字符串中的 % 指令和转义序列，生成格式化项的迭代器
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
@@ -169,7 +152,7 @@ pub fn parse_spec_and_escape(
         }
         [b'%', rest @ ..] => {
             current = rest;
-            let spec = match Spec::parse(&mut current) {
+            let spec = match IndexedSpec::parse(&mut current) {
                 Ok(spec) => spec,
                 Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
             };
@@ -186,11 +169,9 @@ pub fn parse_spec_and_escape(
     })
 }
 
-/// 解析只包含 % 指令的格式字符串。
 pub fn parse_spec_only(
     fmt: &[u8],
 ) -> impl Iterator<Item = Result<FormatItem<u8>, FormatError>> + '_ {
-    // 生成只解析 % 指令的格式化项迭代器
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
@@ -200,7 +181,7 @@ pub fn parse_spec_only(
         }
         [b'%', rest @ ..] => {
             current = rest;
-            let spec = match Spec::parse(&mut current) {
+            let spec = match IndexedSpec::parse(&mut current) {
                 Ok(spec) => spec,
                 Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
             };
@@ -213,9 +194,7 @@ pub fn parse_spec_only(
     })
 }
 
-/// 解析只包含转义序列的格式字符串。
 pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
-    // 解析只包含转义序列的格式字符串
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
@@ -230,22 +209,6 @@ pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
     })
 }
 
-/// 将格式化的字符串写入 stdout。
-///
-/// `format_string` 包含模板，`args` 包含渲染模板所需的参数。
-///
-/// 参见 [`sprintf`]，它创建一个新的格式化 [`String`]。
-///
-/// # 示例
-///
-///
-///
-/// ```rust
-/// use ctcore::ct_format::{printf, FormatArgument};
-///
-/// printf("hello %s", &[FormatArgument::String("world".into())]).unwrap();
-/// // prints "hello world"
-/// ```
 pub fn printf<'a>(
     format_string: impl AsRef<[u8]>,
     arguments: impl IntoIterator<Item = &'a FormatArgument>,
@@ -253,38 +216,21 @@ pub fn printf<'a>(
     printf_writer(stdout(), format_string, arguments)
 }
 
-/// 写入格式化字符串到指定的写入器。
 fn printf_writer<'a>(
     mut writer: impl Write,
     format_string: impl AsRef<[u8]>,
     args: impl IntoIterator<Item = &'a FormatArgument>,
 ) -> Result<(), FormatError> {
-    let mut args = args.into_iter();
+    let var: Vec<FormatArgument> = args.into_iter().cloned().collect();
+    let mut cursor = ArgCursor::new(&var);
     for item in parse_spec_only(format_string.as_ref()) {
-        if let ControlFlow::Break(()) = item?.write(&mut writer, &mut args)? {
+        if let ControlFlow::Break(()) = item?.write(&mut writer, &mut cursor)? {
             break;
         }
     }
     Ok(())
 }
 
-/// 创建一个新的格式化字符串。
-///
-/// `format_string` 包含模板，`args` 包含渲染模板所需的参数。
-///
-/// 参见 [`printf`]，它将内容打印到 stdout。
-///
-/// # 示例
-///
-///
-///
-/// ```rust
-/// use ctcore::ct_format::{sprintf, FormatArgument};
-///
-/// let s = sprintf("hello %s", &[FormatArgument::String("world".into())]).unwrap();
-/// let s = std::str::from_utf8(&s).unwrap();
-/// assert_eq!(s, "hello world");
-/// ```
 pub fn sprintf<'a>(
     format_string: impl AsRef<[u8]>,
     arguments: impl IntoIterator<Item = &'a FormatArgument>,
@@ -294,12 +240,6 @@ pub fn sprintf<'a>(
     Ok(writer)
 }
 
-/// 为单个浮点值解析格式。
-///
-/// 这被 `seq` 使用。可以通过 [`Format::parse`] 构造它，并使用
-/// [`Format::fmt`] 写入一个值。
-///
-/// 它只能接受一个没有星号参数的规范。如果它得到更多规范，就会返回错误。
 pub struct Format<F: Formatter> {
     prefix: Vec<u8>,
     suffix: Vec<u8>,
@@ -307,9 +247,7 @@ pub struct Format<F: Formatter> {
 }
 
 impl<F: Formatter> Format<F> {
-    /// 解析一个格式字符串。
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
-        // 解析格式字符串，提取前缀、规范和后缀
         let mut iter = parse_spec_only(format_string.as_ref());
 
         let mut prefix = Vec::new();
@@ -317,7 +255,7 @@ impl<F: Formatter> Format<F> {
         for item in &mut iter {
             match item? {
                 FormatItem::Spec(s) => {
-                    spec = Some(s);
+                    spec = Some(s.spec); // 将底层的 Spec 剥离出来，完美兼容
                     break;
                 }
                 FormatItem::Char(c) => prefix.push(c),
@@ -349,9 +287,7 @@ impl<F: Formatter> Format<F> {
         })
     }
 
-    /// 格式化并写入给定的值。
     pub fn fmt(&self, mut w: impl Write, f: F::Input) -> std::io::Result<()> {
-        // 将前缀、值（通过 formatter）和后缀写入给定的写入器
         w.write_all(&self.prefix)?;
         self.formatter.fmt(&mut w, f)?;
         w.write_all(&self.suffix)?;

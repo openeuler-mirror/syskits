@@ -18,10 +18,11 @@ use std::io::stdout;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ops::ControlFlow;
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_format::{parse_spec_and_escape, ArgCursor, FormatArgument, FormatItem};
+use ctcore::ct_show_error;
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError};
-use ctcore::ct_format::{FormatArgument, FormatItem, parse_spec_and_escape};
 use std::ffi::OsString;
 use sys_locale::get_locale;
 
@@ -50,65 +51,57 @@ impl Tool for Printf {
 }
 
 /// 主函数，用于处理命令行输入并格式化输出。
-///
-/// # 参数
-/// `args`: 实现了 `ctcore::Args` 接口的对象，代表命令行参数。
-///
-/// # 返回值
-/// 返回一个 `CTResult<()>`，成功时为 `Ok(())`，错误时为 `Err(CTsageError)`。
 pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 从命令行参数中获取匹配项
     let args_match = ct_app().get_matches_from(args);
 
-    // 获取格式化字符串参数
     let format_string = args_match
         .get_one::<String>(opt_flags::PRINTF_FORMATSTRING)
         .ok_or_else(|| CTsageError::new(1, "missing operand"))?;
 
-    // 解析额外的参数，并准备格式化参数列表
     let var: Vec<_> = match args_match.get_many::<String>(opt_flags::PRINTF_ARGUMENT) {
         Some(s) => s.map(|s| FormatArgument::Unparsed(s.to_string())).collect(),
         None => vec![],
     };
 
-    // 标记是否在格式化字符串中发现了格式化规范
-    let mut is_format_seen = false;
+    let mut args_slice = var.as_slice();
 
-    // 第一次遍历：处理格式化字符串中的所有项目
-    let mut format_args = var.iter().peekable();
-    for item in parse_spec_and_escape(format_string.as_ref()) {
-        if let Ok(FormatItem::Spec(_)) = item {
-            is_format_seen = true;
-        }
-        match item?.write(stdout(), &mut format_args)? {
-            ControlFlow::Continue(()) => {}
-            ControlFlow::Break(()) => return Ok(()),
-        };
-    }
-    // 如果格式化字符串中没有格式化规范，则提前退出，避免无限循环
-    if !is_format_seen {
-        return Ok(());
-    }
+    // 核心大循环：不断重复 format 字符串，直到所有参数耗尽
+    loop {
+        let mut cursor = ArgCursor::new(args_slice);
 
-    // 第二次遍历：处理剩余的参数
-    while format_args.peek().is_some() {
-        for format_arg in parse_spec_and_escape(format_string.as_ref()) {
-            match format_arg?.write(stdout(), &mut format_args)? {
-                ControlFlow::Continue(()) => {}
+        for item in parse_spec_and_escape(format_string.as_bytes()) {
+            // 这里改用 CtSimpleError
+            let item = item.map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            match item
+                .write(stdout(), &mut cursor)
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?
+            {
                 ControlFlow::Break(()) => return Ok(()),
-            };
+                ControlFlow::Continue(()) => {}
+            }
         }
+        let consumed = cursor.consumed_count();
+
+        // 防死循环：如果这一轮一个参数都没吃掉，证明格式化字符串是个“无底洞”，强制退出
+        if consumed == 0 {
+            break;
+        }
+
+        // 如果吃的参数比剩下的还多，说明参数已经吃干净了
+        if consumed >= args_slice.len() {
+            break;
+        }
+
+        // 往前推进切片窗口
+        args_slice = &args_slice[consumed..];
     }
 
     Ok(())
 }
 
 /// 构建命令行解析器对象。
-///
-/// # 返回值
-/// 返回一个配置好的 `Command` 对象，用于解析命令行参数。
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();

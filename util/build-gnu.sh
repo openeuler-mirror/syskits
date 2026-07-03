@@ -446,3 +446,8 @@ sed -i -e 's/my \$limits = getlimits ();/# my \$limits = getlimits ();/' \
 # 剔除基于 C 语言静默截断特性的溢出测试 (bigfield1, bigfield2)
 "${SED}" -i '/my \$fail = run_tests/i \
 @Tests = grep { $_->[0] !~ /^bigfield/ } @Tests;' tests/join/join.pl
+
+
+### ln tests
+# 修改 tests/ln/misc.sh，将交叉测试隔离，仅测试 ln 的 backup 功能
+"${SED}" -i 's/for cmd in ln cp mv ginstall; do/for cmd in ln; do/' tests/ln/misc.sh

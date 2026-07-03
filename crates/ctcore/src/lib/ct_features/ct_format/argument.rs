@@ -157,7 +157,7 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
         Ok(v) => v,
         Err(e) => {
             set_ct_exit_code(1);
-            let input = escape_name(
+            let input_escaped = escape_name(
                 OsStr::new(input),
                 &CtQuotingStyle::C {
                     quotes: CtQuotes::None,
@@ -165,21 +165,22 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
             );
             match e {
                 ParseError::CtOverflow => {
-                    ct_show_error!("{}: Numerical result out of range", input.quote());
+                    ct_show_error!("{}: Numerical result out of range", input_escaped.quote());
                     Default::default()
                 }
                 ParseError::CtNotNumeric => {
-                    ct_show_error!("{}: expected a numeric value", input.quote());
+                    ct_show_error!("{}: expected a numeric value", input_escaped.quote());
                     Default::default()
                 }
                 ParseError::CtPartialMatch(v, rest) => {
-                    if input.starts_with('\'') {
+                    // 同时兼容单引号和双引号的警告判定
+                    if input.starts_with('\'') || input.starts_with('"') {
                         ct_show_warning!(
                             "{}: character(s) following character constant have been ignored",
                             &rest,
                         );
                     } else {
-                        ct_show_error!("{}: value not completely converted", input.quote());
+                        ct_show_error!("{}: value not completely converted", input_escaped.quote());
                     }
                     v
                 }

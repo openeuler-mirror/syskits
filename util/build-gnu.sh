@@ -534,3 +534,11 @@ echo 'exit 77' > tests/shred/shred-passes.sh
 # 因此 tac 遇到 <&- 时会成功读取 EOF 而非抛出 EBADF。
 # 移除这个特定于 C 语言的已关闭文件描述符测试。
 "${SED}" -i -e '/timeout 10 tac - - <&-/d' tests/tac/tac-2-nonseekable.sh
+
+
+### test tests
+# 修复 test-N.sh 脚本中的 touch 兼容性问题。
+# 环境中的 touch 有可能不支持 GNU 的自然语言日期解析，导致 exit status 99。
+# 将相对时间替换为绝对的 POSIX 标准时间戳 (YYYYMMDDhhmm)。
+"${SED}" -i "s/touch -a -d '12:00 today -2 days'/touch -a -t 200001011200/" tests/test/test-N.sh
+"${SED}" -i "s/touch -m -d '12:00 today -4 days'/touch -m -t 199901011200/" tests/test/test-N.sh

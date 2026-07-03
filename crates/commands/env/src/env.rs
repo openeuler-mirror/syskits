@@ -34,6 +34,9 @@ use native_int_str::{
 #[cfg(unix)]
 use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, raise, sigaction};
 
+#[cfg(unix)]
+use nix::libc;
+
 use std::borrow::Cow;
 use std::env;
 use std::ffi::OsStr;
@@ -65,6 +68,14 @@ struct EnvOptions<'a> {
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
+    #[cfg(unix)]
+    default_signals: Option<Vec<Signal>>,
+    #[cfg(unix)]
+    ignore_signals: Option<Vec<Signal>>,
+    #[cfg(unix)]
+    block_signals: Option<Vec<Signal>>,
+    #[cfg(unix)]
+    list_signal_handling: bool,
 }
 
 fn print_env(line_ending: CtLineEnding) {
@@ -208,6 +219,34 @@ fn env_args_init() -> Vec<Arg> {
             .action(ArgAction::Set)
             .value_parser(ValueParser::os_string())
             .help("process and split S into separate arguments; used to pass multiple arguments on shebang lines"),
+        Arg::new("default-signal")
+            .long("default-signal")
+            .value_name("SIG")
+            .num_args(0..=1)
+            .require_equals(true)
+            .default_missing_value("")
+            .action(ArgAction::Append)
+            .help("reset handling of SIG to its default"),
+        Arg::new("ignore-signal")
+            .long("ignore-signal")
+            .value_name("SIG")
+            .num_args(0..=1)
+            .require_equals(true)
+            .default_missing_value("")
+            .action(ArgAction::Append)
+            .help("set handling of SIG to do nothing"),
+        Arg::new("block-signal")
+            .long("block-signal")
+            .value_name("SIG")
+            .num_args(0..=1)
+            .require_equals(true)
+            .default_missing_value("")
+            .action(ArgAction::Append)
+            .help("block delivery of SIG"),
+        Arg::new("list-signal-handling")
+            .long("list-signal-handling")
+            .action(ArgAction::SetTrue)
+            .help("list nondefault signal handling to stderr"),
         Arg::new("vars")
             .action(ArgAction::Append)
             .value_parser(ValueParser::os_string())
@@ -378,6 +417,14 @@ impl EnvAppData {
         // 设置指定的环境变量
         env_apply_specified_env_vars(&options);
 
+        #[cfg(unix)]
+        apply_signal_handlers(&options)?;
+
+        #[cfg(unix)]
+        if options.list_signal_handling {
+            list_signal_handling();
+        }
+
         if options.program.is_empty() {
             // 如果没有指定程序，则仅打印环境变量
             print_env(options.line_ending);
@@ -475,6 +522,152 @@ fn apply_removal_of_all_env_vars(options: &EnvOptions<'_>) {
     }
 }
 
+#[cfg(unix)]
+fn parse_signal(sig_str: &str) -> CTResult<Signal> {
+    let sig_str = sig_str.to_uppercase();
+    let s = if sig_str.starts_with("SIG") {
+        sig_str.clone()
+    } else {
+        format!("SIG{}", sig_str)
+    };
+    for sig in Signal::iterator() {
+        if sig.as_str() == s {
+            return Ok(sig);
+        }
+    }
+    if let Ok(num) = sig_str.parse::<i32>() {
+        if let Ok(sig) = Signal::try_from(num) {
+            return Ok(sig);
+        }
+    }
+    Err(CtSimpleError::new(
+        125,
+        format!("invalid signal {}", sig_str.quote()),
+    ))
+}
+
+#[cfg(unix)]
+fn parse_signal_list(val: &str) -> CTResult<Vec<Signal>> {
+    let mut sigs = Vec::new();
+    for p in val.split(',') {
+        let p = p.trim();
+        if !p.is_empty() {
+            sigs.push(parse_signal(p)?);
+        }
+    }
+    Ok(sigs)
+}
+
+#[cfg(unix)]
+fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec<Signal>>> {
+    if !args_match.contains_id(name) {
+        return Ok(None);
+    }
+    let mut sigs = Vec::new();
+    let mut all = false;
+    if let Some(vals) = args_match.get_many::<String>(name) {
+        for v in vals {
+            if v.is_empty() {
+                all = true;
+            } else {
+                sigs.extend(parse_signal_list(v)?);
+            }
+        }
+    }
+    if all {
+        Ok(Some(Signal::iterator().collect()))
+    } else {
+        Ok(Some(sigs))
+    }
+}
+
+#[cfg(unix)]
+fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
+    if let Some(ref sigs) = options.default_signals {
+        for &sig in sigs {
+            if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+                continue;
+            }
+            unsafe {
+                let _ = sigaction(
+                    sig,
+                    &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty()),
+                );
+            }
+        }
+    }
+    if let Some(ref sigs) = options.ignore_signals {
+        for &sig in sigs {
+            if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+                continue;
+            }
+            unsafe {
+                let _ = sigaction(
+                    sig,
+                    &SigAction::new(SigHandler::SigIgn, SaFlags::empty(), SigSet::empty()),
+                );
+            }
+        }
+    }
+    if let Some(ref sigs) = options.block_signals {
+        let mut set = SigSet::empty();
+        for &sig in sigs {
+            if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+                continue;
+            }
+            set.add(sig);
+        }
+        let _ = nix::sys::signal::sigprocmask(
+            nix::sys::signal::SigmaskHow::SIG_BLOCK,
+            Some(&set),
+            None,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn list_signal_handling() {
+    for sig in Signal::iterator() {
+        if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+            continue;
+        }
+
+        let mut old_set = SigSet::empty();
+        let _ = nix::sys::signal::sigprocmask(
+            nix::sys::signal::SigmaskHow::SIG_BLOCK,
+            None,
+            Some(&mut old_set),
+        );
+        let is_blocked = old_set.contains(sig);
+
+        let mut old_act: libc::sigaction = unsafe { std::mem::zeroed() };
+        if unsafe { libc::sigaction(sig as libc::c_int, std::ptr::null(), &mut old_act) } == 0 {
+            let handler = old_act.sa_sigaction as usize;
+
+            let state_str = if handler == libc::SIG_IGN as usize {
+                "IGNORE"
+            } else if handler == libc::SIG_DFL as usize {
+                "DEFAULT"
+            } else {
+                "HANDLED"
+            };
+
+            if handler != libc::SIG_DFL as usize || is_blocked {
+                let name = sig.as_str().strip_prefix("SIG").unwrap_or(sig.as_str());
+                let num = sig as i32;
+                if handler != libc::SIG_DFL as usize && is_blocked {
+                    eprintln!("{:<10} ({:2}): {}, BLOCKED", name, num, state_str);
+                } else if handler != libc::SIG_DFL as usize {
+                    eprintln!("{:<10} ({:2}): {}", name, num, state_str);
+                } else if is_blocked {
+                    eprintln!("{:<10} ({:2}): DEFAULT, BLOCKED", name, num);
+                }
+            }
+        }
+    }
+}
+
 /**
  * 根据 clap::ArgMatches 生成 EnvOptions。
  *
@@ -504,6 +697,15 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
         None => Vec::with_capacity(0),
     };
 
+    #[cfg(unix)]
+    let default_signals = get_signals(args_match, "default-signal")?;
+    #[cfg(unix)]
+    let ignore_signals = get_signals(args_match, "ignore-signal")?;
+    #[cfg(unix)]
+    let block_signals = get_signals(args_match, "block-signal")?;
+    #[cfg(unix)]
+    let list_signal_handling = args_match.get_flag("list-signal-handling");
+
     // 初始化 EnvOptions 结构体
     let mut opts = EnvOptions {
         ignore_env,
@@ -513,6 +715,14 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
         unsets,
         sets: vec![],
         program: vec![],
+        #[cfg(unix)]
+        default_signals,
+        #[cfg(unix)]
+        ignore_signals,
+        #[cfg(unix)]
+        block_signals,
+        #[cfg(unix)]
+        list_signal_handling,
     };
 
     // 处理 "vars" 参数，解析环境变量设置和程序参数

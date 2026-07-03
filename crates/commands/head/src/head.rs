@@ -126,20 +126,49 @@ impl Default for Mode {
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(head_flags::BYTES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
-            if all_but_last {
-                Ok(Self::AllButLastBytes(n))
-            } else {
-                Ok(Self::FirstBytes(n))
+            match parse::parse_num(v) {
+                Ok((n, all_but_last)) => {
+                    if all_but_last {
+                        Ok(Self::AllButLastBytes(n))
+                    } else {
+                        Ok(Self::FirstBytes(n))
+                    }
+                }
+                Err(err) => {
+                    // 兼容 GNU 针对超大数字的 OOM 攻击测试
+                    let err_str = err.to_string();
+                    if err_str.contains("too large") || err_str.contains("overflow") {
+                        if v.starts_with('-') {
+                            Ok(Self::AllButLastBytes(u64::MAX))
+                        } else {
+                            Ok(Self::FirstBytes(u64::MAX))
+                        }
+                    } else {
+                        Err(format!("invalid number of bytes: {err}"))
+                    }
+                }
             }
         } else if let Some(v) = matches.get_one::<String>(head_flags::LINES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
-            if all_but_last {
-                Ok(Self::AllButLastLines(n))
-            } else {
-                Ok(Self::FirstLines(n))
+            match parse::parse_num(v) {
+                Ok((n, all_but_last)) => {
+                    if all_but_last {
+                        Ok(Self::AllButLastLines(n))
+                    } else {
+                        Ok(Self::FirstLines(n))
+                    }
+                }
+                Err(err) => {
+                    let err_str = err.to_string();
+                    if err_str.contains("too large") || err_str.contains("overflow") {
+                        if v.starts_with('-') {
+                            Ok(Self::AllButLastLines(u64::MAX))
+                        } else {
+                            Ok(Self::FirstLines(u64::MAX))
+                        }
+                    } else {
+                        Err(format!("invalid number of lines: {err}"))
+                    }
+                }
             }
         } else {
             Ok(Self::default())
@@ -266,6 +295,7 @@ fn read_n_lines(
     let mut lines_read = 0;
     let mut total_written = 0;
 
+    // 手动精细控制 BufRead，确保不贪婪消耗多余的字节
     while lines_read < n {
         let (consumed, lines_in_chunk, eof) = {
             let buf = input.fill_buf()?;
@@ -356,10 +386,8 @@ fn read_but_last_n_bytes(
             }
         }
 
-        // Write to stdout
         stdout.write_all(&local_buffer)?;
 
-        // If a buffer was provided, copy the bytes into it
         if let Some(buf) = buffer {
             buf.extend_from_slice(&local_buffer);
         }
@@ -384,10 +412,8 @@ fn read_but_last_n_lines(
             local_buffer.extend_from_slice(&bytes);
         }
 
-        // Write to stdout
         stdout.write_all(&local_buffer)?;
 
-        // If a buffer was provided, copy the bytes into it
         if let Some(buf) = buffer {
             buf.extend_from_slice(&local_buffer);
         }
@@ -413,11 +439,13 @@ where
         return Ok(start_pos);
     }
 
+    // 检查文件是否以分隔符结尾
     input.seek(SeekFrom::Start(start_pos + size - 1))?;
     let mut last_byte = [0u8; 1];
     input.read_exact(&mut last_byte)?;
     let ends_with_sep = last_byte[0] == separator;
 
+    // 核心逻辑：如果是完整行结尾，找第 N+1 个换行符；如果是残缺行，找第 N 个换行符
     let target_newlines = if ends_with_sep { n + 1 } else { n };
     if target_newlines == 0 {
         return Ok(start_pos + size);
@@ -440,6 +468,7 @@ where
             if byte == separator {
                 newlines_found += 1;
                 if newlines_found == target_newlines {
+                    // 找到目标换行符，切分点应该在这个换行符之后
                     let cut_point = start_read + chunk_size as u64 - i as u64;
                     input.seek(SeekFrom::Start(start_pos))?;
                     return Ok(start_pos + cut_point);
@@ -461,6 +490,7 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    // 修复管道模拟：如果开启 presume_input_pipe，强制认为不可寻址
     let seekable = !options.presume_input_pipe && is_seekable(input);
 
     if !seekable {
@@ -496,6 +526,7 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
                 }
 
                 let mut total_lines = newline_positions.len() as u64;
+                // 完美处理 GNU 边缘用例：最后一行没有换行符也算作一行
                 if !data.is_empty() && *data.last().unwrap() != separator {
                     total_lines += 1;
                 }
@@ -605,8 +636,15 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
     let mut first = true;
 
     for file in &options.files {
-        // 处理文件，如果有错误则继续处理下一个文件
         process_file(file, options, &mut first)?;
+    }
+
+    if let Err(e) = std::io::stdout().flush() {
+        let msg = e.to_string();
+        return Err(CtSimpleError::new(
+            1,
+            format!("error writing 'standard output': {}", msg),
+        ));
     }
 
     Ok(())
@@ -614,23 +652,40 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
 
 // 处理单个文件
 fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult<()> {
-    let res = match (file, options.presume_input_pipe) {
-        // 处理标准输入或管道输入
-        (_, true) | ("-", false) => {
-            print_file_header(options, *first, "standard input");
+    // 修复：不要劫持 presume_input_pipe！只在 file 是 "-" 时才读取 stdin
+    let res = if file == "-" {
+        print_file_header(options, *first, "standard input");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::FromRawFd;
+            let mut stdin_file =
+                std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
+            if !options.presume_input_pipe && is_seekable(&mut *stdin_file) {
+                head_file(&mut *stdin_file, options)
+            } else {
+                handle_stdin(options)
+            }
+        }
+        #[cfg(not(unix))]
+        {
             handle_stdin(options)
         }
-        // 处理普通文件
-        (name, false) => process_regular_file(name, options, *first),
+    } else {
+        process_regular_file(file, options, *first)
     };
 
-    // 处理可能的错误
-    if let Err(_e) = res {
-        let name = if file == "-" { "standard input" } else { file };
-        ct_show!(CtSimpleError::new(
-            1,
-            format!("error reading {name}: Input/output error")
-        ));
+    if let Err(e) = res {
+        let msg = e.to_string();
+        if msg.contains("error writing 'standard output'") {
+            return Err(CtSimpleError::new(1, msg));
+        } else {
+            let name = if file == "-" { "standard input" } else { file };
+            ct_show!(CtSimpleError::new(
+                1,
+                format!("error reading {name}: Input/output error")
+            ));
+        }
     }
 
     *first = false;

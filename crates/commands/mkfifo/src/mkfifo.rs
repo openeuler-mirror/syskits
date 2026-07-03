@@ -16,17 +16,17 @@
 // 命名管道的使用通常涉及到两个或多个进程，其中一个进程将数据写入管道，另一个或多个进程从管道中读取数据。它们在文件系统中有一个名称，因此可以被多个进程引用。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
+use ctcore::Tool;
 use libc::mkfifo;
+use selinux::label::{back_end::File as FileBackEnd, Labeler};
 use selinux::SecurityContext;
-use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
@@ -189,7 +189,20 @@ fn set_default_context_for_path(
     let file_mode = (libc::S_IFIFO as libc::mode_t) | fifo_mode;
     let file_access_mode =
         selinux::FileAccessMode::new(file_mode).expect("mode should be non-zero");
-    let default_context = match labeler.look_up_by_path(fifo_path, Some(file_access_mode)) {
+
+    let path = std::path::Path::new(fifo_path);
+
+    // 将相对路径转换为绝对路径
+    let abs_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|p| p.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+
+    // 传入 abs_path
+    let default_context = match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
         Ok(context) => context,
         Err(_) => return Ok(()),
     };
@@ -197,6 +210,7 @@ fn set_default_context_for_path(
     let _ = default_context.set_for_new_file_system_objects(false);
     Ok(())
 }
+
 pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
     CString::new(os_str.as_bytes()).expect("Failed to convert OsStr to CString")
 }

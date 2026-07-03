@@ -35,17 +35,17 @@
 // spell-checker:ignore (words) wipesync prefill
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
+use ctcore::Tool;
 use ctcore::{ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -310,6 +310,49 @@ impl BytesWriter {
     }
 }
 
+/// 专门用于 shred 的文件大小解析，支持 0x 和 0 前缀
+fn parse_shred_size(size_str: &str) -> Result<u64, ()> {
+    let s = size_str.trim();
+    if s.starts_with('-') {
+        return Err(());
+    }
+
+    // 将数字部分与后缀部分(如 K, M, B)分离
+    let split_idx = s
+        .find(|c: char| !c.is_ascii_hexdigit() && c != 'x' && c != 'X')
+        .unwrap_or(s.len());
+    let (num_str, suffix) = s.split_at(split_idx);
+
+    if num_str.is_empty() {
+        return ctcore::ct_parse_size::parse_size_u64(s).map_err(|_| ());
+    }
+
+    // 判断进制
+    let radix = if num_str.starts_with("0x") || num_str.starts_with("0X") {
+        16
+    } else if num_str.starts_with('0') && num_str.len() > 1 {
+        8
+    } else {
+        10
+    };
+
+    let num_str_clean = if radix == 16 { &num_str[2..] } else { num_str };
+
+    // 尝试按照识别的进制解析，如果失败（比如包含了 B 导致误判为 Hex），则 fallback 到默认解析
+    let num = match u64::from_str_radix(num_str_clean, radix) {
+        Ok(n) => n,
+        Err(_) => return ctcore::ct_parse_size::parse_size_u64(s).map_err(|_| ()),
+    };
+
+    // 如果没有后缀，直接返回；如果有，拼接成十进制格式交给底层库处理单位换算
+    if suffix.is_empty() {
+        Ok(num)
+    } else {
+        let decimal_str = format!("{}{}", num, suffix);
+        ctcore::ct_parse_size::parse_size_u64(&decimal_str).map_err(|_| ())
+    }
+}
+
 /// 文件擦除的配置选项
 ///
 /// # 字段说明
@@ -367,14 +410,20 @@ impl<'a> ShredSettings<'a> {
         let size = matches
             .get_one::<String>(shred_options::SHRED_SIZE)
             .map(|size_str| {
-                parse_size_u64(size_str).map_err(|_| {
+                parse_shred_size(size_str).map_err(|_| {
                     CtSimpleError::new(1, format!("invalid file size: {}", size_str.quote()))
                 })
             })
             .transpose()?;
 
         // 获取其他选项
-        let exact = matches.get_flag(shred_options::SHRED_EXACT);
+        let mut exact = matches.get_flag(shred_options::SHRED_EXACT);
+
+        // 如果用户指定了具体的 size，强制进入 exact 模式，不再向上对齐块大小
+        if size.is_some() {
+            exact = true;
+        }
+
         let zero = matches.get_flag(shred_options::SHRED_ZERO);
         let verbose = matches.get_flag(shred_options::SHRED_VERBOSE);
         let force = matches.get_flag(shred_options::SHRED_FORCE);
@@ -606,16 +655,14 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
                 pass_name
             );
         }
-        ct_show_if_err!(
-            shred_do_pass(
-                &mut file,
-                &pass_type,
-                settings.exact,
-                size,
-                settings.random_source
-            )
-            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
-        );
+        ct_show_if_err!(shred_do_pass(
+            &mut file,
+            &pass_type,
+            settings.exact,
+            size,
+            settings.random_source
+        )
+        .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
 
     // 如果需要，删除文件
@@ -802,8 +849,8 @@ mod tests {
     use std::fs;
     use std::fs::File;
     use std::io::Write;
-    use tempfile::Builder;
     use tempfile::tempdir;
+    use tempfile::Builder;
 
     #[test]
     fn test_tool_implementation() {

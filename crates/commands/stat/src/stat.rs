@@ -115,6 +115,7 @@ pub enum StatOutputType {
 #[derive(Debug, PartialEq, Eq)]
 enum StatToken {
     Char(char),
+    Byte(u8),
     Directive {
         flag: StatFlags,
         width: usize,
@@ -125,11 +126,11 @@ enum StatToken {
 }
 
 trait ScanUtil {
-    fn scan_char(&self, radix: u32) -> Option<(char, usize)>;
+    fn scan_char(&self, radix: u32) -> Option<(u8, usize)>;
 }
 
 impl ScanUtil for str {
-    fn scan_char(&self, radix: u32) -> Option<(char, usize)> {
+    fn scan_char(&self, radix: u32) -> Option<(u8, usize)> {
         let count = match radix {
             8 => 3,
             16 => 2,
@@ -156,7 +157,7 @@ impl ScanUtil for str {
             offset = i + 1;
         }
         if offset > 0 {
-            Some((res as u8 as char, offset))
+            Some((res as u8, offset))
         } else {
             None
         }
@@ -571,30 +572,35 @@ impl Stater {
             return StatToken::Char('\\');
         }
         match chars[*i] {
-            'x' if *i + 1 < bound => {
-                if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
-                    *i += offset;
-                    StatToken::Char(c)
+            'x' => {
+                if *i + 1 < bound {
+                    if let Some((b, offset)) = format_str[*i + 1..].scan_char(16) {
+                        *i += offset;
+                        StatToken::Byte(b)
+                    } else {
+                        ct_show_warning!("unrecognized escape '\\x'");
+                        StatToken::Char('x')
+                    }
                 } else {
-                    ct_show_warning!("unrecognized escape '\\x'");
+                    ct_show_warning!("incomplete hex escape '\\x'");
                     StatToken::Char('x')
                 }
             }
             '0'..='7' => {
-                let (c, offset) = format_str[*i..].scan_char(8).unwrap();
+                let (b, offset) = format_str[*i..].scan_char(8).unwrap();
                 *i += offset - 1;
-                StatToken::Char(c)
+                StatToken::Byte(b)
             }
             '"' => StatToken::Char('"'),
             '\\' => StatToken::Char('\\'),
-            'a' => StatToken::Char('\x07'),
-            'b' => StatToken::Char('\x08'),
-            'e' => StatToken::Char('\x1B'),
-            'f' => StatToken::Char('\x0C'),
-            'n' => StatToken::Char('\n'),
-            'r' => StatToken::Char('\r'),
-            't' => StatToken::Char('\t'),
-            'v' => StatToken::Char('\x0B'),
+            'a' => StatToken::Byte(b'\x07'),
+            'b' => StatToken::Byte(b'\x08'),
+            'e' => StatToken::Byte(b'\x1B'),
+            'f' => StatToken::Byte(b'\x0C'),
+            'n' => StatToken::Byte(b'\n'),
+            'r' => StatToken::Byte(b'\r'),
+            't' => StatToken::Byte(b'\t'),
+            'v' => StatToken::Byte(b'\x0B'),
             c => {
                 ct_show_warning!("unrecognized escape '\\{}'", c);
                 StatToken::Char(c)
@@ -894,6 +900,10 @@ impl Stater {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
+                StatToken::Byte(b) => {
+                    use std::io::Write;
+                    let _ = std::io::stdout().write_all(&[*b]);
+                }
                 StatToken::Directive {
                     flag,
                     width,
@@ -912,6 +922,10 @@ impl Stater {
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
+                StatToken::Byte(b) => {
+                    use std::io::Write;
+                    let _ = std::io::stdout().write_all(&[*b]);
+                }
                 StatToken::Directive {
                     flag,
                     width,

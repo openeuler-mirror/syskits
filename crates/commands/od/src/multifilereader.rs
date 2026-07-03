@@ -14,6 +14,7 @@ use std::io::{self, BufReader};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_show_error;
+use ctcore::libc;
 
 /// 输入源的枚举类型，表示不同类型的输入来源
 pub enum OdInputSource<'a> {
@@ -42,105 +43,92 @@ pub trait HasError {
     fn has_error(&self) -> bool;
 }
 
+#[cfg(unix)]
+struct UnbufferedStdin;
+
+#[cfg(unix)]
+impl io::Read for UnbufferedStdin {
+    /// 使用底层的 libc::read 实现绝对的无缓冲读取。
+    /// 这样当上层 (PartialReader) 限制只读 N 个字节时，
+    /// 管道中剩余的数据不会被多余的缓冲区吸走，留给后续进程继续使用。
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let res = unsafe { libc::read(0, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+        if res < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(res as usize)
+        }
+    }
+}
+
 impl OdMultifileReader<'_> {
     /// 创建新的多文件读取器
-    ///
-    /// # 参数
-    /// * `fnames` - 输入源列表
     pub fn new(fnames: Vec<OdInputSource>) -> OdMultifileReader {
         let mut mf = OdMultifileReader {
             ni: fnames,
-            curr_file: None, // 通常表示已完成；需要调用 next_file()
+            curr_file: None,
             is_any_err: false,
         };
         mf.next_file();
         mf
     }
 
-    /// 切换到下一个输入文件
-    ///
-    /// # 功能
-    /// - 从输入源列表中获取并处理下一个输入源
-    /// - 根据输入源类型执行相应的初始化
-    /// - 处理文件打开失败的情况
-    ///
-    /// # 实现细节
-    /// - 如果输入列表为空，设置 curr_file 为 None
-    /// - 对于标准输入，创建带缓冲的标准输入读取器
-    /// - 对于文件名，尝试打开文件，失败时记录错误并继续处理下一个
-    /// - 对于流，直接使用作为当前文件
     fn next_file(&mut self) {
-        // 循环处理输入源，直到成功打开一个或处理完所有输入
         while !self.ni.is_empty() {
-            // 获取并移除列表中的第一个输入源
             match self.ni.remove(0) {
                 OdInputSource::Stdin => {
-                    // 标准输入：创建缓冲读取器并退出循环
-                    self.curr_file = Some(Box::new(BufReader::new(std::io::stdin())));
+                    #[cfg(unix)]
+                    {
+                        // 使用无缓冲的标准输入，避免 over-read
+                        self.curr_file = Some(Box::new(UnbufferedStdin));
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        // Windows 等非 Unix 系统暂退回标准 stdin
+                        self.curr_file = Some(Box::new(std::io::stdin()));
+                    }
                     return;
                 }
-                OdInputSource::FileName(fname) => {
-                    // 文件输入：尝试打开文件
-                    match File::open(fname) {
-                        Ok(f) => {
-                            // 成功打开文件：创建缓冲读取器并退出循环
-                            self.curr_file = Some(Box::new(BufReader::new(f)));
-                            return;
-                        }
-                        Err(e) => {
-                            // 文件打开失败：记录错误并继续处理下一个输入源
-                            ct_show_error!("{}: {}", fname.maybe_quote(), e);
-                            self.is_any_err = true;
-                            // 继续循环尝试下一个输入源
-                        }
+                OdInputSource::FileName(fname) => match File::open(fname) {
+                    Ok(f) => {
+                        self.curr_file = Some(Box::new(BufReader::new(f)));
+                        return;
                     }
-                }
+                    Err(e) => {
+                        ct_show_error!("{}: {}", fname.maybe_quote(), e);
+                        self.is_any_err = true;
+                    }
+                },
                 OdInputSource::Stream(s) => {
-                    // 流输入：直接使用并退出循环
                     self.curr_file = Some(s);
                     return;
                 }
             }
         }
-
-        // 所有输入源都处理完毕或都失败了
         self.curr_file = None;
     }
 }
 
 impl io::Read for OdMultifileReader<'_> {
-    /// 从文件列表中读取字节填充缓冲区
-    ///
-    /// # 返回值
-    /// * `Ok(读取的字节数)`
-    ///
-    /// 内部处理 IO 错误，因此总是返回 Ok
-    /// 除非已经没有输入，否则会尝试完全填充提供的缓冲区
-    /// 如果任何一次调用返回的数据少于 buf.len()，后续所有调用都将返回 Ok(0)
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut xfrd = 0;
-        // 当缓冲区未满时继续读取，可能会读取多个文件
         'fillloop: while xfrd < buf.len() {
             match self.curr_file {
                 None => break,
-                Some(ref mut curr_file) => {
-                    loop {
-                        // 标准输入可能在按回车时返回，即使缓冲区未满
-                        xfrd += match curr_file.read(&mut buf[xfrd..]) {
-                            Ok(0) => break,
-                            Ok(n) => n,
-                            Err(e) => {
-                                ct_show_error!("I/O: {}", e);
-                                self.is_any_err = true;
-                                break;
-                            }
-                        };
-                        if xfrd == buf.len() {
-                            // 已传输请求的所有数据
-                            break 'fillloop;
+                Some(ref mut curr_file) => loop {
+                    xfrd += match curr_file.read(&mut buf[xfrd..]) {
+                        Ok(0) => break,
+                        Ok(n) => n,
+                        Err(e) => {
+                            ct_show_error!("I/O: {}", e);
+                            self.is_any_err = true;
+                            break;
                         }
+                    };
+                    if xfrd == buf.len() {
+                        break 'fillloop;
                     }
-                }
+                },
             }
             self.next_file();
         }
@@ -149,7 +137,6 @@ impl io::Read for OdMultifileReader<'_> {
 }
 
 impl HasError for OdMultifileReader<'_> {
-    /// 返回是否发生过任何错误
     fn has_error(&self) -> bool {
         self.is_any_err
     }

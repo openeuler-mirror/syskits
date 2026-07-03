@@ -37,20 +37,20 @@ use clap::builder::ValueParser;
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_crash_if_err;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
-use memchr::{memchr_iter, memchr3_iter};
+use ctcore::Tool;
+use memchr::{memchr3_iter, memchr_iter, memmem};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -90,9 +90,9 @@ enum FileNum {
     File2,
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)] // 移除了 Copy
 enum Sep {
-    Char(u8),
+    Char(Vec<u8>),
     Line,
     Whitespaces,
 }
@@ -163,7 +163,7 @@ struct JoinRepr<'a> {
     /// 行终止符类型
     line_ending: CtLineEnding,
     /// 输出字段分隔符
-    separator: u8,
+    separator: Vec<u8>,
     /// 输出格式规范
     format: &'a [JoinSpec],
     /// 空字段替换值
@@ -173,7 +173,7 @@ struct JoinRepr<'a> {
 impl<'a> JoinRepr<'a> {
     fn new(
         line_ending: CtLineEnding,
-        separator: u8,
+        separator: Vec<u8>,
         format: &'a [JoinSpec],
         empty: &'a [u8],
     ) -> JoinRepr<'a> {
@@ -221,15 +221,11 @@ impl<'a> JoinRepr<'a> {
         line: &Line,
         skip_index: usize,
     ) -> Result<(), std::io::Error> {
-        // 遍历所有字段
         for (index, _) in line.field_ranges.iter().enumerate() {
-            // 跳过指定索引的字段
             if index == skip_index {
                 continue;
             }
-
-            // 写入分隔符和字段内容
-            writer.write_all(&[self.separator])?;
+            writer.write_all(&self.separator)?; // 直接写入多字节分隔符
             if let Some(field) = line.get_field(index) {
                 writer.write_all(field)?;
             }
@@ -253,22 +249,18 @@ impl<'a> JoinRepr<'a> {
     where
         F: Fn(&JoinSpec) -> Option<&'a [u8]>,
     {
-        // 如果没有格式定义，直接返回
         if self.format.is_empty() {
             return Ok(());
         }
 
-        // 打印第一个字段(无需分隔符)
         let first_content = field_getter(&self.format[0]).unwrap_or(self.empty);
         writer.write_all(first_content)?;
 
-        // 打印剩余字段(带分隔符)
         for spec in &self.format[1..] {
-            writer.write_all(&[self.separator])?;
+            writer.write_all(&self.separator)?; // 直接写入多字节分隔符
             let content = field_getter(spec).unwrap_or(self.empty);
             writer.write_all(content)?;
         }
-
         Ok(())
     }
 
@@ -378,11 +370,12 @@ struct Line {
 }
 
 impl Line {
-    fn new(string: Vec<u8>, separator: Sep, len_guess: usize) -> Self {
+    // 传递引用 &Sep，避免频繁克隆
+    fn new(string: Vec<u8>, separator: &Sep, len_guess: usize) -> Self {
         let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;
-        if separator == Sep::Whitespaces {
-            // GNU join uses Bourne shell field splitters by default
+
+        if *separator == Sep::Whitespaces {
             for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
                 if i > last_end {
                     field_ranges.push((last_end, i));
@@ -393,9 +386,17 @@ impl Line {
                 field_ranges.push((last_end, string.len()));
             }
         } else if let Sep::Char(sep) = separator {
-            for i in memchr_iter(sep, &string) {
-                field_ranges.push((last_end, i));
-                last_end = i + 1;
+            // 单字节用 memchr_iter，多字节用 find_iter
+            if sep.len() == 1 {
+                for i in memchr_iter(sep[0], &string) {
+                    field_ranges.push((last_end, i));
+                    last_end = i + 1;
+                }
+            } else {
+                for i in memmem::find_iter(&string, sep) {
+                    field_ranges.push((last_end, i));
+                    last_end = i + sep.len(); // 跳过多字节分隔符的完整长度
+                }
             }
             field_ranges.push((last_end, string.len()));
         } else {
@@ -408,7 +409,6 @@ impl Line {
         }
     }
 
-    /// Get field at index.
     fn get_field(&self, index: usize) -> Option<&[u8]> {
         if index < self.field_ranges.len() {
             let (low, high) = self.field_ranges[index];
@@ -599,7 +599,7 @@ impl<'a> JoinState<'a> {
     }
 
     fn reset_read_line(&mut self, input: &JoinInput) -> Result<(), std::io::Error> {
-        let line = self.read_line(input.separator)?;
+        let line = self.read_line(&input.separator)?;
         self.reset(line);
         Ok(())
     }
@@ -622,10 +622,9 @@ impl<'a> JoinState<'a> {
     ///
     /// # 返回值
     /// 返回最大字段数
-    fn initialize(&mut self, read_sep: Sep, autoformat: bool) -> usize {
+    fn initialize(&mut self, read_sep: &Sep, autoformat: bool) -> usize {
         if let Some(line) = ct_crash_if_err!(1, self.read_line(read_sep)) {
             self.seq.push(line);
-
             if autoformat {
                 return self.seq[0].field_ranges.len();
             }
@@ -658,7 +657,7 @@ impl<'a> JoinState<'a> {
     }
 
     /// Get the next line without the order check.
-    fn read_line(&mut self, sep: Sep) -> Result<Option<Line>, std::io::Error> {
+    fn read_line(&mut self, sep: &Sep) -> Result<Option<Line>, std::io::Error> {
         match self.lines.next() {
             Some(value) => {
                 self.line_num += 1;
@@ -680,8 +679,7 @@ impl<'a> JoinState<'a> {
     /// # 返回值
     /// 返回下一行，如果发现排序错误则设置错误标志
     fn next_line(&mut self, input: &JoinInput) -> Result<Option<Line>, JoinError> {
-        // 读取下一行
-        if let Some(line) = self.read_line(input.separator)? {
+        if let Some(line) = self.read_line(&input.separator)? {
             // 如果不需要检查排序顺序，直接返回
             if input.check_order == CheckOrder::Disabled {
                 return Ok(Some(line));
@@ -760,26 +758,19 @@ impl<'a> JoinState<'a> {
 }
 
 fn parse_separator(value_os: &OsString) -> CTResult<Sep> {
-    #[cfg(unix)]
     let value = value_os.as_bytes();
-    #[cfg(not(unix))]
-    let value = match value_os.to_str() {
-        Some(value) => value.as_bytes(),
-        None => {
-            return Err(CtSimpleError::new(
-                1,
-                "unprintable field separators are only supported on unix-like platforms",
-            ));
+    if value.is_empty() {
+        Ok(Sep::Line)
+    } else if value == b"\\0" {
+        Ok(Sep::Char(vec![0]))
+    } else {
+        // 转换为字符串以正确统计 UTF-8 字符（而非字节）
+        let s = value_os.to_string_lossy();
+        if s.chars().count() == 1 {
+            Ok(Sep::Char(value.to_vec()))
+        } else {
+            Err(CtSimpleError::new(1, format!("multi-character tab {}", s)))
         }
-    };
-    match value.len() {
-        0 => Ok(Sep::Line),
-        1 => Ok(Sep::Char(value[0])),
-        2 if value[0] == b'\\' && value[1] == b'0' => Ok(Sep::Char(0)),
-        _ => Err(CtSimpleError::new(
-            1,
-            format!("multi-character tab {}", value_os.to_string_lossy()),
-        )),
     }
 }
 
@@ -1011,14 +1002,15 @@ fn join_exec(file1: &str, file2: &str, mut settings: JoinSettings) -> CTResult<(
     let stdout = stdout(); // Move stdout here to manage lifetime
     let mut writer = BufWriter::new(stdout.lock());
 
-    let (mut state1, mut state2, input) =
-        init_join_states(file1, file2, &mut settings, &stdin)?;
+    // 此时只获取 state 和 input，可变借用在这里结束后就会释放
+    let (mut state1, mut state2, input) = init_join_states(file1, file2, &mut settings, &stdin)?;
 
+    // 可变借用结束后，我们安全地创建 repr（不可变借用 settings）
     let repr = JoinRepr::new(
         settings.line_ending,
-        match settings.separator {
-            Sep::Char(sep) => sep,
-            _ => b' ',
+        match &settings.separator {
+            Sep::Char(sep) => sep.clone(),
+            _ => vec![b' '],
         },
         &settings.format,
         &settings.empty,
@@ -1050,9 +1042,8 @@ fn init_join_states<'a>(
     file1: &'a str,
     file2: &'a str,
     settings: &mut JoinSettings,
-    stdin: &'a Stdin, // Add stdin parameter
+    stdin: &'a Stdin,
 ) -> CTResult<(JoinState<'a>, JoinState<'a>, JoinInput)> {
-    // 初始化文件状态
     let mut state1 = JoinState::new(
         FileNum::File1,
         file1,
@@ -1061,7 +1052,6 @@ fn init_join_states<'a>(
         settings.line_ending,
         settings.is_print_unpaired1,
     )?;
-
     let mut state2 = JoinState::new(
         FileNum::File2,
         file2,
@@ -1071,14 +1061,12 @@ fn init_join_states<'a>(
         settings.is_print_unpaired2,
     )?;
 
-    // 创建输入处理器
     let input = JoinInput::new(
-        settings.separator,
+        settings.separator.clone(), // 因为现在 Sep 包含 Vec，需要 clone
         settings.is_ignore_case,
         settings.check_order,
     );
 
-    // 准备输出格式
     settings.format = prepare_format(&mut state1, &mut state2, settings);
 
     Ok((state1, state2, input))
@@ -1093,7 +1081,7 @@ fn prepare_format(
     if settings.is_autoformat {
         let mut format = vec![JoinSpec::Key];
         let mut initialize = |state: &mut JoinState| {
-            let max_fields = state.initialize(settings.separator, settings.is_autoformat);
+            let max_fields = state.initialize(&settings.separator, settings.is_autoformat);
             for i in 0..max_fields {
                 if i != state.key {
                     format.push(JoinSpec::Field(state.file_num, i));
@@ -1104,8 +1092,8 @@ fn prepare_format(
         initialize(state2);
         format
     } else {
-        state1.initialize(settings.separator, settings.is_autoformat);
-        state2.initialize(settings.separator, settings.is_autoformat);
+        state1.initialize(&settings.separator, settings.is_autoformat);
+        state2.initialize(&settings.separator, settings.is_autoformat);
         settings.format.clone()
     }
 }

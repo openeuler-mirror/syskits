@@ -84,12 +84,12 @@ pub struct FmtFileLine {
 /// 从文件中产生行数据流的迭代器
 pub struct FmtFileLines<'a> {
     opts: &'a FmtConfigs,
-    lines: Lines<&'a mut FmtFileOrStdReader>,
+    reader: &'a mut FmtFileOrStdReader,
 }
 
 impl FmtFileLines<'_> {
-    fn new<'b>(opts: &'b FmtConfigs, lines: Lines<&'b mut FmtFileOrStdReader>) -> FmtFileLines<'b> {
-        FmtFileLines { opts, lines }
+    fn new<'b>(opts: &'b FmtConfigs, reader: &'b mut FmtFileOrStdReader) -> FmtFileLines<'b> {
+        FmtFileLines { opts, reader }
     }
 
     /// 如果该行应被格式化，则返回 true
@@ -161,7 +161,20 @@ impl Iterator for FmtFileLines<'_> {
     type Item = FmtLine;
 
     fn next(&mut self) -> Option<FmtLine> {
-        let n = self.lines.next()?.ok()?;
+        // 使用底层读取+有损转换，防止因为非法的 UTF-8 字节导致迭代器异常中止
+        let mut buf = Vec::new();
+        match self.reader.read_until(b'\n', &mut buf) {
+            Ok(0) | Err(_) => return None, // 遇到 EOF 或不可恢复的 IO 错误时退出
+            Ok(_) => {}
+        }
+
+        let mut n = String::from_utf8_lossy(&buf).into_owned();
+        if n.ends_with('\n') {
+            n.pop();
+        }
+        if n.ends_with('\r') {
+            n.pop();
+        }
 
         // 如果这一行完全是空白、
         // 发送一个空行
@@ -179,8 +192,7 @@ impl Iterator for FmtFileLines<'_> {
             return Some(FmtLine::NoFormatLine(n, false));
         }
 
-        // 如果行符合前缀，但后面是空白、 不允许通过它合并行（也就是说，把它当作空行来处理，
-        // 但由于它不是真正的空行，我们将不允许在下面一行中使用邮件标题）
+        // 如果行符合前缀，但后面是空白、 不允许通过它合并行...
         if is_p_match
             && n[p_offset + self.opts.prefix_option.as_ref().map_or(0, |s| s.len())..]
                 .chars()
@@ -189,13 +201,10 @@ impl Iterator for FmtFileLines<'_> {
             return Some(FmtLine::NoFormatLine(n, false));
         }
 
-        // 如果该行匹配反前缀，则跳过
-        //（注意，如果要处理，match_anti_prefix 的定义为 TRUE）
         if !self.match_anti_prefix(&n[..]) {
             return Some(FmtLine::NoFormatLine(n, false));
         }
 
-        // 计算出缩进点、前缀和前缀缩进结束点
         let prefix_end = p_offset + self.opts.prefix_option.as_ref().map_or(0, |s| s.len());
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
@@ -244,7 +253,8 @@ impl FmtParagraphStream<'_> {
         opts: &'b FmtConfigs,
         reader: &'b mut FmtFileOrStdReader,
     ) -> FmtParagraphStream<'b> {
-        let lines = FmtFileLines::new(opts, reader.lines()).peekable();
+        // 不再调用脆弱的 .lines()，将 reader 本身传给强韧的 FmtFileLines
+        let lines = FmtFileLines::new(opts, reader).peekable();
         // 在文件开头，我们可能会发现邮件头
         FmtParagraphStream {
             lines,

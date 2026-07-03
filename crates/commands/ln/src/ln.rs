@@ -111,6 +111,8 @@ enum LnError {
     NonRootPermission,
     /// 源文件和目标文件是同一个文件
     SameFile(PathBuf, PathBuf),
+    /// 不允许对目录创建硬链接
+    HardLinkToDirectory(PathBuf),
 }
 
 impl Display for LnError {
@@ -118,6 +120,10 @@ impl Display for LnError {
         match self {
             // 目标路径是目录时的错误信息
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
+
+            Self::HardLinkToDirectory(s) => {
+                write!(f, "{}: hard link not allowed for directory", s.display())
+            }
 
             // 源文件和目标文件是同一个文件时的错误信息
             Self::SameFile(s, d) => {
@@ -473,17 +479,22 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
 
 /// 检查两个路径是否指向同一个物理文件
 fn is_same_file(path1: &Path, path2: &Path, settings: &LnSettings) -> bool {
+    // 1. 获取目标(dst)的 metadata：永远使用 lstat，因为我们要覆盖的是目标自身，而不是它指向的东西
     let meta2 = match fs::symlink_metadata(path2) {
         Ok(m) => m,
-        Err(_) => return false,
+        Err(_) => return false, // 目标不存在，不可能冲突
     };
 
+    // 2. 获取源(src)的 metadata：根据模式决定是否穿透符号链接
     let meta1 = if settings.is_symbolic || settings.is_logical {
+        // -s 符号链接 或 -L 逻辑硬链接：尝试穿透。
+        // 如果源是一个悬空的坏链接，这里会 err，直接判定为无冲突，放行覆盖。
         match fs::metadata(path1) {
             Ok(m) => m,
             Err(_) => return false,
         }
     } else {
+        // 默认硬链接 (-P 物理模式)：不穿透
         match fs::symlink_metadata(path1) {
             Ok(m) => m,
             Err(_) => return false,
@@ -506,19 +517,24 @@ fn is_same_file(path1: &Path, path2: &Path, settings: &LnSettings) -> bool {
     };
 
     if is_same_inode {
+        // 如果将要覆盖或备份目标文件
         let will_replace = settings.overwrite == OverwriteMode::Force
             || settings.overwrite == OverwriteMode::Interactive
             || settings.backup != CtBackupMode::NoBackup;
 
+        // 如果没有开启替换，同数据块直接视为同文件，拒绝操作
         if !will_replace {
             return true;
         }
 
+        // 如果开启了替换（如 -f），则检查它们的绝对规范路径。
+        // 路径不同（如 f 和 d/f，属于不同硬链接），放行覆盖。
+        // 路径相同（如 a 和 ./a），阻断自杀式覆盖！
         if let (Ok(c1), Ok(c2)) = (fs::canonicalize(path1), fs::canonicalize(path2)) {
             return c1 == c2;
         }
 
-        return true;
+        return true; // 获取路径失败时，保守拒绝操作以防数据丢失
     }
 
     false
@@ -569,6 +585,7 @@ fn handle_backup_and_overwrite(
     dst: &Path,
     settings: &LnSettings,
 ) -> CTResult<Option<PathBuf>> {
+    // 使用 symlink_metadata 准确判断文件或悬空链接是否存在
     if fs::symlink_metadata(dst).is_err() {
         return Ok(None);
     }
@@ -576,7 +593,7 @@ fn handle_backup_and_overwrite(
     let backup_path = generate_backup_path(dst, settings)?;
     if let Some(ref backup) = backup_path {
         if fs::symlink_metadata(backup).is_ok() {
-            let _ = fs::remove_file(backup);
+            let _ = fs::remove_file(backup); // 忽略错误，交由系统处理
         }
         rename_backup(dst, backup)?;
     }
@@ -618,6 +635,7 @@ fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTRe
             Ok(())
         }
         OverwriteMode::Force => {
+            // 无论目标是普通文件、目录还是悬空的符号链接，都尝试删除它
             if let Ok(meta) = fs::symlink_metadata(dst) {
                 if meta.is_dir() {
                     let _ = fs::remove_dir(dst);
@@ -654,10 +672,19 @@ fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResul
         source.to_path_buf()
     };
 
+    // 使用 symlink_metadata 来判断是否为目录。
+    // 这保证了在使用 -P (物理模式) 时，指向目录的符号链接不会被误判为目录，
+    // 但如果路径带有尾部斜杠（如 link-to-dir/），系统底层会自动解析它，从而正确拦截。
+    let is_dir = match fs::symlink_metadata(&resolved_source) {
+        Ok(meta) => meta.is_dir(),
+        Err(_) => false,
+    };
+
     // 检查是否是目录硬链接请求
-    if resolved_source.is_dir() {
+    if is_dir {
         if !settings.is_directory {
-            return Err(LnError::TargetIsDirectory(resolved_source.to_owned()).into());
+            // 抛出正确的、专属的目录硬链接错误
+            return Err(LnError::HardLinkToDirectory(source.to_path_buf()).into());
         }
 
         // 检查是否具有root权限

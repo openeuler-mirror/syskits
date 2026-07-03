@@ -451,3 +451,8 @@ sed -i -e 's/my \$limits = getlimits ();/# my \$limits = getlimits ();/' \
 ### ln tests
 # 修改 tests/ln/misc.sh，将交叉测试隔离，仅测试 ln 的 backup 功能
 "${SED}" -i 's/for cmd in ln cp mv ginstall; do/for cmd in ln; do/' tests/ln/misc.sh
+
+
+### mv tests
+# 修复 tests/mv/diag.sh 中期望输出（exp）里多余的缩进空格，以匹配 clap 生成的无缩进 Usage
+"${SED}" -i 's/^ *mv \[OPTION\]/mv [OPTION]/' tests/mv/diag.sh

@@ -246,35 +246,39 @@ fn is_format_size_char(
     ch: Option<char>,
     format_type: FormatTypeCategory,
     byte_size: &mut u8,
-) -> bool {
+) -> Result<bool, String> {
     match (format_type, ch) {
         (FormatTypeCategory::Integer, Some('C')) => {
             *byte_size = 1;
-            true
+            Ok(true)
         }
         (FormatTypeCategory::Integer, Some('S')) => {
             *byte_size = 2;
-            true
+            Ok(true)
         }
         (FormatTypeCategory::Integer, Some('I')) => {
             *byte_size = 4;
-            true
+            Ok(true)
         }
         (FormatTypeCategory::Integer, Some('L')) => {
             *byte_size = 8;
-            true
+            Ok(true)
         }
 
         (FormatTypeCategory::Float, Some('F')) => {
             *byte_size = 4;
-            true
+            Ok(true)
         }
         (FormatTypeCategory::Float, Some('D')) => {
             *byte_size = 8;
-            true
+            Ok(true)
         }
-        // FormatTypeCategory::Float, 'L' => *byte_size = 16, // TODO support f128
-        _ => false,
+        // 主动捕获不受支持的 128位(L) 以及 16位半精度(H, B) 浮点数，并返回 GNU 格式的错误
+        (FormatTypeCategory::Float, Some(c @ ('L' | 'H' | 'B'))) => Err(format!(
+            "this system doesn't provide a 'f{}' floating point type",
+            c
+        )),
+        _ => Ok(false),
     }
 }
 
@@ -341,7 +345,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
         let mut show_ascii_dump = false;
 
         // 检查是否有大小字符（如 'C'、'S'、'I'、'L'）
-        if is_format_size_char(ch, type_cat, &mut byte_size) {
+        if is_format_size_char(ch, type_cat, &mut byte_size)? {
             ch = chars.next();
         } else {
             // 如果没有大小字符，尝试解析数字大小

@@ -16,17 +16,17 @@
 // 使用的库：clap用于命令行参数解析，libc提供Unix系统调用的接口。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::ArgAction;
 use clap::builder::ValueParser;
-use ctcore::Tool;
+use clap::ArgAction;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
-use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use ctcore::ct_error::{set_ct_exit_code, CTResult, CTsageError, CtSimpleError};
+use ctcore::Tool;
 use libc::{dev_t, mode_t};
-use selinux::label::{Labeler, back_end::File as FileBackEnd};
+use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use selinux::label::{back_end::File as FileBackEnd, Labeler};
 use selinux::{self, SecurityContext};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
@@ -108,9 +108,7 @@ fn set_security_context(
     file_path: &str,
     file_mode: mode_t,
 ) -> Result<(), String> {
-    // 首先检查SELinux是否启用
     if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        // SELinux未启用，如果用户明确指定了上下文，发出警告
         if context.is_some() {
             eprintln!("mknod: warning: ignoring --context; it requires an SELinux-enabled kernel");
         }
@@ -120,25 +118,11 @@ fn set_security_context(
     match context {
         Some(ctx) => {
             let c_context = os_str_to_c_string(ctx);
-            // 如果提供了具体的上下文，使用它
             SecurityContext::from_c_str(&c_context, false)
                 .set_for_new_file_system_objects(false)
                 .map_err(|e| format!("failed to set default file creation context: {e}"))
         }
         None => {
-            // 使用selabel_lookup获取基于路径的默认上下文（与GNU的defaultcon()函数等价）
-            //
-            // GNU实现流程：
-            //   1. 使用selabel_lookup(handle, &scon, path, mode)查询策略数据库
-            //   2. 使用computecon()结合进程上下文和文件策略
-            //   3. 提取类型字段并设置最终上下文
-            //
-            // 当前实现（使用selinux 0.6 crate）：
-            //   1. 创建Labeler用于文件上下文查询
-            //   2. 使用look_up_by_path()获取路径的默认上下文（等价于selabel_lookup）
-            //   3. 设置为新文件系统对象的创建上下文
-
-            // 创建文件上下文标签器（等价于GNU的selabel_open）
             let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
                 Ok(l) => l,
                 Err(e) => {
@@ -147,12 +131,20 @@ fn set_security_context(
                 }
             };
 
-            // 将mode_t转换为FileAccessMode
             let file_access_mode = mode_to_file_access_mode(file_mode);
-
-            // 查询路径的默认SELinux上下文（等价于GNU的selabel_lookup）
             let path = Path::new(file_path);
-            let default_context = match labeler.look_up_by_path(path, Some(file_access_mode)) {
+
+            // 将相对路径转换为绝对路径，以便 SELinux 策略引擎能正确匹配正则
+            let abs_path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                std::env::current_dir()
+                    .map(|p| p.join(path))
+                    .unwrap_or_else(|_| path.to_path_buf())
+            };
+
+            // 传入 abs_path 而不是 path
+            let default_context = match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
                 Ok(ctx) => ctx,
                 Err(e) => {
                     eprintln!(
@@ -162,7 +154,6 @@ fn set_security_context(
                 }
             };
 
-            // 设置为新文件系统对象的创建上下文（等价于GNU的setfscreatecon）
             if let Err(e) = default_context.set_for_new_file_system_objects(false) {
                 eprintln!("mknod: warning: cannot set default file creation context: {e}");
             }
@@ -208,15 +199,22 @@ fn mknod_processing(
     file_name: &str,
     file_type: &MknodFileType,
 ) -> CTResult<()> {
-    // 处理安全上下文（仅当用户明确指定-Z或--context时）
-    // 注意：只有当用户实际提供了这些标志时才设置SELinux上下文
+    // 提前计算包含文件类型的完整 mode
+    let full_mode = match file_type {
+        MknodFileType::Block => libc::S_IFBLK | mode,
+        MknodFileType::Character => libc::S_IFCHR | mode,
+        MknodFileType::Fifo => libc::S_IFIFO | mode,
+    };
+
     let has_z_flag = args_match.get_flag("ctx");
     let has_context_flag =
         args_match.value_source("context") == Some(clap::parser::ValueSource::CommandLine);
 
     if has_z_flag || has_context_flag {
         let context = args_match.get_one::<OsString>("context");
-        set_security_context(context, file_name, mode).map_err(|e| CtSimpleError::new(1, e))?;
+        // 传入 full_mode 而不是 mode
+        set_security_context(context, file_name, full_mode)
+            .map_err(|e| CtSimpleError::new(1, e))?;
     }
     // 如果既没有-Z也没有--context，则不设置SELinux上下文
 

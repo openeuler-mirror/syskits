@@ -14,14 +14,14 @@ use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::parser::ValuesRef;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 #[cfg(not(windows))]
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_mode;
 use ctcore::ct_show_if_err;
+use ctcore::Tool;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -29,9 +29,9 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use ctcore::libc;
 #[cfg(target_os = "linux")]
-use selinux::SecurityContext;
+use selinux::label::{back_end::File as FileBackEnd, Labeler};
 #[cfg(target_os = "linux")]
-use selinux::label::{Labeler, back_end::File as FileBackEnd};
+use selinux::SecurityContext;
 #[cfg(target_os = "linux")]
 use std::ffi::{CString, OsStr};
 #[cfg(target_os = "linux")]
@@ -148,6 +148,10 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_verbose = matches.get_flag(mkdir_flags::VERBOSE);
     let is_recursive = matches.get_flag(mkdir_flags::PARENTS);
     let has_z_flag = matches.get_flag(mkdir_flags::CTX);
+
+    // 判断用户是否显式传递了 -m 参数
+    let specified_mode = matches.get_one::<String>(mkdir_flags::MODE).is_some();
+
     let has_context_flag =
         matches.value_source(mkdir_flags::CONTEXT) == Some(clap::parser::ValueSource::CommandLine);
     let context = matches
@@ -161,6 +165,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
             dirs,
             is_recursive,
             mode,
+            specified_mode,
             is_verbose,
             context,
             set_context,
@@ -237,6 +242,7 @@ fn mkdir_exec(
     dirs: ValuesRef<OsString>,
     is_recursive: bool,
     mode: u32,
+    specified_mode: bool,
     is_verbose: bool,
     context: Option<&OsString>,
     set_context: bool,
@@ -250,6 +256,7 @@ fn mkdir_exec(
             p,
             is_recursive,
             mode,
+            specified_mode,
             is_verbose,
             context,
             set_context,
@@ -274,14 +281,12 @@ pub fn mkdir(
     path: &Path,
     is_recursive: bool,
     mode: u32,
+    specified_mode: bool,
     is_verbose: bool,
     context: Option<&OsString>,
     set_context: bool,
     warn_on_unsupported: bool,
 ) -> CTResult<()> {
-    // 特殊情况匹配 GNU 的行为：
-    // mkdir -p foo/. 应该工作并只创建 foo/
-    // std::fs::create_dir("foo/."); 在纯 Rust 中失败
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
 
@@ -303,7 +308,13 @@ pub fn mkdir(
         set_context,
         warn_on_unsupported,
     )?;
-    mkdir_chmod(path, mode)
+
+    // 只有显式指定了 -m 才覆写权限！否则保留系统生成的含有 ACL 的完美权限
+    if specified_mode {
+        mkdir_chmod(path, mode)
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(unix)]
@@ -388,9 +399,13 @@ fn mkdir_create_dir(
         }
         #[cfg(not(windows))]
         if is_parent {
-            // 由 -p 创建的目录权限位设置为 '=rwx,u+wx'，
-            // 即 umask 修改后的 'u+wx'
-            mkdir_chmod(path, (!ct_mode::get_umask() & 0o0777) | 0o0300)?;
+            // 由 -p 创建的中间级目录
+            // 只有当 umask 限制了当前用户的 rwx 导致无法进入时，才强制用 chmod
+            // 否则不调用 chmod，以保护系统自动分配的缺省 ACL
+            let umask = ctcore::ct_mode::get_umask();
+            if (umask & 0o0300) != 0 {
+                mkdir_chmod(path, (!umask & 0o0777) | 0o0300)?;
+            }
         }
         Ok(())
     }
@@ -1581,19 +1596,17 @@ mod tests {
                 fs::remove_dir_all(test_dir.as_path()).unwrap();
             }
 
-            assert!(
-                mkdir_create_dir(
-                    test_dir.as_path(),
-                    false,
-                    false,
-                    false,
-                    0o777,
-                    None,
-                    false,
-                    false
-                )
-                .is_err()
-            );
+            assert!(mkdir_create_dir(
+                test_dir.as_path(),
+                false,
+                false,
+                false,
+                0o777,
+                None,
+                false,
+                false
+            )
+            .is_err());
         }
 
         #[test]

@@ -20,7 +20,7 @@ use ctcore::{
     ct_show,
     ct_sum::{
         div_ceil, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224, Sha256,
-        Sha384, Sha512, BSD, SYSV,
+        Sha384, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha512, BSD, SYSV,
     },
 };
 use hex::decode;
@@ -46,6 +46,7 @@ const CKSUM_ALGORITHM_OPTIONS_SHA384: &str = "sha384";
 const CKSUM_ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const CKSUM_ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const CKSUM_ALGORITHM_OPTIONS_SM3: &str = "sm3";
+const CKSUM_ALGORITHM_OPTIONS_SHA3: &str = "sha3";
 
 #[derive(Debug)]
 enum CkSumError {
@@ -141,7 +142,7 @@ fn cksum_detect_algo(
         CKSUM_ALGORITHM_OPTIONS_SM3 => (
             CKSUM_ALGORITHM_OPTIONS_SM3,
             Box::new(CtSm3::new()) as Box<dyn CtDigest>,
-            512,
+            256,
         ),
         CKSUM_ALGORITHM_OPTIONS_SHA2 => match len {
             Some(224) => (
@@ -166,7 +167,200 @@ fn cksum_detect_algo(
             ),
             _ => unreachable!("length should be validated before reaching here"),
         },
+        CKSUM_ALGORITHM_OPTIONS_SHA3 => match len {
+            Some(224) => (
+                "sha3-224",
+                Box::new(Sha3_224::new()) as Box<dyn CtDigest>,
+                224,
+            ),
+            Some(256) => (
+                "sha3-256",
+                Box::new(Sha3_256::new()) as Box<dyn CtDigest>,
+                256,
+            ),
+            Some(384) => (
+                "sha3-384",
+                Box::new(Sha3_384::new()) as Box<dyn CtDigest>,
+                384,
+            ),
+            Some(512) | None => (
+                "sha3-512",
+                Box::new(Sha3_512::new()) as Box<dyn CtDigest>,
+                512,
+            ),
+            _ => unreachable!("length should be validated before reaching here"),
+        },
+        "sha3-224" => (
+            "sha3-224",
+            Box::new(Sha3_224::new()) as Box<dyn CtDigest>,
+            224,
+        ),
+        "sha3-256" => (
+            "sha3-256",
+            Box::new(Sha3_256::new()) as Box<dyn CtDigest>,
+            256,
+        ),
+        "sha3-384" => (
+            "sha3-384",
+            Box::new(Sha3_384::new()) as Box<dyn CtDigest>,
+            384,
+        ),
+        "sha3-512" => (
+            "sha3-512",
+            Box::new(Sha3_512::new()) as Box<dyn CtDigest>,
+            512,
+        ),
         _ => unreachable!("unknown algorithm: clap should have prevented this case"),
+    }
+}
+
+fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize, &'static str)> {
+    let tag = tag.trim().to_uppercase();
+
+    if let Some(len_str) = tag.strip_prefix("BLAKE2B-") {
+        if let Ok(bits) = len_str.parse::<usize>() {
+            if bits % 8 == 0 && bits <= 512 {
+                return Some((
+                    Box::new(CtBlake2b::with_output_bytes(bits / 8)) as Box<dyn CtDigest>,
+                    bits,
+                    CKSUM_ALGORITHM_OPTIONS_BLAKE2B,
+                ));
+            }
+        }
+        return None;
+    }
+
+    if let Some(len_str) = tag.strip_prefix("SHA2-") {
+        if let Ok(bits) = len_str.parse::<usize>() {
+            match bits {
+                224 => {
+                    return Some((
+                        Box::new(Sha224::new()) as Box<dyn CtDigest>,
+                        224,
+                        CKSUM_ALGORITHM_OPTIONS_SHA224,
+                    ))
+                }
+                256 => {
+                    return Some((
+                        Box::new(Sha256::new()) as Box<dyn CtDigest>,
+                        256,
+                        CKSUM_ALGORITHM_OPTIONS_SHA256,
+                    ))
+                }
+                384 => {
+                    return Some((
+                        Box::new(Sha384::new()) as Box<dyn CtDigest>,
+                        384,
+                        CKSUM_ALGORITHM_OPTIONS_SHA384,
+                    ))
+                }
+                512 => {
+                    return Some((
+                        Box::new(Sha512::new()) as Box<dyn CtDigest>,
+                        512,
+                        CKSUM_ALGORITHM_OPTIONS_SHA512,
+                    ))
+                }
+                _ => return None,
+            }
+        }
+        return None;
+    }
+
+    if let Some(len_str) = tag.strip_prefix("SHA3-") {
+        if let Ok(bits) = len_str.parse::<usize>() {
+            match bits {
+                224 => {
+                    return Some((
+                        Box::new(Sha3_224::new()) as Box<dyn CtDigest>,
+                        224,
+                        "sha3-224",
+                    ))
+                }
+                256 => {
+                    return Some((
+                        Box::new(Sha3_256::new()) as Box<dyn CtDigest>,
+                        256,
+                        "sha3-256",
+                    ))
+                }
+                384 => {
+                    return Some((
+                        Box::new(Sha3_384::new()) as Box<dyn CtDigest>,
+                        384,
+                        "sha3-384",
+                    ))
+                }
+                512 => {
+                    return Some((
+                        Box::new(Sha3_512::new()) as Box<dyn CtDigest>,
+                        512,
+                        "sha3-512",
+                    ))
+                }
+                _ => return None,
+            }
+        }
+        return None;
+    }
+
+    match tag.as_str() {
+        "MD5" => Some((
+            Box::new(Md5::new()) as Box<dyn CtDigest>,
+            128,
+            CKSUM_ALGORITHM_OPTIONS_MD5,
+        )),
+        "SHA1" => Some((
+            Box::new(Sha1::new()) as Box<dyn CtDigest>,
+            160,
+            CKSUM_ALGORITHM_OPTIONS_SHA1,
+        )),
+        "SHA224" => Some((
+            Box::new(Sha224::new()) as Box<dyn CtDigest>,
+            224,
+            CKSUM_ALGORITHM_OPTIONS_SHA224,
+        )),
+        "SHA256" => Some((
+            Box::new(Sha256::new()) as Box<dyn CtDigest>,
+            256,
+            CKSUM_ALGORITHM_OPTIONS_SHA256,
+        )),
+        "SHA384" => Some((
+            Box::new(Sha384::new()) as Box<dyn CtDigest>,
+            384,
+            CKSUM_ALGORITHM_OPTIONS_SHA384,
+        )),
+        "SHA512" => Some((
+            Box::new(Sha512::new()) as Box<dyn CtDigest>,
+            512,
+            CKSUM_ALGORITHM_OPTIONS_SHA512,
+        )),
+        "BLAKE2B" => Some((
+            Box::new(CtBlake2b::new()) as Box<dyn CtDigest>,
+            512,
+            CKSUM_ALGORITHM_OPTIONS_BLAKE2B,
+        )),
+        "SM3" => Some((
+            Box::new(CtSm3::new()) as Box<dyn CtDigest>,
+            256,
+            CKSUM_ALGORITHM_OPTIONS_SM3,
+        )), // [FIX]: 长度同步 256
+        "CRC" => Some((
+            Box::new(CtCRC::new()) as Box<dyn CtDigest>,
+            256,
+            CKSUM_ALGORITHM_OPTIONS_CRC,
+        )),
+        "SYSV" => Some((
+            Box::new(SYSV::new()) as Box<dyn CtDigest>,
+            512,
+            CKSUM_ALGORITHM_OPTIONS_SYSV,
+        )),
+        "BSD" => Some((
+            Box::new(BSD::new()) as Box<dyn CtDigest>,
+            1024,
+            CKSUM_ALGORITHM_OPTIONS_BSD,
+        )),
+        _ => None,
     }
 }
 
@@ -179,6 +373,11 @@ struct CksumOptions {
     output_format: CksumOutputFormat,
     zero: bool,
     binary: bool,
+    quiet: bool,
+    status: bool,
+    warn: bool,
+    strict: bool,
+    ignore_missing: bool,
 }
 
 /// Calculate checksum
@@ -474,37 +673,59 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    // 将参数转换为 Vec，方便我们手动扫描和传递给 Clap
     let args_vec: Vec<OsString> = args.collect();
 
     let mut last_tag_idx = 0;
     let mut last_untagged_idx = 0;
     let mut last_binary_idx = 0;
     let mut last_text_idx = 0;
+    let mut last_status_idx = 0;
+    let mut last_warn_idx = 0;
 
     let mut untagged = false;
     let mut tag = false;
     let mut binary = false;
     let mut text = false;
+    let mut status = false;
+    let mut warn = false;
 
+    // 手动扫描参数
     for (i, arg) in args_vec.iter().enumerate() {
         let arg_str = arg.to_string_lossy();
-        if arg_str == "--tag" { 
-            last_tag_idx = i; tag = true; 
-        } else if arg_str == "--untagged" { 
-            last_untagged_idx = i; untagged = true; 
-        } else if arg_str == "--binary" || arg_str == "-b" { 
-            last_binary_idx = i; binary = true; 
-        } else if arg_str == "--text" || arg_str == "-t" { 
-            last_text_idx = i; text = true; 
+        if arg_str == "--tag" {
+            last_tag_idx = i;
+            tag = true;
+        } else if arg_str == "--untagged" {
+            last_untagged_idx = i;
+            untagged = true;
+        } else if arg_str == "--binary" || arg_str == "-b" {
+            last_binary_idx = i;
+            binary = true;
+        } else if arg_str == "--text" || arg_str == "-t" {
+            last_text_idx = i;
+            text = true;
+        } else if arg_str == "--status" {
+            last_status_idx = i;
+            status = true;
+        } else if arg_str == "--warn" || arg_str == "-w" {
+            last_warn_idx = i;
+            warn = true;
         } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
-            // 处理可能组合的短参数，比如 -bt, -tb 或 -ba
-            if arg_str.contains('b') { last_binary_idx = i; binary = true; }
-            if arg_str.contains('t') { last_text_idx = i; text = true; }
+            if arg_str.contains('b') {
+                last_binary_idx = i;
+                binary = true;
+            }
+            if arg_str.contains('t') {
+                last_text_idx = i;
+                text = true;
+            }
+            if arg_str.contains('w') {
+                last_warn_idx = i;
+                warn = true;
+            }
         }
     }
 
-    // 处理 TAG 和 UNTAGGED 的冲突 (后出现者生效)
     if untagged && tag {
         if last_tag_idx > last_untagged_idx {
             untagged = false;
@@ -512,8 +733,6 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             tag = false;
         }
     }
-
-    // 处理 BINARY 和 TEXT 的冲突 (后出现者生效)
     if binary && text {
         if last_text_idx > last_binary_idx {
             binary = false;
@@ -521,27 +740,22 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             text = false;
         }
     }
-
-    // GNU 边缘行为模拟：如果 `--tag` 出现的位置在 `-b/--binary` 之后，重置 binary 标志。
     if binary && last_tag_idx > last_binary_idx {
         binary = false;
     }
+    if status && warn && last_status_idx > last_warn_idx {
+        warn = false;
+    }
 
-    // 拦截 Clap 的解析错误，强制返回退出码 1
     let matches = match ct_app().try_get_matches_from(args_vec) {
         Ok(m) => m,
         Err(e) => {
-            let _ = e.print(); // 依然打印错误或帮助信息
-            
-            // 检查错误的类型
-            if e.kind() == clap::error::ErrorKind::DisplayHelp 
-                || e.kind() == clap::error::ErrorKind::DisplayVersion 
+            let _ = e.print();
+            if e.kind() == clap::error::ErrorKind::DisplayHelp
+                || e.kind() == clap::error::ErrorKind::DisplayVersion
             {
-                // 如果是用户请求查看帮助或版本，正常退出，状态码为 0
                 return Ok(0);
             }
-            
-            // 如果是真正的非法参数错误（比如未知的算法），强制返回状态码 1
             return Ok(1);
         }
     };
@@ -551,48 +765,63 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         None => CKSUM_ALGORITHM_OPTIONS_CRC,
     };
 
-    let input_length = matches.get_one::<usize>(opt_flags::LENGTH);
-    let length = if let Some(length) = input_length {
-        match length.to_owned() {
-            0 => None,
-            n if n % 8 != 0 => {
-                ctcore::ct_show_error!("invalid length: \u{2018}{length}\u{2019}");
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "length is not a multiple of 8",
-                )
-                .into());
-            }
-            n if n > 512 => {
-                ctcore::ct_show_error!("invalid length: \u{2018}{length}\u{2019}");
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
-                )
-                .into());
-            }
-            n => {
-                if algo_name == CKSUM_ALGORITHM_OPTIONS_BLAKE2B {
-                    Some(n / 8)
-                } else if algo_name == CKSUM_ALGORITHM_OPTIONS_SHA2 {
-                    match n {
-                        224 | 256 | 384 | 512 => Some(n),
-                        _ => {
-                            ctcore::ct_show_error!("invalid length: \u{2018}{n}\u{2019}");
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "invalid length for sha2",
-                            )
-                            .into());
-                        }
-                    }
-                } else {
+    let input_length_str = matches.get_one::<String>(opt_flags::LENGTH);
+    let length = if let Some(len_str) = input_length_str {
+        let parsed_n = len_str.parse::<usize>();
+        let (is_err, n) = match parsed_n {
+            Ok(v) => (false, v),
+            Err(_) => (true, 0), // 解析失败（如溢出）视为非法
+        };
+
+        match algo_name {
+            CKSUM_ALGORITHM_OPTIONS_BLAKE2B => {
+                if is_err || n > 512 {
+                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "--length is only supported with --algorithm=blake2b or sha2",
+                        "maximum digest length for 'BLAKE2b' is 512 bits",
                     )
                     .into());
                 }
+                if n % 8 != 0 {
+                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "length is not a multiple of 8",
+                    )
+                    .into());
+                }
+                if n == 0 {
+                    None
+                } else {
+                    Some(n / 8)
+                }
+            }
+            CKSUM_ALGORITHM_OPTIONS_SHA2 | CKSUM_ALGORITHM_OPTIONS_SHA3 => {
+                if is_err || !matches!(n, 224 | 256 | 384 | 512) {
+                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                    let algo_display = if algo_name == CKSUM_ALGORITHM_OPTIONS_SHA2 {
+                        "SHA2"
+                    } else {
+                        "SHA3"
+                    };
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "digest length for '{}' must be 224, 256, 384, or 512",
+                            algo_display
+                        ),
+                    )
+                    .into());
+                }
+                Some(n)
+            }
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--length is only supported with --algorithm=blake2b, sha2, or sha3",
+                )
+                .into());
             }
         }
     } else {
@@ -618,24 +847,34 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
         binary,
+        quiet: matches.get_flag(opt_flags::QUIET),
+        status,
+        warn,
+        strict: matches.get_flag(opt_flags::STRICT),
+        ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
     };
 
     if matches.get_flag(opt_flags::CHECK) {
-        // GNU 规定：老旧的非标签化算法不支持 --check 模式
-        if matches!(
-            opts.algo_name,
-            CKSUM_ALGORITHM_OPTIONS_BSD
-                | CKSUM_ALGORITHM_OPTIONS_SYSV
-                | CKSUM_ALGORITHM_OPTIONS_CRC
-        ) {
-            ctcore::ct_show_error!(
-                "--check is not supported with --algorithm={}",
-                opts.algo_name
-            );
-            return Ok(1); // 强制退出并返回错误码 1
+        if matches.contains_id(opt_flags::ALGORITHM) {
+            if matches!(
+                opts.algo_name,
+                CKSUM_ALGORITHM_OPTIONS_BSD
+                    | CKSUM_ALGORITHM_OPTIONS_SYSV
+                    | CKSUM_ALGORITHM_OPTIONS_CRC
+            ) {
+                ctcore::ct_show_error!(
+                    "--check is not supported with --algorithm={}",
+                    opts.algo_name
+                );
+                return Ok(1);
+            }
         }
 
-        return cksum_check(opts, &matches);
+        let files = match matches.get_many::<String>(opt_flags::FILE) {
+            Some(v) => v.map(OsStr::new).collect(),
+            None => vec![OsStr::new("-")],
+        };
+        return cksum_check(opts, files);
     }
 
     match matches.get_many::<String>(opt_flags::FILE) {
@@ -646,35 +885,31 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     Ok(0)
 }
 
-fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i32> {
-    let quiet = matches.get_flag(opt_flags::QUIET);
-    let status = matches.get_flag(opt_flags::STATUS);
-    let warn = matches.get_flag(opt_flags::WARN);
-    let strict = matches.get_flag(opt_flags::STRICT);
-    let ignore_missing = matches.get_flag(opt_flags::IGNORE_MISSING);
-
-    let files = match matches.get_many::<String>(opt_flags::FILE) {
-        Some(v) => v.map(OsStr::new).collect(),
-        None => vec![OsStr::new("-")],
-    };
-
+fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
+    let mut global_properly_formatted = 0;
     let mut bad_format = 0;
     let mut bad_checksum = 0;
     let mut missing_files = 0;
     let mut failed_open = 0;
     let mut no_file_verified = false;
 
+    let show_warnings = !opts.status || opts.warn;
+
     for cksum_file in files {
         let f_name = Path::new(cksum_file);
         let mut n_properly_formatted_this_file = 0;
         let mut n_verified_this_file = 0;
+        let mut current_default_algo = opts.algo_name;
+
         let file_input: Box<dyn BufRead> = if f_name == OsStr::new("-") {
             Box::new(BufReader::new(stdin()))
         } else {
             match File::open(f_name) {
                 Ok(f) => Box::new(BufReader::new(f)),
                 Err(e) => {
-                    ctcore::ct_show_error!("{}: {}", f_name.display(), e);
+                    let err_msg = e.to_string();
+                    let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                    ctcore::ct_show_error!("{}: {}", f_name.display(), clean_err);
                     failed_open += 1;
                     continue;
                 }
@@ -685,71 +920,187 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
             let line = match line_result {
                 Ok(l) => l,
                 Err(e) => {
-                    ctcore::ct_show_error!("{}: {}", f_name.display(), e);
+                    let err_msg = e.to_string();
+                    let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                    ctcore::ct_show_error!("{}: {}", f_name.display(), clean_err);
                     continue;
                 }
             };
 
-            if line.trim().is_empty() {
+            if line.trim().is_empty() || line.trim().starts_with('#') {
                 continue;
             }
 
-            let (digest_str, filename_str) = match parse_check_line(&line) {
-                Some((d, f)) => (d, f),
+            let (digest_str, filename_str, line_algo) = match parse_check_line(&line) {
+                Some((d, f, a)) => (d, f, a),
                 None => {
                     bad_format += 1;
-                    if warn {
+                    if opts.warn {
                         ctcore::ct_show_error!(
-                            "{}: {}: improperly formatted checksum line",
+                            "{}: {}: improperly formatted {} checksum line",
                             f_name.display(),
-                            line_num + 1
+                            line_num + 1,
+                            algo_display_name(current_default_algo)
                         );
                     }
                     continue;
                 }
             };
 
-            let is_valid_format = match opts.output_format {
-                CksumOutputFormat::Hexadecimal => match opts.algo_name {
-                    CKSUM_ALGORITHM_OPTIONS_CRC
-                    | CKSUM_ALGORITHM_OPTIONS_SYSV
-                    | CKSUM_ALGORITHM_OPTIONS_BSD => digest_str.chars().all(|c| c.is_ascii_digit()),
-                    _ => {
-                        let expected_len = opts.output_bits / 4;
-                        digest_str.len() == expected_len
-                            && digest_str.chars().all(|c| c.is_ascii_hexdigit())
+            let (current_algo_name, mut current_digest, current_bits) = if let Some(tag) = line_algo
+            {
+                if let Some((d, b, n)) = detect_algo_from_tag(tag) {
+                    current_default_algo = n;
+                    (n, d, b)
+                } else {
+                    bad_format += 1;
+                    if opts.warn {
+                        let display_tag = {
+                            let u = tag.to_uppercase();
+                            if u.starts_with("SHA3-") {
+                                "SHA3"
+                            } else if u.starts_with("SHA2-") {
+                                "SHA2"
+                            } else if u.starts_with("BLAKE2B-") {
+                                "BLAKE2b"
+                            } else {
+                                tag
+                            }
+                        };
+                        ctcore::ct_show_error!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            display_tag
+                        );
                     }
-                },
-                CksumOutputFormat::Base64 => {
-                    let bytes = opts.output_bits.div_ceil(8);
-                    let expected_len = bytes.div_ceil(3) * 4;
-                    digest_str.len() == expected_len
-                        && digest_str
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+                    continue;
                 }
-                CksumOutputFormat::Raw => true,
+            } else {
+                let mut inferred_len = opts.length;
+
+                if inferred_len.is_none() {
+                    let is_blake2b = current_default_algo.eq_ignore_ascii_case("blake2b");
+                    // 包容所有衍生的变体名称
+                    let is_sha2_family = matches!(
+                        current_default_algo,
+                        "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
+                    );
+                    let is_sha3_family = current_default_algo.starts_with("sha3");
+
+                    if (is_blake2b || is_sha2_family || is_sha3_family)
+                        && digest_str.chars().all(|c| c.is_ascii_hexdigit())
+                    {
+                        let bits = digest_str.len() * 4;
+                        if is_blake2b {
+                            inferred_len = Some(bits / 8);
+                            current_default_algo = "blake2b";
+                        } else if matches!(bits, 224 | 256 | 384 | 512) {
+                            inferred_len = Some(bits);
+                            current_default_algo = if is_sha2_family { "sha2" } else { "sha3" };
+                        }
+                    }
+                }
+
+                cksum_detect_algo(current_default_algo, inferred_len)
             };
+
+            if matches!(
+                current_algo_name,
+                CKSUM_ALGORITHM_OPTIONS_CRC
+                    | CKSUM_ALGORITHM_OPTIONS_SYSV
+                    | CKSUM_ALGORITHM_OPTIONS_BSD
+            ) {
+                bad_format += 1;
+                if opts.warn {
+                    if let Some(tag) = line_algo {
+                        let display_tag = {
+                            let u = tag.to_uppercase();
+                            if u.starts_with("SHA3-") {
+                                "SHA3"
+                            } else if u.starts_with("SHA2-") {
+                                "SHA2"
+                            } else if u.starts_with("BLAKE2B-") {
+                                "BLAKE2b"
+                            } else {
+                                tag
+                            }
+                        };
+                        ctcore::ct_show_error!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            display_tag
+                        );
+                    } else {
+                        ctcore::ct_show_error!(
+                            "{}: {}: improperly formatted checksum line",
+                            f_name.display(),
+                            line_num + 1
+                        );
+                    }
+                }
+                continue;
+            }
+
+            let expected_hex_len = current_bits / 4;
+            let expected_b64_len = (((current_bits + 7) / 8) + 2) / 3 * 4;
+
+            let is_hex = digest_str.len() == expected_hex_len
+                && digest_str.chars().all(|c| c.is_ascii_hexdigit());
+            let is_b64 = digest_str.len() == expected_b64_len
+                && digest_str
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=');
+
+            let is_valid_format = is_hex || is_b64;
 
             if !is_valid_format {
                 bad_format += 1;
-                if warn {
-                    ctcore::ct_show_error!(
-                        "{}: {}: improperly formatted checksum line",
-                        f_name.display(),
-                        line_num + 1
-                    );
+                if opts.warn {
+                    if let Some(tag) = line_algo {
+                        let display_tag = {
+                            let u = tag.to_uppercase();
+                            if u.starts_with("SHA3-") {
+                                "SHA3"
+                            } else if u.starts_with("SHA2-") {
+                                "SHA2"
+                            } else if u.starts_with("BLAKE2B-") {
+                                "BLAKE2b"
+                            } else {
+                                tag
+                            }
+                        };
+                        ctcore::ct_show_error!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            display_tag
+                        );
+                    } else {
+                        ctcore::ct_show_error!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            algo_display_name(current_default_algo)
+                        );
+                    }
                 }
                 continue;
-            };
+            }
 
             n_properly_formatted_this_file += 1;
+            global_properly_formatted += 1;
+
             let target_path = Path::new(filename_str);
             let mut target_file: Box<dyn Read> = match File::open(target_path) {
                 Ok(f) => Box::new(BufReader::new(f)),
-                Err(_) => {
-                    if !ignore_missing {
-                        if !status {
+                Err(e) => {
+                    if !opts.ignore_missing {
+                        let err_msg = e.to_string();
+                        let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                        ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
+                        if !opts.status {
                             println!(
                                 "{}: {}",
                                 filename_str,
@@ -763,17 +1114,20 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
             };
 
             let (sum_hex, _) = match cksum_digest_read(
-                &mut opts.digest,
+                &mut current_digest,
                 &mut BufReader::new(&mut target_file),
-                opts.output_bits,
+                current_bits,
             ) {
                 Ok(s) => {
                     n_verified_this_file += 1;
                     s
                 }
-                Err(_) => {
-                    if !ignore_missing {
-                        if !status {
+                Err(e) => {
+                    if !opts.ignore_missing {
+                        let err_msg = e.to_string();
+                        let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                        ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
+                        if !opts.status {
                             println!(
                                 "{}: {}",
                                 filename_str,
@@ -786,20 +1140,41 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
                 }
             };
 
-            if sum_hex.eq_ignore_ascii_case(digest_str) {
-                if !quiet && !status {
+            let computed_sum = if is_b64 {
+                ct_encoding::encode(ct_encoding::Format::Base64, &decode(&sum_hex).unwrap())
+                    .unwrap()
+            } else {
+                sum_hex
+            };
+
+            let checksum_match = if is_b64 {
+                computed_sum == digest_str
+            } else {
+                computed_sum.eq_ignore_ascii_case(digest_str)
+            };
+
+            if checksum_match {
+                if !opts.quiet && !opts.status {
                     println!("{}: {}", filename_str, t!("cksum.check.ok"));
                 }
             } else {
-                if !status {
+                if !opts.status {
                     println!("{}: {}", filename_str, t!("cksum.check.failed"));
                 }
                 bad_checksum += 1;
             }
         }
 
-        if ignore_missing && n_properly_formatted_this_file > 0 && n_verified_this_file == 0 {
-            if !status {
+        if n_properly_formatted_this_file == 0 {
+            if show_warnings {
+                ctcore::ct_show_error!(
+                    "{}: no properly formatted checksum lines found",
+                    f_name.display()
+                );
+            }
+            no_file_verified = true;
+        } else if opts.ignore_missing && n_verified_this_file == 0 {
+            if show_warnings {
                 ctcore::ct_show_error!(
                     "{}: {}",
                     f_name.display(),
@@ -810,75 +1185,111 @@ fn cksum_check(mut opts: CksumOptions, matches: &clap::ArgMatches) -> CTResult<i
         }
     }
 
-    if bad_checksum > 0 {
-        if !status {
-            if bad_checksum == 1 {
-                ctcore::ct_show_error!(
-                    "{}",
-                    t!("cksum.check.checksum_did_not_match", count = bad_checksum)
-                );
-            } else {
-                ctcore::ct_show_error!(
-                    "{}",
-                    t!("cksum.check.checksums_did_not_match", count = bad_checksum)
-                );
-            }
-        }
-        return Ok(1);
-    }
-    if bad_format > 0 {
-        if !status {
+    let mut exit_code = 0;
+
+    if global_properly_formatted > 0 {
+        if bad_format > 0 && show_warnings {
             if bad_format == 1 {
-                ctcore::ct_show_error!(
-                    "{}",
-                    t!("cksum.check.line_improperly_formatted", count = bad_format)
-                );
+                ctcore::ct_show_error!("WARNING: 1 line is improperly formatted");
             } else {
-                ctcore::ct_show_error!(
-                    "{}",
-                    t!("cksum.check.lines_improperly_formatted", count = bad_format)
-                );
+                ctcore::ct_show_error!("WARNING: {} lines are improperly formatted", bad_format);
             }
         }
-        if strict {
-            return Ok(1);
+        if missing_files > 0 && show_warnings {
+            if missing_files == 1 {
+                ctcore::ct_show_error!("WARNING: 1 listed file could not be read");
+            } else {
+                ctcore::ct_show_error!("WARNING: {} listed files could not be read", missing_files);
+            }
         }
-    }
-    if missing_files > 0 || failed_open > 0 || no_file_verified {
-        return Ok(1);
+        if bad_checksum > 0 {
+            if show_warnings {
+                if bad_checksum == 1 {
+                    ctcore::ct_show_error!("WARNING: 1 computed checksum did NOT match");
+                } else {
+                    ctcore::ct_show_error!(
+                        "WARNING: {} computed checksums did NOT match",
+                        bad_checksum
+                    );
+                }
+            }
+            exit_code = 1;
+        }
+
+        if bad_format > 0 && opts.strict {
+            exit_code = 1;
+        }
+        if missing_files > 0 {
+            exit_code = 1;
+        }
+    } else {
+        if bad_format > 0 || missing_files > 0 || failed_open > 0 || no_file_verified {
+            exit_code = 1;
+        }
     }
 
-    Ok(0)
+    if missing_files > 0 || failed_open > 0 || no_file_verified {
+        exit_code = 1;
+    }
+
+    Ok(exit_code)
 }
 
-fn parse_check_line(line: &str) -> Option<(&str, &str)> {
-    let trimmed = line.trim();
+fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>)> {
+    let mut trimmed = line.trim();
 
-    // Try to parse as BSD format: ALGO (filename) = DIGEST
-    if let Some(last_idx) = trimmed.rfind(") = ") {
-        let digest_start = last_idx + 4;
-        let digest = &trimmed[digest_start..];
-        if let Some(first_idx) = trimmed.find(" (") {
-            if first_idx < last_idx {
-                let filename = &trimmed[first_idx + 2..last_idx];
-                return Some((digest, filename));
+    // GNU 规范：允许行首出现 '\' 用于转义，解析时应当忽略它
+    if let Some(stripped) = trimmed.strip_prefix('\\') {
+        trimmed = stripped;
+    }
+
+    if let Some(last_paren) = trimmed.rfind(')') {
+        let after_paren = &trimmed[last_paren + 1..];
+        if let Some(eq_idx) = after_paren.find('=') {
+            let digest = after_paren[eq_idx + 1..].trim_start();
+            if let Some(first_paren) = trimmed.find('(') {
+                if first_paren < last_paren {
+                    let algo = trimmed[..first_paren].trim_end();
+                    let filename = &trimmed[first_paren + 1..last_paren];
+                    return Some((digest, filename, Some(algo)));
+                }
             }
         }
     }
 
+    // 解析 Untagged 格式: DIGEST *filename 或 DIGEST  filename
     if let Some(first_space) = trimmed.find(' ') {
         let digest = &trimmed[..first_space];
-        let rest = &trimmed[first_space + 1..];
+        let rest = trimmed[first_space + 1..].trim_start();
         if let Some(filename) = rest.strip_prefix('*') {
-            return Some((digest, filename));
+            return Some((digest, filename, None));
         }
-        if let Some(filename) = rest.strip_prefix(' ') {
-            return Some((digest, filename));
-        }
-        let filename = rest.trim_start();
-        return Some((digest, filename));
+        return Some((digest, rest, None));
     }
     None
+}
+
+fn algo_display_name(algo: &str) -> &'static str {
+    match algo {
+        "blake2b" => "BLAKE2b",
+        "sm3" => "SM3",
+        "md5" => "MD5",
+        "sha1" => "SHA1",
+        "sha224" => "SHA224",
+        "sha256" => "SHA256",
+        "sha384" => "SHA384",
+        "sha512" => "SHA512",
+        "crc" => "CRC",
+        "sysv" => "SYSV",
+        "bsd" => "BSD",
+        "sha2" => "SHA2",
+        "sha3" => "SHA3",
+        "sha3-224" => "SHA3-224",
+        "sha3-256" => "SHA3-256",
+        "sha3-384" => "SHA3-384",
+        "sha3-512" => "SHA3-512",
+        _ => "UNKNOWN",
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -924,7 +1335,8 @@ fn args_init() -> Vec<Arg> {
                 CKSUM_ALGORITHM_OPTIONS_SHA512,
                 CKSUM_ALGORITHM_OPTIONS_BLAKE2B,
                 CKSUM_ALGORITHM_OPTIONS_SM3,
-                CKSUM_ALGORITHM_OPTIONS_SHA2, 
+                CKSUM_ALGORITHM_OPTIONS_SHA2,
+                CKSUM_ALGORITHM_OPTIONS_SHA3,
             ]),
         Arg::new(opt_flags::UNTAGGED)
             .long(opt_flags::UNTAGGED)
@@ -936,7 +1348,6 @@ fn args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::LENGTH)
             .long(opt_flags::LENGTH)
-            .value_parser(value_parser!(usize))
             .short('l')
             .help(t!("cksum.clap.length", default = "digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8"))
             .action(ArgAction::Set),

@@ -14,20 +14,20 @@
 extern crate rust_i18n;
 mod operation;
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_show;
 use operation::{
-    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
+    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
 };
-use std::io::{BufRead, BufWriter, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 use sys_locale::get_locale;
 
 use crate::operation::DeleteOperation;
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::Tool;
 use std::ffi::OsString;
 
 // 1. 定义配置标志常量
@@ -375,22 +375,18 @@ mod tests {
             let app = ct_app();
 
             // 验证基本参数
-            assert!(
-                app.get_arguments()
-                    .any(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT)
-            );
-            assert!(
-                app.get_arguments()
-                    .any(|arg| arg.get_id() == tr_flags::TR_DELETE)
-            );
-            assert!(
-                app.get_arguments()
-                    .any(|arg| arg.get_id() == tr_flags::TR_SQUEEZE)
-            );
-            assert!(
-                app.get_arguments()
-                    .any(|arg| arg.get_id() == tr_flags::TR_TRUNCATE_SET1)
-            );
+            assert!(app
+                .get_arguments()
+                .any(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT));
+            assert!(app
+                .get_arguments()
+                .any(|arg| arg.get_id() == tr_flags::TR_DELETE));
+            assert!(app
+                .get_arguments()
+                .any(|arg| arg.get_id() == tr_flags::TR_SQUEEZE));
+            assert!(app
+                .get_arguments()
+                .any(|arg| arg.get_id() == tr_flags::TR_TRUNCATE_SET1));
 
             // 验证参数别名
             let complement_arg = app

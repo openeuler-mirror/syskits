@@ -39,6 +39,7 @@ const CKSUM_ALGORITHM_OPTIONS_BSD: &str = "bsd";
 const CKSUM_ALGORITHM_OPTIONS_CRC: &str = "crc";
 const CKSUM_ALGORITHM_OPTIONS_MD5: &str = "md5";
 const CKSUM_ALGORITHM_OPTIONS_SHA1: &str = "sha1";
+const CKSUM_ALGORITHM_OPTIONS_SHA2: &str = "sha2";
 const CKSUM_ALGORITHM_OPTIONS_SHA224: &str = "sha224";
 const CKSUM_ALGORITHM_OPTIONS_SHA256: &str = "sha256";
 const CKSUM_ALGORITHM_OPTIONS_SHA384: &str = "sha384";
@@ -142,6 +143,29 @@ fn cksum_detect_algo(
             Box::new(CtSm3::new()) as Box<dyn CtDigest>,
             512,
         ),
+        CKSUM_ALGORITHM_OPTIONS_SHA2 => match len {
+            Some(224) => (
+                CKSUM_ALGORITHM_OPTIONS_SHA224,
+                Box::new(Sha224::new()) as Box<dyn CtDigest>,
+                224,
+            ),
+            Some(256) => (
+                CKSUM_ALGORITHM_OPTIONS_SHA256,
+                Box::new(Sha256::new()) as Box<dyn CtDigest>,
+                256,
+            ),
+            Some(384) => (
+                CKSUM_ALGORITHM_OPTIONS_SHA384,
+                Box::new(Sha384::new()) as Box<dyn CtDigest>,
+                384,
+            ),
+            Some(512) | None => (
+                CKSUM_ALGORITHM_OPTIONS_SHA512,
+                Box::new(Sha512::new()) as Box<dyn CtDigest>,
+                512,
+            ),
+            _ => unreachable!("length should be validated before reaching here"),
+        },
         _ => unreachable!("unknown algorithm: clap should have prevented this case"),
     }
 }
@@ -461,8 +485,6 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         match length.to_owned() {
             0 => None,
             n if n % 8 != 0 => {
-                // GNU's implementation seem to use these quotation marks
-                // in their error messages, so we do the same.
                 ctcore::ct_show_error!("invalid length: \u{2018}{length}\u{2019}");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -472,7 +494,6 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             }
             n if n > 512 => {
                 ctcore::ct_show_error!("invalid length: \u{2018}{length}\u{2019}");
-
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
@@ -480,17 +501,27 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
                 .into());
             }
             n => {
-                if algo_name != CKSUM_ALGORITHM_OPTIONS_BLAKE2B {
+                if algo_name == CKSUM_ALGORITHM_OPTIONS_BLAKE2B {
+                    Some(n / 8)
+                } else if algo_name == CKSUM_ALGORITHM_OPTIONS_SHA2 {
+                    match n {
+                        224 | 256 | 384 | 512 => Some(n),
+                        _ => {
+                            ctcore::ct_show_error!("invalid length: \u{2018}{n}\u{2019}");
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "invalid length for sha2",
+                            )
+                            .into());
+                        }
+                    }
+                } else {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "--length is only supported with --algorithm=blake2b",
+                        "--length is only supported with --algorithm=blake2b or sha2",
                     )
                     .into());
                 }
-
-                // Divide by 8, as our blake2b implementation expects bytes
-                // instead of bits.
-                Some(n / 8)
             }
         }
     } else {
@@ -809,6 +840,7 @@ fn args_init() -> Vec<Arg> {
                 CKSUM_ALGORITHM_OPTIONS_SHA512,
                 CKSUM_ALGORITHM_OPTIONS_BLAKE2B,
                 CKSUM_ALGORITHM_OPTIONS_SM3,
+                CKSUM_ALGORITHM_OPTIONS_SHA2, 
             ]),
         Arg::new(opt_flags::UNTAGGED)
             .long(opt_flags::UNTAGGED)

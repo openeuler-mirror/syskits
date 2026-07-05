@@ -182,45 +182,56 @@ impl UniqFlags {
         })
     }
 
+    /// 辅助函数：根据 UTF-8 编码规则，向后跳过 n 个字符，返回真实的字节索引
+    fn skip_n_chars(slice: &[u8], n: usize) -> usize {
+        let mut i = 0;
+        let mut count = 0;
+        while i < slice.len() && count < n {
+            let byte = slice[i];
+            // 简单的 UTF-8 字符长度嗅探
+            let len = if byte < 0x80 {
+                1
+            } else if byte & 0xE0 == 0xC0 {
+                2
+            } else if byte & 0xF0 == 0xE0 {
+                3
+            } else if byte & 0xF8 == 0xF0 {
+                4
+            } else {
+                1 // 如果遇到非法的 UTF-8 序列，按单字节推进
+            };
+
+            // 防御性检查，避免超出切片边界
+            i += len.min(slice.len() - i);
+            count += 1;
+        }
+        i
+    }
+
     fn cmp_key<F>(&self, line: &[u8], mut closure: F) -> bool
     where
         F: FnMut(&mut dyn Iterator<Item = u8>) -> bool,
     {
         let check_fields = self.skip_fields(line);
-        let fields_len = check_fields.len();
-        let start_slice = self.slice_start.unwrap_or(0);
-        let stop_slice = self.slice_stop.unwrap_or(fields_len);
-        if fields_len > 0 {
-            // 快速路径：避免在没有跳过或映射为小写的情况下进行任何工作
-            if !self.is_ignore_case && start_slice == 0 && stop_slice == fields_len {
-                return closure(&mut check_fields.iter().copied());
-            }
 
-            // 快速路径：避免跳过
-            if self.is_ignore_case && start_slice == 0 && stop_slice == fields_len {
-                return closure(&mut check_fields.iter().map(|u| u.to_ascii_lowercase()));
-            }
+        // 1. 处理 -s: 跳过指定数量的字符
+        let start_byte = Self::skip_n_chars(&check_fields, self.slice_start.unwrap_or(0));
+        let slice_after_start = &check_fields[start_byte..];
 
-            // 快速路径：如果我们不想忽略大小写，可以避免将字符映射为小写
-            if !self.is_ignore_case {
-                return closure(
-                    &mut check_fields
-                        .iter()
-                        .skip(start_slice)
-                        .take(stop_slice)
-                        .copied(),
-                );
-            }
-
-            closure(
-                &mut check_fields
-                    .iter()
-                    .skip(start_slice)
-                    .take(stop_slice)
-                    .map(|u| u.to_ascii_lowercase()),
-            )
+        // 2. 处理 -w: 比较指定数量的字符
+        let end_byte = if let Some(w) = self.slice_stop {
+            start_byte + Self::skip_n_chars(slice_after_start, w)
         } else {
-            closure(&mut check_fields.iter().copied())
+            check_fields.len()
+        };
+
+        // 3. 截取出需要比较的最终真实字节切片
+        let final_slice = &check_fields[start_byte..end_byte];
+
+        if !self.is_ignore_case {
+            closure(&mut final_slice.iter().copied())
+        } else {
+            closure(&mut final_slice.iter().map(|u| u.to_ascii_lowercase()))
         }
     }
 

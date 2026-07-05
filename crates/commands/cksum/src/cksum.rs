@@ -10,17 +10,17 @@
  */
 
 extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version, value_parser};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
-    ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo},
+    ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code},
     ct_show,
     ct_sum::{
-        div_ceil, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224,
-        Sha256, Sha384, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha512, BSD, SYSV,
+        BSD, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1,
+        Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, div_ceil,
     },
 };
 use hex::decode;
@@ -30,7 +30,7 @@ use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -248,28 +248,28 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
                         Box::new(Sha224::new()) as Box<dyn CtDigest>,
                         224,
                         CKSUM_ALGORITHM_OPTIONS_SHA224,
-                    ))
+                    ));
                 }
                 256 => {
                     return Some((
                         Box::new(Sha256::new()) as Box<dyn CtDigest>,
                         256,
                         CKSUM_ALGORITHM_OPTIONS_SHA256,
-                    ))
+                    ));
                 }
                 384 => {
                     return Some((
                         Box::new(Sha384::new()) as Box<dyn CtDigest>,
                         384,
                         CKSUM_ALGORITHM_OPTIONS_SHA384,
-                    ))
+                    ));
                 }
                 512 => {
                     return Some((
                         Box::new(Sha512::new()) as Box<dyn CtDigest>,
                         512,
                         CKSUM_ALGORITHM_OPTIONS_SHA512,
-                    ))
+                    ));
                 }
                 _ => return None,
             }
@@ -285,28 +285,28 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
                         Box::new(Sha3_224::new()) as Box<dyn CtDigest>,
                         224,
                         "sha3-224",
-                    ))
+                    ));
                 }
                 256 => {
                     return Some((
                         Box::new(Sha3_256::new()) as Box<dyn CtDigest>,
                         256,
                         "sha3-256",
-                    ))
+                    ));
                 }
                 384 => {
                     return Some((
                         Box::new(Sha3_384::new()) as Box<dyn CtDigest>,
                         384,
                         "sha3-384",
-                    ))
+                    ));
                 }
                 512 => {
                     return Some((
                         Box::new(Sha3_512::new()) as Box<dyn CtDigest>,
                         512,
                         "sha3-512",
-                    ))
+                    ));
                 }
                 _ => return None,
             }
@@ -984,6 +984,7 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                                 c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
                             });
 
+                        // 如果包含 [g-z], [G-Z], +, /, = 等非十六进制字符，它必定是 Base64
                         let has_b64_only_chars = digest_str.chars().any(|c| {
                             c == '+'
                                 || c == '/'
@@ -993,6 +994,7 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                         });
 
                         if is_b64_chars && has_b64_only_chars {
+                            // 通过 base64 的长度和末尾填充的 = 数量，精准逆推哈希字节数
                             let padding =
                                 digest_str.chars().rev().take_while(|&c| c == '=').count();
                             let bytes = (digest_str.len() / 4) * 3 - padding;
@@ -3033,7 +3035,6 @@ mod tests {
 
     #[cfg(test)]
     mod tests_detect_algo {
-        use crate::cksum_detect_algo;
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
@@ -3045,6 +3046,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
+        use crate::cksum_detect_algo;
 
         #[test]
         fn test_detect_algo_sysv() {
@@ -3157,7 +3159,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::{cksum, cksum_detect_algo, ct_app, opt_flags, CksumOptions, CksumOutputFormat};
+        use crate::{CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, ct_app, opt_flags};
         use std::ffi::OsStr;
         use std::fs;
         use std::fs::File;

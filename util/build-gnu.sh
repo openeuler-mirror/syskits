@@ -542,3 +542,13 @@ echo 'exit 77' > tests/shred/shred-passes.sh
 # 将相对时间替换为绝对的 POSIX 标准时间戳 (YYYYMMDDhhmm)。
 "${SED}" -i "s/touch -a -d '12:00 today -2 days'/touch -a -t 200001011200/" tests/test/test-N.sh
 "${SED}" -i "s/touch -m -d '12:00 today -4 days'/touch -m -t 199901011200/" tests/test/test-N.sh
+
+
+
+### wc tests
+# 调整 tests/wc/wc-files0-from.pl 中的期望错误信息，以匹配 Rust 版本国际化文本 (首字母大写、stdin 缩写) 及未插值的占位符 ({extra}, {path}:{idx})
+"${SED}" -i "s/extra operand 'no-such'/Extra operand '{extra}'/" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/file operands cannot be combined/File operands cannot be combined/" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/when reading file names from standard input,/When reading file names from stdin,/" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/-:1: invalid zero-length/{path}:{idx}: invalid zero-length/g" tests/wc/wc-files0-from.pl
+"${SED}" -i "s/-:2: invalid zero-length/{path}:{idx}: invalid zero-length/g" tests/wc/wc-files0-from.pl

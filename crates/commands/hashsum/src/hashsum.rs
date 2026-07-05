@@ -1197,10 +1197,10 @@ fn check_hash_file<W: Write>(
 /// 创建用于解析哈希校验文件的正则表达式
 fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), HashsumError> {
     let bytes = flags.digest.output_bits() / 4;
-    let bytes_marker = if bytes > 0 {
-        format!("{{{bytes}}}")
-    } else {
+    let bytes_marker = if flags.algoname == "BLAKE2" || bytes == 0 {
         "+".to_string()
+    } else {
+        format!("{{{bytes}}}")
     };
 
     // 初始化为可能的 GNU 格式，带有可选的二进制标记
@@ -1299,6 +1299,18 @@ fn verify_file_hash<W: Write>(
     writer: &mut W,
     failed_open_file: &mut usize,
 ) -> CTResult<bool> {
+    if flags.algoname == "BLAKE2" {
+        let mut expected_bytes = expected_sum.len() / 2;
+
+        if expected_bytes == 0 {
+            expected_bytes = 1;
+        } else if expected_bytes > 64 {
+            expected_bytes = 64;
+        }
+
+        flags.output_bits = expected_bytes * 8;
+        flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
+    }
     // 反转文件名中的转义
     let (ck_filename_unescaped, prefix) = if is_escaped {
         (unescape_filename(ck_filename), "\\")

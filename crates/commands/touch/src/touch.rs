@@ -89,7 +89,8 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
 
-    let files = arg_matches
+    // 1. 将 files 收集为 Vec，以便我们可以移出作为时间戳的元素
+    let mut files: Vec<OsString> = arg_matches
         .get_many::<OsString>(TOUCH_ARG_FILES)
         .ok_or_else(|| {
             let err_message = format!(
@@ -97,12 +98,39 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
                 ctcore::ct_execute_phrase()
             );
             CtSimpleError::new(1, err_message)
-        })?;
+        })?
+        .cloned()
+        .collect();
 
-    let (a_time, m_time) = touch_determine_times(&arg_matches)?;
+    // 2. 嗅探并提取过时的 POSIX 语法时间戳
+    let mut obs_time = None;
+    if !arg_matches.contains_id(touch_flags::TOUCH_SOURCES) && files.len() >= 2 {
+        if let Some(s) = files[0].to_str() {
+            let is_obsolescent = if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
+                true
+            } else if s.len() == 10 && s.chars().all(|c| c.is_ascii_digit()) {
+                let yy = s[8..10].parse::<i32>().unwrap_or(0);
+                // 关键点：POSIX.2-1992 严格规定 10 位过时时间戳的 YY 必须在 69 到 99 之间
+                // 如果是 00 (比如 Y2000 用例)，则不属于此格式，必须作为普通文件处理
+                yy >= 69 && yy <= 99
+            } else {
+                false
+            };
 
-    for filename in files {
-        // FIXME: 找到避免必须克隆路径的方法
+            if is_obsolescent {
+                obs_time = Some(parse_obsolescent_timestamp(s)?);
+                // 从目标文件列表中移除已被解析为时间戳的元素
+                files.remove(0);
+            }
+        }
+    }
+
+    // 3. 将可能存在的 obs_time 传入
+    let (a_time, m_time) = touch_determine_times(&arg_matches, obs_time)?;
+
+    // 4. 注意这里的循环变量改为借用引用 &files
+    for filename in &files {
+        // ... 原来的逻辑保持不变 ...
         let path_buf = if filename == "-" {
             touch_pathbuf_from_stdout()?
         } else {
@@ -242,7 +270,10 @@ pub fn ct_app() -> Command {
 }
 
 // 确定访问和修改时间
-fn touch_determine_times(matches: &ArgMatches) -> CTResult<(FileTime, FileTime)> {
+fn touch_determine_times(
+    matches: &ArgMatches,
+    obs_time: Option<FileTime>,
+) -> CTResult<(FileTime, FileTime)> {
     match (
         matches.get_one::<OsString>(touch_flags::sources::TOUCH_REFERENCE),
         matches.get_one::<String>(touch_flags::sources::TOUCH_DATE),
@@ -276,6 +307,9 @@ fn touch_determine_times(matches: &ArgMatches) -> CTResult<(FileTime, FileTime)>
                 matches.get_one::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
             {
                 parse_timestamp(ts)?
+            } else if let Some(t) = obs_time {
+                // 如果命中过时的时间戳格式，则使用它
+                t
             } else {
                 touch_datetime_to_filetime(&Local::now())
             };
@@ -449,6 +483,50 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
     // 凌晨3:00，在这种情况下，凌晨2:00到凌晨2:59之间的任何时间都是无效的。
     // 如果我们在这个跳跃中，chrono会从跳跃前获取偏移量。如果我们向前跳一小时，
     // 我们会得到新的修正偏移量。向后跳跃将现在正确考虑跳跃。
+    let local2 = local + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
+    if local.hour() != local2.hour() {
+        return Err(CtSimpleError::new(
+            1,
+            format!("invalid date format {}", s.quote()),
+        ));
+    }
+
+    Ok(touch_datetime_to_filetime(&local))
+}
+
+fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
+    let current_year = || Local::now().year();
+    let format = touch_format::YYYYMMDDHHMM;
+
+    let ts = if s.len() == 8 {
+        format!("{}{}", current_year(), s)
+    } else if s.len() == 10 {
+        // 由于外层已经保证了 YY 必然在 69-99 之间，直接 +1900 即可
+        let mmddhhmm = &s[0..8];
+        let yy = &s[8..10];
+        let year = yy.parse::<i32>().unwrap_or(0) + 1900;
+        format!("{:04}{}", year, mmddhhmm)
+    } else {
+        return Err(CtSimpleError::new(
+            1,
+            format!("invalid date format {}", s.quote()),
+        ));
+    };
+
+    let local = NaiveDateTime::parse_from_str(&ts, format)
+        .map_err(|_| CtSimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
+
+    let mut local = match chrono::Local.from_local_datetime(&local) {
+        LocalResult::Single(dt) => dt,
+        _ => {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid date ts format {}", ts.quote()),
+            ));
+        }
+    };
+
+    // 夏令时跳变校验
     let local2 = local + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
     if local.hour() != local2.hour() {
         return Err(CtSimpleError::new(

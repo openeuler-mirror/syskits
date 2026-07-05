@@ -350,7 +350,7 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
             Box::new(CtSm3::new()) as Box<dyn CtDigest>,
             256,
             CKSUM_ALGORITHM_OPTIONS_SM3,
-        )), // [FIX]: 长度同步 256
+        )),
         "CRC" => Some((
             Box::new(CtCRC::new()) as Box<dyn CtDigest>,
             256,
@@ -398,18 +398,10 @@ struct CksumOptions {
 /// * `options` - CLI options for the assigning checksum algorithm
 /// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
 #[allow(clippy::cognitive_complexity)]
-/**
- *   计算文件或标准输入的校验和。
- *
- * @param mut options 包含校验和计算选项的结构体。
- * @param files 一个迭代器，提供要计算校验和的文件名或"-"表示标准输入。
- * @return CTResult<()>，成功时返回Ok(())，错误时返回Err(Box<CkSumError>)。
- */
 fn cksum<'a, I>(mut cksum_opts: CksumOptions, cksum_files: I) -> CTResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    // 将文件名迭代器收集到一个向量中，方便后续处理
     let f: Vec<_> = cksum_files.collect();
     let implicit_stdin = f.is_empty();
     if implicit_stdin {
@@ -425,7 +417,6 @@ where
 
         let sum = match cksum_opts.output_format {
             CksumOutputFormat::Raw => {
-                // 对于原始格式，根据算法类型转换校验和字符串为字节序列
                 let bytes = match cksum_opts.algo_name {
                     CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
                         sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
@@ -435,7 +426,6 @@ where
                     }
                     _ => decode(sum_hex).unwrap(),
                 };
-                // 输出原始格式的校验和，然后立即返回
                 stdout().write_all(&bytes)?;
                 return Ok(());
             }
@@ -469,14 +459,12 @@ where
             }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
-                    // 输出BLAKE2b算法的校验和，可选的长度参数
                     print!("BLAKE2b-{} (-) = {sum}{}", length * 8, line_end);
                 } else {
                     print!("BLAKE2b (-) = {sum}{line_end}");
                 }
             }
             _ => {
-                // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
                     let marker = if cksum_opts.binary { "*" } else { " " };
                     print!("{sum} {marker}-{line_end}");
@@ -493,29 +481,24 @@ where
         return Ok(());
     }
 
-    // 检查是否以原始格式计算多个文件的校验和，这是不被支持的
     if cksum_opts.output_format == CksumOutputFormat::Raw && f.len() > 1 {
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
 
     let line_end = if cksum_opts.zero { "\0" } else { "\n" };
 
-    // 遍历文件列表，对每个文件或标准输入计算校验和
     for file_name in f {
         let filename = Path::new(file_name);
         let stdin_buffer;
         let file_buffer;
         let not_file = filename == OsStr::new("-");
 
-        // 根据文件名是否为"-"，或者是否为目录，选择不同的读取方式
         let mut file = BufReader::new(if not_file {
             stdin_buffer = stdin();
             Box::new(stdin_buffer) as Box<dyn Read>
         } else if filename.is_dir() {
-            // 如果是目录，则使用空读取器
             Box::new(BufReader::new(io::empty())) as Box<dyn Read>
         } else {
-            // 尝试打开文件
             file_buffer = match File::open(filename) {
                 Ok(file) => file,
                 Err(err) => {
@@ -526,12 +509,10 @@ where
             Box::new(file_buffer) as Box<dyn Read>
         });
 
-        // 计算校验和
         let (sum_hex, sz) =
             cksum_digest_read(&mut cksum_opts.digest, &mut file, cksum_opts.output_bits)
                 .map_err_context(|| "failed to read input".to_string())?;
 
-        // 如果是目录，打印错误信息并继续处理下一个文件
         if filename.is_dir() {
             ct_show!(CtSimpleError::new(
                 1,
@@ -540,10 +521,8 @@ where
             continue;
         }
 
-        // 根据输出格式和算法，格式化校验和结果
         let sum = match cksum_opts.output_format {
             CksumOutputFormat::Raw => {
-                // 对于原始格式，根据算法类型转换校验和字符串为字节序列
                 let bytes = match cksum_opts.algo_name {
                     CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
                         sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
@@ -553,7 +532,6 @@ where
                     }
                     _ => decode(sum_hex).unwrap(),
                 };
-                // 输出原始格式的校验和，然后立即返回
                 stdout().write_all(&bytes)?;
                 return Ok(());
             }
@@ -569,7 +547,6 @@ where
         };
 
         let bsd_width = 5;
-        // 根据算法格式化并输出校验和结果
         match cksum_opts.algo_name {
             CKSUM_ALGORITHM_OPTIONS_SYSV => print!(
                 "{} {} {}{}",
@@ -590,7 +567,6 @@ where
             }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
-                    // 输出BLAKE2b算法的校验和，可选的长度参数
                     print!(
                         "BLAKE2b-{} ({}) = {sum}{}",
                         length * 8,
@@ -602,7 +578,6 @@ where
                 }
             }
             _ => {
-                // 根据是否标记，以不同的格式输出校验和
                 if cksum_opts.untagged {
                     let marker = if cksum_opts.binary { "*" } else { " " };
                     print!("{sum} {marker}{}{}", filename.display(), line_end);
@@ -627,12 +602,6 @@ fn cksum_digest_read<T: Read>(
     output_bits: usize,
 ) -> io::Result<(String, usize)> {
     cksum_digest.reset();
-
-    // 从reader中读取字节并将其写入digest。
-    // 如果binary为false且操作系统为Windows，则DigestWriter会在将字节写入digest前将"\r\n"替换为"\n"。否则，它会直接按原样插入字节。
-    // 为了支持替换"\r\n"，我们必须调用finalize()，以应对从reader中读取的最后一个字符为"\r"的可能性。
-    // （该字符会被DigestWriter缓冲，仅在后续字符为"\n"时才被写出。
-    // 但当"\r"是最后一个读取到的字符时，我们需要强制将其写出。）
     let mut digest_writer = CtDigestWriter::new(cksum_digest, true);
     let output_size = std::io::copy(buf_reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
@@ -640,7 +609,6 @@ fn cksum_digest_read<T: Read>(
     if cksum_digest.output_bits() > 0 {
         Ok((cksum_digest.result_str(), output_size))
     } else {
-        // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
         let mut bytes = vec![0; output_bits.div_ceil(8)];
         cksum_digest.hash_finalize(&mut bytes);
         Ok((encode(bytes), output_size))
@@ -706,7 +674,6 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     let mut status = false;
     let mut warn = false;
 
-    // 手动扫描参数
     for (i, arg) in args_vec.iter().enumerate() {
         let arg_str = arg.to_string_lossy();
         if arg_str == "--tag" {
@@ -999,7 +966,6 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
 
                 if inferred_len.is_none() {
                     let is_blake2b = current_default_algo.eq_ignore_ascii_case("blake2b");
-                    // 包容所有衍生的变体名称
                     let is_sha2_family = matches!(
                         current_default_algo,
                         "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
@@ -1257,7 +1223,6 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
 fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>)> {
     let mut trimmed = line.trim();
 
-    // GNU 规范：允许行首出现 '\' 用于转义，解析时应当忽略它
     if let Some(stripped) = trimmed.strip_prefix('\\') {
         trimmed = stripped;
     }
@@ -1276,7 +1241,6 @@ fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>)> {
         }
     }
 
-    // 解析 Untagged 格式: DIGEST *filename 或 DIGEST  filename
     if let Some(first_space) = trimmed.find(' ') {
         let digest = &trimmed[..first_space];
         let rest = trimmed[first_space + 1..].trim_start();

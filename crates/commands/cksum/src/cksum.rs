@@ -19,8 +19,8 @@ use ctcore::{
     ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo},
     ct_show,
     ct_sum::{
-        div_ceil, CtBlake2b, CtCRC, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224, Sha256,
-        Sha384, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha512, BSD, SYSV,
+        div_ceil, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, Sha1, Sha224,
+        Sha256, Sha384, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Sha512, BSD, SYSV,
     },
 };
 use hex::decode;
@@ -37,6 +37,7 @@ use sys_locale::get_locale;
 const CKSUM_ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 const CKSUM_ALGORITHM_OPTIONS_BSD: &str = "bsd";
 const CKSUM_ALGORITHM_OPTIONS_CRC: &str = "crc";
+const CKSUM_ALGORITHM_OPTIONS_CRC32B: &str = "crc32b";
 const CKSUM_ALGORITHM_OPTIONS_MD5: &str = "md5";
 const CKSUM_ALGORITHM_OPTIONS_SHA1: &str = "sha1";
 const CKSUM_ALGORITHM_OPTIONS_SHA2: &str = "sha2";
@@ -99,6 +100,11 @@ fn cksum_detect_algo(
             CKSUM_ALGORITHM_OPTIONS_CRC,
             Box::new(CtCRC::new()) as Box<dyn CtDigest>,
             256,
+        ),
+        CKSUM_ALGORITHM_OPTIONS_CRC32B => (
+            CKSUM_ALGORITHM_OPTIONS_CRC32B,
+            Box::new(CtCRC32b::new()) as Box<dyn CtDigest>,
+            32,
         ),
         CKSUM_ALGORITHM_OPTIONS_MD5 => (
             CKSUM_ALGORITHM_OPTIONS_MD5,
@@ -350,6 +356,11 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
             256,
             CKSUM_ALGORITHM_OPTIONS_CRC,
         )),
+        "CRC32B" => Some((
+            Box::new(CtCRC32b::new()) as Box<dyn CtDigest>,
+            32,
+            CKSUM_ALGORITHM_OPTIONS_CRC32B,
+        )),
         "SYSV" => Some((
             Box::new(SYSV::new()) as Box<dyn CtDigest>,
             512,
@@ -416,7 +427,7 @@ where
             CksumOutputFormat::Raw => {
                 // 对于原始格式，根据算法类型转换校验和字符串为字节序列
                 let bytes = match cksum_opts.algo_name {
-                    CKSUM_ALGORITHM_OPTIONS_CRC => {
+                    CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
                         sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
                     }
                     CKSUM_ALGORITHM_OPTIONS_SYSV | CKSUM_ALGORITHM_OPTIONS_BSD => {
@@ -431,6 +442,7 @@ where
             CksumOutputFormat::Hexadecimal => sum_hex,
             CksumOutputFormat::Base64 => match cksum_opts.algo_name {
                 CKSUM_ALGORITHM_OPTIONS_CRC
+                | CKSUM_ALGORITHM_OPTIONS_CRC32B
                 | CKSUM_ALGORITHM_OPTIONS_SYSV
                 | CKSUM_ALGORITHM_OPTIONS_BSD => sum_hex,
                 _ => ct_encoding::encode(ct_encoding::Format::Base64, &decode(sum_hex).unwrap())
@@ -452,7 +464,9 @@ where
                 div_ceil(sz, cksum_opts.output_bits),
                 line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_CRC => print!("{sum} {sz}{line_end}"),
+            CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
+                print!("{sum} {sz}{line_end}")
+            }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
@@ -531,7 +545,7 @@ where
             CksumOutputFormat::Raw => {
                 // 对于原始格式，根据算法类型转换校验和字符串为字节序列
                 let bytes = match cksum_opts.algo_name {
-                    CKSUM_ALGORITHM_OPTIONS_CRC => {
+                    CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
                         sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec()
                     }
                     CKSUM_ALGORITHM_OPTIONS_SYSV | CKSUM_ALGORITHM_OPTIONS_BSD => {
@@ -546,6 +560,7 @@ where
             CksumOutputFormat::Hexadecimal => sum_hex,
             CksumOutputFormat::Base64 => match cksum_opts.algo_name {
                 CKSUM_ALGORITHM_OPTIONS_CRC
+                | CKSUM_ALGORITHM_OPTIONS_CRC32B
                 | CKSUM_ALGORITHM_OPTIONS_SYSV
                 | CKSUM_ALGORITHM_OPTIONS_BSD => sum_hex,
                 _ => ct_encoding::encode(ct_encoding::Format::Base64, &decode(sum_hex).unwrap())
@@ -570,7 +585,9 @@ where
                 filename.display(),
                 line_end
             ),
-            CKSUM_ALGORITHM_OPTIONS_CRC => print!("{sum} {sz} {}{}", filename.display(), line_end),
+            CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
+                print!("{sum} {sz} {}{}", filename.display(), line_end)
+            }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 if let Some(length) = cksum_opts.length {
                     // 输出BLAKE2b算法的校验和，可选的长度参数
@@ -861,6 +878,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
                 CKSUM_ALGORITHM_OPTIONS_BSD
                     | CKSUM_ALGORITHM_OPTIONS_SYSV
                     | CKSUM_ALGORITHM_OPTIONS_CRC
+                    | CKSUM_ALGORITHM_OPTIONS_CRC32B
             ) {
                 ctcore::ct_show_error!(
                     "--check is not supported with --algorithm={}",
@@ -1010,6 +1028,7 @@ fn cksum_check(mut opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                 CKSUM_ALGORITHM_OPTIONS_CRC
                     | CKSUM_ALGORITHM_OPTIONS_SYSV
                     | CKSUM_ALGORITHM_OPTIONS_BSD
+                    | CKSUM_ALGORITHM_OPTIONS_CRC32B
             ) {
                 bad_format += 1;
                 if opts.warn {
@@ -1280,6 +1299,7 @@ fn algo_display_name(algo: &str) -> &'static str {
         "sha384" => "SHA384",
         "sha512" => "SHA512",
         "crc" => "CRC",
+        "crc32b" => "CRC32b",
         "sysv" => "SYSV",
         "bsd" => "BSD",
         "sha2" => "SHA2",
@@ -1327,6 +1347,7 @@ fn args_init() -> Vec<Arg> {
                 CKSUM_ALGORITHM_OPTIONS_SYSV,
                 CKSUM_ALGORITHM_OPTIONS_BSD,
                 CKSUM_ALGORITHM_OPTIONS_CRC,
+                CKSUM_ALGORITHM_OPTIONS_CRC32B,
                 CKSUM_ALGORITHM_OPTIONS_MD5,
                 CKSUM_ALGORITHM_OPTIONS_SHA1,
                 CKSUM_ALGORITHM_OPTIONS_SHA224,

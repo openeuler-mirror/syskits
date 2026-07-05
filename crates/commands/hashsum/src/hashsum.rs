@@ -16,13 +16,13 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::{Arg, ArgMatches, Command};
-use ctcore::Tool;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_sum::{
-    CtBlake2b, CtBlake3, CtDigest, CtDigestWriter, Md5, Sha1, Sha3_224, Sha3_256, Sha3_384,
-    Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256,
+    CtBlake2b, CtBlake3, CtDigest, CtDigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
+    Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
+use ctcore::Tool;
 use ctcore::{ct_display::Quotable, ct_show_warning};
 use hex::encode;
 use regex::Captures;
@@ -33,7 +33,7 @@ use sys_locale::get_locale;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write, stdin};
+use std::io::{self, stdin, BufRead, BufReader, Read, Write};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
@@ -722,30 +722,39 @@ impl Tool for B3sum {
 /// * `writer` - 用于输出结果的写入器
 /// * `args` - 命令行参数
 ///
-pub fn hashsum_main<W: Write>(writer: &mut W, mut args: impl ctcore::Args) -> CTResult<()> {
+pub fn hashsum_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+
+    let mut args_iter = args.into_iter();
     // 如果由于某些原因没有程序名称，默认为 "hashsum"
-    let program = args.next().unwrap_or_else(|| OsString::from(NAME));
-    // 从完整程序路径中提取基本名称（如 "md5sum"、"sha1sum" 等）
-    // 这个名称用于确定默认的哈希算法
+    let program = args_iter.next().unwrap_or_else(|| OsString::from(NAME));
     let binary_name = Path::new(&program)
         .file_stem()
         .unwrap_or_else(|| OsStr::new(NAME))
-        .to_string_lossy();
+        .to_string_lossy()
+        .to_string();
 
-    // 将程序名重新加入参数列表，以便 clap 可以正确解析
-    let args = iter::once(program.clone()).chain(args);
-    // 使用 binary_name 决定支持哪些命令行选项
-    let matches = ct_app(&binary_name).try_get_matches_from(args)?;
+    let args_vec: Vec<OsString> = iter::once(program).chain(args_iter).collect();
+
+    let matches = match ct_app(&binary_name).try_get_matches_from(args_vec) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = e.print();
+            if e.kind() == clap::error::ErrorKind::DisplayHelp
+                || e.kind() == clap::error::ErrorKind::DisplayVersion
+            {
+                return Ok(());
+            }
+            return Err(CtSimpleError::new(1, "").into());
+        }
+    };
 
     // 根据程序名和命令行参数创建配置
     let flags = HashsumFlags::new(matches.clone(), &binary_name)?;
 
     // 处理文件参数
-    // 如果提供了文件参数，就处理这些文件
-    // 否则从标准输入读取（使用 "-" 作为文件名）
     match matches.get_many::<OsString>(hashsum_flags::FILE) {
         Some(files) => hashsum(flags, files.map(|f| f.as_os_str()), writer),
         None => hashsum(flags, iter::once(OsStr::new("-")), writer),
@@ -1283,24 +1292,23 @@ fn verify_file_hash<W: Write>(
     };
 
     let f = match File::open(&ck_filename_unescaped) {
-        Err(_) => {
-            // 修改点：如果开启了 --ignore-missing，则忽略文件丢失错误
+        Err(e) => {
             if flags.is_ignore_missing {
-                return Ok(true); // 视为成功跳过
+                return Ok(true);
             }
             *failed_open_file += 1;
-            writeln!(
-                writer,
-                "{}: {}: No such file or directory",
-                ctcore::ct_util_name(),
-                ck_filename
-            )?;
-            writeln!(
-                writer,
-                "{}: {}",
-                ck_filename,
-                t!("hashsum.check.failed_open_or_read")
-            )?;
+            let err_msg = e.to_string();
+            let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+            ctcore::ct_show_error!("{}: {}", ck_filename, clean_err);
+
+            if !flags.is_status {
+                writeln!(
+                    writer,
+                    "{}: {}",
+                    ck_filename,
+                    t!("hashsum.check.failed_open_or_read")
+                )?;
+            }
             return Ok(false);
         }
         Ok(file) => file,
@@ -1309,9 +1317,29 @@ fn verify_file_hash<W: Write>(
     let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
 
     // 计算实际哈希值
-    let real_sum = digest_reader(&mut flags.digest, &mut ckf, binary_check, flags.output_bits)
-        .map_err_context(|| "failed to read input".to_string())?
-        .to_ascii_lowercase();
+    let real_sum = match digest_reader(&mut flags.digest, &mut ckf, binary_check, flags.output_bits)
+    {
+        Ok(s) => s.to_ascii_lowercase(),
+        Err(e) => {
+            if flags.is_ignore_missing {
+                return Ok(true);
+            }
+            *failed_open_file += 1;
+            let err_msg = e.to_string();
+            let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+            ctcore::ct_show_error!("{}: {}", ck_filename, clean_err);
+
+            if !flags.is_status {
+                writeln!(
+                    writer,
+                    "{}: {}",
+                    ck_filename,
+                    t!("hashsum.check.failed_open_or_read")
+                )?;
+            }
+            return Ok(false);
+        }
+    };
 
     if expected_sum == real_sum {
         if !flags.is_quiet {
@@ -1329,8 +1357,6 @@ fn verify_file_hash<W: Write>(
         Ok(false)
     }
 }
-
-// ... (compute_and_output_hash, output_summary, unescape_filename, escape_filename, HashsumError, digest_reader 保持不变) ...
 
 /// 计算文件的哈希值并输出
 fn compute_and_output_hash<W: Write>(

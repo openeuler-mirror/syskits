@@ -473,7 +473,78 @@ impl Tool for Cksum {
 pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+
+    // 将参数转换为 Vec，方便我们手动扫描和传递给 Clap
+    let args_vec: Vec<OsString> = args.collect();
+
+    let mut last_tag_idx = 0;
+    let mut last_untagged_idx = 0;
+    let mut last_binary_idx = 0;
+    let mut last_text_idx = 0;
+
+    let mut untagged = false;
+    let mut tag = false;
+    let mut binary = false;
+    let mut text = false;
+
+    for (i, arg) in args_vec.iter().enumerate() {
+        let arg_str = arg.to_string_lossy();
+        if arg_str == "--tag" { 
+            last_tag_idx = i; tag = true; 
+        } else if arg_str == "--untagged" { 
+            last_untagged_idx = i; untagged = true; 
+        } else if arg_str == "--binary" || arg_str == "-b" { 
+            last_binary_idx = i; binary = true; 
+        } else if arg_str == "--text" || arg_str == "-t" { 
+            last_text_idx = i; text = true; 
+        } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
+            // 处理可能组合的短参数，比如 -bt, -tb 或 -ba
+            if arg_str.contains('b') { last_binary_idx = i; binary = true; }
+            if arg_str.contains('t') { last_text_idx = i; text = true; }
+        }
+    }
+
+    // 处理 TAG 和 UNTAGGED 的冲突 (后出现者生效)
+    if untagged && tag {
+        if last_tag_idx > last_untagged_idx {
+            untagged = false;
+        } else {
+            tag = false;
+        }
+    }
+
+    // 处理 BINARY 和 TEXT 的冲突 (后出现者生效)
+    if binary && text {
+        if last_text_idx > last_binary_idx {
+            binary = false;
+        } else {
+            text = false;
+        }
+    }
+
+    // GNU 边缘行为模拟：如果 `--tag` 出现的位置在 `-b/--binary` 之后，重置 binary 标志。
+    if binary && last_tag_idx > last_binary_idx {
+        binary = false;
+    }
+
+    // 拦截 Clap 的解析错误，强制返回退出码 1
+    let matches = match ct_app().try_get_matches_from(args_vec) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = e.print(); // 依然打印错误或帮助信息
+            
+            // 检查错误的类型
+            if e.kind() == clap::error::ErrorKind::DisplayHelp 
+                || e.kind() == clap::error::ErrorKind::DisplayVersion 
+            {
+                // 如果是用户请求查看帮助或版本，正常退出，状态码为 0
+                return Ok(0);
+            }
+            
+            // 如果是真正的非法参数错误（比如未知的算法），强制返回状态码 1
+            return Ok(1);
+        }
+    };
 
     let algo_name: &str = match matches.get_one::<String>(opt_flags::ALGORITHM) {
         Some(v) => v,
@@ -543,10 +614,10 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         digest: algo,
         output_bits: bits,
         length,
-        untagged: matches.get_flag(opt_flags::UNTAGGED),
+        untagged,
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
-        binary: matches.get_flag(opt_flags::BINARY),
+        binary,
     };
 
     if matches.get_flag(opt_flags::CHECK) {
@@ -845,8 +916,7 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::UNTAGGED)
             .long(opt_flags::UNTAGGED)
             .help(t!("cksum.clap.untagged"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(opt_flags::TAG),
+            .action(ArgAction::SetTrue),
         Arg::new(opt_flags::TAG)
             .long(opt_flags::TAG)
             .help(t!("cksum.clap.tag"))
@@ -872,8 +942,7 @@ fn args_init() -> Vec<Arg> {
             .short('c')
             .long(opt_flags::CHECK)
             .help(t!("cksum.clap.check", default = "read checksums from the FILEs and check them"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(opt_flags::TAG),
+            .action(ArgAction::SetTrue),
         Arg::new(opt_flags::QUIET)
             .long(opt_flags::QUIET)
             .help(t!("cksum.clap.quiet", default = "don't print OK for each successfully verified file"))
@@ -904,14 +973,12 @@ fn args_init() -> Vec<Arg> {
             .short('t')
             .long(opt_flags::TEXT)
             .help(t!("cksum.clap.text", default = "read in text mode"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(opt_flags::BINARY),
+            .action(ArgAction::SetTrue),
         Arg::new(opt_flags::BINARY)
             .short('b')
             .long(opt_flags::BINARY)
             .help(t!("cksum.clap.binary", default = "read in binary mode"))
-            .action(ArgAction::SetTrue)
-            .overrides_with(opt_flags::TEXT),
+            .action(ArgAction::SetTrue),
         Arg::new("help")
             .short('h')
             .long("help")

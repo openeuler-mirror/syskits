@@ -636,6 +636,7 @@ mod opt_flags {
     pub const ZERO: &str = "zero";
     pub const TEXT: &str = "text";
     pub const BINARY: &str = "binary";
+    pub const DEBUG: &str = "debug";
 }
 
 #[derive(Default)]
@@ -1369,7 +1370,8 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::LENGTH)
             .short('l')
             .help(t!("cksum.clap.length", default = "digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8"))
-            .action(ArgAction::Set),
+            .action(ArgAction::Set)
+            .overrides_with(opt_flags::LENGTH),
         Arg::new(opt_flags::RAW)
             .long(opt_flags::RAW)
             .help(t!("cksum.clap.raw"))
@@ -1419,6 +1421,10 @@ fn args_init() -> Vec<Arg> {
             .short('b')
             .long(opt_flags::BINARY)
             .help(t!("cksum.clap.binary", default = "read in binary mode"))
+            .action(ArgAction::SetTrue),
+        Arg::new(opt_flags::DEBUG)
+            .long(opt_flags::DEBUG)
+            .help(t!("cksum.clap.debug", default = "indicate which implementation used"))
             .action(ArgAction::SetTrue),
         Arg::new("help")
             .short('h')

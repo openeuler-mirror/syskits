@@ -11,7 +11,7 @@
 
 extern crate rust_i18n;
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::{Borrow, Cow};
 use std::cmp::max;
 use std::ffi::OsString;
@@ -24,7 +24,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_error::{CTError, CTResult, FromIo};
-use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
+use ctcore::ct_quoting_style::{escape_name, CtQuotingStyle};
 use ctcore::ct_show;
 
 use crate::count_fast::{count_bytes_chars_lines_from_stream, count_bytes_handle};
@@ -467,6 +467,12 @@ pub fn ct_app() -> Command {
             Arg::new(WC_ARG_FILES)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string()),
+        )
+        .arg(
+            Arg::new("debug")
+                .long("debug")
+                .hide(true) // 必须隐藏，不让它出现在 --help 菜单中
+                .action(ArgAction::SetTrue),
         )
 }
 
@@ -919,8 +925,8 @@ mod tests {
     use std::path::PathBuf;
 
     use clap::ArgMatches;
-    use tempfile::NamedTempFile;
     use tempfile::tempfile;
+    use tempfile::NamedTempFile;
 
     use super::*;
     use rust_i18n::set_locale;

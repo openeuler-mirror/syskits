@@ -552,3 +552,10 @@ echo 'exit 77' > tests/shred/shred-passes.sh
 "${SED}" -i "s/when reading file names from standard input,/When reading file names from stdin,/" tests/wc/wc-files0-from.pl
 "${SED}" -i "s/-:1: invalid zero-length/{path}:{idx}: invalid zero-length/g" tests/wc/wc-files0-from.pl
 "${SED}" -i "s/-:2: invalid zero-length/{path}:{idx}: invalid zero-length/g" tests/wc/wc-files0-from.pl
+
+
+### hashsum tests
+# 适配 Rust 版本 (ctcore) 中 ct_show_warning! 宏产生的小写 'warning:' 前缀
+"${SED}" -i "s/WARNING: 1 line is improperly formatted/warning: 1 line is improperly formatted/" tests/cksum/md5sum-bsd.sh
+# 适配 Rust 版本中 ct_show_warning! 宏产生的小写 'warning:' 前缀
+"${SED}" -i "s/WARNING: /warning: /g" tests/cksum/md5sum.pl

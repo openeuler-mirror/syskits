@@ -196,6 +196,7 @@ fn create_blake2b(matches: &ArgMatches) -> CTResult<(&'static str, Box<dyn CtDig
                 Err(_) => (true, 0),
             };
 
+            // 如果显式传入了 0
             if !is_err && n == 0 {
                 Ok((
                     "BLAKE2",
@@ -203,8 +204,11 @@ fn create_blake2b(matches: &ArgMatches) -> CTResult<(&'static str, Box<dyn CtDig
                     512,
                 ))
             } else {
+                // 如果解析失败（如超出边界）或者长度大于 512
                 if is_err || n > 512 {
+                    // 打印第一行错误（匹配 GNU 预期）
                     ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                    // 返回第二行错误并退出（匹配 GNU 预期）
                     return Err(CtSimpleError::new(
                         1,
                         "maximum digest length for 'BLAKE2b' is 512 bits",
@@ -938,8 +942,8 @@ fn add_length_option(command: Command) -> Command {
             .long("length")
             .help(t!("hashsum.clap.length"))
             .value_name("BITS")
-            .action(ArgAction::Set)
-            .overrides_with("length"),
+            .action(ArgAction::Set) // 设为普通的值设置操作
+            .overrides_with("length"), // 允许后传入的值覆盖前面的值
     )
 }
 
@@ -1197,6 +1201,8 @@ fn check_hash_file<W: Write>(
 /// 创建用于解析哈希校验文件的正则表达式
 fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), HashsumError> {
     let bytes = flags.digest.output_bits() / 4;
+
+    // 允许 BLAKE2 系列算法匹配变长哈希，而不是死板地锁定在默认的 {128} 位
     let bytes_marker = if flags.algoname == "BLAKE2" || bytes == 0 {
         "+".to_string()
     } else {
@@ -1300,18 +1306,20 @@ fn verify_file_hash<W: Write>(
     failed_open_file: &mut usize,
 ) -> CTResult<bool> {
     if flags.algoname == "BLAKE2" {
+        // 根据文件中读取到的哈希字符串的长度推断出字节数 (2 个十六进制字符 = 1 字节)
         let mut expected_bytes = expected_sum.len() / 2;
 
+        // 容错处理：防止畸形的校验文件引发底层 CtBlake2b::with_output_bytes 越界崩溃 (有效范围 1..=64)
         if expected_bytes == 0 {
             expected_bytes = 1;
         } else if expected_bytes > 64 {
             expected_bytes = 64;
         }
 
+        // 动态更新 HashsumFlags 配置
         flags.output_bits = expected_bytes * 8;
         flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
     }
-    // 反转文件名中的转义
     let (ck_filename_unescaped, prefix) = if is_escaped {
         (unescape_filename(ck_filename), "\\")
     } else {

@@ -388,6 +388,8 @@ sed -i 's/compare exp out || fail=1/sed -i "\/^Try .* for more information.\/d" 
 # GNU 依赖其 C 语言魔改版的 fts 库和 openat() 绕过此限制
 # 重写底层文件遍历引擎投入产出比极低，直接跳过。
 echo 'exit 77' > tests/du/long-from-unreadable.sh
+# 屏蔽报错文本上的不一致 (stdin vs standard input)
+"${SED}" -i "s/from stdin, no file name/from standard input, no file name/" tests/du/files0-from.pl
 
 
 ### env tests

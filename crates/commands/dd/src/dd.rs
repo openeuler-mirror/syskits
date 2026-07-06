@@ -811,13 +811,17 @@ impl<'a> DdOutput<'a> {
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.settings.obs) {
-            let wlen = self.dst.write(chunk)?;
-            if wlen < self.settings.obs {
+            // 使用 write_all 替代 write，它会自动处理信号中断(EINTR)和短写
+            // 确保不会有一丁点数据被抛弃
+            self.dst.write_all(chunk)?;
+
+            // 只有当传入的 chunk 长度本身就小于 obs（通常是在文件末尾），才算作 partial 写入
+            if chunk.len() < self.settings.obs {
                 writes_partial += 1;
             } else {
                 writes_complete += 1;
             }
-            bytes_total += wlen;
+            bytes_total += chunk.len();
         }
 
         Ok(WriteStat {

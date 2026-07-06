@@ -14,12 +14,12 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{TailInput, TailInputKind, TailMetadataExt, TailPathExt};
 use crate::{platform, text};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTResult, CtSimpleError};
 use ctcore::ct_show_error;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, channel};
+use std::sync::mpsc::{self, channel, Receiver};
 
 pub struct WatcherRx {
     watcher: Box<dyn Watcher>,
@@ -490,16 +490,21 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
             break;
         }
 
-        // For `-F` we need to poll if an orphan path becomes available during runtime.
-        // If a path becomes an orphan during runtime, it will be added to orphans.
-        // To be able to differentiate between the cases of test_retry8 and test_retry9,
-        // here paths will not be removed from orphans if the path becomes available.
+        // For `-F` we need to poll if an inaccessible path becomes available during runtime.
+        // This handles orphans, recreated files, and symlinks whose targets are created.
         if observer.follow_name_retry() {
-            for new_path in &observer.orphans {
-                if new_path.exists() {
-                    let pd = observer.files.get(new_path);
-                    let md = new_path.metadata().unwrap();
-                    if md.is_tailable() && pd.reader.is_none() {
+            let mut newly_appeared = vec![];
+            for path in observer.files.keys() {
+                let pd = observer.files.get(path);
+                if pd.reader.is_none() && path.exists() {
+                    newly_appeared.push(path.clone());
+                }
+            }
+
+            for new_path in &newly_appeared {
+                if let Ok(md) = new_path.metadata() {
+                    if md.is_tailable() {
+                        let pd = observer.files.get(new_path);
                         ct_show_error!(
                             "{} has appeared;  following new file",
                             pd.display_name.quote()
@@ -507,11 +512,9 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
                         observer.files.update_metadata(new_path, Some(md));
                         observer.files.update_reader(new_path)?;
                         _read_some = observer.files.tail_file(new_path, options.verbose)?;
-                        observer
-                            .watcher_rx
-                            .as_mut()
-                            .unwrap()
-                            .watch_with_parent(new_path)?;
+                        if let Some(rx) = observer.watcher_rx.as_mut() {
+                            rx.watch_with_parent(new_path)?;
+                        }
                     }
                 }
             }

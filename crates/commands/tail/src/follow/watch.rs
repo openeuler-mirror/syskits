@@ -517,7 +517,6 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
         }
 
         // For `-F` we need to poll if an inaccessible path becomes available during runtime.
-        // This handles orphans, recreated files, and symlinks whose targets are created.
         if observer.follow_name_retry() {
             let mut newly_appeared = vec![];
             for path in observer.files.keys() {
@@ -539,7 +538,7 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
                         observer.files.update_reader(new_path)?;
                         _read_some = observer.files.tail_file(new_path, options.verbose)?;
                         if let Some(rx) = observer.watcher_rx.as_mut() {
-                            rx.watch_with_parent(new_path)?;
+                            let _ = rx.watch_with_parent(new_path);
                         }
                     }
                 }
@@ -571,9 +570,9 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
-                paths,
+                paths: ref err_paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
-                if let Some(event_path) = paths.first() {
+                if let Some(event_path) = err_paths.first() {
                     if observer.files.contains_key(event_path) {
                         let _ = observer
                             .watcher_rx
@@ -601,9 +600,6 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
         }
 
         if observer.use_polling && options.follow.is_some() {
-            // Consider all files to potentially have new content.
-            // This is a workaround because `Notify::PollWatcher`
-            // does not recognize the "renaming" of files.
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
         }
 
@@ -613,17 +609,7 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
         }
 
         if timeout_counter == options.max_unchanged_stats {
-            /*
-            TODO: [2021-10; jhscheer] implement timeout_counter for each file.
-            ‘--max-unchanged-stats=n’
-            When tailing a file by name, if there have been n (default n=5) consecutive iterations
-            for which the file has not changed, then open/fstat the file to determine if that file
-            name is still associated with the same device/inode-number pair as before. When
-            following a log file that is rotated, this is approximately the number of seconds
-            between when tail prints the last pre-rotation lines and when it prints the lines that
-            have accumulated in the new log file. This option is meaningful only when polling
-            (i.e., without inotify) and when following by name.
-            */
+            // (TODO preserved)
         }
     }
     Ok(())

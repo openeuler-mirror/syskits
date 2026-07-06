@@ -32,21 +32,21 @@ extern crate rust_i18n; // spell-checker:ignore (ToDO) rwxr sourcepath targetpat
 /// - `copy()`: 复制文件并设置属性
 mod mode;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{grp2gid, usr2uid};
 use ctcore::ct_error::{CTError, CTIoError, CTResult, FromIo};
 use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_mode::get_umask;
-use ctcore::ct_perms::{CtVerbosityLevel, Verbosity, wrap_chown};
+use ctcore::ct_perms::{wrap_chown, CtVerbosityLevel, Verbosity};
 use ctcore::ct_process::{getegid, geteuid};
+use ctcore::Tool;
 use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff;
-use filetime::{FileTime, set_file_times};
+use filetime::{set_file_times, FileTime};
 #[cfg(target_os = "linux")]
 use selinux::{self, SecurityContext};
 use std::error::Error;
@@ -512,7 +512,7 @@ impl Installer {
 
         if self.create_leading {
             if let Some(parent) = to.parent() {
-                create_leading_dirs(parent, self.verbose)
+                create_leading_dirs(parent, self.verbose, self)
                     .map_err(|e| InstallError::CreateDirFailed(parent.to_path_buf(), e))?;
 
                 // 验证创建的目录
@@ -694,7 +694,7 @@ impl Installer {
         let path_to_create = dir_strip_dot_for_creation(path);
 
         // 创建目录及其所有父目录，并在 verbose 模式下打印每一层
-        create_leading_dirs(path_to_create.as_path(), self.verbose)
+        create_leading_dirs(path_to_create.as_path(), self.verbose, self)
             .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())?;
 
         Ok(())
@@ -851,6 +851,7 @@ pub fn ct_app() -> Command {
             .help(t!("install.clap.install_context"))
             .value_name("CONTEXT")
             .num_args(0..=1)
+            .require_equals(true)
             .value_parser(clap::builder::ValueParser::os_string()),
         Arg::new(install_options::INSTALL_FILES)
             .action(ArgAction::Append)
@@ -1019,7 +1020,7 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
     };
     if !target_dir.exists() {
         if b.create_leading {
-            create_leading_dirs(&target_dir, b.verbose)
+            create_leading_dirs(&target_dir, b.verbose, b)
                 .map_err(|e| InstallError::CreateDirFailed(target_dir.clone(), e))?;
         } else {
             return Err(InstallError::InvalidTarget(target_dir).into());
@@ -1144,7 +1145,16 @@ fn normalize_context_flags(
 #[cfg(target_os = "linux")]
 fn apply_default_selinux_context(path: &Path, mode: u32) -> CTResult<()> {
     let _ = mode;
-    SecurityContext::set_default_for_path(path).map_err(|e| {
+    // SELinux policy matching requires absolute paths to match correctly.
+    let abs_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+
+    SecurityContext::set_default_for_path(&abs_path).map_err(|e| {
         ct_show_error!(
             "warning: failed to restore context for {}: {e}",
             path.display()
@@ -1203,7 +1213,8 @@ fn apply_preserve_context(_from: &Path, _to: &Path) -> CTResult<()> {
     Ok(())
 }
 
-fn create_leading_dirs(path: &Path, verbose: bool) -> Result<(), std::io::Error> {
+// 给函数签名增加 b: &Installer 参数
+fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> Result<(), std::io::Error> {
     let mut cur = PathBuf::new();
     for component in path.components() {
         cur.push(component);
@@ -1217,6 +1228,15 @@ fn create_leading_dirs(path: &Path, verbose: bool) -> Result<(), std::io::Error>
             continue;
         }
         fs::create_dir(&cur)?;
+
+        if b.set_context {
+            if let Some(ref ctx) = b.context {
+                let _ = apply_explicit_selinux_context(&cur, ctx);
+            } else {
+                let _ = apply_default_selinux_context(&cur, DEFAULT_MODE);
+            }
+        }
+
         if verbose {
             println!(
                 "{}: {} {}",

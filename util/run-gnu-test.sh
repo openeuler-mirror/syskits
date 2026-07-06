@@ -31,6 +31,8 @@ cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 export RUST_BACKTRACE=1
 
+touch -c aclocal.m4 configure config.status Makefile.in Makefile
+
 ## 麻烦的两类测试：TTY测试和SELINUX测试
 
 # 判断传入的测试名中是否包含selinux测试

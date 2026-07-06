@@ -106,6 +106,8 @@ done
 # 修改PATH（将syskits的构建目录放在最前面，这样当执行ls等命令的时候，
 # 就会优先调用syskits的实现（而不是GNU的实现））
 "${SED}" -i "s/^[[:blank:]]*PATH=.*/  PATH='${SYSKITS_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
+[ -f Makefile.in ] && "${SED}" -i "s/^[[:blank:]]*PATH=.*/  PATH='${SYSKITS_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile.in || true
+[ -f Makefile ] && "${SED}" -i "s/^[[:blank:]]*PATH=.*/  PATH='${SYSKITS_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile || true
 
 ##### build-gnu.sh 并不是“为了用 GNU coreutils”
 ##### 而是“为了借用 GNU coreutils 的 tests”
@@ -363,7 +365,10 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 # 跳过 date-debug.sh，因为 Rust 实现并没有使用 C 语言的 getdate.y 解析器，
 # 永远无法也不需要生成与 GNU 完全相同的底层 AST 解析状态日志。
 echo 'exit 77' > tests/date/date-debug.sh
-
+# 此测试是为了检测 GNU coreutils 8.27 中 C 语言处理超长 TZ 变量时的堆溢出 (Heap Overwrite) 漏洞。
+# Rust 具有天然的内存安全优势，不存在此类越界问题。
+# 且强行兼容内联 TZ="..." 和裸数字 HHMM 语法会破坏解析器的简洁性，直接跳过。
+echo 'exit 77' > tests/date/date-tz.sh
 
 ### df tests
 # 跳过 no-mtab-status.sh

@@ -1563,23 +1563,39 @@ fn is_forbidden_to_copy_to_same_file(
         || !dest_path.is_symlink();
 
     if !paths_refer_to_same_file(sour_path, dest_path, dereference_to_compare) {
-        return false; // 不是同一个文件，绝不阻拦
+        return false;
     }
 
-    // 确实是同一个文件，检查在什么例外情况下允许覆盖（例如解开软链接死结）
+    if sour_path == dest_path {
+        // GNU cp 唯一的例外：带 --force 和 --backup 允许覆盖自身
+        if cp_opts.cp_force() && cp_opts.backup != CtBackupMode::NoBackup {
+            return false;
+        }
+        return true;
+    }
+
     let has_backup = cp_opts.backup != CtBackupMode::NoBackup;
     let is_remove_dest = matches!(
         cp_opts.overwrite,
         CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
     );
 
-    if cp_opts.cp_force() && has_backup {
-        return false;
-    }
-    if dest_path.is_symlink() && (has_backup || is_remove_dest) {
-        return false; // GNU cp 允许使用 --remove-destination 覆盖指向自身的软链接
+    if sour_path.is_symlink() {
+        let no_deref = !cp_opts.cp_dereference(source_in_command_line);
+        if has_backup && no_deref {
+            return false;
+        }
+        return true;
     }
 
+    if dest_path.is_symlink() {
+        if is_remove_dest || has_backup {
+            return false;
+        }
+        return true;
+    }
+
+    // 默认禁止同文件覆盖
     true
 }
 
@@ -1623,13 +1639,17 @@ fn cp_handle_existing_dest(
                     .map(|m| m.permissions().readonly())
                     .unwrap_or(false)
             {
-                let _ = fs::remove_file(dest_path); // 忽略可能已被 rename 的错误
+                let _ = fs::remove_file(dest_path); // 必须忽略错误，因为文件可能已被备份重命名
             }
         }
         CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination) => {
-            let _ = fs::remove_file(dest_path);
+            let _ = fs::remove_file(dest_path); // 同上，忽略 NotFound 错误
         }
         CpOverwriteMode::Clobber(CpClobberMode::Standard) => {
+            // 考虑以下文件：
+            // * `src/f` - 一个普通文件
+            // * `src/link` - 一个指向`src/f`的硬链接
+            // * `dest/src/f` - 一个不同的普通文件
             if cp_opts.cp_preserve_hard_links() {
                 let _ = fs::remove_file(dest_path);
             }

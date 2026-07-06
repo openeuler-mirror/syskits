@@ -19,13 +19,13 @@ mod platform;
 pub mod text;
 
 pub use args::ct_app;
-use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
+use args::{tail_parse_args, TailFilterMode, TailOptions, TailSignum};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use chunks::TailReverseChunks;
 use clap::Command;
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code};
+use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code, CTResult, CtSimpleError, FromIo};
+use ctcore::Tool;
 use ctcore::{ct_show, ct_show_error};
 use follow::Observer;
 use paths::{TailFileExtTail, TailHeaderPrinter, TailInput, TailInputKind, TailMetadataExt};
@@ -33,7 +33,7 @@ use same_file::Handle;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -138,21 +138,17 @@ fn tail_file(
         return handle_directory(input, path, options, observer);
     }
 
-    // 检查路径是否可追踪
-    if input.is_tailable() {
-        return handle_tailable_file(
-            options,
-            header_printer,
-            input,
-            path,
-            observer,
-            offset,
-            buffer,
-        );
-    }
-
-    observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    Ok(())
+    // 块设备（Block Device）和字符设备同样可以被 tail 读取。
+    // 直接将控制权交给 handle_tailable_file，让底层的 File::open 和 seek 来决定是否可读。
+    handle_tailable_file(
+        options,
+        header_printer,
+        input,
+        path,
+        observer,
+        offset,
+        buffer,
+    )
 }
 
 fn handle_file_not_found(input: &TailInput, path: &Path, observer: &mut Observer) -> CTResult<()> {
@@ -202,18 +198,18 @@ fn handle_tailable_file(
     input: &TailInput,
     path: &Path,
     observer: &mut Observer,
-    offset: u64,
+    offset: u64, // 注意：这个参数即使未使用也需保留以匹配函数签名
     buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
-    let metadata = path.metadata().ok();
     match File::open(path) {
         Ok(mut file) => {
             header_printer.print_input(input);
-            let reader = if !options.presume_input_pipe
-                && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                && metadata.as_ref().unwrap().get_block_size() > 0
-            {
-                let _ = tail_bounded(&mut file, options, buffer);
+
+            // 放弃可能误判块设备的 is_seekable，直接用原生 seek 探测
+            let is_seek = file.seek(SeekFrom::Current(0)).is_ok();
+
+            let reader = if !options.presume_input_pipe && is_seek {
+                tail_bounded(&mut file, options, buffer)?;
                 BufReader::new(file)
             } else {
                 let mut reader = BufReader::new(file);

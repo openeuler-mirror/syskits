@@ -87,6 +87,12 @@ for binary in $("${SYSKITS_BUILD_DIR}/syskits" --list); do
     ln -vf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/${binary}"
 done
 
+# 专门为 ginstall 创建一个包装脚本，将其请求转发给 syskits 的 install
+# 必须放在下面那个检查缺失工具的循环之前，防止它被变成 false
+echo '#!/bin/bash' > "${SYSKITS_BUILD_DIR}/ginstall"
+echo 'exec "${0%/*}/install" "$@"' >> "${SYSKITS_BUILD_DIR}/ginstall"
+chmod +x "${SYSKITS_BUILD_DIR}/ginstall"
+
 if [ "${SELINUX_ENABLED}" = 1 ]; then
     CARGO_BUILD_FLAGS="${CARGO_BUILD_FLAGS} --features selinux"
 fi

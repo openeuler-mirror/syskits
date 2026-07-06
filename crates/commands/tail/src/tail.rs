@@ -526,11 +526,18 @@ fn handle_bounded_bytes(
 ) -> CTResult<()> {
     match signum {
         TailSignum::Negative(count) => {
-            let file_len = file.metadata()?.len();
-            if *count >= file_len {
-                file.seek(SeekFrom::Start(0))?;
-            } else {
-                file.seek(SeekFrom::End(-(*count as i64)))?;
+            let end_pos = match file.seek(SeekFrom::End(0)) {
+                Ok(pos) => pos,
+                Err(_) => {
+                    file.seek(SeekFrom::Start(0))?;
+                    0
+                }
+            };
+
+            if end_pos > 0 {
+                // 自己计算绝对起点，再使用绝对寻址 SeekFrom::Start
+                let start_pos = end_pos.saturating_sub(*count as u64);
+                file.seek(SeekFrom::Start(start_pos))?;
             }
             io::copy(file, writer)?;
         }
@@ -539,7 +546,7 @@ fn handle_bounded_bytes(
             io::copy(file, writer)?;
         }
         TailSignum::Positive(count) => {
-            file.seek(SeekFrom::Start(*count - 1))?;
+            file.seek(SeekFrom::Start(count.saturating_sub(1)))?;
             io::copy(file, writer)?;
         }
         _ => {}

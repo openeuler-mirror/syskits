@@ -16,7 +16,7 @@ wc:
   errors:
     system: "System error"
     unknown: "Unknown error"
-    disabled_files: "Extra operand '{extra}'\nFile operands cannot be combined with --files0-from"
+    disabled_files: "Extra operand %{extra}\nFile operands cannot be combined with --files0-from"
     stdin_repr_not_allowed: "When reading file names from stdin, no file name of '-' allowed"
     zero_length: "Invalid zero-length file name"
-    zero_length_ctx: "{path}:{idx}: invalid zero-length file name" 
+    zero_length_ctx: "%{path}:%{idx}: invalid zero-length file name" 

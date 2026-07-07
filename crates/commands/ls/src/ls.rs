@@ -213,10 +213,13 @@ impl Display for LsError {
             LsError::LsTimeStyleParseError(s, possible_time_styles) => {
                 write!(
                     formatter,
-                    "invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help",
-                    s.quote(),
-                    possible_time_styles
-                )
+                    "invalid --time-style argument {}\nPossible values are:",
+                    s.quote()
+                )?;
+                for style in possible_time_styles {
+                    write!(formatter, "\n  - {}", style)?;
+                }
+                write!(formatter, "\n\nFor more information try --help")
             }
             LsError::LsInvalidLineWidth(s) => {
                 write!(formatter, "invalid line width: {}", s.quote())
@@ -372,10 +375,10 @@ fn is_posix_locale() -> bool {
 
 fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsError> {
     let possible_time_styles = vec![
-        "full-iso".to_string(),
-        "long-iso".to_string(),
-        "iso".to_string(),
-        "locale".to_string(),
+        "[posix-]full-iso".to_string(),
+        "[posix-]long-iso".to_string(),
+        "[posix-]iso".to_string(),
+        "[posix-]locale".to_string(),
         "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
     ];
     if let Some(field) = options.get_one::<String>(ls_flags::LS_TIME_STYLE) {

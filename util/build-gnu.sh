@@ -586,3 +586,9 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 ### pwd tests
 # 在 pwd-long.sh 退出并触发 cleanup 陷阱前，切回系统 PATH，让系统原生 rm 处理长路径清理
 "${SED}" -i 's/Exit $fail/PATH=\/bin:\/usr\/bin\nExit $fail/' tests/pwd/pwd-long.sh
+
+
+### ls tests
+# 修复 ANSI 颜色代码顺序差异：GNU ls 盲目拼接字符串输出 30;41，
+# 而 Rust lscolors 解析后统一规范输出为等价的 41;30 (先背景后前景)。修改测试脚本以匹配此顺序。
+"${SED}" -i "s/code='30;41'/code='41;30'/" tests/ls/capability.sh

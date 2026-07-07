@@ -19,7 +19,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
-use std::io::{BufWriter, ErrorKind, Write, stdout};
+use std::io::{stdout, BufWriter, ErrorKind, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -37,17 +37,17 @@ use sys_locale::get_locale;
 use std::{collections::HashSet, io::IsTerminal};
 
 use clap::builder::{NonEmptyStringValueParser, ValueParser};
-use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_display::Quotable;
+use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
-use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::ct_version_cmp::ct_version_cmp;
+use ctcore::Tool;
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -55,12 +55,12 @@ use ctcore::ct_version_cmp::ct_version_cmp;
 use ctcore::ct_entries;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_quoting_style;
-use ctcore::ct_quoting_style::CtQuotingStyle;
 use ctcore::ct_quoting_style::escape_name;
-#[cfg(unix)]
-use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use ctcore::ct_quoting_style::CtQuotingStyle;
 #[cfg(target_os = "linux")]
 use ctcore::libc::{dev_t, major, minor};
+#[cfg(unix)]
+use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use ctcore::{ct_parse_glob, ct_show, ct_show_error, ct_show_warning};
 use dired::DiredOutput;
 use glob::{MatchOptions, Pattern};
@@ -3218,7 +3218,11 @@ fn display_len_or_rdev(mdata: &Metadata, config: &LsConfig) -> SizeOrDeviceId {
     let len_adjusted = {
         let d = mdata.len() / config.file_size_block_size;
         let r = mdata.len() % config.file_size_block_size;
-        if r == 0 { d } else { d + 1 }
+        if r == 0 {
+            d
+        } else {
+            d + 1
+        }
     };
     SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }
@@ -3522,24 +3526,62 @@ impl StyleManager {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn has_capability(path: &Path) -> bool {
+    use std::ffi::CString;
+    // 使用 CString 和底层 libc 探测文件的扩展属性 (xattr)
+    if let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) {
+        unsafe {
+            ctcore::libc::getxattr(
+                c_path.as_ptr(),
+                b"security.capability\0".as_ptr() as *const ctcore::libc::c_char,
+                std::ptr::null_mut(),
+                0,
+            ) > 0
+        }
+    } else {
+        false
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn has_capability(_path: &Path) -> bool {
+    false
+}
+
 fn apply_style_based_on_metadata(
     path: &PathData,
     md_option: Option<&Metadata>,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
     name: &str,
+    target_symlink: Option<&PathData>,
 ) -> String {
-    if let Some(style) = ls_colors.style_for_path_with_metadata(&path.p_buf, md_option) {
-        style_manager.apply_style(style, name)
+    let mut style = None;
+    let actual_path = target_symlink.unwrap_or(path);
+
+    // 能力集 (Capability) 拥有最高的颜色显示优先级，必须优先检查
+    if md_option.map(|m| m.is_file()).unwrap_or(false) {
+        if let Some(cap_style) = ls_colors.style_for_indicator(lscolors::Indicator::Capabilities) {
+            // 只有当环境变量配置了 'ca' 颜色时，才执行较重的系统调用探测扩展属性
+            if has_capability(&actual_path.p_buf) {
+                style = Some(cap_style);
+            }
+        }
+    }
+
+    if style.is_none() {
+        style = ls_colors.style_for_path_with_metadata(&actual_path.p_buf, md_option);
+    }
+
+    if let Some(s) = style {
+        style_manager.apply_style(s, name)
     } else {
         name.to_owned()
     }
 }
 
-/// 根据为给定路径确定的 WWW 风格为提供的名称着色
-/// 这个函数相当长，因为它试图利用 DirEntry 来避免
-/// 不必要地调用 stat()
-/// 并管理符号链接错误
+/// 根据确定的风格为提供的名称着色
 fn color_name<W: Write>(
     name: String,
     path: &PathData,
@@ -3548,30 +3590,26 @@ fn color_name<W: Write>(
     out: &mut W,
     target_symlink: Option<&PathData>,
 ) -> String {
-    if !path.is_must_dereference {
-        // 如果我们需要取消引用（跟踪）一个符号链接，我们需要获取元数据
-        if let Some(de) = &path.de {
-            if let Some(style) = ls_colors.style_for(de) {
-                return style_manager.apply_style(style, &name);
-            } else {
-                return name;
-            }
-        }
-    }
-
     if let Some(target) = target_symlink {
         // 使用可选的 target_symlink
-        // 此处使用 fn get_metadata_with_deref_opt 代替 get_metadata()，因为如果无法获取 target_metadata，ls 不应以 Err 结尾
+        // 此处使用 fn get_metadata_with_deref_opt 代替 get_metadata()
         let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.is_must_dereference)
             .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
 
-        apply_style_based_on_metadata(path, Some(&md), ls_colors, style_manager, &name)
+        apply_style_based_on_metadata(
+            path,
+            Some(&md),
+            ls_colors,
+            style_manager,
+            &name,
+            target_symlink,
+        )
     } else {
         let mdata_option = path.get_metadata(out);
         let symlink_metadata = path.p_buf.symlink_metadata().ok();
         let mdata = mdata_option.or(symlink_metadata.as_ref());
 
-        apply_style_based_on_metadata(path, mdata, ls_colors, style_manager, &name)
+        apply_style_based_on_metadata(path, mdata, ls_colors, style_manager, &name, None)
     }
 }
 

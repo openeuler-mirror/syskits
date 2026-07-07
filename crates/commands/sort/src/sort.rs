@@ -1373,7 +1373,27 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                 }
 
                 let file_name_string = String::from_utf8_lossy(line_slice).into_owned();
-                files.push(OsString::from(file_name_string));
+                
+                // 捕捉 stdin 里嵌套读取 stdin 的死循环异常
+                if is_stdin && file_name_string == "-" {
+                    return Err(CtSimpleError::new(
+                        2,
+                        "when reading file names from stdin, no file name of '-' allowed"
+                            .to_string(),
+                    )
+                    .into());
+                }
+
+                // 兼容 Unix 系统下非 UTF-8 文件名的安全转换
+                #[cfg(unix)]
+                {
+                    use std::os::unix::ffi::OsStringExt;
+                    files.push(OsString::from_vec(line_slice.to_vec()));
+                }
+                #[cfg(not(unix))]
+                {
+                    files.push(OsString::from(file_name_string));
+                }
 
                 file_idx += 1;
             }

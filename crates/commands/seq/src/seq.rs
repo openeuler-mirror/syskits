@@ -369,36 +369,37 @@ fn write_value_float(
     width: usize,
     precision: usize,
 ) -> std::io::Result<()> {
-    let value_as_str =
-        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
-            if precision == 0 {
-                format!("{value:>width$}")
-            } else {
-                format!("{value:>width$.precision$}")
-            }
+    let s = if *value == ExtendedBigDecimal::Infinity {
+        "inf".to_string()
+    } else if *value == ExtendedBigDecimal::MinusInfinity {
+        "-inf".to_string()
+    } else if *value == ExtendedBigDecimal::Nan {
+        "nan".to_string()
+    } else {
+        if precision > 0 {
+            // 保留小数精度
+            format!("{value:.precision$}")
         } else {
-            if precision == 0 {
-                // 模拟 C 语言 %g 的智能截断
-                let mut s = value.to_string();
-                if s.contains('.') {
-                    s = s.trim_end_matches('0').trim_end_matches('.').to_string();
-                }
-
-                // 处理 String 格式化时的前导零与负号的冲突
-                if s.starts_with('-') {
-                    let num_part = &s[1..];
-                    // 宽度需要减去负号占用的 1 位
-                    let pad_width = width.saturating_sub(1);
-                    format!("-{num_part:0>pad_width$}")
-                } else {
-                    format!("{s:0>width$}") // 强制使用 '0' 作为填充字符
-                }
-            } else {
-                // 原生数字类型格式化
-                format!("{value:0>width$.precision$}")
+            // 模拟 C 语言 %g 的智能截断
+            let mut s = value.to_string();
+            if s.contains('.') {
+                s = s.trim_end_matches('0').trim_end_matches('.').to_string();
             }
-        };
-    write!(writer, "{value_as_str}")
+            s
+        }
+    };
+
+    // 手动进行前导 0 填充，避开原生 format! 宏对大数类型填充支持不佳的坑
+    if s.len() < width {
+        let pad_len = width - s.len();
+        if s.starts_with('-') {
+            write!(writer, "-{}{}", "0".repeat(pad_len), &s[1..])
+        } else {
+            write!(writer, "{}{}", "0".repeat(pad_len), s)
+        }
+    } else {
+        write!(writer, "{s}")
+    }
 }
 
 /// Custom format function that handles zero-padding with signs correctly

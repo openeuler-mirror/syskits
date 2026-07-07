@@ -1191,11 +1191,19 @@ fn sort_handle_settings(
         );
     }
 
-    let output = SortOutput::new(
-        matches
-            .get_one::<String>(sort_flags::SORT_OUTPUT)
-            .map(|s| s.as_str()),
-    )?;
+    // 提取所有的 -o 参数
+    let outputs: Vec<&String> = matches
+        .get_many::<String>(sort_flags::SORT_OUTPUT)
+        .unwrap_or_default()
+        .collect();
+
+    // 如果指定了多个输出文件，严格复刻 GNU 的报错退出行为
+    if outputs.len() > 1 {
+        return Err(CTsageError::new(2, "multiple output files specified"));
+    }
+
+    // 取出唯一的一个（如果有的话）
+    let output = SortOutput::new(outputs.into_iter().next().map(|s| s.as_str()))?;
 
     settings.init_precomputed();
     Ok((settings, files, tmp_dir, output))
@@ -1613,6 +1621,7 @@ pub fn ct_app() -> Command {
             .long(sort_flags::SORT_OUTPUT)
             .help(t!("sort.clap.sort_output"))
             .value_name("FILENAME")
+            .action(ArgAction::Append)
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(sort_flags::SORT_REVERSE)
             .short('r')

@@ -1881,7 +1881,7 @@ fn sort_get_leading_gen(input: &str) -> Range<usize> {
         if c.is_ascii_digit() {
             continue;
         }
-        if c == SORT_DECIMAL_PT && !is_had_decimal_pt && !is_had_e_notation {
+        if (c == SORT_DECIMAL_PT || c == ',') && !is_had_decimal_pt && !is_had_e_notation {
             is_had_decimal_pt = true;
             continue;
         }

@@ -113,8 +113,12 @@ impl NumInfo {
             if Self::is_invalid_char(char, &mut is_had_decimal_pt, parse_settings) {
                 return match start {
                     Some(start) => {
+                        // 在此处加入 R 和 Q
                         let has_si_unit = parse_settings.accept_si_units
-                            && matches!(char, 'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y');
+                            && matches!(
+                                char,
+                                'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y' | 'R' | 'Q'
+                            );
                         (
                             Self { exponent, sign },
                             start..if has_si_unit {
@@ -204,6 +208,8 @@ fn num_cmp_get_unit(unit: Option<char>) -> u8 {
         Some('E') => 6,
         Some('Z') => 7,
         Some('Y') => 8,
+        Some('R') => 9,  // Ronna = 10^27
+        Some('Q') => 10, // Quetta = 10^30
         Some(_) | None => 0,
     }
 }

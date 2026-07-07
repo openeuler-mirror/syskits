@@ -1452,17 +1452,13 @@ pub(crate) fn copy_attributes_with_deref(
     })?;
 
     cp_handle_preserve(&attr.mode, || -> CopyResult<()> {
-        // 作为`fs::set_permissions()`调用基础的`chmod()`系统调用无法更改符号链接的权限。
-        // 在这种情况下，我们什么也不做，因为每个符号链接都有相同的权限。
         if !dest_path.is_symlink() {
             fs::set_permissions(dest_path, sour_metadata.permissions()).context(str)?;
-            // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source_path, None)
                 .and_then(|acl| exacl::setfacl(&[dest_path], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
         }
-
         Ok(())
     })?;
 
@@ -1474,7 +1470,6 @@ pub(crate) fn copy_attributes_with_deref(
         } else {
             filetime::set_file_times(dest_path, atime, mtime)?;
         }
-
         Ok(())
     })?;
 
@@ -1497,7 +1492,6 @@ pub(crate) fn copy_attributes_with_deref(
                 )
             })?;
         }
-
         Ok(())
     })?;
 
@@ -1511,20 +1505,6 @@ pub(crate) fn copy_attributes_with_deref(
                 }
             }
         }
-        #[cfg(target_os = "windows")]
-        {
-            // The documentation for GNU cp states:
-            //
-            // > Try to preserve SELinux security context and
-            // > extended attributes (xattr), but ignore any failure
-            // > to do that and print no corresponding diagnostic.
-            //
-            // so we simply do nothing here.
-            //
-            // TODO Silently ignore failures in the `#[cfg(unix)]`
-            // block instead of terminating immediately on errors.
-        }
-
         Ok(())
     })?;
 

@@ -252,44 +252,41 @@ impl SortMode {
 }
 
 pub struct SortOutput {
-    file: Option<(String, File)>,
+    file: Option<String>,
 }
 
 impl SortOutput {
     fn new(name: Option<&str>) -> CTResult<Self> {
-        let file = if let Some(name) = name {
-            // 这与 `File::create()` 不同，因为我们还没有截断输出。
-            // 这样就可以将输出文件用作输入文件。
-            #[allow(clippy::suspicious_open_options)]
-            let file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(name)
-                .map_err(|e| SortError::SortOpenFailed {
-                    path: name.to_owned(),
-                    error: e,
-                })?;
-            Some((name.to_owned(), file))
-        } else {
-            None
-        };
-        Ok(Self { file })
-    }
-
-    fn into_write(self) -> BufWriter<Box<dyn Write>> {
-        BufWriter::new(if let Some((_name, file)) = self.file {
-            let _ = file.set_len(0);
-            Box::new(file)
-        } else {
-            Box::new(stdout())
+        Ok(Self {
+            file: name.map(|s| s.to_owned()),
         })
     }
 
+    fn into_write(self) -> BufWriter<Box<dyn Write>> {
+        // 直到真正需要写入时（最后一步），才去打开并截断文件
+        let w: Box<dyn Write> = if let Some(name) = self.file {
+            let file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true) // 此时可以安全截断，因为如果有冲突，输入文件早已被拷贝到临时文件中
+                .open(&name)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "sort: open failed: {}: {}",
+                        name.maybe_quote(),
+                        strip_errno(&e)
+                    );
+                    std::process::exit(2);
+                });
+            Box::new(file)
+        } else {
+            Box::new(stdout())
+        };
+        BufWriter::new(w)
+    }
+
     fn as_output_name(&self) -> Option<&str> {
-        match &self.file {
-            Some((name, _file)) => Some(name),
-            None => None,
-        }
+        self.file.as_deref()
     }
 }
 

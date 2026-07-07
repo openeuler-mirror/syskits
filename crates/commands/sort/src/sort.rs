@@ -1306,12 +1306,17 @@ fn sort_get_settings_buffer_size(matches: &ArgMatches) -> CTResult<usize> {
     matches
         .get_one::<String>(sort_flags::SORT_BUF_SIZE)
         .map_or(Ok(SORT_DEFAULT_BUF_SIZE), |s| {
-            SortGlobalConfigs::parse_byte_count(s).map_err(|e| {
-                CtSimpleError::new(
-                    2,
-                    sort_format_error_message(&e, s, sort_flags::SORT_BUF_SIZE),
-                )
-            })
+            SortGlobalConfigs::parse_byte_count(s)
+                .map_err(|e| {
+                    CtSimpleError::new(
+                        2,
+                        sort_format_error_message(&e, s, sort_flags::SORT_BUF_SIZE),
+                    )
+                })
+                .map(|size| {
+                    // 核心修复：防止缓冲区过小导致 ext_sort 陷入死循环
+                    std::cmp::max(size, 1024) 
+                })
         })
 }
 

@@ -87,6 +87,7 @@ struct PrintConfig<'a> {
     pad: bool,
     padding: usize,
     format: &'a Option<Format<num_format::Float>>,
+    format_str: Option<&'a str>,
     buffer: Option<&'a mut Vec<u8>>,
 }
 
@@ -146,6 +147,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
         pad: options.is_equal_width,
         padding,
         format: &format,
+        format_str: options.format.as_deref(),
         buffer: None,
     };
 
@@ -404,44 +406,104 @@ fn write_value_float(
 
 /// Custom format function that handles zero-padding with signs correctly
 /// This fixes the issue where ctcore's Format doesn't handle the '0' flag properly with signs
+/// 直接使用底层的格式化器，移除之前破坏 printf 标准的魔改逻辑
 fn format_with_zero_padding(
     writer: &mut impl Write,
     format: &Format<num_format::Float>,
     float: f64,
+    orig_format: Option<&str>,
 ) -> std::io::Result<()> {
-    // First, format to a temporary buffer to see what we get
     let mut temp_buf = Vec::new();
     format.fmt(&mut temp_buf, float)?;
-    let formatted = String::from_utf8_lossy(&temp_buf);
+    let mut formatted = String::from_utf8_lossy(&temp_buf).to_string();
 
-    // Check if we have a sign followed by spaces (which should be zeros for %0 flag)
-    // This happens when NumberAlignment::RightZero doesn't work correctly with signs
-    // ctcore outputs "+  1" (4 chars) for width=3, but should output "+01" (3 chars)
-    if (formatted.starts_with('+') || formatted.starts_with('-')) && formatted.contains(' ') {
-        let sign_char = formatted.chars().next().unwrap();
-        let rest = &formatted[1..];
+    if let Some(fmt) = orig_format {
+        if let Some(pct) = fmt.find('%') {
+            let mut has_minus = false;
+            let mut has_plus = false;
+            let mut has_space = false;
+            let mut has_zero = false;
 
-        // Replace leading spaces with zeros, but also trim to correct width
-        if rest.starts_with(' ') {
-            let trimmed = rest.trim_start();
-            // The issue: ctcore doesn't account for sign in width calculation
-            // If formatted is "+  1" (4 chars) but width should be 3,
-            // we need to output "+01" (3 chars), not "+001" (4 chars)
-            // So we need to reduce the zero count by 1
-            let space_count = rest.len() - trimmed.len();
-            let zero_count = if space_count > 0 { space_count - 1 } else { 0 };
-
-            write!(writer, "{sign_char}")?;
-            for _ in 0..zero_count {
-                write!(writer, "0")?;
+            for c in fmt[pct + 1..].chars() {
+                match c {
+                    '-' => has_minus = true,
+                    '+' => has_plus = true,
+                    ' ' => has_space = true,
+                    '0' => has_zero = true,
+                    '1'..='9' | '.' | 'f' | 'g' | 'e' | 'E' | 'G' | 'F' => break,
+                    _ => {}
+                }
             }
-            write!(writer, "{trimmed}")?;
-            return Ok(());
+
+            let prefix_len = pct;
+            let mut dir_end = pct + 1;
+            for (i, c) in fmt[pct + 1..].char_indices() {
+                if "fFeEgG".contains(c) {
+                    dir_end = pct + 1 + i + c.len_utf8();
+                    break;
+                }
+            }
+            let suffix_len = fmt.len() - dir_end;
+
+            if formatted.len() > prefix_len + suffix_len {
+                let num_part = &formatted[prefix_len..formatted.len() - suffix_len];
+
+                let is_negative = float < 0.0 || float.is_sign_negative();
+
+                // ctcore Bug: 处理非负数且要求显示 '+' 或 ' ' 标志时，
+                // 它会在填充完宽度后，硬塞一个符号，导致总字符串超长 1 个字符。
+                if !is_negative && (has_plus || has_space) {
+                    if !num_part.is_empty()
+                        && (num_part.starts_with('+') || num_part.starts_with(' '))
+                    {
+                        if has_minus {
+                            // 左对齐：多余的填充字符在尾部，直接削掉最后一个空格
+                            if num_part.ends_with(' ') {
+                                let fixed_num = &num_part[..num_part.len() - 1];
+                                formatted = format!(
+                                    "{}{}{}",
+                                    &fmt[..prefix_len],
+                                    fixed_num,
+                                    &fmt[dir_end..]
+                                );
+                            }
+                        } else {
+                            // 右对齐：多余的填充字符在头部（但在符号之后），削掉一个字符并重排位置
+                            let sign_char = num_part.chars().next().unwrap();
+                            let rest = &num_part[1..];
+                            if rest.starts_with(' ') || rest.starts_with('0') {
+                                let fixed_rest = &rest[1..];
+                                if has_zero {
+                                    // 零填充：将错误的内部空格替换为 0 (如 "+ 1" -> "+01")
+                                    let spaces_to_zeros = fixed_rest.replace(" ", "0");
+                                    let fixed_num = format!("{}{}", sign_char, spaces_to_zeros);
+                                    formatted = format!(
+                                        "{}{}{}",
+                                        &fmt[..prefix_len],
+                                        fixed_num,
+                                        &fmt[dir_end..]
+                                    );
+                                } else {
+                                    // 空格填充：将空格推到符号外部 (如 "+  1" -> " +1")
+                                    let trimmed = fixed_rest.trim_start_matches(' ');
+                                    let spaces = " ".repeat(fixed_rest.len() - trimmed.len());
+                                    let fixed_num = format!("{}{}{}", spaces, sign_char, trimmed);
+                                    formatted = format!(
+                                        "{}{}{}",
+                                        &fmt[..prefix_len],
+                                        fixed_num,
+                                        &fmt[dir_end..]
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // Otherwise, just write the formatted string as-is
-    writer.write_all(&temp_buf)
+    writer.write_all(formatted.as_bytes())
 }
 
 /// Floating point based code path
@@ -479,7 +541,7 @@ fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
                     ExtendedBigDecimal::MinusZero => -0.0,
                     ExtendedBigDecimal::Nan => f64::NAN,
                 };
-                format_with_zero_padding(&mut writer, f, float)?;
+                format_with_zero_padding(&mut writer, f, float, config.format_str)?;
             }
             None => write_value_float(&mut writer, &value, padding, config.largest_dec)?,
         }

@@ -15,17 +15,17 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use clap::{Arg, ArgAction, ArgMatches, Command};
 use clap::{crate_version, value_parser};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
 use ctcore::ct_show_warning;
 
 use crate::paths::TailInput;
-use crate::{Quotable, parse, platform};
+use crate::{parse, platform, Quotable};
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -530,7 +530,28 @@ pub fn tail_parse_args(args: impl ctcore::Args) -> CTResult<TailOptions> {
 
 /// 使用现代语法解析参数
 fn parse_modern_syntax(args: &[OsString]) -> CTResult<TailOptions> {
-    match ct_app().try_get_matches_from(args) {
+    let mut processed_args = Vec::new();
+    let mut iter = args.iter().peekable();
+
+    // 预处理：解决 `tail -c --` 时 `--` 被 clap 误认为“结束解析符”的问题
+    while let Some(arg) = iter.next() {
+        let arg_str = arg.to_string_lossy();
+        if arg_str == "-c" || arg_str == "-n" || arg_str == "--bytes" || arg_str == "--lines" {
+            if let Some(next_arg) = iter.peek() {
+                if next_arg.to_string_lossy() == "--" {
+                    let mut combined = arg.to_os_string();
+                    combined.push("=");
+                    combined.push("--");
+                    processed_args.push(combined);
+                    iter.next(); // 吞掉 "--"
+                    continue;
+                }
+            }
+        }
+        processed_args.push(arg.clone());
+    }
+
+    match ct_app().try_get_matches_from(&processed_args) {
         Ok(matches) => Ok(TailOptions::from(&matches)?),
         Err(err) => Err(err.into()),
     }

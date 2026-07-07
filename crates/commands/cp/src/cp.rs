@@ -1406,14 +1406,19 @@ fn cp_handle_preserve<F: Fn() -> CopyResult<()>>(p: &CpPreserve, f: F) -> CopyRe
     Ok(())
 }
 
-/// Copy the specified attributes from one path to another.
-pub(crate) fn copy_attributes(
+pub(crate) fn copy_attributes_with_deref(
     source_path: &Path,
     dest_path: &Path,
     attr: &CpAttributes,
+    dereference: bool,
 ) -> CopyResult<()> {
     let str = &*format!("{} -> {}", source_path.quote(), dest_path.quote());
-    let sour_metadata = fs::symlink_metadata(source_path).context(str)?;
+    // 根据当前策略决定是否穿透软链接读取真实权限
+    let sour_metadata = if dereference {
+        fs::metadata(source_path).context(str)?
+    } else {
+        fs::symlink_metadata(source_path).context(str)?
+    };
 
     // 必须先更改所有权以避免干扰模式更改。
     #[cfg(unix)]
@@ -1520,6 +1525,15 @@ pub(crate) fn copy_attributes(
     })?;
 
     Ok(())
+}
+
+// 兼容包装器，防止破坏其他未知代码的调用
+pub(crate) fn copy_attributes(
+    source_path: &Path,
+    dest_path: &Path,
+    attr: &CpAttributes,
+) -> CopyResult<()> {
+    copy_attributes_with_deref(source_path, dest_path, attr, false)
 }
 
 fn cp_symlink_file(
@@ -2092,7 +2106,13 @@ fn copy_file(
         fs::set_permissions(dest_path, dest_permissions).ok();
     }
 
-    copy_attributes(sour_path, dest_path, &cp_opts.attributes)?;
+    // 使用带有精确 dereference 标志的引擎同步属性
+    copy_attributes_with_deref(
+        sour_path,
+        dest_path,
+        &cp_opts.attributes,
+        cp_opts.cp_dereference(source_in_command_line),
+    )?;
 
     copied_files.insert(
         CtFileInformation::from_path(sour_path, cp_opts.cp_dereference(source_in_command_line))?,

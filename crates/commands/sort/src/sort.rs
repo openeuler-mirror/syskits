@@ -761,16 +761,27 @@ impl SortKeyPosition {
             .ok_or_else(|| format!("invalid key {}", key.quote()))?;
         let char_option = field_and_char.next();
 
-        let field = field
-            .parse()
-            .map_err(|e| format!("failed to parse field index {}: {}", field.quote(), e))?;
+        // 处理超过 usize::MAX 的极大数值，按 GNU 规则静默截断为 usize::MAX
+        let field = field.parse::<usize>().or_else(|e| {
+            if *e.kind() == std::num::IntErrorKind::PosOverflow {
+                Ok(usize::MAX)
+            } else {
+                Err(format!("failed to parse field index {}: {}", field.quote(), e))
+            }
+        })?;
+        
         if field == 0 {
             return Err("field index can not be 0".to_string());
         }
 
         let char_size = char_option.map_or(Ok(default_char_index), |char| {
-            char.parse()
-                .map_err(|e| format!("failed to parse character index {}: {}", char.quote(), e))
+            char.parse::<usize>().or_else(|e| {
+                if *e.kind() == std::num::IntErrorKind::PosOverflow {
+                    Ok(usize::MAX)
+                } else {
+                    Err(format!("failed to parse character index {}: {}", char.quote(), e))
+                }
+            })
         })?;
 
         Ok(Self {

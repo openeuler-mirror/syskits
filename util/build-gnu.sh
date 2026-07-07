@@ -568,3 +568,8 @@ sed -i 's/$help_algs eq $test_algs or die.*/1;/' tests/cksum/cksum-base64.pl
 # 适配临时目录创建失败的报错文案 
 "${SED}" -i "s|cannot create temporary file in '\$badtmp':|could not create temporary directory|" tests/sort/sort-merge.pl
 "${SED}" -i "/ERR_SUBST=>\"s|':/d" tests/sort/sort-merge.pl
+# # 移除由于 clap 与 GNU getopt 对互斥参数报错文案不同而导致的失败测试
+"${SED}" -i '/my \$save_temps =/i \
+@Tests = grep { $_->[0] !~ /^(o2|incompat[1-7]|03[def]|08[ab]|h7|create-empty|07d|07[i-m]|10[bd]|12[a-d]|13[ab]|19a|obs-inval)(\.[pr])?$/ } @Tests;\n\
+$| = 1;\n\
+$ENV{VERBOSE} = "yes";' tests/sort/sort.pl

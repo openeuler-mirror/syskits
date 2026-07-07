@@ -1597,8 +1597,16 @@ fn is_forbidden_to_copy_to_same_file(
         }
     }
 
-    // 如果是不同的路径但指向同文件，若有备份或移除目标的指令，则允许操作 (GNU 行为)
+    // GNU 行为：如果有备份或移除目标的指令，则允许操作
     if is_remove_dest || has_backup {
+        return false;
+    }
+
+    // 如果是强制覆盖 (-f)，且我们在建链模式 (-s 或 -l)，且目标是一个现有的符号链接，则开绿灯允许
+    if cp_opts.cp_force()
+        && dest_path.is_symlink()
+        && matches!(cp_opts.copy_mode, CpCopyMode::SymLink | CpCopyMode::Link)
+    {
         return false;
     }
 
@@ -1830,10 +1838,11 @@ fn cp_handle_copy_mode(
             )?;
         }
         CpCopyMode::SymLink => {
-            if dest_path.exists()
+            // 改用 cp_file_or_link_exists，确保哪怕是断链也能被识别并在 -f 时被正确删除
+            if cp_file_or_link_exists(dest_path)
                 && cp_opts.overwrite == CpOverwriteMode::Clobber(CpClobberMode::Force)
             {
-                fs::remove_file(dest_path)?;
+                fs::remove_file(dest_path).ok();
             }
             cp_symlink_file(sour_path, dest_path, cp_str, symlinked_files)?;
         }

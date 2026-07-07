@@ -1551,6 +1551,7 @@ dependencies = [
 name = "ct_sort"
 version = "3.1.7"
 dependencies = [
+ "bigdecimal",
  "binary-heap-plus",
  "clap",
  "compare",

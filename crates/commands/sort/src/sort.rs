@@ -24,6 +24,8 @@ use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use bigdecimal::BigDecimal;
+use std::str::FromStr;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -1910,12 +1912,12 @@ fn sort_get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SortGeneralF64ParseResult {
     SortInvalid,
     SortNaN,
     SortNegInfinity,
-    SortNumber(f64),
+    SortNumber(BigDecimal),
     SortInfinity,
 }
 
@@ -1923,14 +1925,24 @@ pub enum SortGeneralF64ParseResult {
 /// 必须使用 GeneralF64ParseResult 而不是 f64 才能正确排序浮点数。
 #[inline(always)]
 fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
-    // 这里的实际行为依赖于 Rust 的浮点解析实现。
-    // 例如，从 1.53 版本开始，"nan"、"inf"（忽略大小写）和 "无穷大 "只能解析为浮点数。
-    // TODO：一旦我们支持的 Rust 最低版本达到 1.53 或以上，我们就应该为这些情况添加测试。
-    match a.parse::<f64>() {
-        Ok(a) if a.is_nan() => SortGeneralF64ParseResult::SortNaN,
-        Ok(a) if a == f64::NEG_INFINITY => SortGeneralF64ParseResult::SortNegInfinity,
-        Ok(a) if a == f64::INFINITY => SortGeneralF64ParseResult::SortInfinity,
-        Ok(a) => SortGeneralF64ParseResult::SortNumber(a),
+    // 抹平 locale 差异：将法文的逗号强转为标准小数点
+    let normalized = a.replace(',', ".");
+    let normalized = normalized.trim();
+
+    // 手动处理特殊值
+    if normalized.eq_ignore_ascii_case("nan") {
+        return SortGeneralF64ParseResult::SortNaN;
+    } else if normalized.eq_ignore_ascii_case("inf") 
+        || normalized.eq_ignore_ascii_case("+inf") 
+        || normalized.eq_ignore_ascii_case("infinity") {
+        return SortGeneralF64ParseResult::SortInfinity;
+    } else if normalized.eq_ignore_ascii_case("-inf") 
+        || normalized.eq_ignore_ascii_case("-infinity") {
+        return SortGeneralF64ParseResult::SortNegInfinity;
+    }
+
+    match BigDecimal::from_str(normalized) {
+        Ok(val) => SortGeneralF64ParseResult::SortNumber(val),
         Err(_) => SortGeneralF64ParseResult::SortInvalid,
     }
 }
@@ -1942,7 +1954,28 @@ fn sort_general_numeric_compare(
     a: &SortGeneralF64ParseResult,
     b: &SortGeneralF64ParseResult,
 ) -> Ordering {
-    a.partial_cmp(b).unwrap()
+    // 严格遵循 GNU 的隐式排序规则: Invalid < NaN < -Inf < Numbers < +Inf
+    match (a, b) {
+        (SortGeneralF64ParseResult::SortInvalid, SortGeneralF64ParseResult::SortInvalid) => Ordering::Equal,
+        (SortGeneralF64ParseResult::SortInvalid, _) => Ordering::Less,
+        (_, SortGeneralF64ParseResult::SortInvalid) => Ordering::Greater,
+
+        (SortGeneralF64ParseResult::SortNaN, SortGeneralF64ParseResult::SortNaN) => Ordering::Equal,
+        (SortGeneralF64ParseResult::SortNaN, _) => Ordering::Less,
+        (_, SortGeneralF64ParseResult::SortNaN) => Ordering::Greater,
+
+        (SortGeneralF64ParseResult::SortNegInfinity, SortGeneralF64ParseResult::SortNegInfinity) => Ordering::Equal,
+        (SortGeneralF64ParseResult::SortNegInfinity, _) => Ordering::Less,
+        (_, SortGeneralF64ParseResult::SortNegInfinity) => Ordering::Greater,
+
+        (SortGeneralF64ParseResult::SortInfinity, SortGeneralF64ParseResult::SortInfinity) => Ordering::Equal,
+        (SortGeneralF64ParseResult::SortInfinity, _) => Ordering::Greater,
+        (_, SortGeneralF64ParseResult::SortInfinity) => Ordering::Less,
+
+        (SortGeneralF64ParseResult::SortNumber(num_a), SortGeneralF64ParseResult::SortNumber(num_b)) => {
+            num_a.cmp(num_b)
+        }
+    }
 }
 
 fn sort_get_rand_string() -> [u8; 16] {

@@ -100,7 +100,7 @@ enum DateFormat {
 /// Various places that dates can come from
 enum DateSource {
     Now,
-    Custom(String),
+    Custom(OsString),
     File(PathBuf),
     Resolution,
     Reference(PathBuf),
@@ -283,13 +283,17 @@ fn date_processing(
         // 创建一个动态分发的迭代器Box<dyn Iterator<Item = _>>，用于根据不同的DateSource枚举值生成对应的日期迭代
         let dates_iterator: Box<dyn Iterator<Item = _>> = match date_set.date_source {
             DateSource::Custom(ref input) => {
-                let mut date = parse_date(input.clone());
+                let input_str = input.to_string_lossy().to_string();
+                let mut date = parse_date(&input_str);
                 if let Ok(dt) = date {
                     if date_set.utc {
                         date = Ok(dt.with_timezone(&Utc).into());
                     }
                 }
-                let iter = std::iter::once(date);
+                let iter = std::iter::once(date.map_err(|_| {
+                    // 直接使用 OsString 的 quote() 完美还原非法字节
+                    CtSimpleError::new(1, format!("invalid date {}", input.quote()))
+                }));
                 Box::new(iter)
             }
             DateSource::File(ref path) => {
@@ -303,7 +307,10 @@ fn date_processing(
                     .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
                 let mut iter: Box<dyn Iterator<Item = _>> =
-                    Box::new(lines.map_while(Result::ok).map(parse_date));
+                    Box::new(lines.map_while(Result::ok).map(|line| {
+                        parse_date(&line).map_err(|_| CtSimpleError::new(1, format!("invalid date {}", line.quote())))
+                    }));
+                    
                 if date_set.utc {
                     iter = Box::new(iter.map(|res| res.map(|dt| dt.with_timezone(&Utc).into())));
                 }
@@ -373,10 +380,7 @@ fn date_processing(
                         println!("{formatted}");
                     }
                 }
-                Err((input, _err)) => ct_show!(CtSimpleError::new(
-                    1,
-                    format!("invalid date {}", input.quote())
-                )),
+                Err(err) => ct_show!(err),
             }
         }
         Ok(())
@@ -384,29 +388,31 @@ fn date_processing(
 }
 
 fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffset>>, CTResult<()>> {
-    // 解析并验证设置日期的参数
-    let set_to_params = match args_match.get_one::<String>(DATE_OPT_SET).map(parse_date) {
+    let set_to_params = match args_match.get_one::<OsString>(DATE_OPT_SET) {
         None => None,
-        Some(Err((input, _err))) => {
-            return Err(Err(CtSimpleError::new(
-                1,
-                format!("invalid date {}", input.quote()),
-            )));
+        Some(input) => {
+            match parse_date(input.to_string_lossy().to_string()) {
+                Err(_) => {
+                    return Err(Err(CtSimpleError::new(
+                        1,
+                        format!("invalid date {}", input.quote()),
+                    )));
+                }
+                Ok(date) => Some(date),
+            }
         }
-        Some(Ok(date)) => Some(date),
     };
     Ok(set_to_params)
 }
 
 fn get_date_source(args_match: &ArgMatches) -> DateSource {
-    // 根据命令行参数确定日期来源
     if args_match.get_flag(DATE_OPT_RESOLUTION) {
         DateSource::Resolution
-    } else if let Some(date) = args_match.get_many::<String>(DATE_OPT_DATE).and_then(|mut iter| iter.next_back()) {
+    } else if let Some(date) = args_match.get_many::<OsString>(DATE_OPT_DATE).and_then(|mut iter| iter.next_back()) {
         DateSource::Custom(date.into())
-    } else if let Some(file) = args_match.get_one::<String>(DATE_OPT_FILE) {
+    } else if let Some(file) = args_match.get_one::<OsString>(DATE_OPT_FILE) {
         DateSource::File(file.into())
-    } else if let Some(file) = args_match.get_one::<String>(DATE_OPT_REFERENCE) {
+    } else if let Some(file) = args_match.get_one::<OsString>(DATE_OPT_REFERENCE) {
         DateSource::Reference(file.into())
     } else {
         DateSource::Now
@@ -482,11 +488,13 @@ fn date_args_init() -> Vec<Arg> {
             .long(DATE_OPT_DATE)
             .value_name("STRING")
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new()) // 允许原生字节，不强制 UTF-8
             .help(t!("date.clap.date_opt_date")),
         Arg::new(DATE_OPT_FILE)
             .short('f')
             .long(DATE_OPT_FILE)
             .value_name("DATEFILE")
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath)
             .help(t!("date.clap.date_opt_file")),
         Arg::new(DATE_OPT_ISO_8601)
@@ -517,12 +525,14 @@ fn date_args_init() -> Vec<Arg> {
             .short('r')
             .long(DATE_OPT_REFERENCE)
             .value_name("FILE")
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath)
             .help(t!("date.clap.date_opt_reference")),
         Arg::new(DATE_OPT_SET)
             .short('s')
             .long(DATE_OPT_SET)
             .value_name("STRING")
+            .value_parser(clap::builder::OsStringValueParser::new())
             .help(DATE_OPT_SET_HELP_STRING),
         Arg::new(DATE_OPT_UNIVERSAL)
             .short('u')

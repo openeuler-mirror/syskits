@@ -1961,9 +1961,8 @@ impl PathData {
             must_dereference: bool,
         ) -> OnceCell<Option<FileType>> {
             if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    return OnceCell::from(Some(md_pb.file_type()));
-                }
+                // 必须跟随软链接时，清空预判状态，强制后续去真实 stat 目标
+                return OnceCell::new();
             }
 
             if let Ok(ft_de) = de.file_type() {
@@ -2365,13 +2364,21 @@ fn enter_directory<W: Write>(
     display_items(&entries, config, out, dired, style_manager, None)?;
 
     if config.is_recursive {
-        for e in entries
-            .iter()
-            .skip(if config.files == LsFiles::LsAll { 2 } else { 0 })
-            .filter(|p| p.ft.get().is_some())
-            .filter(|p| p.ft.get().unwrap().is_some())
-            .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
-        {
+        let mut subdir_indices = Vec::new();
+        let skip_count = if config.files == LsFiles::LsAll { 2 } else { 0 };
+
+        for (i, e) in entries.iter().enumerate().skip(skip_count) {
+            // 调用 file_type(out) 会强制去探测真实文件。
+            // 如果是断链，这里会抛出我们需要的 error 日志，并返回 None。
+            if let Some(ft) = e.file_type(out) {
+                if ft.is_dir() {
+                    subdir_indices.push(i);
+                }
+            }
+        }
+
+        for i in subdir_indices {
+            let e = &entries[i];
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
                     out.flush()?;
@@ -2609,6 +2616,11 @@ fn display_grid_by_format_other_type<W: Write>(
 
     let mut names_vec = Vec::new();
     for i in items {
+        // 对于必须跟随软链接的情况，强制触发 metadata 获取以暴露断链错误
+        if i.is_must_dereference {
+            let _ = i.get_metadata(out);
+        }
+
         let more_info = display_additional_leading_info(i, &padding, config, out)?;
         let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
         names_vec.push(cell);

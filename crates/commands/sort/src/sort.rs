@@ -1141,6 +1141,8 @@ fn sort_handle_settings(
     settings.is_stable = matches.get_flag(sort_flags::SORT_STABLE);
     settings.is_unique = matches.get_flag(sort_flags::SORT_UNIQUE);
 
+    settings.is_debug = matches.get_flag(sort_flags::SORT_DEBUG);
+
     if files.is_empty() {
         /* if no file, default to stdin */
         files.push("-".to_string().into());

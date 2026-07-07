@@ -564,17 +564,31 @@ fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOp
         return false;
     }
 
+    let arg1 = args[1].to_string_lossy();
+
     if modern_result.is_ok() {
-        let arg1 = args[1].to_string_lossy();
-        // 仅在没有额外文件参数时才尝试过时的正数形式（如 +N）
+        // 现代语法解析成功，但如果长得像 `+2`，那其实是过时语法
         if arg1.starts_with('+') {
-            return args.len() == 2;
+            return true;
         }
         return false;
     }
 
-    // 如果现代语法解析失败，可能是过时语法
-    true
+    // 如果现代语法解析失败
+    // 只有当 arg1 真的看起来像过时语法时，我们才尝试。
+    if arg1.starts_with('+') {
+        return true;
+    }
+    if arg1.starts_with('-') && arg1.len() > 1 {
+        let second_char = arg1.chars().nth(1).unwrap_or('\0');
+        // 只有跟随数字（如 -10），或者严格为 -l, -b 时才认为是过时语法
+        // 绝不放行 `-c`，因为 `-c` 属于现代选项，如果报错应该保留其原本的错误信息
+        if second_char.is_ascii_digit() || arg1 == "-l" || arg1 == "-b" {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// 解析过时语法

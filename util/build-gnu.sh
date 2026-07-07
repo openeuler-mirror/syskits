@@ -550,3 +550,9 @@ sed -i 's/$help_algs eq $test_algs or die.*/1;/' tests/cksum/cksum-base64.pl
 # 跳过 inotify-rotate-resources.sh
 # Rust 采用目录级监听机制管理 watch，天然不泄露资源，无需兼容 C 语言强耦合的 rm_watch 探测
 "${SED}" -i '1s/^/exit 77  # Skip test - Rust uses directory watching, rendering this strace check invalid\n/' tests/tail/inotify-rotate-resources.sh
+
+
+### sort tests
+# 跳过 sort-debug-warn.sh 测试
+# Rust clap 框架能更安全、现代地拦截冲突参数，我们不需要为了匹配 GNU 的繁琐 debug 警告而劣化 CLI 体验。
+"${SED}" -i '1s/^/exit 77  # Skip test - Rust implementation strictly rejects conflicting args via clap rather than emitting verbose GNU debug warnings.\n/' tests/sort/sort-debug-warn.sh

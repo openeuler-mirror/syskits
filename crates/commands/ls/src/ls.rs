@@ -2046,29 +2046,45 @@ impl PathData {
     fn get_metadata<W: Write>(&self, out: &mut W) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                // 检查我们是否可以使用 DirEntry 元数据
-                // 这将避免调用 stat()
+                // 使用 DirEntry::metadata() 尝试跟随 symlink
+                // 对于 dangling symlink，这会失败（ENOENT），必须报错并显示 "?"
                 if !self.is_must_dereference {
                     if let Some(dir_entry) = &self.de {
-                        return dir_entry.metadata().ok();
+                        match dir_entry.metadata() {
+                            Ok(md) => return Some(md),
+                            Err(err) => {
+                                // dangling symlink 跟随失败，打印错误并返回 None
+                                // 这将触发显示 "?" 并设置退出码 1
+                                ct_show!(LsError::LsIOErrorContext(
+                                    err,
+                                    self.p_buf.clone(),
+                                    self.is_command_line
+                                ));
+                                return None;
+                            }
+                        }
                     }
                 }
-
-                // 如果没有，检查我们是否可以使用路径元数据
+                
+                // 只有在使用 -L 且隐式遇到文件且错误为 ELOOP（循环链接）时，才允许静默回退
                 match get_metadata_with_deref_opt(self.p_buf.as_path(), self.is_must_dereference) {
                     Err(err) => {
-                        // 修正： 在这里传播结果有点麻烦
                         out.flush().unwrap();
                         let errno = err.raw_os_error().unwrap_or(1i32);
-                        // 一个坏的 fd 在被引用时会产生错误、
-                        // 但 GNU 在输入坏的 fd "dir "之前不会出错。
-                        // 在这里，我们与 GNU 的行为相匹配，通过在 EBADF 时交回未被引用的元数据来实现。
-                        // 在这里，我们与 GNU 的行为相匹配，在 EBADF 时交还未被引用的元数据。
+                        
+                        // EBADF 特殊处理（保留原有逻辑）
                         if self.is_must_dereference && errno == 9i32 {
                             if let Some(dir_entry) = &self.de {
                                 return dir_entry.metadata().ok();
                             }
                         }
+
+                        if self.is_must_dereference && !self.is_command_line && errno == 40 {
+                            // ELOOP - 循环链接，静默获取 symlink 本身的元数据
+                            return self.p_buf.symlink_metadata().ok();
+                        }
+                        
+                        // 其他情况（dangling symlink ENOENT，或其他错误，或显式指定），报错
                         ct_show!(LsError::LsIOErrorContext(
                             err,
                             self.p_buf.clone(),
@@ -2648,7 +2664,7 @@ fn display_grid_by_format_other_type<W: Write>(
     let mut names_vec = Vec::new();
     for i in items {
         // 对于必须跟随软链接的情况，强制触发 metadata 获取以暴露断链错误
-        if i.is_must_dereference {
+        if i.is_must_dereference && i.is_command_line {
             let _ = i.get_metadata(out);
         }
 

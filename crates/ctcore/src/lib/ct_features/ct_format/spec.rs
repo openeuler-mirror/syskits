@@ -10,14 +10,15 @@
  */
 
 use super::{
+    FormatChar, FormatError,
     argument::ArgCursor,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, FormatChar, FormatError,
+    parse_escape_only,
 };
-use crate::ct_quoting_style::{escape_name, CtQuotingStyle};
+use crate::ct_quoting_style::{CtQuotingStyle, escape_name};
 use std::ffi::OsStr;
 use std::{io::Write, ops::ControlFlow};
 
@@ -460,18 +461,6 @@ impl Spec {
     }
 }
 
-fn resolve_asterisk<'a>(
-    option: Option<CanAsterisk<usize>>,
-    idx: Option<usize>,
-    cursor: &mut ArgCursor<'a>,
-) -> Result<Option<usize>, FormatError> {
-    Ok(match option {
-        None => None,
-        Some(CanAsterisk::Asterisk) => Some(usize::try_from(cursor.get_u64(idx)).ok().unwrap_or(0)),
-        Some(CanAsterisk::Fixed(w)) => Some(w),
-    })
-}
-
 fn resolve_width<'a>(
     option: Option<CanAsterisk<usize>>,
     idx: Option<usize>,
@@ -501,11 +490,7 @@ fn resolve_precision<'a>(
         None => None,
         Some(CanAsterisk::Asterisk) => {
             let v = cursor.get_i64(idx);
-            if v < 0 {
-                None
-            } else {
-                Some(v as usize)
-            }
+            if v < 0 { None } else { Some(v as usize) }
         }
         Some(CanAsterisk::Fixed(p)) => Some(p),
     }

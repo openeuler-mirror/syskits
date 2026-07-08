@@ -22,13 +22,13 @@
 
 use ctcore::ct_error::CTError;
 use nom::{
-    IResult,
     branch::alt,
     bytes::complete::{tag, take},
     character::complete::{digit1, one_of},
     combinator::{map, map_opt, peek, recognize, value},
-    multi::{many_m_n, many0},
+    multi::{many0, many_m_n},
     sequence::{delimited, preceded, separated_pair},
+    IResult,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -688,24 +688,35 @@ where
     R: BufRead,
     W: Write,
 {
-    const BUFFER_SIZE: usize = 8192;
-    let mut buf = Vec::with_capacity(BUFFER_SIZE);
+    // 使用 64KB 固定大小的缓冲区
+    const BUFFER_SIZE: usize = 65536;
+    let mut buf = [0u8; BUFFER_SIZE];
     let mut output_buf = Vec::with_capacity(BUFFER_SIZE);
 
-    while let Ok(length) = input.read_until(b'\n', &mut buf) {
-        if length == 0 {
-            break;
-        }
+    loop {
+        // 使用定长缓冲块读取 (read) 替代按行读取 (read_until)。
+        // 彻底解决读取 /dev/zero 等无换行符的无限流时产生的死循环和 OOM 问题。
+        let length = match input.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("Error reading input: {e}");
+                break;
+            }
+        };
 
         output_buf.clear();
-        output_buf.extend(buf.iter().filter_map(|&c| translator.translate(c)));
+        output_buf.extend(
+            buf[..length]
+                .iter()
+                .filter_map(|&c| translator.translate(c)),
+        );
 
+        // 写入数据。如果底层是 /dev/full，tr.rs 里的 StrictWriter 会捕获并直接 exit(1)
         if let Err(e) = output.write_all(&output_buf) {
             eprintln!("Error writing output: {e}");
             break;
         }
-
-        buf.clear();
     }
 
     if let Err(e) = output.flush() {

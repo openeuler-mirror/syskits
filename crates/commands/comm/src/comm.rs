@@ -19,10 +19,10 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Stdin, stdin};
+use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use ctcore::Tool;
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -141,24 +141,25 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     let mut issued_warning = [false, false];
 
     // 初始化用于读取数据的缓冲区及读取状态
+    // 直接处理 Result，遇到 IO 错误立刻抛出，不再把错误当成 EOF 吞掉
     let ra = &mut Vec::new();
-    let mut na = a.read_line(ra);
+    let mut na = a
+        .read_line(ra)
+        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
     let mut prev_ra = Vec::new();
-    if let Ok(size) = na {
-        if size > 0 {
-            prev_ra.extend_from_slice(ra);
-        }
+    if na > 0 {
+        prev_ra.extend_from_slice(ra);
     }
 
     let rb = &mut Vec::new();
-    let mut nb = b.read_line(rb);
+    let mut nb = b
+        .read_line(rb)
+        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
     let mut prev_rb = Vec::new();
     let mut prev_prev_ra = Vec::new();
     let mut prev_prev_rb = Vec::new();
-    if let Ok(size) = nb {
-        if size > 0 {
-            prev_rb.extend_from_slice(rb);
-        }
+    if nb > 0 {
+        prev_rb.extend_from_slice(rb);
     }
 
     // 初始化用于计数的变量
@@ -166,22 +167,17 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     let mut total_col_2 = 0;
     let mut total_col_3 = 0;
 
-    // 循环读取并比较两组数据，直到其中一组读取完毕
-    while na.is_ok() || nb.is_ok() {
+    // 循环读取并比较两组数据，直到两组都读取完毕
+    while na > 0 || nb > 0 {
         // 根据两行数据的状态进行比较
-        let ord = match (na.is_ok(), nb.is_ok()) {
-            (false, true) => Ordering::Greater,
-            (true, false) => Ordering::Less,
-            (true, true) => match (&na, &nb) {
-                (&Ok(0), &Ok(0)) => break, // 两行都读取完毕，退出循环
-                (&Ok(0), _) => Ordering::Greater,
-                (_, &Ok(0)) => Ordering::Less,
-                _ => {
-                    // 使用locale感知的字符串比较
-                    strcoll_compare(ra, rb, false)
-                }
-            },
-            _ => unreachable!(), // 理论上不应到达此处
+        let ord = match (na, nb) {
+            (0, 0) => break, // 两行都读取完毕，退出循环
+            (0, _) => Ordering::Greater,
+            (_, 0) => Ordering::Less,
+            _ => {
+                // 使用locale感知的字符串比较
+                strcoll_compare(ra, rb, false)
+            }
         };
 
         // 根据比较结果输出相应行数据，并准备下一次读取
@@ -191,31 +187,31 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
                 print!("{}", String::from_utf8_lossy(ra));
             }
             ra.clear();
-            na = a.read_line(ra);
-            if let Ok(size) = na {
-                if size > 0 {
-                    check_order(
-                        &prev_ra,
-                        ra,
-                        1,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                    prev_prev_ra.clear();
-                    prev_prev_ra.extend_from_slice(&prev_ra);
-                    prev_ra.clear();
-                    prev_ra.extend_from_slice(ra);
-                } else if !prev_prev_ra.is_empty() {
-                    check_order(
-                        &prev_prev_ra,
-                        &prev_ra,
-                        1,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                }
+            na = a
+                .read_line(ra)
+                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            if na > 0 {
+                check_order(
+                    &prev_ra,
+                    ra,
+                    1,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
+                prev_prev_ra.clear();
+                prev_prev_ra.extend_from_slice(&prev_ra);
+                prev_ra.clear();
+                prev_ra.extend_from_slice(ra);
+            } else if !prev_prev_ra.is_empty() {
+                check_order(
+                    &prev_prev_ra,
+                    &prev_ra,
+                    1,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
             }
             total_col_1 += 1;
         } else if ord == Ordering::Greater {
@@ -224,31 +220,31 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
                 print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
             }
             rb.clear();
-            nb = b.read_line(rb);
-            if let Ok(size) = nb {
-                if size > 0 {
-                    check_order(
-                        &prev_rb,
-                        rb,
-                        2,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                    prev_prev_rb.clear();
-                    prev_prev_rb.extend_from_slice(&prev_rb);
-                    prev_rb.clear();
-                    prev_rb.extend_from_slice(rb);
-                } else if !prev_prev_rb.is_empty() {
-                    check_order(
-                        &prev_prev_rb,
-                        &prev_rb,
-                        2,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                }
+            nb = b
+                .read_line(rb)
+                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            if nb > 0 {
+                check_order(
+                    &prev_rb,
+                    rb,
+                    2,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
+                prev_prev_rb.clear();
+                prev_prev_rb.extend_from_slice(&prev_rb);
+                prev_rb.clear();
+                prev_rb.extend_from_slice(rb);
+            } else if !prev_prev_rb.is_empty() {
+                check_order(
+                    &prev_prev_rb,
+                    &prev_rb,
+                    2,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
             }
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
@@ -257,57 +253,57 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             }
             ra.clear();
             rb.clear();
-            na = a.read_line(ra);
-            if let Ok(size) = na {
-                if size > 0 {
-                    check_order(
-                        &prev_ra,
-                        ra,
-                        1,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                    prev_prev_ra.clear();
-                    prev_prev_ra.extend_from_slice(&prev_ra);
-                    prev_ra.clear();
-                    prev_ra.extend_from_slice(ra);
-                } else if !prev_prev_ra.is_empty() {
-                    check_order(
-                        &prev_prev_ra,
-                        &prev_ra,
-                        1,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                }
+            na = a
+                .read_line(ra)
+                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            if na > 0 {
+                check_order(
+                    &prev_ra,
+                    ra,
+                    1,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
+                prev_prev_ra.clear();
+                prev_prev_ra.extend_from_slice(&prev_ra);
+                prev_ra.clear();
+                prev_ra.extend_from_slice(ra);
+            } else if !prev_prev_ra.is_empty() {
+                check_order(
+                    &prev_prev_ra,
+                    &prev_ra,
+                    1,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
             }
-            nb = b.read_line(rb);
-            if let Ok(size) = nb {
-                if size > 0 {
-                    check_order(
-                        &prev_rb,
-                        rb,
-                        2,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                    prev_prev_rb.clear();
-                    prev_prev_rb.extend_from_slice(&prev_rb);
-                    prev_rb.clear();
-                    prev_rb.extend_from_slice(rb);
-                } else if !prev_prev_rb.is_empty() {
-                    check_order(
-                        &prev_prev_rb,
-                        &prev_rb,
-                        2,
-                        &check_opt,
-                        &mut issued_warning,
-                        seen_unpairable,
-                    )?;
-                }
+            nb = b
+                .read_line(rb)
+                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            if nb > 0 {
+                check_order(
+                    &prev_rb,
+                    rb,
+                    2,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
+                prev_prev_rb.clear();
+                prev_prev_rb.extend_from_slice(&prev_rb);
+                prev_rb.clear();
+                prev_rb.extend_from_slice(rb);
+            } else if !prev_prev_rb.is_empty() {
+                check_order(
+                    &prev_prev_rb,
+                    &prev_rb,
+                    2,
+                    &check_opt,
+                    &mut issued_warning,
+                    seen_unpairable,
+                )?;
             }
             total_col_3 += 1;
         }
@@ -340,7 +336,7 @@ fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
         .get_many::<String>(opt_flags::DELIMITER)
         .map(|v| v.collect())
         .unwrap_or_default();
-    
+
     // 如果有多个值，检查它们是否都相同
     if delims.len() > 1 {
         let first = delims[0];
@@ -354,7 +350,7 @@ fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
             }
         }
     }
-    
+
     Ok(match delims.last().map(|s| s.as_str()).unwrap_or("\t") {
         "" => "\0",
         delim => delim,
@@ -606,12 +602,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_1)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_1)
+                .unwrap());
         }
 
         #[test]
@@ -621,12 +615,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_2)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_2)
+                .unwrap());
         }
 
         #[test]
@@ -636,12 +628,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_3)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_3)
+                .unwrap());
         }
 
         #[test]
@@ -651,12 +641,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_1)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_1)
+                .unwrap());
         }
 
         #[test]
@@ -666,12 +654,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_3)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_3)
+                .unwrap());
         }
 
         #[test]
@@ -681,12 +667,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_3)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_3)
+                .unwrap());
         }
 
         #[test]
@@ -726,12 +710,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::COLUMN_1)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::COLUMN_1)
+                .unwrap());
             // assert!(result.unwrap().get_one::<bool>(opt_flags::COLUMN_2).unwrap());
             // assert!(result.unwrap().get_one::<bool>(opt_flags::COLUMN_3).unwrap());
         }
@@ -748,12 +730,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::ZERO_TERMINATED)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ZERO_TERMINATED)
+                .unwrap());
         }
 
         #[test]
@@ -763,12 +743,10 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(
-                result
-                    .unwrap()
-                    .get_one::<bool>(opt_flags::ZERO_TERMINATED)
-                    .unwrap()
-            );
+            assert!(result
+                .unwrap()
+                .get_one::<bool>(opt_flags::ZERO_TERMINATED)
+                .unwrap());
         }
 
         #[test]
@@ -804,7 +782,7 @@ mod tests {
         fn test_ct_app_file_2() {
             let command = ct_app();
             let test_file_path = "test_ct_app_file_2.txt"; // 测试文件路径
-            // let expected_result = FILE_2;
+                                                           // let expected_result = FILE_2;
             let flag = FILE_2.to_string();
             let files = test_file_path.to_string();
             let args = vec![ctcore::ct_util_name(), &flag, &files];
@@ -1156,7 +1134,7 @@ mod tests {
         #[test]
         fn test_ct_main_file_2() {
             let test_file_path = "test_ct_main_file_2.txt"; // 测试文件路径
-            // let expected_result = FILE_2;
+                                                            // let expected_result = FILE_2;
             let flag = FILE_2.to_string();
             let files = test_file_path.to_string();
             let args = [ctcore::ct_util_name(), &flag, &files];

@@ -1157,6 +1157,7 @@ fn pr_read_stream_and_create_pages(
     let last_page = output_opts.end_page;
     let lines_needed_per_page = pr_lines_to_read_for_page(output_opts);
     let is_omit_pagination = output_opts.is_omit_pagination;
+    let mut ignore_next_leading_form_feed = false;
 
     Box::new(
         lines
@@ -1172,11 +1173,41 @@ fn pr_read_stream_and_create_pages(
                 let mut page_with_lines = Vec::new();
                 for line in it {
                     let form_feeds_after = line.form_feeds_after;
-                    first_page.push(line);
+                    let is_form_feed_marker = form_feeds_after > 0
+                        && matches!(line.line_content.as_ref(), Ok(content) if content.is_empty());
 
                     if is_omit_pagination {
+                        if !is_form_feed_marker {
+                            first_page.push(line);
+                        }
                         continue;
                     }
+
+                    if is_form_feed_marker {
+                        if first_page.is_empty()
+                            && ignore_next_leading_form_feed
+                            && form_feeds_after == 1
+                        {
+                            // GNU pr avoids creating an extra empty page when a full page
+                            // boundary is immediately followed by a form-feed marker.
+                            ignore_next_leading_form_feed = false;
+                            continue;
+                        }
+
+                        if first_page.is_empty() {
+                            page_with_lines.push(vec![]);
+                        } else {
+                            page_with_lines.push(first_page);
+                        }
+                        for _i in 1..form_feeds_after {
+                            page_with_lines.push(vec![]);
+                        }
+                        ignore_next_leading_form_feed = false;
+                        return Some(page_with_lines);
+                    }
+
+                    ignore_next_leading_form_feed = false;
+                    first_page.push(line);
 
                     if form_feeds_after > 1 {
                         // 插入空页面
@@ -1184,6 +1215,7 @@ fn pr_read_stream_and_create_pages(
                         for _i in 1..form_feeds_after {
                             page_with_lines.push(vec![]);
                         }
+                        ignore_next_leading_form_feed = false;
                         return Some(page_with_lines);
                     }
 
@@ -1195,6 +1227,10 @@ fn pr_read_stream_and_create_pages(
                 if first_page.is_empty() {
                     return None;
                 }
+                ignore_next_leading_form_feed = first_page.len() == lines_needed_per_page
+                    && first_page
+                        .last()
+                        .is_some_and(|line| line.form_feeds_after == 0);
                 page_with_lines.push(first_page);
                 Some(page_with_lines)
             }) // 创建一组页面，因为表单输入可能导致页面为空
@@ -4445,6 +4481,50 @@ mod tests {
 
             // 由于文件不存在，应该返回错误
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_form_feed_marker_line_does_not_add_blank_content_line() {
+            let content = "line1\n\u{000C}\nline2\n";
+            let reader = create_test_reader(content);
+            let buffer_reader = BufReader::new(reader);
+            let lines = buffer_reader.lines();
+
+            let output_opts = PrOutputOptions {
+                number: None,
+                header: "".to_string(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: "".to_string(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 10,
+                page_separator_char: "".to_string(),
+                column_mode_options: None,
+                merge_files_print: None,
+                offset_spaces: "".to_string(),
+                is_form_feed_used: true,
+                is_join_lines: false,
+                col_sep_for_printing: "".to_string(),
+                page_width: 72,
+                line_width: None,
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: None,
+                output_tabs: None,
+            };
+
+            let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
+
+            assert_eq!(pages.len(), 2);
+            assert_eq!(pages[0].1.len(), 1);
+            assert_eq!(pages[0].1[0].line_content.as_ref().unwrap(), "line1");
+            assert_eq!(pages[1].1.len(), 1);
+            assert_eq!(pages[1].1[0].line_content.as_ref().unwrap(), "line2");
         }
     }
 

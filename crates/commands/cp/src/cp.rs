@@ -1424,7 +1424,7 @@ pub(crate) fn copy_attributes_with_deref(
         fs::symlink_metadata(source_path).context(str)?
     };
 
-    // 必须先更改所有权以避免干扰模式更改。
+        // 必须先更改所有权以避免干扰模式更改。
     #[cfg(unix)]
     cp_handle_preserve(&attr.ownership, || -> CopyResult<()> {
         use ctcore::ct_perms::wrap_chown;
@@ -1435,7 +1435,8 @@ pub(crate) fn copy_attributes_with_deref(
         let dest_uid = sour_metadata.uid();
         let dest_gid = sour_metadata.gid();
 
-        wrap_chown(
+        // 首先尝试完整复制 UID 和 GID（特权用户场景）
+        match wrap_chown(
             dest_path,
             &dest_path.symlink_metadata().context(str)?,
             Some(dest_uid),
@@ -1445,10 +1446,35 @@ pub(crate) fn copy_attributes_with_deref(
                 groups_only: false,
                 level: CtVerbosityLevel::Normal,
             },
-        )
-        .map_err(CpError::Error)?;
-
-        Ok(())
+        ) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                // 检查是否为权限不足错误（非特权用户无法设置 UID 为 root）
+                let err_str = e.to_string();
+                let is_perm = err_str.contains("Operation not permitted") 
+                    || err_str.contains("EPERM");
+                
+                if is_perm {
+                    // 降级策略——尝试仅保留 GID
+                    // 如果 GID 是进程的附加组，即使无法保留 UID，也应保留 GID
+                    let _ = wrap_chown(
+                        dest_path,
+                        &dest_path.symlink_metadata().context(str)?,
+                        None, // 不更改 UID（保持为当前进程 UID）
+                        Some(dest_gid),
+                        false,
+                        Verbosity {
+                            groups_only: true, // 标记为仅设置组
+                            level: CtVerbosityLevel::Normal,
+                        },
+                    );
+                    // 无论第二次尝试成败，都静默继续（GNU 兼容行为）
+                    Ok(())
+                } else {
+                    Err(CpError::Error(e))
+                }
+            }
+        }
     })?;
 
     cp_handle_preserve(&attr.mode, || -> CopyResult<()> {

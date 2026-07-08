@@ -177,6 +177,7 @@ od = { optional = true, package = "ct_od", path = "../../crates/commands/od" }
 hashsum = { optional = true, package = "ct_hashsum", path = "../../crates/commands/hashsum" }
 stdbuf = { optional = true, package = "ct_stdbuf", path = "../../crates/commands/stdbuf" }
 command_test = { optional = true, package = "ct_test", path = "../../crates/commands/test" }
+walkdir.workspace = true
 
 [dev-dependencies]
 filetime = { workspace = true }

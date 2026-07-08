@@ -1395,6 +1395,10 @@ fn cp_construct_dest_path(
         CpTargetType::Directory => {
             let root = if options.parents {
                 Path::new("")
+            } else if sour_path.to_string_lossy().ends_with("/.")
+                || sour_path.to_string_lossy().ends_with("\\.")
+            {
+                sour_path
             } else {
                 sour_path.parent().unwrap_or(sour_path)
             };
@@ -1426,24 +1430,9 @@ fn copy_source(
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_str = source.as_os_str().to_string_lossy();
-    let source_buf = if source_str.ends_with("/.") || source_str.ends_with("\\.") {
-        // 手动移除末尾的 /. 或 \.，保留前面的路径
-        let new_str = if source_str.ends_with("/.") {
-            &source_str[..source_str.len() - 2] // 移除 "/."
-        } else {
-            &source_str[..source_str.len() - 2] // 移除 "\."
-        };
-        // 处理边界情况：如果裁剪后为空，使用 "." 
-        if new_str.is_empty() {
-            PathBuf::from(".")
-        } else {
-            PathBuf::from(new_str)
-        }
-    } else {
-        source.to_path_buf()
-    };
+    let source_buf = source.to_path_buf();
     let source_path: &Path = &source_buf;
-    
+
     let dest = cp_construct_dest_path(source_path, target, target_type, options)?;
 
     let is_dir = if options.cp_dereference(true) {
@@ -1457,24 +1446,23 @@ fn copy_source(
     if is_dir && target.exists() && target.is_dir() && !options.parents {
         let source_str = source.as_os_str().to_string_lossy();
         let ends_with_dot = source_str.ends_with("/.") || source_str.ends_with("\\.");
-        
+
         if ends_with_dot {
             // 检查源目录是否为空（过滤掉 . 和 ..）
             let is_empty = match fs::read_dir(source) {
-                Ok(entries) => {
-                    entries.filter(|e| {
-                        match e.as_ref() {
-                            Ok(entry) => {
-                                let name = entry.file_name();
-                                name != "." && name != ".."
-                            }
-                            Err(_) => false,
+                Ok(entries) => entries
+                    .filter(|e| match e.as_ref() {
+                        Ok(entry) => {
+                            let name = entry.file_name();
+                            name != "." && name != ".."
                         }
-                    }).next().is_none()
-                }
+                        Err(_) => false,
+                    })
+                    .next()
+                    .is_none(),
                 Err(_) => false,
             };
-            
+
             if is_empty {
                 return Ok(());
             }
@@ -1595,9 +1583,9 @@ pub(crate) fn copy_attributes_with_deref(
             Err(e) => {
                 // 检查是否为权限不足错误（非特权用户无法设置 UID 为 root）
                 let err_str = e.to_string();
-                let is_perm = err_str.contains("Operation not permitted") 
-                    || err_str.contains("EPERM");
-                
+                let is_perm =
+                    err_str.contains("Operation not permitted") || err_str.contains("EPERM");
+
                 if is_perm {
                     // 降级策略——尝试仅保留 GID
                     // 如果 GID 是进程的附加组，即使无法保留 UID，也应保留 GID
@@ -2304,7 +2292,7 @@ fn copy_file(
         if cp_opts.debug {
             println!("skipped '{}'", sour_path.display());
         }
-        
+
         return Ok(());
     }
 
@@ -2446,9 +2434,7 @@ fn copy_file(
 fn handle_no_preserve_mode(cp_opts: &CpOptions, _org_mode: u32) -> u32 {
     let (is_preserve_mode, _) = cp_opts.cp_preserve_mode();
     if !is_preserve_mode {
-        use libc::{
-            S_IRGRP, S_IROTH, S_IRUSR, S_IWUSR, S_IWGRP, S_IWOTH,
-        };
+        use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
         // 无论是否显式 --no-preserve=mode，只要不带 -p，就使用默认权限 (666)
         // 随后由 umask 过滤为 644
         const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;

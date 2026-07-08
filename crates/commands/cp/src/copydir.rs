@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTIoError;
 use ctcore::ct_fs::{
-    CtFileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
+    canonicalize, path_ends_with_terminator, CtFileInformation, MissingHandling, ResolveMode,
 };
 use ctcore::ct_show;
 use ctcore::ct_show_error;
@@ -30,8 +30,8 @@ use indicatif::ProgressBar;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    CopyResult, CpError, CpOptions, copy_attributes, copy_file, copy_link, cp_aligned_ancestors,
-    cp_context_for,
+    copy_attributes, copy_file, copy_link, cp_aligned_ancestors, cp_context_for, CopyResult,
+    CpError, CpOptions,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -263,17 +263,17 @@ fn copy_direntry(
             return Err("cannot overwrite non-directory with directory".into());
         } else {
             fs::create_dir_all(&local_to_target)?;
-            
+
             // 根据 preserve 设置调整临时权限，以通过 parent-perm-race 测试
             // 当只保留 ownership（不保留 mode）时，使用 700 防止竞态条件
             // 当保留 mode 或默认时，使用 755
             #[cfg(unix)]
             {
-                use std::os::unix::fs::PermissionsExt;
                 use crate::CpPreserve;
-                
-                let temp_mode = if !matches!(options.attributes.mode, CpPreserve::Yes {..}) 
-                    && matches!(options.attributes.ownership, CpPreserve::Yes {..}) 
+                use std::os::unix::fs::PermissionsExt;
+
+                let temp_mode = if !matches!(options.attributes.mode, CpPreserve::Yes { .. })
+                    && matches!(options.attributes.ownership, CpPreserve::Yes { .. })
                 {
                     // --preserve=ownership (但不保留 mode): 使用 700，确保 group/other 无权限
                     0o700
@@ -283,7 +283,7 @@ fn copy_direntry(
                 };
                 fs::set_permissions(&local_to_target, fs::Permissions::from_mode(temp_mode))?;
             }
-            
+
             if options.verbose {
                 println!("{}", cp_context_for(&source_relative, &local_to_target));
             }
@@ -436,6 +436,8 @@ pub(crate) fn copy_directory(
         Err(e) => return Err(format!("failed to get current directory {e}").into()),
     };
 
+    let mut dirs_to_preserve = Vec::new();
+
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)
@@ -445,6 +447,10 @@ pub(crate) fn copy_directory(
         match direntry_result {
             Ok(direntry) => {
                 let entry = Entry::new(&context, &direntry, options.no_target_dir)?;
+                if entry.source_absolute.is_dir() && !ends_with_slash_dot(&entry.source_absolute) {
+                    dirs_to_preserve
+                        .push((entry.source_absolute.clone(), entry.local_to_target.clone()));
+                }
                 copy_direntry(
                     progress_bar,
                     entry,
@@ -460,15 +466,20 @@ pub(crate) fn copy_directory(
         }
     }
 
-    // Copy the attributes from the root directory to the target directory.
+    // Apply attributes to all directories we traversed in post-order (deepest first).
+    // This perfectly emulates GNU cp behavior and avoids read-only parent issues.
+    for (src, dest) in dirs_to_preserve.into_iter().rev() {
+        if dest.exists() && dest.is_dir() {
+            copy_attributes(&src, &dest, &options.attributes)?;
+        }
+    }
+
+    // Ancestor directories created by `--parents` were not yielded by WalkDir
     if options.parents {
         let dest = target.join(root.file_name().unwrap());
-        copy_attributes(root, dest.as_path(), &options.attributes)?;
         for (x, y) in cp_aligned_ancestors(root, dest.as_path()) {
             copy_attributes(x, y, &options.attributes)?;
         }
-    } else {
-        copy_attributes(root, target, &options.attributes)?;
     }
 
     Ok(())

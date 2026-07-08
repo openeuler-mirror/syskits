@@ -643,6 +643,8 @@ mod tests {
 
     mod timeout_execution_tests {
         use super::*;
+        use std::os::unix::process::CommandExt;
+        use std::process::Command;
 
         #[test]
         fn test_timeout_normal_exit() {
@@ -734,6 +736,47 @@ mod tests {
             // 进程应该超时并返回124（兼容性要求）
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 124);
+        }
+
+        #[test]
+        fn test_timeout_with_kill_after_and_signal_zero() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: Some(Duration::from_millis(50)),
+                signal: get_ct_signal_by_name_or_value("0").unwrap(),
+                duration: Duration::from_millis(100),
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["sleep".to_string(), "1".to_string()],
+            });
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 137);
+        }
+
+        #[test]
+        fn test_forward_signal_terminates_background_group() {
+            let mut cmd = Command::new("sleep");
+            cmd.arg("30");
+            unsafe {
+                cmd.pre_exec(|| {
+                    if libc::setpgid(0, 0) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+
+            let mut child = cmd.spawn().unwrap();
+            forward_signal_to_monitored_process(child.id() as i32, libc::SIGTERM, false);
+
+            let status = child.wait_or_timeout(Duration::from_secs(2)).unwrap();
+            if status.is_none() {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("child process was not terminated by forwarded SIGTERM");
+            }
+
+            assert_eq!(status.unwrap().signal(), Some(libc::SIGTERM));
         }
     }
 

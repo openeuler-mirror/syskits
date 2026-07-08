@@ -121,6 +121,9 @@ done
 ##### build-gnu.sh 并不是“为了用 GNU coreutils”
 ##### 而是“为了借用 GNU coreutils 的 tests”
 
+# 使用 GNU nproc（兼容 *BSD/macOS）
+NPROC="$(command -v nproc||command -v gnproc)"
+
 # 是否已经构建过GNU coreutils了？
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
@@ -147,10 +150,7 @@ else
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
     # Skip make if possible
-    # Use GNU nproc for *BSD and macOS
-    NPROC="$(command -v nproc||command -v gnproc)"
     test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")"
-    cp -f src/getlimits "${SYSKITS_BUILD_DIR}"
 
     # Handle generated factor tests
     t_first=00
@@ -176,6 +176,10 @@ else
     # 完成GNU的最小化编译后，创建标志文件
     touch gnu-built
 fi
+
+# tests/Coreutils.pm 通过 PATH 调用 getlimits，这里确保每次都可用
+test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")" src/getlimits
+cp -f src/getlimits "${SYSKITS_BUILD_DIR}"
 
 # 劫持GNU coreutils的tests，使其适配syskits coreutils
 # 原本GNU tests的假设：path_prepend_ ./src 优先使用 GNU 自己编译的 src/ls

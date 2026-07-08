@@ -15,15 +15,15 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::fs::File;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show_error;
+use ctcore::Tool;
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::OsString;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use sys_locale::get_locale;
 
 mod line_break;
@@ -202,7 +202,18 @@ fn fmt_process_file<W: ?Sized + Write>(
         BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>)
     } else {
         match File::open(file_name) {
-            Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
+            Ok(f) => {
+                // 打开文件后立即检查是否为目录。
+                // 因为 Unix 允许只读打开目录，但在读取时才会报 EISDIR 错误。
+                // 提前拦截可以防止底层的段落解析器将读取错误误当成 EOF 吞掉。
+                if let Ok(metadata) = f.metadata() {
+                    if metadata.is_dir() {
+                        ct_show_error!("{}: Is a directory", file_name);
+                        return Ok(false);
+                    }
+                }
+                BufReader::new(Box::new(f) as Box<dyn Read + 'static>)
+            }
             Err(e) => {
                 ct_show_error!(
                     "cannot open {} for reading: {}",
@@ -4370,8 +4381,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_long_with_record_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_long_with_record_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -4695,8 +4706,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_group_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_group_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -4769,8 +4780,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_record_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_long_with_record_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -5838,8 +5849,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_group_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_group_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -5912,8 +5923,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_record_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_long_exact_skip_prefix_short_with_record_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -6189,8 +6200,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_group_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_group_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -6220,8 +6231,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_unit_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_unit_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");
@@ -6251,8 +6262,8 @@ mod tests {
         }
 
         #[test]
-        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_record_separator()
-         {
+        fn test_fmt_configs_with_file_skip_prefix_short_exact_skip_prefix_short_with_record_separator(
+        ) {
             let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
             let temp_dir_path = tmp_dir.path();
             let test_file_path = temp_dir_path.join("test_fmt_file");

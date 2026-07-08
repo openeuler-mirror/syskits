@@ -25,6 +25,8 @@ use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::OsString;
 use std::fmt::Display;
 #[cfg(not(windows))]
@@ -681,9 +683,9 @@ impl DuStatPrinter {
 
                         // GNU du 规则 2：如果数值 >= 10，不再保留小数位
                         if val_ceiled >= 10.0 {
-                            return format!("{:.0}{}", val_ceiled, print_unit);
+                            return format!("{val_ceiled:.0}{print_unit}");
                         } else {
-                            return format!("{:.1}{}", val_ceiled, print_unit);
+                            return format!("{val_ceiled:.1}{print_unit}");
                         }
                     }
                 }
@@ -714,7 +716,12 @@ impl DuStatPrinter {
         if let Some(time) = self.time {
             let seconds = du_get_time_secs(time, du_stat)?;
             let du_time = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(seconds));
-            let time_string = du_time.format(&self.time_format).to_string();
+            let time_string = if let Some(fmt) = self.time_format.strip_prefix('+') {
+                du_format_local_time_strftime(seconds, fmt)
+                    .unwrap_or_else(|| du_time.format(fmt).to_string())
+            } else {
+                du_time.format(&self.time_format).to_string()
+            };
             // 格式化并打印文件大小和时间
             print!("{}\t{}\t", self.du_convert_size(size), time_string);
         } else {
@@ -728,6 +735,41 @@ impl DuStatPrinter {
 
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn du_format_local_time_strftime(seconds: u64, fmt: &str) -> Option<String> {
+    let time = ctcore::libc::time_t::try_from(seconds).ok()?;
+    let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
+    let c_format = CString::new(fmt).ok()?;
+    let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
+    if tm_ptr.is_null() {
+        return None;
+    }
+
+    let mut capacity = 128usize;
+    while capacity <= 8192 {
+        let mut buf = vec![0u8; capacity];
+        let written = unsafe {
+            ctcore::libc::strftime(
+                buf.as_mut_ptr() as *mut ctcore::libc::c_char,
+                capacity,
+                c_format.as_ptr(),
+                &tm as *const _,
+            )
+        };
+        if written > 0 {
+            buf.truncate(written);
+            return String::from_utf8(buf).ok();
+        }
+        capacity *= 2;
+    }
+    None
+}
+
+#[cfg(not(unix))]
+fn du_format_local_time_strftime(_seconds: u64, _fmt: &str) -> Option<String> {
+    None
 }
 /**
  * 计算a除以b后的向上取整结果。
@@ -973,6 +1015,12 @@ fn du_get_stat_printer(
     du_time: Option<DuTime>,
     size_format: DuSizeFormat,
 ) -> Result<DuStatPrinter, Box<dyn CTError>> {
+    let time_format = if du_time.is_some() {
+        du_parse_time_style(du_effective_time_style(args_match).as_deref())?.to_string()
+    } else {
+        String::new()
+    };
+
     // 构建统计信息打印器
     let stat_printer = DuStatPrinter {
         max_depth: du_max_depth,
@@ -991,15 +1039,31 @@ fn du_get_stat_printer(
         apparent_size: args_match.get_flag(opt_flags::APPARENT_SIZE)
             || args_match.get_flag(opt_flags::BYTES),
         time: du_time,
-        time_format: du_parse_time_style(
-            args_match
-                .get_one::<String>("time-style")
-                .map(|s| s.as_str()),
-        )?
-        .to_string(),
+        time_format,
         line_ending: CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::NULL)),
     };
     Ok(stat_printer)
+}
+
+fn du_effective_time_style(args_match: &ArgMatches) -> Option<String> {
+    if let Some(style) = args_match.get_one::<String>(opt_flags::TIME_STYLE) {
+        return Some(style.clone());
+    }
+
+    let mut style = env::var("TIME_STYLE").ok()?;
+    if style == "locale" {
+        return Some("long-iso".to_string());
+    }
+    if style.starts_with('+') {
+        if let Some(pos) = style.find('\n') {
+            style.truncate(pos);
+        }
+        return Some(style);
+    }
+    while let Some(rest) = style.strip_prefix("posix-") {
+        style = rest.to_string();
+    }
+    Some(style)
 }
 
 fn du_get_size_format(args_match: &ArgMatches) -> Result<DuSizeFormat, Box<dyn CTError>> {
@@ -1067,6 +1131,7 @@ fn du_parse_time_style(option: Option<&str>) -> CTResult<&str> {
             "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
             "long-iso" => Ok("%Y-%m-%d %H:%M"),
             "iso" => Ok("%Y-%m-%d"),
+            _ if s.starts_with('+') => Ok(s),
             _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
         },
         None => Ok("%Y-%m-%d %H:%M"),
@@ -9035,6 +9100,94 @@ mod tests_fn {
         let time = du_get_time(&matches);
 
         assert_eq!(time, None);
+    }
+
+    #[test]
+    fn test_parse_time_style_custom_format() {
+        assert_eq!(
+            du_parse_time_style(Some("+%Y-%m-%d %H:%M:%S %z (%Z)")).unwrap(),
+            "+%Y-%m-%d %H:%M:%S %z (%Z)"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_du_format_local_time_strftime_percent_z() {
+        let out = du_format_local_time_strftime(0, "%Z").unwrap();
+        assert!(!out.is_empty());
+        assert!(!out.contains(':'));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_time_style_from_env_when_time_enabled() {
+        static TIME_STYLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = TIME_STYLE_LOCK
+            .lock()
+            .expect("failed to lock TIME_STYLE test mutex");
+        let saved_time_style = std::env::var("TIME_STYLE").ok();
+
+        unsafe {
+            std::env::set_var("TIME_STYLE", "iso");
+        }
+
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let args = vec![ctcore::ct_util_name(), dir, "--time"];
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+        let time = du_get_time(&matches);
+        let size_format = du_get_size_format(&matches).unwrap();
+        let stat_printer =
+            du_get_stat_printer(&matches, summarize, max_depth, time, size_format).unwrap();
+
+        assert_eq!(stat_printer.time_format, "%Y-%m-%d");
+
+        unsafe {
+            match saved_time_style.as_deref() {
+                Some(v) => std::env::set_var("TIME_STYLE", v),
+                None => std::env::remove_var("TIME_STYLE"),
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_time_style_ignored_without_time() {
+        static TIME_STYLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = TIME_STYLE_LOCK
+            .lock()
+            .expect("failed to lock TIME_STYLE test mutex");
+        let saved_time_style = std::env::var("TIME_STYLE").ok();
+
+        unsafe {
+            std::env::set_var("TIME_STYLE", "invalid-style");
+        }
+
+        let temp_dir = Builder::new()
+            .prefix("tests_ct_main_dir")
+            .tempdir()
+            .unwrap();
+        let dir = temp_dir.path().to_str().unwrap();
+        let args = vec![ctcore::ct_util_name(), dir];
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+        let summarize = matches.get_flag(opt_flags::SUMMARIZE);
+        let max_depth = du_get_max_depth(&matches, summarize).unwrap();
+        let time = du_get_time(&matches);
+        let size_format = du_get_size_format(&matches).unwrap();
+
+        assert!(du_get_stat_printer(&matches, summarize, max_depth, time, size_format).is_ok());
+
+        unsafe {
+            match saved_time_style.as_deref() {
+                Some(v) => std::env::set_var("TIME_STYLE", v),
+                None => std::env::remove_var("TIME_STYLE"),
+            }
+        }
     }
 
     #[test]

@@ -607,9 +607,25 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
 
-    let matches = ct_app()
-        .try_get_matches_from(args)
-        .map_err(|e| uniq_map_clap_errors(&e))?;
+    let matches = match ct_app().try_get_matches_from(args) {
+        Ok(matches) => matches,
+        Err(err) => {
+            let mut command = ct_app();
+            return match err.kind() {
+                ErrorKind::DisplayHelp => {
+                    command.print_long_help()?;
+                    println!();
+                    Ok(())
+                }
+                ErrorKind::DisplayVersion => {
+                    print!("{}", command.render_version());
+                    println!();
+                    Ok(())
+                }
+                _ => Err(uniq_map_clap_errors(&err)),
+            };
+        }
+    };
 
     let files = matches.get_many::<OsString>(UNIQ_ARG_FILES);
 
@@ -728,8 +744,22 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .infer_long_args(true)
         .after_help(t!("uniq.after_help"))
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .help("display this help and exit")
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .help("output version information and exit")
+                .action(ArgAction::Version),
+        )
         .args(args)
 }
 
@@ -843,7 +873,7 @@ mod tests {
         // Test execute method with help flag (should work)
         let args = vec![OsString::from("uniq"), OsString::from("--help")];
         let result = tool.execute(&args);
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[cfg(test)]
@@ -2584,7 +2614,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--version"];
             let result = uniq_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2599,7 +2629,7 @@ mod tests {
         fn test_ct_main_execution_help() {
             let args = [ctcore::ct_util_name(), "--help"];
             let result = uniq_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2989,7 +3019,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]

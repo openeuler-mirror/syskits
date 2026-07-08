@@ -13,7 +13,10 @@
 //! 这在需要将输出保存到文件并同时查看终端输出时非常有用。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, builder::PossibleValue, crate_version};
+use clap::{
+    Arg, ArgAction, Command, builder::PossibleValue, crate_version,
+    error::ErrorKind as ClapErrorKind,
+};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -22,7 +25,7 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, sink, stdout};
+use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdout};
 use std::path::PathBuf;
 use sys_locale::get_locale;
 
@@ -30,7 +33,7 @@ use sys_locale::get_locale;
 use ctcore::ct_signals::{enable_pipe_errors, ignore_interrupts};
 
 #[cfg(unix)]
-use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 #[cfg(unix)]
 use std::os::fd::AsFd;
 
@@ -73,7 +76,26 @@ enum OutputErrorMode {
 pub fn tee_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let args: Vec<OsString> = args.collect();
+    let matches = match ct_app().try_get_matches_from(args) {
+        Ok(matches) => matches,
+        Err(err) => {
+            let mut command = ct_app();
+            return match err.kind() {
+                ClapErrorKind::DisplayHelp => {
+                    command.print_long_help()?;
+                    println!();
+                    Ok(())
+                }
+                ClapErrorKind::DisplayVersion => {
+                    print!("{}", command.render_version());
+                    println!();
+                    Ok(())
+                }
+                _ => Err(err.into()),
+            };
+        }
+    };
     let options = TeeOptions::new(&matches);
 
     match run_tee(&options) {
@@ -117,13 +139,13 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
     #[cfg(unix)]
     {
         if let Err(e) = copy_with_poll(&mut output) {
-            if e.kind() != ErrorKind::Other {
+            if e.kind() != IoErrorKind::Other {
                 return Err(e);
             }
             // ErrorKind::Other means all outputs closed
             // Check if any errors occurred (e.g., pipe errors in warn mode)
             if output.error_occurred() {
-                return Err(Error::from(ErrorKind::Other));
+                return Err(Error::from(IoErrorKind::Other));
             }
         }
     }
@@ -133,13 +155,13 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
             inner: Box::new(stdin()) as Box<dyn Read>,
         };
         match std::io::copy(&mut input, &mut output) {
-            Err(e) if e.kind() != ErrorKind::Other => return Err(e),
+            Err(e) if e.kind() != IoErrorKind::Other => return Err(e),
             _ => (),
         }
     }
 
     if output.flush().is_err() || output.error_occurred() {
-        Err(Error::from(ErrorKind::Other))
+        Err(Error::from(IoErrorKind::Other))
     } else {
         Ok(())
     }
@@ -160,14 +182,19 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
         // Poll stdin for readability and stdout for errors
         let mut poll_fds = [
             PollFd::new(stdin_fd, PollFlags::POLLIN),
-            PollFd::new(stdout_fd, PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL),
+            PollFd::new(
+                stdout_fd,
+                PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL,
+            ),
         ];
 
         match poll(&mut poll_fds, PollTimeout::NONE) {
             Ok(_) => {
                 // Check if stdout has error/hangup
                 if let Some(revents) = poll_fds[1].revents() {
-                    if revents.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL) {
+                    if revents
+                        .intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
+                    {
                         // Output closed, write to remaining outputs and exit
                         let _ = output.flush();
                         return Ok(());
@@ -184,7 +211,7 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                             }
                             Ok(n) => {
                                 if let Err(e) = output.write_all(&buf[..n]) {
-                                    if e.kind() == ErrorKind::Other {
+                                    if e.kind() == IoErrorKind::Other {
                                         // All outputs closed
                                         return Ok(());
                                     }
@@ -203,8 +230,8 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                 }
             }
             Err(nix::errno::Errno::EINTR) => continue,
-            Err(e) => {
-                return Err(Error::from(ErrorKind::Other));
+            Err(_e) => {
+                return Err(Error::from(IoErrorKind::Other));
             }
         }
     }
@@ -213,10 +240,10 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
 #[cfg(unix)]
 fn setup_signal_handlers(options: &TeeOptions) -> Result<()> {
     if options.is_ignore_interrupts {
-        ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
+        ignore_interrupts().map_err(|_| Error::from(IoErrorKind::Other))?;
     }
     if options.output_error.is_none() {
-        enable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
+        enable_pipe_errors().map_err(|_| Error::from(IoErrorKind::Other))?;
     }
     Ok(())
 }
@@ -289,8 +316,22 @@ pub fn ct_app() -> Command {
         .version(crate_version!())
         .about(t!("tee.about"))
         .override_usage(t!("tee.usage"))
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .after_help(t!("tee.after_help"))
         .infer_long_args(true)
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .help("display this help and exit")
+                .action(ArgAction::Help),
+        )
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .help("output version information and exit")
+                .action(ArgAction::Version),
+        )
         .args(args)
 }
 
@@ -354,7 +395,7 @@ fn process_error(
             Ok(())
         }
         Some(OutputErrorMode::WarnNoPipe) | None => {
-            if f.kind() != ErrorKind::BrokenPipe {
+            if f.kind() != IoErrorKind::BrokenPipe {
                 ct_show_error!("{}: {}", writer.name.maybe_quote(), f);
                 *ignored_errors += 1;
             }
@@ -365,7 +406,7 @@ fn process_error(
             Err(f)
         }
         Some(OutputErrorMode::ExitNoPipe) => {
-            if f.kind() == ErrorKind::BrokenPipe {
+            if f.kind() == IoErrorKind::BrokenPipe {
                 Ok(())
             } else {
                 ct_show_error!("{}: {}", writer.name.maybe_quote(), f);
@@ -386,7 +427,7 @@ impl Write for MultiWriter {
             match result {
                 Err(f) => {
                     // WouldBlock is a temporary error, don't remove the writer
-                    if f.kind() == ErrorKind::WouldBlock {
+                    if f.kind() == IoErrorKind::WouldBlock {
                         would_block_occurred = true;
                         return true;
                     }
@@ -405,10 +446,10 @@ impl Write for MultiWriter {
             Err(e)
         } else if would_block_occurred {
             // Return WouldBlock to let the caller retry
-            Err(Error::from(ErrorKind::WouldBlock))
+            Err(Error::from(IoErrorKind::WouldBlock))
         } else if self.writers.is_empty() {
             // 标准库永远不会引发此错误类型，因此我们可以使用它来提前终止 `copy`
-            Err(Error::from(ErrorKind::Other))
+            Err(Error::from(IoErrorKind::Other))
         } else {
             Ok(buf.len())
         }
@@ -424,7 +465,7 @@ impl Write for MultiWriter {
             match result {
                 Err(f) => {
                     // WouldBlock is a temporary error, don't remove the writer
-                    if f.kind() == ErrorKind::WouldBlock {
+                    if f.kind() == IoErrorKind::WouldBlock {
                         would_block_occurred = true;
                         return true;
                     }
@@ -442,7 +483,7 @@ impl Write for MultiWriter {
         if let Some(e) = aborted {
             Err(e)
         } else if would_block_occurred {
-            Err(Error::from(ErrorKind::WouldBlock))
+            Err(Error::from(IoErrorKind::WouldBlock))
         } else {
             Ok(())
         }
@@ -512,10 +553,10 @@ mod tests {
         let command = tool.command();
         assert!(command.get_name().contains("tee"));
 
-        // Test execute method with help flag (should work)
+        // Test execute method with help flag (should exit successfully)
         let args = vec![OsString::from("tee"), OsString::from("--help")];
         let result = tool.execute(&args);
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]

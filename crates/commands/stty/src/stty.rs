@@ -1183,6 +1183,8 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .after_help(after_help)
         .infer_long_args(true)
+        .color(clap::ColorChoice::Never)
+        .term_width(80) 
         .args(&args)
 }
 

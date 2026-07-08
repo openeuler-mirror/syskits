@@ -475,22 +475,122 @@ fn get_padded_number(
 fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result<()> {
     let delimiter = options.delimiter.as_ref().unwrap();
 
-    for (n, field) in (1..).zip(s.split(delimiter)) {
-        let is_field_selected = ctcore::ct_ranges::contain(&options.fields, n);
+    let mut out = String::new();
 
-        // 在第二个及其后的字段前打印分隔符
-        if n > 1 {
-            print!("{delimiter}");
+    if delimiter.is_empty() {
+        if ctcore::ct_ranges::contain(&options.fields, 1) {
+            out.push_str(&numfmt_format_string(s.trim_start(), options, None)?);
+        } else {
+            out.push_str(s);
         }
+    } else {
+        for (n, field) in (1..).zip(s.split(delimiter)) {
+            let is_field_selected = ctcore::ct_ranges::contain(&options.fields, n);
+
+            // 在第二个及其后的字段前打印分隔符
+            if n > 1 {
+                out.push_str(delimiter);
+            }
+
+            if is_field_selected {
+                out.push_str(&numfmt_format_string(field.trim_start(), options, None)?);
+            } else {
+                // 打印未选择的字段，不进行转换
+                out.push_str(field);
+            }
+        }
+    }
+
+    if options.zero_terminated {
+        out.push('\0');
+    } else {
+        out.push('\n');
+    }
+
+    print!("{out}");
+    Ok(())
+}
+
+fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
+    let mut out = String::new();
+
+    for (n, (prefix, field)) in (1..).zip(NumfmtWhitespaceSplitter { s: Some(s) }) {
+        let is_field_selected = ctcore::ct_ranges::contain(&numfmt_configs.fields, n);
 
         if is_field_selected {
-            print!(
-                "{}",
-                numfmt_format_string(field.trim_start(), options, None)?
-            );
+            let is_empty_prefix = prefix.is_empty();
+
+            // 在第二个及其后的字段前打印分隔符
+            let prefix_str = if n > 1 {
+                out.push(' ');
+                &prefix[1..]
+            } else {
+                prefix
+            };
+
+            let implicit_padding = if !is_empty_prefix && numfmt_configs.padding == 0 {
+                Some((prefix_str.len() + field.len()) as isize)
+            } else {
+                None
+            };
+
+            out.push_str(&numfmt_format_string(
+                field,
+                numfmt_configs,
+                implicit_padding,
+            )?);
         } else {
             // 打印未选择的字段，不进行转换
-            print!("{field}");
+            if numfmt_configs.zero_terminated {
+                for ch in prefix.chars() {
+                    if ch.is_whitespace() {
+                        out.push(' ');
+                    } else {
+                        out.push(ch);
+                    }
+                }
+            } else {
+                out.push_str(prefix);
+            }
+            out.push_str(field);
+        }
+    }
+
+    if numfmt_configs.zero_terminated {
+        out.push('\0');
+    } else {
+        out.push('\n');
+    }
+
+    print!("{out}");
+    Ok(())
+}
+
+fn numfmt_format_and_print_delimited_abort(s: &str, options: &NumfmtConfigs) -> Result<()> {
+    let delimiter = options.delimiter.as_ref().unwrap();
+
+    if delimiter.is_empty() {
+        if ctcore::ct_ranges::contain(&options.fields, 1) {
+            print!("{}", numfmt_format_string(s.trim_start(), options, None)?);
+        } else {
+            print!("{s}");
+        }
+    } else {
+        for (n, field) in (1..).zip(s.split(delimiter)) {
+            let is_field_selected = ctcore::ct_ranges::contain(&options.fields, n);
+
+            if n > 1 {
+                print!("{delimiter}");
+            }
+
+            if is_field_selected {
+                print!(
+                    "{}",
+                    numfmt_format_string(field.trim_start(), options, None)?
+                );
+            } else {
+                print!("{field}");
+            }
         }
     }
 
@@ -503,14 +603,13 @@ fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result
     Ok(())
 }
 
-fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
+fn numfmt_format_and_print_whitespace_abort(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
     for (n, (prefix, field)) in (1..).zip(NumfmtWhitespaceSplitter { s: Some(s) }) {
         let is_field_selected = ctcore::ct_ranges::contain(&numfmt_configs.fields, n);
 
         if is_field_selected {
             let is_empty_prefix = prefix.is_empty();
 
-            // 在第二个及其后的字段前打印分隔符
             let prefix_str = if n > 1 {
                 print!(" ");
                 &prefix[1..]
@@ -528,8 +627,16 @@ fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -
                 "{}",
                 numfmt_format_string(field, numfmt_configs, implicit_padding)?
             );
+        } else if numfmt_configs.zero_terminated {
+            for ch in prefix.chars() {
+                if ch.is_whitespace() {
+                    print!(" ");
+                } else {
+                    print!("{ch}");
+                }
+            }
+            print!("{field}");
         } else {
-            // 打印未选择的字段，不进行转换
             print!("{prefix}{field}");
         }
     }
@@ -552,6 +659,14 @@ pub fn numfmt_format_and_print(s: &str, numfmt_configs: &NumfmtConfigs) -> Resul
         numfmt_format_and_print_delimited(s, numfmt_configs)
     } else {
         numfmt_format_and_print_whitespace(s, numfmt_configs)
+    }
+}
+
+pub fn numfmt_format_and_print_abort(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
+    if numfmt_configs.delimiter.is_some() {
+        numfmt_format_and_print_delimited_abort(s, numfmt_configs)
+    } else {
+        numfmt_format_and_print_whitespace_abort(s, numfmt_configs)
     }
 }
 

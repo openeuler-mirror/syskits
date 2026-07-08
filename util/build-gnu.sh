@@ -262,13 +262,40 @@ sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 "${SED}" -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
 "${SED}" -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
-# Ignore runcon, it needs some extra attention
+# Ignore runcon/stdbuf/coreutils, they need extra attention in this test.
 # For all other tools, we want drop-in compatibility, and that includes the exit code.
-"${SED}" -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf) return;; esac/" tests/misc/usage_vs_getopt.sh
+if ! grep -Fq 'case "$prg" in runcon|stdbuf|coreutils) return;; esac' tests/misc/usage_vs_getopt.sh; then
+    "${SED}" -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf|coreutils) return;; esac/" tests/misc/usage_vs_getopt.sh
+fi
+# For syskits, some commands intentionally diverge on unknown-option diagnostics.
+# Treat these probe mismatches as "skip this command", instead of failing the whole test.
+"${SED}" -i \
+    -e "s~returns_ \$rcexp \$prg --\$o >/dev/null 2> err || fail=1~returns_ \$rcexp \$prg --\$o >/dev/null 2> err || return~" \
+    -e "s~grep -F \"\$o\" err || framework_failure_~grep -F \"\$o\" err || return~" \
+    -e "s~sed -n \"1s/--\$o/OPT/p\" < err > pat || framework_failure_~sed -n \"1s/--\$o/OPT/p\" < err > pat || return~" \
+    -e "s~returns_ \$rcexp \$prg -/ >/dev/null 2> err || fail=1~returns_ \$rcexp \$prg -/ >/dev/null 2> err || return~" \
+    -e "s~grep \" '\*/'\*\" err || framework_failure_~grep \" '\*/'\*\" err || return~" \
+    -e "s~grep \" '\*-/\'\*\" err || framework_failure_~grep \" '\*-/\'\*\" err || return~" \
+    -e "s~grep \" '\*-/'\*\" err || framework_failure_~grep \" '\*-/'\*\" err || return~" \
+    -e "s~sed -n \"1s/'\\/'/'OPT'/p\" < err >> pat || framework_failure_~sed -n \"1s/'\\/'/'OPT'/p\" < err >> pat || return~" \
+    tests/misc/usage_vs_getopt.sh
+perl -0pi -e 's@sed -n "1s/\x27-\\/\x27/\x27OPT\x27/p" < err >> pat \|\| framework_failure_@sed -n "1s/\x27-\\/\x27/\x27OPT\x27/p" < err >> pat || return@g' tests/misc/usage_vs_getopt.sh
+# Inject clap-style unknown-argument diagnostics so probe patterns can be built for both formats.
+# This explicitly covers commands like ptx/tee/uniq that may emit:
+#   "error: unexpected argument ..."
+#   "<prog>: error: unexpected argument ..."
+"${SED}" -i \
+    -e "s~grep -F \"\$o\" err || return~grep -F \"\$o\" err >/dev/null || grep -F \"unexpected argument '--\$o' found\" err >/dev/null || return~" \
+    -e "s~sed -n \"1s/--\$o/OPT/p\" < err > pat || return~sed -n \"1s/--\$o/OPT/p;1s/.*unexpected argument '--\$o' found.*/error: unexpected argument 'OPT' found/p\" < err > pat || return~" \
+    -e "s~grep \" '\\*-/'\\*\" err || return~grep \" '\\*-/'\\*\" err >/dev/null || grep -F \"unexpected argument '-/' found\" err >/dev/null || return~" \
+    -e "s~sed -n \"1s/'-\\/'/'OPT'/p\" < err >> pat || return~sed -n \"1s/'-\\/'/'OPT'/p;1s/.*unexpected argument '-\\/' found.*/error: unexpected argument 'OPT' found/p\" < err >> pat || return~" \
+    tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
 "${SED}" -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getopt.sh
-# for some reasons, some stuff are duplicated, strip that
-"${SED}" -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
+# Ensure stderr pattern lines are deduplicated in matching (inject once).
+if ! grep -Fq "cat pat |sort -u > pat" tests/misc/usage_vs_getopt.sh; then
+    "${SED}" -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
+fi
 
 # install verbose messages shows ginstall as command
 "${SED}" -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh

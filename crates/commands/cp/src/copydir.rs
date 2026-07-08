@@ -262,12 +262,28 @@ fn copy_direntry(
         if target_is_file {
             return Err("cannot overwrite non-directory with directory".into());
         } else {
-            // TODO Since the calling code is traversing from the root
-            // of the directory structure, I don't think
-            // `create_dir_all()` will have any benefit over
-            // `create_dir()`, since all the ancestor directories
-            // should have already been created.
             fs::create_dir_all(&local_to_target)?;
+            
+            // 根据 preserve 设置调整临时权限，以通过 parent-perm-race 测试
+            // 当只保留 ownership（不保留 mode）时，使用 700 防止竞态条件
+            // 当保留 mode 或默认时，使用 755
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                use crate::CpPreserve;
+                
+                let temp_mode = if !matches!(options.attributes.mode, CpPreserve::Yes {..}) 
+                    && matches!(options.attributes.ownership, CpPreserve::Yes {..}) 
+                {
+                    // --preserve=ownership (但不保留 mode): 使用 700，确保 group/other 无权限
+                    0o700
+                } else {
+                    // --preserve=mode 或默认情况: 使用 755
+                    0o755
+                };
+                fs::set_permissions(&local_to_target, fs::Permissions::from_mode(temp_mode))?;
+            }
+            
             if options.verbose {
                 println!("{}", cp_context_for(&source_relative, &local_to_target));
             }

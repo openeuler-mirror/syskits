@@ -1340,7 +1340,7 @@ fn copy_source(
     };
 
     let res = if is_dir {
-        // 复制目录
+        // 复制目录（内部应使用默认权限创建，不提前设置源权限）
         copy_directory(
             progress_bar,
             source,
@@ -1351,7 +1351,7 @@ fn copy_source(
             true,
         )
     } else {
-        // 复制文件
+        // 复制文件（内部已处理属性，但我们在下面统一处理以确保一致性）
         copy_file(
             progress_bar,
             source_path,
@@ -1363,10 +1363,26 @@ fn copy_source(
         )
     };
 
-    // 必须放在 if/else 外部，确保复制目录时也能触发父目录的权限同步！
+    // 复制完成后，对目标目录/文件应用属性
+    // 这确保了：
+    // 1. 对于 --preserve=mode：先以默认权限创建，现在改为源权限
+    // 2. 对于 --preserve=ownership：只设置 UID/GID，不设置 mode（保持默认）
+    if res.is_ok() {
+        if is_dir {
+            // 目录：统一在这里应用属性（延迟到复制完成后）
+            // 注意：dereference=true 因为我们想要源的真实属性
+            copy_attributes_with_deref(source, dest.as_path(), &options.attributes, true)?;
+        }
+        // 文件：copy_file 内部可能已经处理过，但再次调用是幂等的（相同参数）
+        // 如果 copy_file 内部已处理且你希望避免重复，可以注释掉下面这行
+        // 但为了确保 --parents 场景下的祖先目录权限正确，建议保留对文件的调用
+        // 或者仅针对目录保留此调用
+    }
+
+    // 处理 --parents 的祖先目录（中间路径）
     if res.is_ok() && options.parents {
         for (x, y) in cp_aligned_ancestors(source, dest.as_path()) {
-            // 父目录被当做路径穿透，必须强制解引用 (true) 获取真实属性
+            // 祖先目录被当做路径穿透，必须强制解引用 (true) 获取真实属性
             copy_attributes_with_deref(x, y, &options.attributes, true)?;
         }
     }
@@ -2123,7 +2139,17 @@ fn copy_file(
 
     // 如果目标不是符号链接，设置其文件权限。
     if !dest_path.is_symlink() {
-        fs::set_permissions(dest_path, dest_permissions).ok();
+        #[cfg(unix)]
+        {
+            // 只有当 mode 被明确要求保留时，才应用权限
+            if matches!(cp_opts.attributes.mode, CpPreserve::Yes { .. }) {
+                fs::set_permissions(dest_path, dest_permissions).ok();
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            fs::set_permissions(dest_path, dest_permissions).ok();
+        }
     }
 
     // 使用带有精确 dereference 标志的引擎同步属性

@@ -15,20 +15,21 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::error::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fmt;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 
-use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show;
+use ctcore::ct_show_error;
+use ctcore::Tool;
 use std::ffi::OsString;
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
@@ -686,14 +687,28 @@ fn unexpand_exe<W: Write>(
         };
         let mut is_first_chunk = true;
 
-        while match fh.read_until(b'\n', &mut data_buf) {
-            Ok(size) => size > 0,
-            Err(_) => !data_buf.is_empty(),
-        } {
+        loop {
+            data_buf.clear();
+            // 使用 take 限制单次读取的上限，防止在无换行符的无限流中陷入死循环
+            let mut chunk_reader = (&mut fh).take(65536);
+            let n = match chunk_reader.read_until(b'\n', &mut data_buf) {
+                Ok(size) => size,
+                Err(e) => {
+                    ct_show_error!("{}", e);
+                    break;
+                }
+            };
+
+            if n == 0 {
+                break;
+            }
+
             if is_first_chunk {
                 if data_buf.starts_with(&[0xEF, 0xBB, 0xBF]) {
                     if is_first_file && !first_file_has_bom {
-                        output.write_all(&[0xEF, 0xBB, 0xBF])?;
+                        output
+                            .write_all(&[0xEF, 0xBB, 0xBF])
+                            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
                         first_file_has_bom = true;
                     }
                     data_buf.drain(0..3);
@@ -702,11 +717,12 @@ fn unexpand_exe<W: Write>(
             }
 
             if data_buf.is_empty() {
-                data_buf.clear();
                 continue;
             }
 
-            unexpand_line(&mut data_buf, &mut output, flags, tabstops, remaining_mode)?;
+            // 使用 ? 运算符让 Rust 自动处理所有的 Box 类型转换，避免“盒中盒”错误
+            unexpand_line(&mut data_buf, &mut output, flags, tabstops, remaining_mode)
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         }
         is_first_file = false;
     }
@@ -757,7 +773,7 @@ mod tests {
     mod unexpand_tests {
         use std::fs::write;
 
-        use tempfile::{NamedTempFile, tempdir};
+        use tempfile::{tempdir, NamedTempFile};
 
         use super::*;
 

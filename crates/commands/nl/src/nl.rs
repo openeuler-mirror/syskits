@@ -484,17 +484,39 @@ where
     W: std::io::Write,
 {
     let mut current_numbering_style = &flags.body_numbering;
+    let mut buf = Vec::new();
 
-    for line in reader.lines() {
-        let line = line.map_err_context(|| "could not read line".to_string())?;
+    loop {
+        buf.clear();
+        // 使用 read_until 直接读取字节流，不再使用带 UTF-8 洁癖的 lines() 迭代器
+        let n = reader
+            .read_until(b'\n', &mut buf)
+            .map_err_context(|| "could not read line".to_string())?;
 
-        if line.is_empty() {
+        if n == 0 {
+            break; // EOF
+        }
+
+        // 计算剥离了 \r 和 \n 的有效数据长度，用于逻辑判断
+        let mut line_len = buf.len();
+        if line_len > 0 && buf[line_len - 1] == b'\n' {
+            line_len -= 1;
+            if line_len > 0 && buf[line_len - 1] == b'\r' {
+                line_len -= 1;
+            }
+        }
+        let is_empty = line_len == 0;
+
+        if is_empty {
             flags.stats.consecutive_empty_lines += 1;
         } else {
             flags.stats.consecutive_empty_lines = 0;
         };
 
-        let new_numbering_style = match NlSectionDelimiter::parse(&line, &flags.section_delimiter) {
+        // 将字节流进行容错转换，以便进行字符串比较和正则匹配
+        let lossy_line = String::from_utf8_lossy(&buf[..line_len]);
+
+        let new_numbering_style = match NlSectionDelimiter::parse(&lossy_line, &flags.section_delimiter) {
             Some(NlSectionDelimiter::Header) => Some(&flags.header_numbering),
             Some(NlSectionDelimiter::Body) => Some(&flags.body_numbering),
             Some(NlSectionDelimiter::Footer) => Some(&flags.footer_numbering),
@@ -512,7 +534,7 @@ where
 
         let is_line_numbered = match current_numbering_style {
             NlNumberingStyle::All => {
-                if line.is_empty() {
+                if is_empty {
                     if flags.join_blank_lines > 0 {
                         flags.stats.consecutive_empty_lines % flags.join_blank_lines == 0
                     } else {
@@ -522,29 +544,43 @@ where
                     true
                 }
             }
-            NlNumberingStyle::NonEmpty => !line.is_empty(),
+            NlNumberingStyle::NonEmpty => !is_empty,
             NlNumberingStyle::None => false,
-            NlNumberingStyle::Regex(re) => re.is_match(&line),
+            NlNumberingStyle::Regex(re) => re.is_match(&lossy_line),
         };
 
         if is_line_numbered {
             let Some(line_number) = flags.stats.line_number else {
                 return Err(CtSimpleError::new(1, "line number overflow"));
             };
-            writeln!(
+            
+            // 写入行号和分隔符
+            write!(
                 writer,
-                "{}{}{}",
+                "{}{}",
                 flags.number_format.format(line_number, flags.number_width),
-                flags.number_separator,
-                line
+                flags.number_separator
             )?;
+            
+            // 直接原封不动地写入原始字节流（包含潜在的非 UTF-8 字符和换行符）
+            writer.write_all(&buf)?;
+            
+            // 如果最后一行没有换行符，补上一个
+            if buf.last() != Some(&b'\n') {
+                writeln!(writer)?;
+            }
+
             match line_number.checked_add(flags.line_increment) {
                 Some(new_line_number) => flags.stats.line_number = Some(new_line_number),
                 None => flags.stats.line_number = None,
             }
         } else {
             let spaces = " ".repeat(flags.number_width + 1);
-            writeln!(writer, "{spaces}{line}")?;
+            write!(writer, "{spaces}")?;
+            writer.write_all(&buf)?;
+            if buf.last() != Some(&b'\n') {
+                writeln!(writer)?;
+            }
         }
     }
     Ok(())

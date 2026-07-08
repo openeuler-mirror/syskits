@@ -41,7 +41,7 @@ const PR_FILE_STDIN: &str = "-";
 const PR_READ_BUFFER_SIZE: usize = 1024 * 64;
 const PR_DEFAULT_COLUMN_WIDTH: usize = 72;
 const PR_DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
-const PR_DEFAULT_COLUMN_SEPARATOR: &char = &PR_TAB;
+const PR_DEFAULT_COLUMN_SEPARATOR: &char = &' ';
 const PR_FF: u8 = 0x0C_u8;
 // 根据locale选择时间格式
 fn get_pr_date_time_format() -> &'static str {
@@ -612,6 +612,19 @@ fn pr_build_options(
 
     let is_pad_columns =
         !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) && !is_join_lines;
+    let expand_tabs = parse_tab_args(arg_matches, "expand-tabs");
+    let expand_tabs =
+        if columns_to_print > 1 && expand_tabs.is_none() && col_sep_for_printing != "\t" {
+            Some((PR_TAB, 8))
+        } else {
+            expand_tabs
+        };
+    let output_tabs = parse_tab_args(arg_matches, "output-tabs");
+    let output_tabs = if columns_to_print > 1 {
+        output_tabs.or(Some((PR_TAB, 8)))
+    } else {
+        output_tabs
+    };
 
     Ok(PrOutputOptions {
         number,
@@ -643,8 +656,8 @@ fn pr_build_options(
         is_omit_pagination: arg_matches.get_flag("omit-pagination"),
         is_pad_columns,
         line_separator: "\n".to_string(),
-        expand_tabs: parse_tab_args(arg_matches, "expand-tabs"),
-        output_tabs: parse_tab_args(arg_matches, "output-tabs"),
+        expand_tabs,
+        output_tabs,
     })
 }
 
@@ -722,12 +735,14 @@ fn parse_line_width(
     if is_join_lines {
         None
     } else if columns_to_print > 1 {
-        Some(
-            column_mode_options
-                .as_ref()
-                .map(|i| i.width)
-                .unwrap_or(PR_DEFAULT_COLUMN_WIDTH),
-        )
+        page_width.or_else(|| {
+            Some(
+                column_mode_options
+                    .as_ref()
+                    .map(|i| i.width)
+                    .unwrap_or(PR_DEFAULT_COLUMN_WIDTH),
+            )
+        })
     } else {
         page_width
     }
@@ -753,14 +768,16 @@ fn parse_col_sep_for_printing(
     };
 
     // First try the column separator explicitly
-    if let Some(sep) = arg_matches.get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
-        return sep.to_string();
-    } else if let Some(sep) = arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
-        return sep.to_string();
-    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
-        || arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
-    {
-        return "".to_string();
+    if arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
+        return arg_matches
+            .get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            .cloned()
+            .unwrap_or_default();
+    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
+        return arg_matches
+            .get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            .cloned()
+            .unwrap_or_else(|| PR_TAB.to_string());
     }
 
     column_mode_options
@@ -843,12 +860,19 @@ fn parse_page_width(arg_matches: &ArgMatches) -> Result<Option<usize>, PrError> 
 }
 
 fn parse_column_separator(arg_matches: &ArgMatches) -> String {
-    match arg_matches.get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
-        Some(x) => Some(x),
-        None => arg_matches.get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR),
+    if arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR) {
+        arg_matches
+            .get_one::<String>(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+            .cloned()
+            .unwrap_or_default()
+    } else if arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) {
+        arg_matches
+            .get_one::<String>(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            .cloned()
+            .unwrap_or_else(|| PR_TAB.to_string())
+    } else {
+        PR_DEFAULT_COLUMN_SEPARATOR.to_string()
     }
-    .map(ToString::to_string)
-    .unwrap_or_else(|| PR_DEFAULT_COLUMN_SEPARATOR.to_string())
 }
 
 fn parse_column_width(arg_matches: &ArgMatches) -> Result<usize, PrError> {
@@ -4527,8 +4551,27 @@ mod tests {
             );
             assert_eq!(result, None);
 
-            // 场景2: columns_to_print > 1，应该使用 column_mode_options 的宽度
+            // 场景2: columns_to_print > 1 且指定了 page_width，优先使用 page_width
             let page_width = Some(80);
+            let column_mode_options = Some(PrColumnModeOptions {
+                width: 40,
+                columns: 2,
+                column_separator: "\t".to_string(),
+                is_across_mode: false,
+            });
+            let is_join_lines = false;
+            let columns_to_print = 2;
+
+            let result = parse_line_width(
+                page_width,
+                &column_mode_options,
+                is_join_lines,
+                columns_to_print,
+            );
+            assert_eq!(result, Some(80));
+
+            // 场景3: columns_to_print > 1 且 page_width 未指定，使用 column_mode_options 宽度
+            let page_width = None;
             let column_mode_options = Some(PrColumnModeOptions {
                 width: 40,
                 columns: 2,
@@ -4546,8 +4589,8 @@ mod tests {
             );
             assert_eq!(result, Some(40));
 
-            // 场景3: columns_to_print > 1 但 column_mode_options 为 None，应该使用默认值
-            let page_width = Some(80);
+            // 场景4: columns_to_print > 1, page_width 和 column_mode_options 都未指定，使用默认值
+            let page_width = None;
             let column_mode_options = None;
             let is_join_lines = false;
             let columns_to_print = 2;
@@ -4560,7 +4603,7 @@ mod tests {
             );
             assert_eq!(result, Some(PR_DEFAULT_COLUMN_WIDTH));
 
-            // 场景4: columns_to_print = 1，应该直接使用 page_width
+            // 场景5: columns_to_print = 1，应该直接使用 page_width
             let page_width = Some(80);
             let column_mode_options = Some(PrColumnModeOptions {
                 width: 40,

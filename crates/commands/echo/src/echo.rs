@@ -187,17 +187,83 @@ impl Tool for Echo {
 pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app()
-        .after_help(t!("echo.after_help"))
-        .try_get_matches_from(args)?;
-
-    let no_newline = args_match.get_flag(opt_flags::NO_NEWLINE);
-    let escaped = args_match.get_flag(opt_flags::ENABLE_BACKSLASH_ESCAPE);
-    let values: Vec<String> = match args_match.get_many::<String>(opt_flags::STRING) {
-        Some(s) => s.map(|s| s.to_string()).collect(),
-        None => vec![String::new()],
-    };
-
+    
+    let args_vec: Vec<String> = args.skip(1).map(|s| s.to_string_lossy().into_owned()).collect();
+    let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
+    
+    let mut no_newline = false;
+    let mut escaped = false;
+    let mut values = Vec::new();
+    
+    if posix_mode {
+        // POSIXLY_CORRECT 模式：
+        // 只有单独的 -n 作为第一个参数时才启用选项处理
+        // 此时 -E 被忽略（跳过），其他参数原样输出
+        if args_vec.get(0) == Some(&"-n".to_string()) {
+            no_newline = true;
+            // 启用选项处理，扫描剩余参数
+            for arg in args_vec.iter().skip(1) {
+                if arg == "-E" {
+                    // 忽略 -E（POSIX 模式下转义始终启用，-E 只是禁用转义的选项，但被忽略）
+                    continue;
+                } else {
+                    values.push(arg.clone());
+                }
+            }
+        } else {
+            // 未启用选项处理，所有参数原样输出
+            values = args_vec.clone();
+        }
+        // POSIX 模式下始终启用转义
+        escaped = true;
+    } else {
+        // 标准模式：解析 -n, -e, -E，但保留 --
+        let mut parsing_options = true;
+        for arg in args_vec {
+            if parsing_options {
+                if arg == "-n" {
+                    no_newline = true;
+                    continue;
+                } else if arg == "-e" {
+                    escaped = true;
+                    continue;
+                } else if arg == "-E" {
+                    escaped = false;
+                    continue;
+                } else if arg == "--" {
+                    values.push(arg);
+                    parsing_options = false;
+                    continue;
+                } else if arg.starts_with('-') && arg.len() > 1 {
+                    // 处理组合选项如 -ne, -nE
+                    if arg.starts_with("-n") {
+                        no_newline = true;
+                        for c in arg[2..].chars() {
+                            match c {
+                                'e' => escaped = true,
+                                'E' => escaped = false,
+                                _ => {}
+                            }
+                        }
+                        continue;
+                    } else if arg == "-e" {
+                        escaped = true;
+                        continue;
+                    } else if arg == "-E" {
+                        escaped = false;
+                        continue;
+                    }
+                }
+            }
+            values.push(arg);
+            parsing_options = false;
+        }
+    }
+    
+    if values.is_empty() {
+        values.push(String::new());
+    }
+    
     echo_execute(no_newline, escaped, &values)
         .map_err_context(|| "could not write to stdout".to_string())
 }

@@ -1355,25 +1355,29 @@ fn copy_source(
     };
 
     if is_dir && target.exists() && target.is_dir() && !options.parents {
-        // 检查源目录是否为空（过滤掉 . 和 ..）
-        let is_empty = match fs::read_dir(source_path) {
-            Ok(entries) => {
-                entries.filter(|e| {
-                    match e.as_ref() {
-                        Ok(entry) => {
-                            let name = entry.file_name();
-                            name != "." && name != ".."
-                        }
-                        Err(_) => false,
-                    }
-                }).next().is_none()
-            }
-            Err(_) => false, // 如果无法读取目录，不视为空，让后续错误处理
-        };
+        let source_str = source.as_os_str().to_string_lossy();
+        let ends_with_dot = source_str.ends_with("/.") || source_str.ends_with("\\.");
         
-        if is_empty {
-            // 空目录复制到已存在目录：静默成功，无操作，无输出
-            return Ok(());
+        if ends_with_dot {
+            // 检查源目录是否为空（过滤掉 . 和 ..）
+            let is_empty = match fs::read_dir(source) {
+                Ok(entries) => {
+                    entries.filter(|e| {
+                        match e.as_ref() {
+                            Ok(entry) => {
+                                let name = entry.file_name();
+                                name != "." && name != ".."
+                            }
+                            Err(_) => false,
+                        }
+                    }).next().is_none()
+                }
+                Err(_) => false,
+            };
+            
+            if is_empty {
+                return Ok(());
+            }
         }
     }
 

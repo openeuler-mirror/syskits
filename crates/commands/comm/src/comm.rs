@@ -117,6 +117,10 @@ fn check_order(
  * @param opts 包含各种选项的参数匹配器，用于定制比较和输出的行为。
  */
 fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CTResult<()> {
+    // 引入 Write 特征以使用 write! 宏，避免与其他的 trait 冲突
+    use std::io::Write as _;
+    let mut stdout = std::io::stdout().lock();
+
     // 根据选项获取分隔符
     let delim = comm_get_del_im(opts)?;
 
@@ -141,7 +145,6 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     let mut issued_warning = [false, false];
 
     // 初始化用于读取数据的缓冲区及读取状态
-    // 直接处理 Result，遇到 IO 错误立刻抛出，不再把错误当成 EOF 吞掉
     let ra = &mut Vec::new();
     let mut na = a
         .read_line(ra)
@@ -174,17 +177,16 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             (0, 0) => break, // 两行都读取完毕，退出循环
             (0, _) => Ordering::Greater,
             (_, 0) => Ordering::Less,
-            _ => {
-                // 使用locale感知的字符串比较
-                strcoll_compare(ra, rb, false)
-            }
+            _ => strcoll_compare(ra, rb, false),
         };
 
         // 根据比较结果输出相应行数据，并准备下一次读取
         if ord == Ordering::Less {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_1) {
-                print!("{}", String::from_utf8_lossy(ra));
+                // 安全写入并转换错误
+                write!(stdout, "{}", String::from_utf8_lossy(ra))
+                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             }
             ra.clear();
             na = a
@@ -217,7 +219,8 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
         } else if ord == Ordering::Greater {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
-                print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
+                write!(stdout, "{delim_col_2}{}", String::from_utf8_lossy(rb))
+                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             }
             rb.clear();
             nb = b
@@ -249,7 +252,8 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
-                print!("{delim_col_3}{}", String::from_utf8_lossy(ra));
+                write!(stdout, "{delim_col_3}{}", String::from_utf8_lossy(ra))
+                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             }
             ra.clear();
             rb.clear();
@@ -313,11 +317,12 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     if opts.get_flag(opt_flags::TOTAL) {
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
         let total_str = t!("comm.messages.total");
-        // 使用 comm_get_del_im 来获取分隔符，它会将空字符串转换为 \0
         let col_sep = comm_get_del_im(opts)?;
-        print!(
+        write!(
+            stdout,
             "{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}"
-        );
+        )
+        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
     }
 
     if issued_warning[0] || issued_warning[1] {

@@ -125,10 +125,21 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     args.push(std::ptr::null());
 
     let result = unsafe { execvp(args[0], args.as_mut_ptr()) };
-    // 根据execvp的返回值设置退出码
-    match result {
-        libc::ENOENT => set_ct_exit_code(EXIT_ENOENT),
-        _ => set_ct_exit_code(EXIT_CANNOT_INVOKE),
+    if result == -1 {
+        let err = std::io::Error::last_os_error();
+        // 获取命令名用于错误信息
+        let cmd_name = std::str::from_utf8(&cstrings[0].to_bytes())
+            .unwrap_or("<unknown>")
+            .to_string();
+        let err_msg = format!("cannot run command '{}': {}", cmd_name, err);
+        // 尝试输出错误，如果 stderr 写入失败则退出 125
+        if write_nohup_msg(&err_msg).is_err() {
+            std::process::exit(125);
+        }
+        match err.raw_os_error() {
+            Some(libc::ENOENT) => set_ct_exit_code(EXIT_ENOENT),
+            _ => set_ct_exit_code(EXIT_CANNOT_INVOKE),
+        }
     }
     Ok(())
 }

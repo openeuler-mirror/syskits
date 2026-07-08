@@ -377,6 +377,7 @@ fn execute_path(ct_args: &mut impl Iterator<Item = OsString>) -> PathBuf {
 /// 主函数
 fn main() {
     ctcore::ct_panic::ct_mute_set_panic_hook();
+    ctcore::ct_ensure_standard_fds();
 
     let mut args = ctcore::ct_os_args();
     let execute_path = execute_path(&mut args);

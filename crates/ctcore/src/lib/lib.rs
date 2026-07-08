@@ -111,7 +111,7 @@ pub use crate::ct_features::ct_fsxattr;
 //## core functions
 
 use std::ffi::OsString;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use once_cell::sync::Lazy;
 
@@ -126,6 +126,8 @@ macro_rules! ct_bin {
             use std::io::Write;
             // 对SIGPIPE失败/恐慌抑制冗余错误输出
             ctcore::ct_panic::ct_mute_set_panic_hook();
+            // 保障标准输入输出错误描述符存在，避免关闭 stdout 后被后续 open 复用。
+            ctcore::ct_ensure_standard_fds();
 
             // 执行实用工具代码
             let args = ctcore::ct_os_args().collect::<Vec<_>>();
@@ -155,6 +157,109 @@ macro_rules! ct_bin {
             std::process::exit(code);
         }
     };
+}
+
+#[cfg(all(unix, feature = "libc"))]
+fn ct_fd_is_closed(fd: libc::c_int) -> bool {
+    // SAFETY: fcntl only observes the descriptor state.
+    let rc = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if rc != -1 {
+        return false;
+    }
+
+    std::io::Error::last_os_error().raw_os_error() == Some(libc::EBADF)
+}
+
+#[cfg(all(unix, feature = "libc"))]
+fn ct_reopen_fd(fd: libc::c_int, path: &std::ffi::CStr, flags: libc::c_int) -> bool {
+    // SAFETY: open/dup2/close are called with valid constants and checked return values.
+    let opened = unsafe { libc::open(path.as_ptr(), flags | libc::O_CLOEXEC) };
+    if opened < 0 {
+        return false;
+    }
+
+    let ok = if opened == fd {
+        true
+    } else {
+        // SAFETY: opened is a valid fd from open, fd is one of the std fds.
+        unsafe { libc::dup2(opened, fd) >= 0 }
+    };
+
+    if opened != fd {
+        // SAFETY: opened was returned by open and not yet closed.
+        unsafe {
+            libc::close(opened);
+        }
+    }
+
+    ok
+}
+
+#[cfg(all(unix, feature = "libc"))]
+fn ct_stdout_is_sanitized_dev_null() -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    // Rust runtime may sanitize missing stdio descriptors to /dev/null with O_RDWR.
+    let fl = unsafe { libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFL) };
+    if fl < 0 || (fl & libc::O_ACCMODE) != libc::O_RDWR {
+        return false;
+    }
+
+    let stdout_meta = match std::fs::metadata("/proc/self/fd/1") {
+        Ok(meta) => meta,
+        Err(_) => return false,
+    };
+    let dev_null_meta = match std::fs::metadata("/dev/null") {
+        Ok(meta) => meta,
+        Err(_) => return false,
+    };
+
+    stdout_meta.dev() == dev_null_meta.dev() && stdout_meta.ino() == dev_null_meta.ino()
+}
+
+#[cfg(all(unix, feature = "libc"))]
+pub fn ct_ensure_standard_fds() {
+    use std::ffi::CString;
+
+    let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
+    let stdout_sanitized = ct_stdout_is_sanitized_dev_null();
+    STDOUT_WAS_CLOSED.store(stdout_closed || stdout_sanitized, Ordering::Relaxed);
+
+    let dev_null = CString::new("/dev/null").expect("literal has no NUL");
+    let dev_full = CString::new("/dev/full").expect("literal has no NUL");
+
+    if ct_fd_is_closed(libc::STDIN_FILENO) {
+        let _ = ct_reopen_fd(libc::STDIN_FILENO, &dev_null, libc::O_RDONLY);
+    }
+
+    if (stdout_closed || stdout_sanitized)
+        && !ct_reopen_fd(libc::STDOUT_FILENO, &dev_full, libc::O_WRONLY)
+    {
+        let _ = ct_reopen_fd(libc::STDOUT_FILENO, &dev_null, libc::O_WRONLY);
+    }
+
+    if ct_fd_is_closed(libc::STDERR_FILENO) {
+        let _ = ct_reopen_fd(libc::STDERR_FILENO, &dev_null, libc::O_WRONLY);
+    }
+}
+
+#[cfg(not(all(unix, feature = "libc")))]
+pub fn ct_ensure_standard_fds() {
+    STDOUT_WAS_CLOSED.store(false, Ordering::Relaxed);
+}
+
+#[cfg(all(unix, feature = "libc"))]
+pub fn ct_stdout_is_closed() -> bool {
+    ct_fd_is_closed(libc::STDOUT_FILENO)
+}
+
+#[cfg(not(all(unix, feature = "libc")))]
+pub fn ct_stdout_is_closed() -> bool {
+    false
+}
+
+pub fn ct_stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
 /// 为 clap 生成使用说明字符串。
@@ -190,6 +295,7 @@ pub fn ct_set_utility_is_second_arg() {
 // 调用args_os()可能代价较高，因为它会在迭代前复制整个argv。
 // 因此，如果我们只需要第一个参数左右的信息，这样做就有些过分了。所以我们将其缓存起来。
 static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
     let base_index = if ct_get_utility_is_second_arg() { 1 } else { 0 };

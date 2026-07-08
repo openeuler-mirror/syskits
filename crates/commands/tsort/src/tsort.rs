@@ -24,18 +24,36 @@ use std::fs::File;
 use std::io::{BufReader, Read, stdin};
 use std::path::Path;
 use sys_locale::get_locale;
+
 mod tsort_flags {
     pub const TSORT_FILE: &str = "file";
 }
+
 use ctcore::ct_show_error;
+
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
-    let input_file = matches
-        .get_one::<String>(tsort_flags::TSORT_FILE)
-        .expect("Value is required by clap");
+    // 获取所有位置参数，检查是否有额外的操作数
+    let input_files: Vec<&String> = matches
+        .get_many::<String>(tsort_flags::TSORT_FILE)
+        .map(|v| v.collect())
+        .unwrap_or_default();
+
+    // 检查是否传入了多个文件参数
+    if input_files.len() > 1 {
+        // 输出 GNU 风格的错误信息
+        ct_show_error!("extra operand '{}'", input_files[1]);
+        ct_show_error!("Try 'tsort --help' for more information.");
+        return Err(CtSimpleError::new(1, ""));
+    }
+
+    let input_file = input_files
+        .first()
+        .map(|s| s.as_str())
+        .unwrap_or("-");
 
     let mut stdin_buf;
     let mut file_buf;
@@ -93,10 +111,14 @@ pub fn ct_app() -> Command {
     let command_version = crate_version!();
     let application_info = t!("tsort.about");
     let usage_description = t!("tsort.usage");
+    
+    // 修改：允许多个参数被解析（0个或多个），但在代码中检查数量
+    // 这样可以在代码中输出 GNU 风格的错误，而不是使用 clap 的默认错误格式
     let arg = Arg::new(tsort_flags::TSORT_FILE)
         .default_value("-")
         .hide(true)
-        .value_hint(clap::ValueHint::FilePath);
+        .value_hint(clap::ValueHint::FilePath)
+        .num_args(0..);  // 关键修改：允许 0 到多个参数，后续手动验证
 
     Command::new(utility_name)
         .version(command_version)

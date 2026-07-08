@@ -268,6 +268,15 @@ mod tests {
     }
 
     #[test]
+    fn test_extra_operand_message_without_placeholder() {
+        rust_i18n::set_locale("en-US");
+        let args = [ctcore::ct_util_name(), "a", "b", "c"];
+        let err = basename_main(args.iter().map(OsString::from)).unwrap_err();
+        assert_eq!(err.to_string(), "extra operand 'c'");
+        assert!(err.usage());
+    }
+
+    #[test]
     fn test_tool_implementation() {
         let tool = Basename;
 

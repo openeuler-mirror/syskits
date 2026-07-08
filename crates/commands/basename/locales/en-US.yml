@@ -9,4 +9,4 @@ basename:
     version: "Show version information"
   errors:
     missing_operand: "missing operand"
-    extra_operand: "extra operand %s"
+    extra_operand: "extra operand"

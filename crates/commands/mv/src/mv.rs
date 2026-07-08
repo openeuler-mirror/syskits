@@ -501,7 +501,7 @@ fn mv_handle_two_paths(
         // 如果设置了no_target_dir且源是目录，则尝试重命名。
         if mv_options.no_target_dir {
             if source_is_directory {
-                match mv_rename(source_path, target_path, mv_options, None) {
+                match mv_rename(source_path, target_path, mv_options, None, None) {
                     Err(e) => {
                         let err_str = e.to_string();
                         let msg = format!(
@@ -550,7 +550,7 @@ fn mv_handle_two_paths(
         .into())
         // 默认情况：尝试重命名或移动文件。
     } else {
-        mv_rename(source_path, target_path, mv_options, None)
+        mv_rename(source_path, target_path, mv_options, None, None)
             .map_err(|e| CtSimpleError::new(1, format!("{e}")))
     }
 }
@@ -645,6 +645,12 @@ fn move_files_into_dir(
         None
     };
 
+    // 用于跨分区移动时追踪硬链接关系
+    // key: 源文件系统的 (device_id, inode) 对
+    // value: 目标文件系统中已创建的文件路径
+    #[cfg(unix)]
+    let mut hardlink_map: HashMap<(u64, u64), PathBuf> = HashMap::new();
+
     // 遍历所有要移动的文件
     for source_path in mv_files {
         // 如果设置了进度条，更新进度条信息
@@ -703,26 +709,61 @@ fn move_files_into_dir(
         }
 
         // 尝试重命名文件（即移动文件），根据结果进行相应处理
-        match mv_rename(source_path, &targetpath, mv_opts, multi_progress.as_ref()) {
-            Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
-            Err(err) => {
-                let err_str = err.to_string();
-                let msg = format!(
-                    "cannot move {} to {}",
-                    source_path.quote(),
-                    targetpath.quote()
-                );
-                let final_err = if err_str.contains(&msg) {
-                    CTIoError::new(err.kind(), err_str)
-                } else {
-                    err.map_err_context(|| msg)
-                };
-                match multi_progress {
-                    Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
-                    None => ct_show!(final_err),
-                };
+        #[cfg(unix)]
+        {
+            match mv_rename_with_hardlink_tracking(
+                source_path,
+                &targetpath,
+                mv_opts,
+                multi_progress.as_ref(),
+                &mut hardlink_map,
+                // 用于递归时传递 inode_map 给 move_dir_cross_device_with_links
+                true,
+            ) {
+                Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
+                Err(err) => {
+                    let err_str = err.to_string();
+                    let msg = format!(
+                        "cannot move {} to {}",
+                        source_path.quote(),
+                        targetpath.quote()
+                    );
+                    let final_err = if err_str.contains(&msg) {
+                        CTIoError::new(err.kind(), err_str)
+                    } else {
+                        err.map_err_context(|| msg)
+                    };
+                    match multi_progress {
+                        Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                        None => ct_show!(final_err),
+                    };
+                }
+                Ok(()) => (),
             }
-            Ok(()) => (),
+        }
+        #[cfg(not(unix))]
+        {
+            match mv_rename(source_path, &targetpath, mv_opts, multi_progress.as_ref(), None) {
+                Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
+                Err(err) => {
+                    let err_str = err.to_string();
+                    let msg = format!(
+                        "cannot move {} to {}",
+                        source_path.quote(),
+                        targetpath.quote()
+                    );
+                    let final_err = if err_str.contains(&msg) {
+                        CTIoError::new(err.kind(), err_str)
+                    } else {
+                        err.map_err_context(|| msg)
+                    };
+                    match multi_progress {
+                        Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                        None => ct_show!(final_err),
+                    };
+                }
+                Ok(()) => (),
+            }
         }
         // 更新进度条
         if let Some(ref pb) = progress {
@@ -736,12 +777,130 @@ fn move_files_into_dir(
 }
 
 /**
+ * 带硬链接追踪的重命名函数（用于 move_files_into_dir）。
+ * 在跨设备移动时，会检查源文件是否与其他已移动的文件是硬链接关系，
+ * 如果是，则在目标位置创建硬链接而不是复制文件内容。
+ * 
+ * @param from_path 原始路径。
+ * @param to_path 目标路径。
+ * @param options 移动选项。
+ * @param multi_progress 多重进度条。
+ * @param hardlink_map 硬链接映射表，key为(device_id, inode)，value为目标路径。
+ * @param use_global_hardlink_map 是否使用全局硬链接映射表（用于跨目录追踪）。
+ * @return io::Result<()>
+ */
+#[cfg(unix)]
+fn mv_rename_with_hardlink_tracking(
+    from_path: &Path,
+    to_path: &Path,
+    options: &MvOpts,
+    multi_progress: Option<&MultiProgress>,
+    hardlink_map: &mut HashMap<(u64, u64), PathBuf>,
+    use_global_hardlink_map: bool,
+) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    // 获取源文件的元数据
+    let source_metadata = from_path.symlink_metadata()?;
+    
+    // 只有普通文件（非目录、非符号链接）才需要处理硬链接
+    if source_metadata.file_type().is_file() {
+        let source_inode = source_metadata.ino();
+        let source_dev = source_metadata.dev();
+        let key = (source_dev, source_inode);
+        
+        // 检查这个 inode 是否已经被移动过
+        if let Some(existing_dest) = hardlink_map.get(&key) {
+            // 检查目标文件系统是否已存在该文件（需要覆盖）
+            if to_path.exists() {
+                match options.overwrite {
+                    MvOverwriteMode::NoClobber => {
+                        return Err(io::Error::other(format!("not replacing {}", to_path.quote())));
+                    }
+                    MvOverwriteMode::Interactive => {
+                        if !ct_prompt_yes!("overwrite {}?", to_path.quote()) {
+                            return Err(io::Error::other(""));
+                        }
+                    }
+                    MvOverwriteMode::Force => {}
+                };
+                
+                // 处理备份
+                if options.backup != CtBackupMode::NoBackup {
+                    let clean_to_os = strip_trailing_slashes(to_path.as_os_str());
+                    let clean_to_path = Path::new(&clean_to_os);
+                    if let Some(backup_path) = ct_backup_control::get_backup_path(
+                        options.backup,
+                        clean_to_path,
+                        &options.suffix,
+                    ) {
+                        mv_rename_with_fallback(to_path, &backup_path, options, multi_progress, None)?;
+                    }
+                }
+                
+                // 删除已存在的目标文件
+                let _ = fs::remove_file(to_path);
+            }
+            
+            // 创建硬链接而不是复制
+            fs::hard_link(existing_dest, to_path)?;
+            // 删除源文件
+            fs::remove_file(from_path)?;
+            
+            // 输出详细信息
+            if options.verbose {
+                let message = format!("renamed {} -> {}", from_path.quote(), to_path.quote());
+                match multi_progress {
+                    Some(pb) => pb.suspend(|| println!("{message}")),
+                    None => println!("{message}"),
+                };
+            }
+            
+            // 设置 SELinux 上下文（如果启用）
+            #[cfg(target_os = "linux")]
+            if options.set_context {
+                if let Err(e) = set_default_context(to_path) {
+                    eprintln!(
+                        "warning: failed to set security context for {}: {}",
+                        to_path.quote(),
+                        e
+                    );
+                }
+            }
+            
+            return Ok(());
+        }
+        
+        // 如果 nlink > 1，说明这是一个硬链接，需要记录到映射表中
+        if source_metadata.nlink() > 1 {
+            // 先执行正常的移动操作，传入 hardlink_map 用于目录递归
+            if use_global_hardlink_map {
+                mv_rename(from_path, to_path, options, multi_progress, Some(hardlink_map))?;
+            } else {
+                mv_rename(from_path, to_path, options, multi_progress, None)?;
+            }
+            // 记录这个 inode 对应的目标路径
+            hardlink_map.insert(key, to_path.to_path_buf());
+            return Ok(());
+        }
+    }
+    
+    // 对于目录、符号链接或普通单链接文件，使用正常的移动逻辑
+    if use_global_hardlink_map {
+        mv_rename(from_path, to_path, options, multi_progress, Some(hardlink_map))
+    } else {
+        mv_rename(from_path, to_path, options, multi_progress, None)
+    }
+}
+
+/**
  * 重命名文件或目录。
  *
  * @param from_path 原始路径。
  * @param to_path 目标路径。
  * @param options 移动选项，包含更新模式、覆盖模式等。
  * @param multi_progress 多重进度条，用于显示进度。
+ * @param hardlink_map 可选的硬链接映射表，用于跨目录追踪硬链接关系。
  * @return io::Result<()>，操作成功返回Ok(())，失败返回Err()。
  */
 fn mv_rename(
@@ -749,6 +908,8 @@ fn mv_rename(
     to_path: &Path,
     options: &MvOpts,
     multi_progress: Option<&MultiProgress>,
+    #[cfg(unix)] hardlink_map: Option<&mut HashMap<(u64, u64), PathBuf>>,
+    #[cfg(not(unix))] _hardlink_map: Option<&mut HashMap<(u64, u64), PathBuf>>,
 ) -> io::Result<()> {
     let mut backup_path = None;
 
@@ -792,7 +953,7 @@ fn mv_rename(
             ct_backup_control::get_backup_path(options.backup, clean_to_path, &options.suffix);
         if let Some(ref bp) = backup_path {
             // 将旧的目标文件重命名为备份文件
-            mv_rename_with_fallback(to_path, bp, options, multi_progress)?;
+            mv_rename_with_fallback(to_path, bp, options, multi_progress, None)?;
         }
     }
 
@@ -816,7 +977,7 @@ fn mv_rename(
     }
 
     // 执行重命名操作 (使用智能计算出的 final_target)
-    mv_rename_with_fallback(from_path, final_target, options, multi_progress)?;
+    mv_rename_with_fallback(from_path, final_target, options, multi_progress, hardlink_map)?;
 
     // 如果设置了详细模式，输出重命名信息 (为了符合 GNU 格式，UI 打印必须保留用户最初输入的 to_path)
     if options.verbose {
@@ -888,6 +1049,7 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
 /// - `to`: 指定目标路径。
 /// - `options`: 移动操作的选项，包括调试和禁止复制选项。
 /// - `multi_progress`: 可选，用于多进度条更新的 `MultiProgress` 实例，可用于显示复制进度。
+/// - `hardlink_map`: 可选的硬链接映射表，用于跨目录追踪硬链接关系。
 ///
 /// # 返回值
 /// 返回一个 `io::Result<()>`, 成功则为 `Ok(())`, 失败则为包含错误信息的 `Err`。
@@ -896,6 +1058,8 @@ fn mv_rename_with_fallback(
     to: &Path,
     options: &MvOpts,
     multi_progress: Option<&MultiProgress>,
+    #[cfg(unix)] hardlink_map: Option<&mut HashMap<(u64, u64), PathBuf>>,
+    #[cfg(not(unix))] _hardlink_map: Option<&mut HashMap<(u64, u64), PathBuf>>,
 ) -> io::Result<()> {
     // 尝试直接重命名，如果失败则尝试备份方法。
     if let Err(rename_error) = fs::rename(from, to) {
@@ -986,9 +1150,25 @@ fn mv_rename_with_fallback(
             }
 
             // 使用自定义的、带有硬链接记忆表的递归转移函数替代第三方库
-            let mut inode_map = HashMap::new();
-            if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map) {
-                return Err(io::Error::other(format!("{:?}", e)));
+            // 如果有外部传入的 hardlink_map，则使用它；否则创建一个新的
+            #[cfg(unix)]
+            if let Some(map) = hardlink_map {
+                // 使用外部传入的映射表，以便跨目录追踪硬链接
+                if let Err(e) = move_dir_cross_device_with_links_with_global_map(from, to, options, map) {
+                    return Err(io::Error::other(format!("{:?}", e)));
+                }
+            } else {
+                let mut inode_map = HashMap::new();
+                if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map) {
+                    return Err(io::Error::other(format!("{:?}", e)));
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                let mut inode_map = HashMap::new();
+                if let Err(e) = move_dir_cross_device_with_links(from, to, options, &mut inode_map) {
+                    return Err(io::Error::other(format!("{:?}", e)));
+                }
             }
         } else {
             // 如果启用了调试模式，说明正在处理常规文件或特殊文件
@@ -1186,6 +1366,86 @@ fn move_dir_cross_device_with_links(
                         // 第一次遇到这个多链接文件，把它存入记忆表
                         inode_map.insert(inode, dest_path.clone());
                     }
+                }
+            }
+
+            // 执行常规的复制和删除
+            #[cfg(target_os = "linux")]
+            {
+                fs::copy(&src_path, &dest_path)
+                    .and_then(|_| ct_fsxattr::ct_copy_xattrs(&src_path, &dest_path))
+                    .and_then(|_| fs::remove_file(&src_path))?;
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                fs::copy(&src_path, &dest_path).and_then(|_| fs::remove_file(&src_path))?;
+            }
+        }
+    }
+
+    // 恢复目录的扩展属性
+    #[cfg(target_os = "linux")]
+    let _ = ct_fsxattr::ct_apply_xattrs(dest_dir, dir_fsxattrs);
+
+    // 目录内部清空后，删除原始空目录
+    fs::remove_dir(src_dir)?;
+    Ok(())
+}
+
+/// 使用全局硬链接映射表的目录跨设备移动函数。
+/// 与 `move_dir_cross_device_with_links` 不同，此函数使用 (device_id, inode) 作为 key，
+/// 以便在跨多个目录移动时追踪硬链接关系。
+#[cfg(unix)]
+fn move_dir_cross_device_with_links_with_global_map(
+    src_dir: &Path,
+    dest_dir: &Path,
+    options: &MvOpts,
+    global_hardlink_map: &mut HashMap<(u64, u64), PathBuf>,
+) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    // 确保目标目录存在
+    if !dest_dir.exists() {
+        fs::create_dir_all(dest_dir)?;
+    }
+
+    #[cfg(target_os = "linux")]
+    let dir_fsxattrs = ct_fsxattr::ct_retrieve_xattrs(src_dir).unwrap_or_default();
+
+    for entry in fs::read_dir(src_dir)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest_dir.join(entry.file_name());
+
+        if options.verbose {
+            println!("renamed {} -> {}", src_path.quote(), dest_path.quote());
+        }
+
+        let file_type = entry.file_type()?;
+
+        if file_type.is_dir() {
+            // 递归处理子目录，继续使用全局映射表
+            move_dir_cross_device_with_links_with_global_map(&src_path, &dest_path, options, global_hardlink_map)?;
+        } else if file_type.is_symlink() {
+            // 符号链接直接转移
+            mv_rename_symlink_fallback(&src_path, &dest_path)?;
+        } else {
+            // 处理普通文件，并尝试追踪硬链接
+            if let Ok(meta) = fs::symlink_metadata(&src_path) {
+                let inode = meta.ino();
+                let dev = meta.dev();
+                let key = (dev, inode);
+
+                // 先查全局表，检查这个 inode 是否在其他目录中已经被复制过了
+                if let Some(existing_dest) = global_hardlink_map.get(&key) {
+                    // 发现这个 inode 之前已经被复制过了，直接在目标分区重建硬链接
+                    fs::hard_link(existing_dest, &dest_path)?;
+                    // 原文件使命达成，可以删除了
+                    fs::remove_file(&src_path)?;
+                    continue;
+                } else if meta.nlink() > 1 {
+                    // 第一次遇到这个多链接文件，把它存入全局记忆表
+                    global_hardlink_map.insert(key, dest_path.clone());
                 }
             }
 
@@ -1512,7 +1772,7 @@ mod tests {
         fs::write(dest_dir.join("old.txt"), b"old").unwrap();
 
         let opts = temp_mv_opts();
-        let result = mv_rename_with_fallback(&src_dir, &dest_dir, &opts, None);
+        let result = mv_rename_with_fallback(&src_dir, &dest_dir, &opts, None, None);
 
         assert!(result.is_err());
         assert!(src_dir.exists());

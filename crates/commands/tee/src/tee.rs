@@ -22,12 +22,17 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, copy, sink, stdin, stdout};
+use std::io::{Error, ErrorKind, Read, Result, Write, sink, stdout};
 use std::path::PathBuf;
 use sys_locale::get_locale;
 
 #[cfg(unix)]
 use ctcore::ct_signals::{enable_pipe_errors, ignore_interrupts};
+
+#[cfg(unix)]
+use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+#[cfg(unix)]
+use std::os::fd::AsFd;
 
 mod stat_flags {
     pub const TEE_APPEND: &str = "append";
@@ -107,20 +112,101 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
     setup_signal_handlers(options)?;
 
     let writers = create_writers(options)?;
-    let mut input = NamedReader {
-        inner: Box::new(stdin()) as Box<dyn Read>,
-    };
-
     let mut output = MultiWriter::new(writers, options.output_error.clone());
-    match copy(&mut input, &mut output) {
-        Err(e) if e.kind() != ErrorKind::Other => return Err(e),
-        _ => (),
+
+    #[cfg(unix)]
+    {
+        if let Err(e) = copy_with_poll(&mut output) {
+            if e.kind() != ErrorKind::Other {
+                return Err(e);
+            }
+            // ErrorKind::Other means all outputs closed
+            // Check if any errors occurred (e.g., pipe errors in warn mode)
+            if output.error_occurred() {
+                return Err(Error::from(ErrorKind::Other));
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let mut input = NamedReader {
+            inner: Box::new(stdin()) as Box<dyn Read>,
+        };
+        match std::io::copy(&mut input, &mut output) {
+            Err(e) if e.kind() != ErrorKind::Other => return Err(e),
+            _ => (),
+        }
     }
 
     if output.flush().is_err() || output.error_occurred() {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
+    }
+}
+
+/// Copy data from stdin to output using poll to detect closed outputs (iopoll)
+#[cfg(unix)]
+fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
+    let stdin_handle = std::io::stdin();
+    let stdout_handle = std::io::stdout();
+    let stdin_fd = stdin_handle.as_fd();
+    let stdout_fd = stdout_handle.as_fd();
+
+    let mut buf = [0u8; 8192];
+    let mut stdin_lock = stdin_handle.lock();
+
+    loop {
+        // Poll stdin for readability and stdout for errors
+        let mut poll_fds = [
+            PollFd::new(stdin_fd, PollFlags::POLLIN),
+            PollFd::new(stdout_fd, PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL),
+        ];
+
+        match poll(&mut poll_fds, PollTimeout::NONE) {
+            Ok(_) => {
+                // Check if stdout has error/hangup
+                if let Some(revents) = poll_fds[1].revents() {
+                    if revents.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL) {
+                        // Output closed, write to remaining outputs and exit
+                        let _ = output.flush();
+                        return Ok(());
+                    }
+                }
+
+                // Check if stdin is readable
+                if let Some(revents) = poll_fds[0].revents() {
+                    if revents.intersects(PollFlags::POLLIN) {
+                        match stdin_lock.read(&mut buf) {
+                            Ok(0) => {
+                                // EOF
+                                return Ok(());
+                            }
+                            Ok(n) => {
+                                if let Err(e) = output.write_all(&buf[..n]) {
+                                    if e.kind() == ErrorKind::Other {
+                                        // All outputs closed
+                                        return Ok(());
+                                    }
+                                    return Err(e);
+                                }
+                            }
+                            Err(e) => {
+                                ct_show_error!("stdin: {}", e);
+                                return Err(e);
+                            }
+                        }
+                    } else if revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR) {
+                        // stdin closed/error
+                        return Ok(());
+                    }
+                }
+            }
+            Err(nix::errno::Errno::EINTR) => continue,
+            Err(e) => {
+                return Err(Error::from(ErrorKind::Other));
+            }
+        }
     }
 }
 

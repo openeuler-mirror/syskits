@@ -106,6 +106,39 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
     })
 }
 
+fn base64_digit(f: Format, byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' if matches!(f, Base64) => Some(62),
+        b'/' if matches!(f, Base64) => Some(63),
+        b'-' if matches!(f, Base64Url) => Some(62),
+        b'_' if matches!(f, Base64Url) => Some(63),
+        _ => None,
+    }
+}
+
+fn decode_base64_short_tail(f: Format, input: &[u8]) -> Option<Vec<u8>> {
+    if input.len() < 2 || input.len() > 3 {
+        return None;
+    }
+
+    let a = base64_digit(f, input[0])?;
+    let b = base64_digit(f, input[1])?;
+    let mut out = vec![(a << 2) | (b >> 4)];
+
+    if input.len() == 3 {
+        if input[2] == b'=' {
+            return Some(out);
+        }
+        let c = base64_digit(f, input[2])?;
+        out.push(((b & 0x0f) << 4) | (c >> 2));
+    }
+
+    Some(out)
+}
+
 pub struct Data<R: Read> {
     line_wrap: usize,
     ignore_garbage: bool,
@@ -148,85 +181,78 @@ impl<R: Read> Data<R> {
     }
 
     pub fn decode<W: Write>(&mut self, mut writer: W) -> Result<(), CtDecodeError> {
-        let chunk_size = match self.format {
-            Format::Base58 | Format::Z85 => 0, // Fallback to read_to_end
-            _ => 30000,
+        let decode_block = match self.format {
+            Format::Base16 => Some(2),
+            Format::Base32 | Format::Base32Hex | Format::Base2Lsbf | Format::Base2Msbf => Some(8),
+            Format::Base64 | Format::Base64Url => Some(4),
+            Format::Z85 => Some(5),
+            Format::Base58 => None,
         };
 
-        if chunk_size == 0 {
-            let mut buf = vec![];
-            self.input.read_to_end(&mut buf)?;
-            if self.ignore_garbage {
-                buf.retain(|c| self.alphabet.contains(c));
-            } else {
-                buf.retain(|&c| c != b'\r' && c != b'\n');
+        let mut read_buf = [0; 8192];
+        let mut char_buf = Vec::with_capacity(8192);
+        loop {
+            let n = match self.input.read(&mut read_buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
             };
-            match self.format {
-                Base16 | Base32 | Base32Hex => buf.make_ascii_uppercase(),
-                _ => {}
-            }
-            let decoded = decode(self.format, &buf)?;
-            writer.write_all(&decoded)?;
-            Ok(())
-        } else {
-            let mut read_buf = [0; 8192];
-            let mut char_buf = Vec::with_capacity(chunk_size + 1024);
 
-            loop {
-                let n = match self.input.read(&mut read_buf) {
-                    Ok(0) => break,
-                    Ok(n) => n,
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(e) => return Err(e.into()),
-                };
-
-                for &c in &read_buf[..n] {
-                    if self.ignore_garbage {
-                        if self.alphabet.contains(&c) {
-                            char_buf.push(c);
-                        }
-                    } else if c != b'\r' && c != b'\n' {
+            for &c in &read_buf[..n] {
+                if self.ignore_garbage {
+                    if self.alphabet.contains(&c) {
                         char_buf.push(c);
                     }
-                }
-
-                while char_buf.len() >= chunk_size {
-                    match self.format {
-                        Base16 | Base32 | Base32Hex => char_buf.make_ascii_uppercase(),
-                        _ => {}
-                    }
-
-                    let process_len = match self.format {
-                        Format::Base16 => char_buf.len() - (char_buf.len() % 2),
-                        Format::Base32
-                        | Format::Base32Hex
-                        | Format::Base2Lsbf
-                        | Format::Base2Msbf => char_buf.len() - (char_buf.len() % 8),
-                        Format::Base64 | Format::Base64Url => char_buf.len() - (char_buf.len() % 4),
-                        _ => char_buf.len(),
-                    };
-
-                    if process_len > 0 {
-                        let chunk = &char_buf[..process_len];
-                        let decoded = decode(self.format, chunk)?;
-                        writer.write_all(&decoded)?;
-                        char_buf.drain(..process_len);
-                    } else {
-                        break;
-                    }
+                } else if c != b'\r' && c != b'\n' {
+                    char_buf.push(c);
                 }
             }
 
-            if !char_buf.is_empty() {
-                match self.format {
-                    Base16 | Base32 | Base32Hex => char_buf.make_ascii_uppercase(),
-                    _ => {}
+            if let Some(block_size) = decode_block {
+                while char_buf.len() >= block_size {
+                    let mut block = char_buf[..block_size].to_vec();
+                    if matches!(self.format, Base16 | Base32 | Base32Hex) {
+                        block.make_ascii_uppercase();
+                    }
+                    let decoded = decode(self.format, &block)?;
+                    writer.write_all(&decoded)?;
+                    char_buf.drain(..block_size);
                 }
-                let decoded = decode(self.format, &char_buf)?;
-                writer.write_all(&decoded)?;
             }
-            Ok(())
         }
+
+        if char_buf.is_empty() {
+            return Ok(());
+        }
+
+        if matches!(self.format, Base16 | Base32 | Base32Hex) {
+            char_buf.make_ascii_uppercase();
+        }
+
+        if matches!(self.format, Base64 | Base64Url) {
+            if char_buf.len() == 1 {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid input").into());
+            }
+
+            if char_buf.len() < 4 {
+                let mut padded = char_buf.clone();
+                while padded.len() < 4 {
+                    padded.push(b'=');
+                }
+                let decoded = decode(self.format, &padded)
+                    .ok()
+                    .or_else(|| decode_base64_short_tail(self.format, &char_buf));
+                if let Some(decoded) = decoded {
+                    writer.write_all(&decoded)?;
+                }
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid input").into());
+            }
+        }
+
+        let decoded = decode(self.format, &char_buf)?;
+        writer.write_all(&decoded)?;
+        Ok(())
     }
 
     pub fn encode<W: Write>(&mut self, mut writer: W) -> Result<(), CtEncodeError> {
@@ -351,6 +377,7 @@ pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::R
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::io::Cursor;
     #[test]
     fn test_encode_base32() {
         let input = [
@@ -554,5 +581,33 @@ mod test {
         let result = decode(Format::Base58, (&input).as_ref());
 
         assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_data_decode_base64_partial_output_then_error() {
+        let input = Cursor::new(b"ab".to_vec());
+        let mut data = Data::new(input, Format::Base64);
+        let mut out = Vec::new();
+        let err = data.decode(&mut out).unwrap_err();
+        assert!(matches!(err, CtDecodeError::Io(_)));
+        assert_eq!(out, b"i");
+    }
+
+    #[test]
+    fn test_data_decode_base2_partial_output_then_error() {
+        let input = Cursor::new(b"100010000000000".to_vec());
+        let mut data = Data::new(input, Format::Base2Msbf);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, vec![0x88]);
+    }
+
+    #[test]
+    fn test_data_decode_z85_partial_output_then_error() {
+        let input = Cursor::new(b"helloX".to_vec());
+        let mut data = Data::new(input, Format::Z85);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, b"5jXu");
     }
 }

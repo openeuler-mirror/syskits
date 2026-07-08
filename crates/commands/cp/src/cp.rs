@@ -2141,9 +2141,18 @@ fn copy_file(
     if !dest_path.is_symlink() {
         #[cfg(unix)]
         {
-            // 只有当 mode 被明确要求保留时，才应用权限
-            if matches!(cp_opts.attributes.mode, CpPreserve::Yes { .. }) {
-                fs::set_permissions(dest_path, dest_permissions).ok();
+            match cp_opts.attributes.mode {
+                CpPreserve::Yes { .. } => {
+                    // --preserve=mode: 保留源文件权限
+                    // dest_permissions 在 cp_calculate_dest_permissions 中已设置为源文件权限
+                    fs::set_permissions(dest_path, dest_permissions).ok();
+                }
+                CpPreserve::No { explicit } => {
+                    if explicit {
+                        fs::set_permissions(dest_path, dest_permissions).ok();
+                    }
+                    // 非显式 No（未指定 preserve 选项）：使用系统默认，不干预
+                }
             }
         }
         #[cfg(not(unix))]

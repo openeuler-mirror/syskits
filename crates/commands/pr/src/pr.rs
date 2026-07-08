@@ -1405,13 +1405,21 @@ fn pr_write_columns(
         }
     }
 
-    let mut balanced_lines = content_lines_per_page;
-    if columns > 1 && output_opts.merge_files_print.is_none() && !across_mode {
-        let needed = lines.len().div_ceil(columns);
-        if needed < balanced_lines {
-            balanced_lines = needed;
+    let down_mode_layout = if output_opts.merge_files_print.is_none() && !across_mode {
+        let total = lines.len();
+        let base = total / columns;
+        let remainder = total % columns;
+        let mut start = 0usize;
+        let mut layout = Vec::with_capacity(columns);
+        for col in 0..columns {
+            let len = base + usize::from(col < remainder);
+            layout.push((start, len));
+            start += len;
         }
-    }
+        Some(layout)
+    } else {
+        None
+    };
 
     let table: Vec<Vec<_>> = (0..content_lines_per_page)
         .map(move |a| {
@@ -1428,10 +1436,15 @@ fn pr_write_columns(
                         *filled_lines
                             .get(content_lines_per_page * i + a)
                             .unwrap_or(&None)
-                    } else if a >= balanced_lines {
-                        None
                     } else {
-                        lines.get(balanced_lines * i + a)
+                        down_mode_layout
+                            .as_ref()
+                            .and_then(|layout| layout.get(i).copied())
+                            .and_then(
+                                |(start, len)| {
+                                    if a >= len { None } else { lines.get(start + a) }
+                                },
+                            )
                     }
                 })
                 .collect()
@@ -1441,6 +1454,19 @@ fn pr_write_columns(
     let blank_line = PrFileLine::default();
     for row in table {
         let indexes = row.len();
+        let mut row_buffer = String::new();
+        if columns > 1 && output_opts.merge_files_print.is_none() && row.iter().all(|c| c.is_none())
+        {
+            if feed_line_present || !output_opts.is_display_header_and_trailer {
+                if feed_line_present && lines_printed == 0 {
+                    out.write_all(line_separator)?;
+                }
+                break;
+            } else {
+                out.write_all(line_separator)?;
+                continue;
+            }
+        }
         if output_opts.merge_files_print.is_some() && row.iter().all(|c| c.is_none()) {
             if feed_line_present || !output_opts.is_display_header_and_trailer {
                 break;
@@ -1451,38 +1477,62 @@ fn pr_write_columns(
         }
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && output_opts.merge_files_print.is_some() {
-                out.write_all(
-                    pr_get_line_for_printing(
-                        output_opts,
-                        &blank_line,
-                        columns,
-                        i,
-                        &line_width,
-                        indexes,
-                    )?
-                    .as_bytes(),
-                )?;
+                row_buffer.push_str(&pr_get_line_for_printing(
+                    output_opts,
+                    &blank_line,
+                    columns,
+                    i,
+                    &line_width,
+                    indexes,
+                )?);
             } else if cell.is_none() {
-                not_found_break = true;
-                break;
+                if across_mode || columns == 1 {
+                    not_found_break = true;
+                    break;
+                }
+                row_buffer.push_str(&pr_get_line_for_printing(
+                    output_opts,
+                    &blank_line,
+                    columns,
+                    i,
+                    &line_width,
+                    indexes,
+                )?);
             } else if cell.is_some() {
                 let file_line = cell.unwrap();
 
-                out.write_all(
-                    pr_get_line_for_printing(
-                        output_opts,
-                        file_line,
-                        columns,
-                        i,
-                        &line_width,
-                        indexes,
-                    )?
-                    .as_bytes(),
-                )?;
+                row_buffer.push_str(&pr_get_line_for_printing(
+                    output_opts,
+                    file_line,
+                    columns,
+                    i,
+                    &line_width,
+                    indexes,
+                )?);
                 lines_printed += 1;
             }
         }
+        let has_row_content = !row_buffer.is_empty();
+        if has_row_content {
+            let rendered_row = if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
+                replace_spaces_with_tabs(&row_buffer, tab_ch, tab_width)
+            } else {
+                row_buffer.clone()
+            };
+            if columns > 1 {
+                let trimmed = rendered_row.trim_end_matches([' ', '\t']);
+                out.write_all(trimmed.as_bytes())?;
+            } else {
+                out.write_all(rendered_row.as_bytes())?;
+            }
+        }
         if not_found_break && (feed_line_present || !output_opts.is_display_header_and_trailer) {
+            if has_row_content {
+                out.write_all(line_separator)?;
+            } else if feed_line_present && lines_printed == 0 {
+                // GNU pr keeps one empty content line on an empty page in form-feed mode.
+                out.write_all(line_separator)?;
+            }
             break;
         } else {
             out.write_all(line_separator)?;
@@ -1577,10 +1627,6 @@ fn pr_get_line_for_printing(
                     let mut extended_line = complete_line.clone();
                     let mut current_len = display_length;
 
-                    while (current_len / 8 + 1) * 8 <= pad_target {
-                        extended_line.push('\t');
-                        current_len = (current_len / 8 + 1) * 8;
-                    }
                     while current_len < pad_target {
                         extended_line.push(' ');
                         current_len += 1;
@@ -1599,13 +1645,7 @@ fn pr_get_line_for_printing(
         })
         .unwrap_or_else(|| Ok(complete_line.clone()));
 
-    let mut final_out = result_line.map(|line| format!("{offset_spaces}{line}{sep}"))?;
-
-    if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
-        final_out = replace_spaces_with_tabs(&final_out, tab_ch, tab_width);
-    }
-
-    Ok(final_out)
+    result_line.map(|line| format!("{offset_spaces}{line}{sep}"))
 }
 
 fn expand_tabs_to_spaces(s: &str, tab_char: char, tab_width: usize) -> String {
@@ -1632,30 +1672,52 @@ fn replace_spaces_with_tabs(s: &str, tab_char: char, tab_width: usize) -> String
         return s.to_string();
     }
     let mut res = String::new();
-    let mut current_col = 0;
-    let mut space_count = 0;
+    let mut current_col = 0usize;
+    let mut pending_spaces = 0usize;
+
+    let flush_spaces = |res: &mut String, current_col: &mut usize, pending_spaces: &mut usize| {
+        if *pending_spaces == 0 {
+            return;
+        }
+
+        let mut h_old = *current_col;
+        let goal = h_old + *pending_spaces;
+
+        while goal.saturating_sub(h_old) > 1 {
+            let h_new = (h_old / tab_width + 1) * tab_width;
+            if h_new > goal {
+                break;
+            }
+            res.push(tab_char);
+            h_old = h_new;
+        }
+
+        while h_old < goal {
+            res.push(' ');
+            h_old += 1;
+        }
+
+        *current_col = goal;
+        *pending_spaces = 0;
+    };
 
     for c in s.chars() {
         if c == ' ' {
-            space_count += 1;
-            if (current_col + space_count) % tab_width == 0 {
-                res.push(tab_char);
-                current_col += space_count;
-                space_count = 0;
-            }
+            pending_spaces += 1;
+            continue;
+        }
+
+        flush_spaces(&mut res, &mut current_col, &mut pending_spaces);
+        res.push(c);
+        if c == '\t' {
+            current_col = (current_col / tab_width + 1) * tab_width;
         } else {
-            if space_count > 0 {
-                res.push_str(&" ".repeat(space_count));
-                current_col += space_count;
-                space_count = 0;
-            }
-            res.push(c);
             current_col += UnicodeWidthChar::width(c).unwrap_or(0);
         }
     }
-    if space_count > 0 {
-        res.push_str(&" ".repeat(space_count));
-    }
+
+    flush_spaces(&mut res, &mut current_col, &mut pending_spaces);
+
     res
 }
 fn pr_get_formatted_line_number(

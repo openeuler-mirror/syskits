@@ -170,10 +170,23 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
 /// Copy data from stdin to output using poll to detect closed outputs (iopoll)
 #[cfg(unix)]
 fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
+    use std::os::unix::io::AsRawFd;
+    
     let stdin_handle = std::io::stdin();
     let stdout_handle = std::io::stdout();
     let stdin_fd = stdin_handle.as_fd();
     let stdout_fd = stdout_handle.as_fd();
+
+    // 强行清除 stdout 的 O_NONBLOCK 标志。
+    // 当恶意测试（如 dd oflag=nonblock）共享并篡改了底层管道的状态时，
+    // 将其重置为阻塞模式能彻底避免在管道写满时触发 WouldBlock 导致程序崩溃。
+    unsafe {
+        let fd = stdout_handle.as_raw_fd();
+        let flags = nix::libc::fcntl(fd, nix::libc::F_GETFL, 0);
+        if flags >= 0 && (flags & nix::libc::O_NONBLOCK) != 0 {
+            nix::libc::fcntl(fd, nix::libc::F_SETFL, flags & !nix::libc::O_NONBLOCK);
+        }
+    }
 
     let mut buf = [0u8; 8192];
     let mut stdin_lock = stdin_handle.lock();

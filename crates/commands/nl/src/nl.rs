@@ -225,9 +225,15 @@ impl NlFlags {
         }
 
         if let Some(num) = matches.get_one::<String>(nl_flags::NL_STARTING_LINE_NUMBER) {
-            // 如果num 是数字，则转换为i64
-            if let Ok(num) = num.parse::<i64>() {
-                flags.starting_line_number = num;
+            // 检测溢出：当数值超出 i64 范围时返回错误
+            match num.parse::<i64>() {
+                Ok(n) => flags.starting_line_number = n,
+                Err(_) => {
+                    errs.push(format!(
+                        "invalid starting line number: '{}': Numerical result out of range",
+                        num
+                    ));
+                }
             }
         }
 

@@ -77,40 +77,117 @@ impl<'a> Iterator for NumfmtWhitespaceSplitter<'a> {
     }
 }
 
+fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
+    let mut idx = 0;
+    let mut chars = s.char_indices().peekable();
+
+    if let Some((i, c)) = chars.peek().copied()
+        && (c == '+' || c == '-')
+    {
+        idx = i + c.len_utf8();
+        chars.next();
+    }
+
+    let mut digits_before = 0usize;
+    while let Some((i, c)) = chars.peek().copied() {
+        if c.is_ascii_digit() {
+            digits_before += 1;
+            idx = i + c.len_utf8();
+            chars.next();
+        } else {
+            break;
+        }
+    }
+
+    let mut has_dot = false;
+    let mut digits_after = 0usize;
+    if let Some((i, '.')) = chars.peek().copied() {
+        has_dot = true;
+        idx = i + 1;
+        chars.next();
+
+        while let Some((i, c)) = chars.peek().copied() {
+            if c.is_ascii_digit() {
+                digits_after += 1;
+                idx = i + c.len_utf8();
+                chars.next();
+            } else {
+                break;
+            }
+        }
+    }
+
+    if digits_before == 0 && digits_after == 0 {
+        return None;
+    }
+
+    Some((idx, has_dot && digits_after == 0))
+}
+
 fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
     if s.is_empty() {
         return Err("invalid number: ''".to_string());
     }
 
-    let is_with_i = s.ends_with('i');
-    let mut iter = s.chars();
-    if is_with_i {
-        iter.next_back();
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("invalid number: ''".to_string());
     }
-    let suffix = match iter.next_back() {
-        Some('K') => Some((NumfmtRawSuffix::K, is_with_i)),
-        Some('M') => Some((NumfmtRawSuffix::M, is_with_i)),
-        Some('G') => Some((NumfmtRawSuffix::G, is_with_i)),
-        Some('T') => Some((NumfmtRawSuffix::T, is_with_i)),
-        Some('P') => Some((NumfmtRawSuffix::P, is_with_i)),
-        Some('E') => Some((NumfmtRawSuffix::E, is_with_i)),
-        Some('Z') => Some((NumfmtRawSuffix::Z, is_with_i)),
-        Some('Y') => Some((NumfmtRawSuffix::Y, is_with_i)),
-        Some('0'..='9') if !is_with_i => None,
-        _ => return Err(format!("invalid suffix in input: {}", s.quote())),
+
+    let (num_end, invalid_fraction) = match parse_numeric_prefix(s) {
+        Some(v) => v,
+        None => {
+            if s.starts_with("..") {
+                return Err(format!("invalid suffix in input: {}", s.quote()));
+            }
+            return Err(format!("invalid number: {}", s.quote()));
+        }
     };
 
-    let suffix_size = match suffix {
-        None => 0,
-        Some((_, false)) => 1,
-        Some((_, true)) => 2,
-    };
+    if invalid_fraction {
+        return Err(format!("invalid number: {}", s.quote()));
+    }
 
-    let number = s[..s.len() - suffix_size]
+    let number = s[..num_end]
         .parse::<f64>()
         .map_err(|_| format!("invalid number: {}", s.quote()))?;
 
-    Ok((number, suffix))
+    let rest = s[num_end..].trim_start();
+    if rest.is_empty() {
+        return Ok((number, None));
+    }
+
+    let raw_suffix = match rest.chars().next() {
+        Some('K') => NumfmtRawSuffix::K,
+        Some('M') => NumfmtRawSuffix::M,
+        Some('G') => NumfmtRawSuffix::G,
+        Some('T') => NumfmtRawSuffix::T,
+        Some('P') => NumfmtRawSuffix::P,
+        Some('E') => NumfmtRawSuffix::E,
+        Some('Z') => NumfmtRawSuffix::Z,
+        Some('Y') => NumfmtRawSuffix::Y,
+        Some('R') => NumfmtRawSuffix::R,
+        Some('Q') => NumfmtRawSuffix::Q,
+        _ => return Err(format!("invalid suffix in input: {}", s.quote())),
+    };
+
+    let mut suffix_len = 1usize;
+    let mut with_i = false;
+    if rest.chars().nth(1) == Some('i') {
+        with_i = true;
+        suffix_len = 2;
+    }
+
+    let trailing = rest[suffix_len..].trim();
+    if !trailing.is_empty() {
+        return Err(format!(
+            "invalid suffix in input {}: {}",
+            s.quote(),
+            trailing.quote()
+        ));
+    }
+
+    Ok((number, Some((raw_suffix, with_i))))
 }
 
 // 返回数字的隐式精度，即点后面的位数。例如
@@ -580,14 +657,11 @@ mod tests {
 
         #[test]
         fn test_parse_with_spaces() {
-            assert!(
-                numfmt_parse_suffix("100 K").is_err(),
-                "Expected error for space between number and suffix"
-            );
-            assert!(
-                numfmt_parse_suffix("100 M ").is_err(),
-                "Expected error for space after suffix"
-            );
+            let result = numfmt_parse_suffix("100 K").unwrap();
+            assert_eq!(result, (100.0, Some((NumfmtRawSuffix::K, false))));
+
+            let result2 = numfmt_parse_suffix("100 M ").unwrap();
+            assert_eq!(result2, (100.0, Some((NumfmtRawSuffix::M, false))));
         }
 
         #[test]

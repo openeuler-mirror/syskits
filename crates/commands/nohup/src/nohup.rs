@@ -100,7 +100,13 @@ fn write_nohup_msg(msg: &str) -> io::Result<()> {
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
+    let arg_error_code = if env::var("POSIXLY_CORRECT").is_ok() {
+        EXIT_ENOENT
+    } else {
+        EXIT_CANCELED
+    };
+
+    let args_match = ct_app().try_get_matches_from(args).with_exit_code(arg_error_code)?;
 
     nohup_replace_fds()?;
 

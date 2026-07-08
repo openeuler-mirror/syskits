@@ -2057,7 +2057,6 @@ fn copy_file(
     }
 
     if is_skipped_by_update(sour_path, dest_path, cp_opts, source_in_command_line) {
-        // 即使跳过内容复制，对于硬链接保持，仍需处理硬链接关系
         if cp_opts.cp_preserve_hard_links() && dest_path.exists() {
             if let Ok(src_info) = CtFileInformation::from_path(
                 sour_path,
@@ -2065,7 +2064,6 @@ fn copy_file(
             ) {
                 if let Some(first_dest_path) = copied_files.get(&src_info) {
                     // 已有同 inode 文件被复制，确保当前目标也链接到那里
-                    // 使用现有的 are_hardlinks_to_same_file 检查是否已是硬链接
                     if !are_hardlinks_to_same_file(first_dest_path, dest_path) {
                         fs::remove_file(dest_path)?;
                         std::fs::hard_link(first_dest_path, dest_path)?;
@@ -2076,6 +2074,10 @@ fn copy_file(
                 }
             }
         }
+        if cp_opts.debug {
+            println!("skipped '{}'", sour_path.display());
+        }
+        
         return Ok(());
     }
 
@@ -2126,7 +2128,6 @@ fn copy_file(
 
     // 准备上下文并获取源文件元数据以进行复制。
     let context = cp_context_for(sour_path, dest_path);
-    let context_str = context.as_str();
 
     let source_metadata = {
         let result = if cp_opts.cp_dereference(source_in_command_line) {
@@ -2170,11 +2171,8 @@ fn copy_file(
                     // dest_permissions 在 cp_calculate_dest_permissions 中已设置为源文件权限
                     fs::set_permissions(dest_path, dest_permissions).ok();
                 }
-                CpPreserve::No { explicit } => {
-                    if explicit {
-                        fs::set_permissions(dest_path, dest_permissions).ok();
-                    }
-                    // 非显式 No（未指定 preserve 选项）：使用系统默认，不干预
+                CpPreserve::No { .. } => {
+                    fs::set_permissions(dest_path, dest_permissions).ok();
                 }
             }
         }
@@ -2205,22 +2203,18 @@ fn copy_file(
 }
 
 #[cfg(unix)]
-fn handle_no_preserve_mode(cp_opts: &CpOptions, org_mode: u32) -> u32 {
-    let (is_preserve_mode, is_explicit_no_preserve_mode) = cp_opts.cp_preserve_mode();
+fn handle_no_preserve_mode(cp_opts: &CpOptions, _org_mode: u32) -> u32 {
+    let (is_preserve_mode, _) = cp_opts.cp_preserve_mode();
     if !is_preserve_mode {
         use libc::{
-            S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
+            S_IRGRP, S_IROTH, S_IRUSR, S_IWUSR, S_IWGRP, S_IWOTH,
         };
-
+        // 无论是否显式 --no-preserve=mode，只要不带 -p，就使用默认权限 (666)
+        // 随后由 umask 过滤为 644
         const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-        const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
-        match is_explicit_no_preserve_mode {
-            true => return MODE_RW_UGO,
-            false => return org_mode & S_IRWXUGO,
-        };
+        return MODE_RW_UGO;
     }
-
-    org_mode
+    _org_mode
 }
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a

@@ -404,6 +404,61 @@ fn termios_equal(lhs: &Termios, rhs: &Termios) -> bool {
         && cfgetospeed(lhs) == cfgetospeed(rhs)
 }
 
+fn get_columns() -> usize {
+    if let Ok(cols) = std::env::var("COLUMNS") {
+        if let Ok(c) = cols.parse::<usize>() {
+            return c;
+        }
+    }
+    let mut size = TermSize::default();
+    // 只有在没有 COLUMNS 环境变量时，才通过 ioctl 查询终端真实宽度
+    if unsafe { tiocgwinsz(std::io::stdout().as_raw_fd(), &mut size as *mut _) }.is_ok() {
+        if size.columns > 0 {
+            return size.columns as usize;
+        }
+    }
+    80
+}
+
+struct LineWrapper {
+    columns: usize,
+    current_col: usize,
+}
+
+impl LineWrapper {
+    fn new() -> Self {
+        Self {
+            columns: get_columns(),
+            current_col: 0,
+        }
+    }
+
+    fn print_item(&mut self, text: &str, is_flag: bool) {
+        let suffix = if is_flag { "" } else { ";" };
+        let width_needed = text.len() + suffix.len();
+
+        if self.current_col == 0 {
+            print!("{}{}", text, suffix);
+            self.current_col = width_needed;
+        } else if self.current_col + 1 + width_needed > self.columns {
+            println!();
+            print!("{}{}", text, suffix);
+            self.current_col = width_needed;
+        } else {
+            // 只有换行失败，接在后面时，才统一添加一个前导空格
+            print!(" {}{}", text, suffix);
+            self.current_col += 1 + width_needed;
+        }
+    }
+
+    fn flush(&mut self) {
+        if self.current_col > 0 {
+            println!();
+            self.current_col = 0;
+        }
+    }
+}
+
 /// 根据提供的 termios 结构和选项打印终端大小和行设置。
 ///
 /// 该函数首先通过 `cfgetospeed` 获取终端的输出速度，
@@ -417,27 +472,34 @@ fn termios_equal(lhs: &Termios, rhs: &Termios) -> bool {
 ///
 /// # 返回值
 /// - `CTResult<()>`: 自定义的结果类型，表示成功执行或发生错误。
-fn stty_print_terminal_size(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
+fn stty_print_terminal_size(termios: &Termios, opts: &SttyFlags, wrapper: &mut LineWrapper) -> CTResult<()> {
     let speed = cfgetospeed(termios);
-
+    let mut speed_text = "0";
+    
     for (text, _, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("speed {text} baud; ");
+            speed_text = text;
             break;
         }
     }
 
-    // 如果 `is_all` 选项被设置，则打印终端的行和列信息。
+    let mut items = vec![format!("speed {speed_text} baud")];
+
     if opts.is_all {
-        stty_print_terminal_rows_columns(opts)?;
+        let mut size = TermSize::default();
+        if unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _) }.is_ok() {
+            items.push(format!("rows {}", size.rows));
+            items.push(format!("columns {}", size.columns));
+        }
     }
 
-    // 由于 nix 的 Termios 结构不直接暴露行规约字段，
-    // 因此我们通过转换为底层的 libc::termios 结构来获取行规约信息。
     let libc_termios: nix::libc::termios = termios.clone().into();
-    let line = libc_termios.c_line;
-    println!("line = {line};");
+    items.push(format!("line = {}", libc_termios.c_line));
 
+    for item in items.iter() {
+        wrapper.print_item(item, false);
+    }
+    wrapper.flush();
     Ok(())
 }
 
@@ -519,26 +581,24 @@ fn stty_control_char_to_string(cc: nix::libc::cc_t) -> CTResult<String> {
 /// # 返回值
 ///
 /// 返回一个`CTResult<()>`，表示操作是否成功
-fn stty_print_control_chars(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
-    // 如果`opts.is_all`为`false`，则不打印任何信息直接返回
-    // 未来的工作是实现一个逻辑来比较并打印与默认值不同的设置
+fn stty_print_control_chars(termios: &Termios, opts: &SttyFlags, wrapper: &mut LineWrapper) -> CTResult<()> {
     if !opts.is_all {
-        // TODO: this branch should print values that differ from defaults
         return Ok(());
     }
-    // 遍历控制字符索引列表，打印每个控制字符的当前设置
+    
+    let mut items = Vec::new();
     for (text, cc_index) in CONTROL_CHARS {
-        print!(
-            "{text} = {}; ",
-            stty_control_char_to_string(termios.control_chars[*cc_index as usize])?
-        );
+        let s = stty_control_char_to_string(termios.control_chars[*cc_index as usize])?;
+        items.push(format!("{text} = {s}"));
     }
-    // 打印`VMIN`和`VTIME`特殊字符的设置
-    println!(
-        "min = {}; time = {};",
-        termios.control_chars[SpecialCharacterIndices::VMIN as usize],
-        termios.control_chars[SpecialCharacterIndices::VTIME as usize]
-    );
+    
+    items.push(format!("min = {}", termios.control_chars[SpecialCharacterIndices::VMIN as usize]));
+    items.push(format!("time = {}", termios.control_chars[SpecialCharacterIndices::VTIME as usize]));
+
+    for item in items.iter() {
+        wrapper.print_item(item, false);
+    }
+    wrapper.flush();
     Ok(())
 }
 
@@ -557,7 +617,6 @@ fn stty_print_in_save_format(termios: &Termios) {
         termios.control_flags.bits(),
         termios.local_flags.bits()
     );
-    // 遍历并打印控制字符，每个字符以十六进制格式
     for cc in termios.control_chars {
         print!(":{cc:x}");
     }
@@ -578,18 +637,16 @@ fn stty_print_in_save_format(termios: &Termios) {
 ///
 /// 返回一个`CTResult<()>`，表示操作的结果，如果打印成功则返回`Ok(())`
 fn stty_print_settings(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
-    // 根据opts.is_save决定打印格式
     if opts.is_save {
-        // 如果是保存格式，则调用相应函数打印
         stty_print_in_save_format(termios);
     } else {
-        // 否则，详细打印终端的尺寸、控制字符和各种设置
-        stty_print_terminal_size(termios, opts)?;
-        stty_print_control_chars(termios, opts)?;
-        stty_print_flags(termios, opts, CONTROL_SETTINGS);
-        stty_print_flags(termios, opts, INPUT_SETTINGS);
-        stty_print_flags(termios, opts, OUTPUT_SETTINGS);
-        stty_print_flags(termios, opts, LOCAL_SETTINGS);
+        let mut wrapper = LineWrapper::new();
+        stty_print_terminal_size(termios, opts, &mut wrapper)?;
+        stty_print_control_chars(termios, opts, &mut wrapper)?;
+        stty_print_flags(termios, opts, CONTROL_SETTINGS, &mut wrapper);
+        stty_print_flags(termios, opts, INPUT_SETTINGS, &mut wrapper);
+        stty_print_flags(termios, opts, OUTPUT_SETTINGS, &mut wrapper);
+        stty_print_flags(termios, opts, LOCAL_SETTINGS, &mut wrapper);
     }
     Ok(())
 }
@@ -604,9 +661,8 @@ fn stty_print_settings(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
 /// - `termios`: 一个`Termios`引用，包含终端的当前设置
 /// - `opts`: 一个`SttyFlags`引用，包含命令行选项
 /// - `flags`: 一个`Settings<T>`切片，描述要检查和打印的标志
-fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: &[Settings<T>]) {
+fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: &[Settings<T>], wrapper: &mut LineWrapper) {
     let mut printed_flags = Vec::new();
-    // 遍历每个设置标志
     for &Settings {
         name,
         flag,
@@ -615,15 +671,11 @@ fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: 
         group,
     } in flags
     {
-        // 如果设置标志不应显示，则跳过
         if !is_show {
             continue;
         }
-        // 检查设置标志是否在`termios`中设置
         let is_val = flag.is_in(termios, group);
-        // 处理属于某个组的设置标志
         if group.is_some() {
-            // 如果设置标志已设置且不被视为正常，或如果选择了显示所有设置，则打印
             if is_val && (!is_sane || opts.is_all) {
                 printed_flags.push(name.to_string());
             }
@@ -638,7 +690,10 @@ fn stty_print_flags<T: TermiosFlag>(termios: &Termios, opts: &SttyFlags, flags: 
     }
 
     if !printed_flags.is_empty() {
-        println!("{}", printed_flags.join(" "));
+        for item in printed_flags.iter() {
+            wrapper.print_item(item, true);
+        }
+        wrapper.flush();
     }
 }
 

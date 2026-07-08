@@ -476,7 +476,7 @@ where
 
     // 获取当前环境的TERM值，作为匹配条件之一。
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
-    let term = term.as_str();
+    let colorterm = env::var("COLORTERM").unwrap_or_default();
 
     // 初始化解析状态为全局（Global）。
     let mut parse_state = DircolorsParseState::Global;
@@ -507,8 +507,14 @@ where
         // 将键转换为小写，以支持不区分大小写的匹配。
         let lower = key.to_lowercase();
         // 处理TERM或COLORTERM匹配逻辑。
-        if lower == "term" || lower == "colorterm" {
+        if lower == "term" {
             if term.fnmatch(value) {
+                parse_state = DircolorsParseState::Matched;
+            } else if parse_state != DircolorsParseState::Matched {
+                parse_state = DircolorsParseState::Pass;
+            }
+        } else if lower == "colorterm" {
+            if colorterm.fnmatch(value) {
                 parse_state = DircolorsParseState::Matched;
             } else if parse_state != DircolorsParseState::Matched {
                 parse_state = DircolorsParseState::Pass;

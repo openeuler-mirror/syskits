@@ -1651,18 +1651,16 @@ fn cp_handle_existing_dest(
                     .map(|m| m.permissions().readonly())
                     .unwrap_or(false)
             {
-                let _ = fs::remove_file(dest_path); // 必须忽略错误，因为文件可能已被备份重命名
+                let _ = fs::remove_file(dest_path);
             }
         }
         CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination) => {
-            let _ = fs::remove_file(dest_path); // 同上，忽略 NotFound 错误
+            let _ = fs::remove_file(dest_path);
         }
         CpOverwriteMode::Clobber(CpClobberMode::Standard) => {
-            // 考虑以下文件：
-            // * `src/f` - 一个普通文件
-            // * `src/link` - 一个指向`src/f`的硬链接
-            // * `dest/src/f` - 一个不同的普通文件
-            if cp_opts.cp_preserve_hard_links() {
+            // --attributes-only 模式下不应删除目标文件，只需修改属性
+            // 删除操作会破坏硬链接并截断文件（重新创建为空文件）
+            if cp_opts.copy_mode != CpCopyMode::AttrOnly && cp_opts.cp_preserve_hard_links() {
                 let _ = fs::remove_file(dest_path);
             }
         }
@@ -1856,13 +1854,25 @@ fn cp_handle_copy_mode(
             )?;
         }
         CpCopyMode::AttrOnly => {
-            // 仅复制文件属性
-            OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(true)
-                .open(dest_path)
-                .unwrap();
+            // 确保文件打开时不截断，且正确处理错误
+            // 如果目标文件不存在（前面逻辑意外删除），创建空文件以兼容 GNU 行为
+            // 如果存在，则以非截断模式打开，准备修改属性
+            if !dest_path.exists() {
+                File::create(dest_path).context(format!(
+                    "cannot create destination file {}",
+                    dest_path.quote()
+                ))?;
+            } else {
+                // 以读写模式打开但不截断，确保可以修改时间戳等属性
+                OpenOptions::new()
+                    .write(true)
+                    .truncate(false)
+                    .open(dest_path)
+                    .context(format!(
+                        "cannot open {} for attribute modification",
+                        dest_path.quote()
+                    ))?;
+            }
         }
     };
 

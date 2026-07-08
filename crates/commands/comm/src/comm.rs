@@ -118,7 +118,7 @@ fn check_order(
  */
 fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CTResult<()> {
     // 根据选项获取分隔符
-    let delim = comm_get_del_im(opts);
+    let delim = comm_get_del_im(opts)?;
 
     // 通过选项确定第一、第二列的宽度
     let width_col_1 = usize::from(!opts.get_flag(opt_flags::COLUMN_1));
@@ -317,10 +317,8 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     if opts.get_flag(opt_flags::TOTAL) {
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
         let total_str = t!("comm.messages.total");
-        let col_sep = opts
-            .get_one::<String>(opt_flags::DELIMITER)
-            .map(|s| s.as_str())
-            .unwrap_or("\t");
+        // 使用 comm_get_del_im 来获取分隔符，它会将空字符串转换为 \0
+        let col_sep = comm_get_del_im(opts)?;
         print!(
             "{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}"
         );
@@ -336,15 +334,31 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     Ok(())
 }
 
-fn comm_get_del_im(options: &ArgMatches) -> &str {
-    match options
-        .get_one::<String>(opt_flags::DELIMITER)
-        .unwrap()
-        .as_str()
-    {
+fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
+    // 获取所有分隔符值，检查是否一致
+    let delims: Vec<&String> = options
+        .get_many::<String>(opt_flags::DELIMITER)
+        .map(|v| v.collect())
+        .unwrap_or_default();
+    
+    // 如果有多个值，检查它们是否都相同
+    if delims.len() > 1 {
+        let first = delims[0];
+        for delim in &delims[1..] {
+            if delim.as_str() != first.as_str() {
+                // 多个不同的分隔符被指定，报错
+                return Err(ctcore::ct_error::CtSimpleError::new(
+                    1,
+                    t!("comm.messages.multiple_delimiters").to_string(),
+                ));
+            }
+        }
+    }
+    
+    Ok(match delims.last().map(|s| s.as_str()).unwrap_or("\t") {
         "" => "\0",
         delim => delim,
-    }
+    })
 }
 
 fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineReader> {
@@ -427,7 +441,8 @@ fn args_init() -> Vec<Arg> {
             .help(t!("comm.clap.delimiter"))
             .value_name("STR")
             .default_value(opt_flags::DELIMITER_DEFAULT)
-            .hide_default_value(true),
+            .hide_default_value(true)
+            .action(ArgAction::Append),
         Arg::new(opt_flags::ZERO_TERMINATED)
             .long(opt_flags::ZERO_TERMINATED)
             .short('z')

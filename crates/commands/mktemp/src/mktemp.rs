@@ -311,6 +311,7 @@ impl MkTempParams {
 }
 
 pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
+    let stdout_initially_closed = ctcore::ct_stdout_is_closed();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     use clap::error::{ContextKind, ContextValue, ErrorKind};
@@ -346,6 +347,11 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_dry_run = flags.is_dry_run;
     let is_suppress_file_err = flags.is_quiet;
     let is_make_dir = flags.is_directory;
+
+    // close-stdout 兼容：stdout 初始关闭时，mktemp 需要以写失败退出。
+    if stdout_initially_closed || ctcore::ct_stdout_was_closed() {
+        return Err(CTsageError::new(1, "write error"));
+    }
 
     // 从命令行选项解析文件路径参数。
     let MkTempParams {

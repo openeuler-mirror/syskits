@@ -25,10 +25,10 @@ impl Add for WcWordCount {
 
     fn add(self, other: Self) -> Self {
         Self {
-            bytes: other.bytes + self.bytes,
-            chars: other.chars + self.chars,
-            lines: other.lines + self.lines,
-            words: other.words + self.words,
+            bytes: other.bytes.saturating_add(self.bytes),
+            chars: other.chars.saturating_add(self.chars),
+            lines: other.lines.saturating_add(self.lines),
+            words: other.words.saturating_add(self.words),
             max_line_length: max(other.max_line_length, self.max_line_length),
         }
     }
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_add_max_values() {
-        let max_value = usize::MAX - 1;
+        let max_value = usize::MAX;
         let wc1 = WcWordCount {
             bytes: max_value,
             chars: max_value,
@@ -133,13 +133,13 @@ mod tests {
             words: 1,
             max_line_length: 1,
         };
-        // 预期会因为usize溢出而失败，但在Rust中，测试环境默认不会panic，需要用checked_add等方法手动处理溢出
+        // overflow 应该被饱和到 usize::MAX，而不是 panic
         let result = wc1 + wc2;
-        assert_eq!(result.bytes, usize::MAX); // 由于溢出，结果会回绕
+        assert_eq!(result.bytes, usize::MAX);
         assert_eq!(result.chars, usize::MAX);
         assert_eq!(result.lines, usize::MAX);
         assert_eq!(result.words, usize::MAX);
-        assert_eq!(result.max_line_length, usize::MAX - 1);
+        assert_eq!(result.max_line_length, usize::MAX);
     }
 
     #[test]
@@ -158,5 +158,30 @@ mod tests {
         assert_eq!(result.lines, 10);
         assert_eq!(result.words, 50);
         assert_eq!(result.max_line_length, 40);
+    }
+
+    #[test]
+    fn test_add_assign_saturates() {
+        let mut total = WcWordCount {
+            bytes: usize::MAX,
+            chars: usize::MAX,
+            lines: usize::MAX,
+            words: usize::MAX,
+            max_line_length: 1,
+        };
+        let delta = WcWordCount {
+            bytes: 10,
+            chars: 10,
+            lines: 10,
+            words: 10,
+            max_line_length: 2,
+        };
+
+        total += delta;
+        assert_eq!(total.bytes, usize::MAX);
+        assert_eq!(total.chars, usize::MAX);
+        assert_eq!(total.lines, usize::MAX);
+        assert_eq!(total.words, usize::MAX);
+        assert_eq!(total.max_line_length, 2);
     }
 }

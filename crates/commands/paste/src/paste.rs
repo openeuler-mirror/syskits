@@ -120,31 +120,49 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn process_line(&mut self, file: &mut InputSource) -> CTResult<bool> {
-        match file {
-            Some(reader) => match reader.read_until(self.line_ending as u8, &mut self.output) {
-                Ok(0) => Ok(false),
-                Ok(_) => {
-                    if self.output.ends_with(&[self.line_ending as u8]) {
+        let line_ending = self.line_ending as u8;
+        let mut has_content = false;
+
+        let mut process_stream = |reader: &mut dyn BufRead| -> CTResult<bool> {
+            loop {
+                let buf = reader
+                    .fill_buf()
+                    .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                if buf.is_empty() {
+                    return Ok(has_content);
+                }
+                let (consumed, hit_eol) = match buf.iter().position(|&b| b == line_ending) {
+                    Some(i) => (i + 1, true),
+                    None => (buf.len(), false),
+                };
+                self.output.extend_from_slice(&buf[..consumed]);
+                reader.consume(consumed);
+                has_content = true;
+
+                // 一旦缓冲区超过 64KB，强制提前刷入底层 writer。
+                // 如果底层是 /dev/full，会立即在此处触发 ENOSPC 错误并安全退出。
+                if self.output.len() > 65536 {
+                    self.writer
+                        .write_all(&self.output)
+                        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                    self.output.clear();
+                }
+
+                if hit_eol {
+                    if self.output.ends_with(&[line_ending]) {
                         self.output.pop();
                     }
-                    Ok(true)
+                    break;
                 }
-                Err(e) => Err(e.map_err_context(String::new)),
-            },
+            }
+            Ok(has_content)
+        };
+
+        match file {
+            Some(reader) => process_stream(reader),
             None => {
-                match stdin()
-                    .lock()
-                    .read_until(self.line_ending as u8, &mut self.output)
-                {
-                    Ok(0) => Ok(false),
-                    Ok(_) => {
-                        if self.output.ends_with(&[self.line_ending as u8]) {
-                            self.output.pop();
-                        }
-                        Ok(true)
-                    }
-                    Err(e) => Err(e.map_err_context(String::new)),
-                }
+                let mut stdin = stdin().lock();
+                process_stream(&mut stdin)
             }
         }
     }
@@ -157,7 +175,8 @@ impl<W: Write> PasteContext<W> {
                 "{}{}",
                 String::from_utf8_lossy(&self.output),
                 self.line_ending
-            )?;
+            )
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         }
         Ok(())
     }
@@ -229,7 +248,8 @@ impl<W: Write> PasteContext<W> {
                     "{}{}",
                     String::from_utf8_lossy(&self.output),
                     self.line_ending
-                )?;
+                )
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             }
             delim_count = 0;
         }

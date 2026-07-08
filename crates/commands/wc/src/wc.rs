@@ -23,7 +23,7 @@ use sys_locale::get_locale;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, FromIo, set_ct_exit_code};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_show;
 
@@ -816,6 +816,10 @@ fn files0_iter<'a>(
 fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
     let mut total_word_count = WcWordCount::default();
     let mut num_inputs: usize = 0;
+    let mut bytes_overflowed = false;
+    let mut chars_overflowed = false;
+    let mut lines_overflowed = false;
+    let mut words_overflowed = false;
 
     let (number_width, are_stats_visible) = if settings.total_when == WcTotalWhen::Only {
         (1, false)
@@ -847,7 +851,28 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
             continue;
         }
 
-        total_word_count += word_count;
+        let (bytes, bytes_overflow) =
+            saturating_add_with_overflow(total_word_count.bytes, word_count.bytes);
+        total_word_count.bytes = bytes;
+        bytes_overflowed |= bytes_overflow;
+
+        let (chars, chars_overflow) =
+            saturating_add_with_overflow(total_word_count.chars, word_count.chars);
+        total_word_count.chars = chars;
+        chars_overflowed |= chars_overflow;
+
+        let (lines, lines_overflow) =
+            saturating_add_with_overflow(total_word_count.lines, word_count.lines);
+        total_word_count.lines = lines;
+        lines_overflowed |= lines_overflow;
+
+        let (words, words_overflow) =
+            saturating_add_with_overflow(total_word_count.words, word_count.words);
+        total_word_count.words = words;
+        words_overflowed |= words_overflow;
+
+        total_word_count.max_line_length =
+            max(total_word_count.max_line_length, word_count.max_line_length);
 
         if are_stats_visible {
             let maybe_title = input.to_title();
@@ -860,7 +885,8 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
         }
     }
 
-    if settings.total_when.is_total_row_visible(num_inputs) {
+    let total_row_visible = settings.total_when.is_total_row_visible(num_inputs);
+    if total_row_visible {
         let total_text = t!("wc.total_row");
         let title = are_stats_visible.then_some(total_text.as_str());
         print_stats(settings, &total_word_count, title, number_width).unwrap_or_else(|err| {
@@ -868,8 +894,57 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
         });
     }
 
+    if total_row_visible {
+        if bytes_overflowed {
+            ct_show!(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Value too large for defined data type"
+                )
+                .map_err_context(|| "total bytes".to_string())
+            );
+        }
+        if chars_overflowed {
+            ct_show!(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Value too large for defined data type"
+                )
+                .map_err_context(|| "total chars".to_string())
+            );
+        }
+        if lines_overflowed {
+            ct_show!(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Value too large for defined data type"
+                )
+                .map_err_context(|| "total lines".to_string())
+            );
+        }
+        if words_overflowed {
+            ct_show!(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Value too large for defined data type"
+                )
+                .map_err_context(|| "total words".to_string())
+            );
+        }
+        if bytes_overflowed || chars_overflowed || lines_overflowed || words_overflowed {
+            set_ct_exit_code(1);
+        }
+    }
+
     // 虽然这似乎是返回 `Ok` ，但退出代码可能已被设置为一个非零值(调用`record_error!()`)。
     Ok(())
+}
+
+fn saturating_add_with_overflow(lhs: usize, rhs: usize) -> (usize, bool) {
+    match lhs.checked_add(rhs) {
+        Some(sum) => (sum, false),
+        None => (usize::MAX, true),
+    }
 }
 
 fn print_stats(
@@ -1540,6 +1615,17 @@ mod tests {
         assert_eq!(word_count.words, 4);
         assert_eq!(word_count.lines, 1);
         assert_eq!(word_count.chars, text.chars().count());
+    }
+
+    #[test]
+    fn test_saturating_add_with_overflow() {
+        let (sum, overflowed) = saturating_add_with_overflow(usize::MAX, 1);
+        assert!(overflowed);
+        assert_eq!(sum, usize::MAX);
+
+        let (sum, overflowed) = saturating_add_with_overflow(10, 20);
+        assert!(!overflowed);
+        assert_eq!(sum, 30);
     }
 
     #[test]

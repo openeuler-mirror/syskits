@@ -77,9 +77,21 @@ pub fn ct_app() -> Command {
 }
 
 fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Format)> {
-    let args_match = ct_app()
-        .try_get_matches_from(args.collect_lossy())
-        .with_exit_code(1)?;
+    let args_match = match ct_app().try_get_matches_from(args.collect_lossy()) {
+        Ok(matches) => matches,
+        Err(e) => {
+            if e.kind() == clap::error::ErrorKind::UnknownArgument {
+                let err_text = e.to_string();
+                if let Some(arg) = extract_unexpected_argument(&err_text) {
+                    return Err(CTsageError::new(
+                        BASE_CMD_PARSE_ERROR,
+                        arg.trim_start_matches('-'),
+                    ));
+                }
+            }
+            return Err(e.with_exit_code(1).into());
+        }
+    };
     let format_mod = BASE64_ENCODINGS
         .iter()
         .find(|encoding| args_match.get_flag(encoding.0))
@@ -87,6 +99,14 @@ fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Forma
         .1;
     let config_mod = BaseConfig::from(&args_match)?;
     Ok((config_mod, format_mod))
+}
+
+fn extract_unexpected_argument(err_text: &str) -> Option<String> {
+    let marker = "unexpected argument '";
+    let start = err_text.find(marker)?;
+    let rest = &err_text[start + marker.len()..];
+    let end = rest.find('\'')?;
+    Some(rest[..end].to_string())
 }
 
 #[derive(Default)]
@@ -149,6 +169,16 @@ mod test {
         // 测试 execute 方法
         let args = vec![OsString::from("basenc"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err()); // basenc needs an encoding flag to be valid
+    }
+
+    #[test]
+    fn test_unknown_argument_error_matches_coreutils_shape() {
+        let args = [ctcore::ct_util_name(), "--foobar"];
+        let mut output = Vec::new();
+        let err = basenc_main(args.iter().map(OsString::from), &mut output).unwrap_err();
+        assert_eq!(err.code(), 1);
+        assert_eq!(err.to_string(), "foobar");
+        assert!(err.usage());
     }
 
     // 创建文件并写入内容

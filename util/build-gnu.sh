@@ -87,6 +87,9 @@ for binary in $("${SYSKITS_BUILD_DIR}/syskits" --list); do
     ln -vf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/${binary}"
 done
 
+# 创建 coreutils 软链接，用于 multicall binary 测试
+ln -vf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/coreutils"
+
 # 专门为 ginstall 创建一个包装脚本，将其请求转发给 syskits 的 install
 # 必须放在下面那个检查缺失工具的循环之前，防止它被变成 false
 echo '#!/bin/bash' > "${SYSKITS_BUILD_DIR}/ginstall"

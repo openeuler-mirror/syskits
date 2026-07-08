@@ -737,16 +737,62 @@ fn uniq_open_input_file(in_file_name: Option<&OsStr>) -> CTResult<Box<dyn BufRea
     })
 }
 
+// 解决 Rust stdout 内部块缓冲导致的“双重缓冲”数据滞留问题。
+struct StdbufWriter<W: Write> {
+    inner: W,
+    mode: u8, // 0: 无缓冲 (unbuffered), 1: 行缓冲 (line buffered)
+}
+
+impl<W: Write> Write for StdbufWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        
+        // 如果是无缓冲，或者在行缓冲模式下当前写入的切片中包含了换行符
+        if self.mode == 0 || (self.mode == 1 && buf[..n].contains(&b'\n')) {
+            // 强行调用内层 Writer 的 flush，穿透 Rust stdout 的 8KB 块缓冲，直达 OS 管道
+            self.inner.flush()?;
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 // None 或 "-" 表示 stdout
 fn uniq_open_output_file(out_file_name: Option<&OsStr>) -> CTResult<Box<dyn Write>> {
-    Ok(match out_file_name {
+    // 获取原始的输出流（文件或 stdout）
+    let out: Box<dyn Write> = match out_file_name {
         Some(path) if path != "-" => {
             let out = File::create(path)
                 .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
-            Box::new(BufWriter::new(out))
+            Box::new(out)
         }
         _ => Box::new(stdout().lock()),
-    })
+    };
+
+    // 主动嗅探 stdbuf 注入的缓冲控制环境变量，并套上我们自定义的强制刷新阀门
+    if let Ok(stdbuf_o) = std::env::var("_STDBUF_O") {
+        match stdbuf_o.as_str() {
+            "0" => Ok(Box::new(StdbufWriter { inner: out, mode: 0 })), // 无缓冲
+            "L" => Ok(Box::new(StdbufWriter { inner: out, mode: 1 })), // 行缓冲
+            size_str => {
+                // 指定大小的块缓冲
+                if let Ok(size) = size_str.parse::<usize>() {
+                    Ok(Box::new(BufWriter::with_capacity(size, out)))
+                } else {
+                    Ok(Box::new(BufWriter::new(out)))
+                }
+            }
+        }
+    } else {
+        // 没有 stdbuf 介入时的默认行为
+        match out_file_name {
+            Some(path) if path != "-" => Ok(Box::new(BufWriter::new(out))),
+            _ => Ok(out),
+        }
+    }
 }
 
 #[cfg(test)]

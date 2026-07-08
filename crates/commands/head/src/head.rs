@@ -492,6 +492,16 @@ where
 }
 
 fn is_seekable(input: &mut std::fs::File) -> bool {
+    // 只有常规文件才允许执行基于 len() 的寻址优化。
+    // 字符设备（如 /dev/zero）或管道返回的 metadata().len() 是不可靠的。
+    if let Ok(meta) = input.metadata() {
+        if !meta.is_file() {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
     let current_pos = input.stream_position();
     current_pos.is_ok()
         && input.seek(SeekFrom::End(0)).is_ok()
@@ -499,7 +509,7 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    // 修复管道模拟：如果开启 presume_input_pipe，强制认为不可寻址
+    // 管道模拟：如果开启 presume_input_pipe，强制认为不可寻址
     let seekable = !options.presume_input_pipe && is_seekable(input);
 
     if !seekable {
@@ -661,7 +671,7 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
 
 // 处理单个文件
 fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult<()> {
-    // 修复：不要劫持 presume_input_pipe！只在 file 是 "-" 时才读取 stdin
+    // 不要劫持 presume_input_pipe！只在 file 是 "-" 时才读取 stdin
     let res = if file == "-" {
         print_file_header(options, *first, "standard input");
 

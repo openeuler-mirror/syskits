@@ -505,16 +505,14 @@ type Field = Range<usize>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct SortLine<'a> {
     line: &'a str,
+    pub raw_bytes: &'a [u8],
     index: usize,
 }
 
 impl<'a> SortLine<'a> {
-    /// 创建一个新的 `Line`。
-    ///
-    /// 如果排序需要额外数据，则将其添加到 `line_data` 中。
-    /// `token_buffer` 允许重复使用标记分配。
     fn create(
         line: &'a str,
+        raw_bytes: &'a [u8],
         index: usize,
         chunk_line_data: &mut ChunkLineData<'a>,
         token_buffer: &mut Vec<Field>,
@@ -544,7 +542,7 @@ impl<'a> SortLine<'a> {
                 }
             }
         }
-        Self { line, index }
+        Self { line, raw_bytes, index }
     }
 
     fn print(&self, w: &mut impl Write, sort_settings: &SortGlobalConfigs) {
@@ -553,7 +551,8 @@ impl<'a> SortLine<'a> {
                 self.print_debug(sort_settings, w).unwrap();
             }
             false => {
-                w.write_all(self.line.as_bytes()).unwrap();
+                // 输出时，必须原封不动地打印被保留下来的原始乱码/非 UTF-8 字节！
+                w.write_all(self.raw_bytes).unwrap();
                 w.write_all(&[sort_settings.line_ending.into()]).unwrap();
             }
         }
@@ -1869,8 +1868,9 @@ fn sort_compare_by<'a>(
     {
         Ordering::Equal
     } else {
-        // 使用locale感知的字符串比较
-        strcoll_compare(a.line.as_bytes(), b.line.as_bytes(), false)
+        // 底层 strcoll 是 C 语言函数，直接支持特定语种（如 fr_FR 的 ISO-8859-1）
+        // 因此必须传入原始字节进行比较，而不能传带有  的容错字符串！
+        strcoll_compare(a.raw_bytes, b.raw_bytes, false)
     };
 
     if global_settings.is_reverse {

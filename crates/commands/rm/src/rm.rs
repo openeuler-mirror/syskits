@@ -810,19 +810,30 @@ fn prompt_file_permission_readonly(local_path: &Path, display_path: &Path) -> bo
 
 #[cfg(unix)]
 fn handle_writable_directory(
-    _local_path: &Path,
+    local_path: &Path,
     display_path: &Path,
     options: &RMOptions,
-    metadata: &Metadata,
+    _metadata: &Metadata,
 ) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    let mode = metadata.permissions().mode();
-    #[allow(clippy::unnecessary_cast)]
-    let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
-
     let is_root = unsafe { libc::geteuid() } == 0;
+    if is_root && options.interactive != InteractiveMode::Always {
+        return true;
+    }
 
-    if !user_writable && !is_root {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let c_path = CString::new(local_path.as_os_str().as_bytes()).unwrap();
+    // 精确判定：缺乏 R 或 X 权限均视为不可访问 (inaccessible)
+    let inaccessible = unsafe { libc::access(c_path.as_ptr(), libc::R_OK | libc::X_OK) } != 0;
+    let write_protected = unsafe { libc::access(c_path.as_ptr(), libc::W_OK) } != 0;
+
+    if inaccessible && !is_root {
+        ct_prompt_yes!(
+            "attempt removal of inaccessible directory {}?",
+            display_path.quote()
+        )
+    } else if write_protected && !is_root {
         ct_prompt_yes!("remove write-protected directory {}?", display_path.quote())
     } else if options.interactive == InteractiveMode::Always {
         ct_prompt_yes!("remove directory {}?", display_path.quote())
@@ -841,6 +852,7 @@ fn handle_writable_directory(
     use std::os::windows::prelude::MetadataExt;
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
     let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+
     if not_user_writable {
         ct_prompt_yes!("remove write-protected directory {}?", display_path.quote())
     } else if options.interactive == InteractiveMode::Always {
@@ -1235,7 +1247,7 @@ mod tests {
     mod test_handle_writable_directory {
         use super::*;
         use std::fs;
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
         #[test]
         fn test_handle_writable_directory() {

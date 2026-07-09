@@ -556,6 +556,31 @@ mod test {
     }
 
     #[test]
+    fn test_decoding_ignore_lowercase_ctmain() {
+        // GNU 行为：--ignore-garbage 不会把小写 base32 字母当作有效字符。
+        let filename = "test_decoding_ignore_lowercase_ctmain.txt";
+        let content = "krsxg5bamrswg33emuqgeyltmuzte==="; /* lowercase of "Test decode base32" */
+
+        match create_file_with_content(filename, content) {
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
+        }
+
+        let args = [ctcore::ct_util_name(), "--ignore-garbage", "-d", filename];
+        let mut output = Vec::new();
+        let result: CTResult<()> = base32_main(args.iter().map(OsString::from), &mut output);
+        assert!(result.is_err());
+        let s = String::from_utf8(output).unwrap().replace('\n', "");
+
+        match delete_file(filename) {
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
+        }
+
+        assert!(s.is_empty());
+    }
+
+    #[test]
     fn test_decoding_wrap_ignore_ctmain() {
         let filename = "test_decoding_wrap_ignore_ctmain.txt";
         let content = "KRSXG5BAMRSWG33EMUQGEYLTMUZTE==="; /* Test decode base32 */

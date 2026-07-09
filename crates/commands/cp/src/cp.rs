@@ -1117,21 +1117,21 @@ impl CpOptions {
         if args_match.get_flag(opt_flags::Z) {
             selinux_context = Some(None);
         }
-        if let Some(ctx) = args_match.get_one::<String>(opt_flags::CONTEXT) {
-            selinux_context = Some(Some(ctx.clone()));
+        if args_match.contains_id(opt_flags::CONTEXT) {
+            if let Some(ctx) = args_match.get_one::<String>(opt_flags::CONTEXT) {
+                selinux_context = Some(Some(ctx.clone()));
+            } else {
+                // GNU cp: bare `--context` has the same semantics as `-Z`.
+                selinux_context = Some(None);
+            }
         }
 
         if selinux_context.is_some() && matches!(context, CpPreserve::Yes { .. }) {
             // 如果是显式的，严格报错；如果是 -a 带来的隐式，则被 -Z 覆盖，不报错
             if explicit_preserve_context {
-                let conflict_flag = if args_match.get_one::<String>(opt_flags::CONTEXT).is_some() {
-                    "--context"
-                } else {
-                    "-Z"
-                };
-                return Err(CpError::Error(format!(
-                    "cannot force both --preserve=context and {conflict_flag}"
-                )));
+                return Err(CpError::Error(
+                    "cannot set target context and preserve it".to_string(),
+                ));
             } else {
                 // -Z 或 --context 覆盖隐式的 context 属性继承
                 context = CpPreserve::No { explicit: true };

@@ -14,7 +14,7 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{TailInput, TailInputKind, TailMetadataExt, TailPathExt};
 use crate::{platform, text};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_show_error;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashMap;
@@ -423,19 +423,32 @@ impl Observer {
                             // assuming it has been truncated to 0. This mimics GNU's `tail`
                             // behavior and is the usual truncation operation for log self.files.
                             if !old_md.is_tailable() {
-                                ct_show_error!( "{} has become accessible", display_name.quote());
-                                self.files.update_reader(&tracked_path)?;
+                                if let Err(e) = self.files.update_reader(&tracked_path) {
+                                    ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
+                                } else {
+                                    ct_show_error!( "{} has become accessible", display_name.quote());
+                                }
                             } else if pd.reader.is_none() {
-                                ct_show_error!( "{} has appeared;  following new file", display_name.quote());
-                                self.files.update_reader(&tracked_path)?;
+                                if let Err(e) = self.files.update_reader(&tracked_path) {
+                                    ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
+                                } else {
+                                    ct_show_error!( "{} has appeared;  following new file", display_name.quote());
+                                }
                             } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
-                                || (self.use_polling
-                                && !old_md.file_id_eq(&new_md)) {
-                                ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
-                                self.files.update_reader(&tracked_path)?;
-                            } else if old_md.got_truncated(&new_md)? {
-                                ct_show_error!("{}: file truncated", display_name);
-                                self.files.update_reader(&tracked_path)?;
+                                || (self.use_polling && !old_md.file_id_eq(&new_md)) {
+                                if let Err(e) = self.files.update_reader(&tracked_path) {
+                                    ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
+                                    ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
+                                } else {
+                                    ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
+                                }
+                            } else if old_md.got_truncated(&new_md).unwrap_or(false) {
+                                if let Err(e) = self.files.update_reader(&tracked_path) {
+                                    ct_show_error!("{}: file truncated", display_name);
+                                    ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
+                                } else {
+                                    ct_show_error!("{}: file truncated", display_name);
+                                }
                             }
                             paths.push(tracked_path.clone());
                         } else if !is_tailable && old_md.is_tailable() {
@@ -449,8 +462,11 @@ impl Observer {
                             }
                         }
                     } else if is_tailable {
-                        ct_show_error!( "{} has appeared;  following new file", display_name.quote());
-                        self.files.update_reader(&tracked_path)?;
+                        if let Err(e) = self.files.update_reader(&tracked_path) {
+                            ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
+                        } else {
+                            ct_show_error!( "{} has appeared;  following new file", display_name.quote());
+                        }
                         paths.push(tracked_path.clone());
                     } else if options.retry {
                         if self.follow_descriptor() {

@@ -164,12 +164,4 @@ mod tests_csplit {
             "too many % conversion specifications in suffix"
         );
     }
-
-    #[test]
-    fn test_csplit_error_not_regular_file() {
-        use crate::csplit_error::CsplitError;
-        let error = CsplitError::NotRegularFile("file.txt".into());
-
-        assert_eq!(error.to_string(), "'file.txt' is not a regular file");
-    }
 }

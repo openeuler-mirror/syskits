@@ -642,14 +642,14 @@ mod tests {
         #[test]
         fn determine_times_defaults_to_now() {
             let matches = build_matches(&["dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
             assert_eq!(atime, mtime);
         }
 
         #[test]
         fn determine_times_with_timestamp_argument() {
             let matches = build_matches(&["-t", "202406150830", "dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
             let expected = Local.with_ymd_and_hms(2024, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(atime.unix_seconds(), expected.timestamp());
             assert_eq!(mtime, atime);
@@ -658,7 +658,7 @@ mod tests {
         #[test]
         fn determine_times_with_date_argument() {
             let matches = build_matches(&["-d", "2024-06-15 08:30:00", "dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
             let expected = Local.with_ymd_and_hms(2024, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(atime.unix_seconds(), expected.timestamp());
             assert_eq!(mtime, atime);
@@ -673,7 +673,7 @@ mod tests {
             set_file_times(&file_path, custom_time, custom_time).unwrap();
 
             let matches = build_matches(&["-r", file_path.to_str().unwrap(), "dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
             assert_eq!(atime.unix_seconds(), custom_time.unix_seconds());
             assert_eq!(mtime.unix_seconds(), custom_time.unix_seconds());
         }
@@ -693,7 +693,7 @@ mod tests {
                 "2024-06-15 08:30:00",
                 "dummy",
             ]);
-            let (atime, mtime) = touch_determine_times(&matches).unwrap();
+            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
             let expected = Local
                 .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
                 .unwrap()
@@ -911,8 +911,8 @@ mod tests {
             // GNU解析器可能不支持微秒，回退到原解析器，使用本地时间
             let expected_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(filetime.unix_seconds(), expected_time.timestamp());
-            // 修正纳秒值的对比，需要匹配代码实际处理逻辑
-            assert_eq!(filetime.nanoseconds(), 123456);
+            // 微秒转纳秒：123456 微秒 = 123456000 纳秒
+            assert_eq!(filetime.nanoseconds(), 123456000);
 
             let date_str = "2022-06-15 08:30";
             let filetime = touch_parse_date(ref_time, date_str).unwrap();

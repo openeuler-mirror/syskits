@@ -839,6 +839,7 @@ mod tests {
     use super::*;
     use std::ffi::{OsStr, OsString};
     use std::fs;
+    use std::os::unix::fs::MetadataExt;
     use std::path::PathBuf;
 
     fn base_options() -> RMOptions {
@@ -847,6 +848,7 @@ mod tests {
             interactive: InteractiveMode::Never,
             one_fs: false,
             preserve_root: true,
+            preserve_root_all: false,
             recursive: false,
             dir: false,
             verbose: false,
@@ -916,7 +918,9 @@ mod tests {
         std::fs::write(nested.join("file.txt"), b"content").unwrap();
         std::fs::write(dir_path.join("root.txt"), b"root").unwrap();
 
-        custom_remove_dir_all(dir_path).unwrap();
+        let options = base_options();
+        let metadata = std::fs::metadata(dir_path).unwrap();
+        custom_remove_dir_all(dir_path, &options, metadata.dev()).unwrap();
         assert!(!dir_path.exists());
     }
 
@@ -1014,6 +1018,7 @@ mod tests {
             interactive: InteractiveMode::Never,
             one_fs: false,
             preserve_root: false,
+            preserve_root_all: false,
             recursive: true,
             dir: true,
             verbose: true,
@@ -1038,6 +1043,7 @@ mod tests {
             interactive: InteractiveMode::Never,
             one_fs: false,
             preserve_root: false,
+            preserve_root_all: false,
             recursive: true,
             dir: true,
             verbose: true,
@@ -1090,13 +1096,15 @@ mod tests {
             interactive: InteractiveMode::Never,
             one_fs: false,
             preserve_root: false,
+            preserve_root_all: false,
             recursive: true,
             dir: true,
             verbose: true,
         };
 
         // 调用函数进行测试
-        let result = handle_dir(path, &options);
+        let metadata = std::fs::metadata(path).unwrap();
+        let result = handle_dir(path, &options, metadata.dev());
 
         // 断言结果
         assert!(!result);
@@ -1119,13 +1127,15 @@ mod tests {
             interactive: InteractiveMode::Never,
             one_fs: false,
             preserve_root: false,
+            preserve_root_all: false,
             recursive: true,
             dir: true,
             verbose: true,
         };
 
         // 调用函数进行测试
-        let result = handle_dir(path, &options);
+        let metadata = std::fs::metadata(path).unwrap();
+        let result = handle_dir(path, &options, metadata.dev());
 
         // 断言结果
         assert!(!result);
@@ -1144,6 +1154,7 @@ mod tests {
             interactive: InteractiveMode::Never,
             one_fs: false,
             preserve_root: false,
+            preserve_root_all: false,
             recursive: true,
             dir: true,
             verbose: true,
@@ -1153,7 +1164,8 @@ mod tests {
         fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
 
         // 调用函数进行测试
-        let result = handle_dir(path, &options);
+        let metadata = std::fs::metadata(path).unwrap();
+        let result = handle_dir(path, &options, metadata.dev());
 
         // 断言结果
         assert_eq!(result, true);
@@ -1162,7 +1174,7 @@ mod tests {
     mod test_handle_writable_directory {
         use super::*;
         use std::fs;
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
         #[test]
         fn test_handle_writable_directory() {
@@ -1179,6 +1191,7 @@ mod tests {
                 interactive: InteractiveMode::PromptProtected,
                 one_fs: false,
                 preserve_root: false,
+                preserve_root_all: false,
                 recursive: true,
                 dir: true,
                 verbose: false,
@@ -1217,6 +1230,7 @@ mod tests {
                 interactive: InteractiveMode::Never,
                 one_fs: false,
                 preserve_root: false,
+                preserve_root_all: false,
                 recursive: true,
                 dir: false,
                 verbose: false,
@@ -1244,6 +1258,7 @@ mod tests {
                 interactive: InteractiveMode::Never,
                 one_fs: false,
                 preserve_root: false,
+                preserve_root_all: false,
                 recursive: true,
                 dir: false,
                 verbose: false,

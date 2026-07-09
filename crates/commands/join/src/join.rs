@@ -1458,7 +1458,7 @@ mod tests {
             .unwrap();
 
         let settings = JoinSettings::new(&matches).unwrap();
-        assert!(matches!(settings.separator, Sep::Char(b',')));
+        assert!(matches!(settings.separator, Sep::Char(ref v) if v == &[b',']));
 
         // 测试空分隔符
         let matches = ct_app()
@@ -1538,7 +1538,7 @@ mod tests {
     fn test_print_field() {
         // 设置测试环境
         let empty = b"EMPTY";
-        let repr = JoinRepr::new(CtLineEnding::Newline, b',', &[], empty);
+        let repr = JoinRepr::new(CtLineEnding::Newline, vec![b','], &[], empty);
         let mut output = Cursor::new(Vec::new());
 
         // 测试正常字段
@@ -1560,11 +1560,15 @@ mod tests {
     #[test]
     fn test_print_fields() {
         // 创建测试行
-        let line = Line::new(b"field1,field2,field3,field4".to_vec(), Sep::Char(b','), 4);
+        let line = Line::new(
+            b"field1,field2,field3,field4".to_vec(),
+            &Sep::Char(vec![b',']),
+            4,
+        );
 
         // 设置测试环境
         let empty = b"EMPTY";
-        let repr = JoinRepr::new(CtLineEnding::Newline, b',', &[], empty);
+        let repr = JoinRepr::new(CtLineEnding::Newline, vec![b','], &[], empty);
         let mut output = Cursor::new(Vec::new());
 
         // 测试跳过第一个字段
@@ -1588,7 +1592,7 @@ mod tests {
             JoinSpec::Field(FileNum::File1, 1),
             JoinSpec::Field(FileNum::File2, 2),
         ];
-        let repr = JoinRepr::new(CtLineEnding::Newline, b',', &format, empty);
+        let repr = JoinRepr::new(CtLineEnding::Newline, vec![b','], &format, empty);
         let mut output = Cursor::new(Vec::new());
 
         // 测试正常格式化
@@ -1690,7 +1694,7 @@ mod tests {
                 key1: 0,
                 key2: 0,
                 is_print_joined: true,
-                separator: Sep::Char(b','),
+                separator: Sep::Char(vec![b',']),
                 ..Default::default()
             };
 

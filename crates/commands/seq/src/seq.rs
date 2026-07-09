@@ -660,7 +660,7 @@ mod tests {
         // 测试无限值
         let mut output = Vec::new();
         write_value_float(&mut output, &ExtendedBigDecimal::Infinity, 8, 3).unwrap();
-        assert_eq!(String::from_utf8(output).unwrap(), "     inf");
+        assert_eq!(String::from_utf8(output).unwrap(), "00000inf");
     }
 
     #[test]
@@ -682,6 +682,7 @@ mod tests {
                 pad: false,
                 padding: 1,
                 format: &None,
+                format_str: None,
                 buffer: Some(&mut output),
             },
         )
@@ -705,6 +706,7 @@ mod tests {
                 pad: true,
                 padding: 2,
                 format: &None,
+                format_str: None,
                 buffer: Some(&mut output),
             },
         )

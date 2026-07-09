@@ -847,8 +847,7 @@ mod tests {
                 ..Default::default()
             };
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let lines = FmtFileLines::new(&opts, r.lines());
+            let lines = FmtFileLines::new(&opts, &mut reader);
 
             let (match_result, _) = lines.match_prefix(data);
             assert!(match_result, "Prefix should match correctly.");
@@ -863,8 +862,7 @@ mod tests {
                 ..Default::default()
             };
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let lines = FmtFileLines::new(&opts, r.lines());
+            let lines = FmtFileLines::new(&opts, &mut reader);
 
             let match_result = lines.match_anti_prefix(data);
             assert!(!match_result, "Anti-prefix should prevent formatting.");
@@ -879,8 +877,7 @@ mod tests {
             };
             let _reader = setup_lines_reader(data);
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let lines = FmtFileLines::new(&opts, r.lines());
+            let lines = FmtFileLines::new(&opts, &mut reader);
 
             let (_, prefix_len, indent_len) = lines.compute_indent(data, 0);
             assert_eq!(prefix_len, 0, "No prefix should be recognized.");
@@ -900,8 +897,7 @@ mod tests {
                 ..Default::default()
             };
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let mut lines = FmtFileLines::new(&opts, r.lines());
+            let mut lines = FmtFileLines::new(&opts, &mut reader);
             let _expected1 = "normal line".to_string();
             let _expected2 = "    indented line".to_string();
             let _expected3 = FormatLine(FmtFileLine {
@@ -937,8 +933,7 @@ mod tests {
                 ..Default::default()
             };
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let lines = FmtFileLines::new(&opts, r.lines());
+            let lines = FmtFileLines::new(&opts, &mut reader);
 
             assert!(
                 lines.match_prefix("prefix1: Line with first prefix.").0,
@@ -958,8 +953,7 @@ mod tests {
                 ..Default::default()
             };
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let mut lines = FmtFileLines::new(&opts, r.lines());
+            let mut lines = FmtFileLines::new(&opts, &mut reader);
 
             let line_with_tab = lines.next().unwrap();
             let line_with_spaces = lines.next().unwrap();
@@ -986,8 +980,7 @@ mod tests {
                 ..Default::default()
             };
             let mut reader = setup_lines_reader(data);
-            let r = &mut reader;
-            let mut lines = FmtFileLines::new(&opts, r.lines());
+            let mut lines = FmtFileLines::new(&opts, &mut reader);
 
             let empty_line = lines.next().unwrap();
             assert!(

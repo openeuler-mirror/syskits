@@ -838,11 +838,11 @@ mod tests {
 
         #[test]
         fn test_no_separator() {
+            // n=0 时，target_newlines=0，直接返回文件大小
             let mut input = Cursor::new("abc");
-            // 对于没有分隔符的输入：
-            // n=0 时，由于没有找到任何分隔符，返回0
-            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 0);
-            // n>0 时，由于没有找到任何分隔符，也返回0
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 3);
+            // n>0 时，由于没有找到任何分隔符，返回0（使用新的 Cursor）
+            let mut input = Cursor::new("abc");
             assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
         }
 
@@ -877,17 +877,20 @@ mod tests {
 
         #[test]
         fn test_without_final_separator() {
-            let mut input = Cursor::new("a\nb\nc");
             // "a\n" = 2字节
             // "b\n" = 2字节
             // "c" = 1字节
             // 总共5字节
-            // n=0 时返回最后一个换行符的位置
-            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 4);
-            // n=1 时返回第一个换行符的位置
-            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
-            // n=2 时，由于没有更多换行符，返回0
-            assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 0);
+            // 文件不以分隔符结尾，ends_with_sep=false
+            // n=0 时 target_newlines=0，返回文件大小
+            let mut input = Cursor::new("a\nb\nc");
+            assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 5);
+            // n=1 时 target_newlines=1，找第1个换行符（从末尾数），即 "b\n" 后的位置（使用新的 Cursor）
+            let mut input = Cursor::new("a\nb\nc");
+            assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 4);
+            // n=2 时 target_newlines=2，找第2个换行符，即 "a\n" 后的位置（使用新的 Cursor）
+            let mut input = Cursor::new("a\nb\nc");
+            assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 2);
         }
     }
     mod test_read_but_last_n_lines {

@@ -1563,7 +1563,8 @@ mod tests {
                 file: device,
                 settings: None,
             };
-            assert!(stty_print_terminal_size(&termios, &opts).is_ok());
+            let mut wrapper = LineWrapper::new();
+            assert!(stty_print_terminal_size(&termios, &opts, &mut wrapper).is_ok());
         }
 
         #[test]
@@ -1581,7 +1582,8 @@ mod tests {
                 file: Device::Stdin(stdin()),
                 settings: None,
             };
-            assert!(stty_print_control_chars(&termios, &opts).is_ok());
+            let mut wrapper = LineWrapper::new();
+            assert!(stty_print_control_chars(&termios, &opts, &mut wrapper).is_ok());
         }
 
         #[test]

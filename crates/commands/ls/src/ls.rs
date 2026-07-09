@@ -3642,33 +3642,27 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
 /// This because we need to check the previous value in case we don't need
 /// the reset
 struct StyleManager {
-    current_style: Option<Style>,
+    is_first: bool,
 }
 
 impl StyleManager {
     fn new() -> Self {
-        Self {
-            current_style: None,
-        }
+        Self { is_first: true }
     }
 
     fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
-        if let Some(current_style) = &self.current_style {
-            if *current_style == *new_style {
-                // 当前样式与新样式相同，应用时无需重置。
-                let mut term_style = new_style.to_nu_ansi_term_style();
-                term_style.prefix_with_reset = false;
-                return term_style.paint(name).to_string();
-            }
+        let mut term_style = new_style.to_nu_ansi_term_style();
+
+        if self.is_first {
+            // 只有在整个输出的第一次着色时，才按照 GNU ls 规范输出全局初始化重置符 (\033[0m)
+            self.is_first = false;
+            term_style = term_style.reset_before_style();
+        } else {
+            // 由于每个上色的文件名末尾都已经自带了重置符，后续的项目不需要在头部进行冗余重置
+            term_style.prefix_with_reset = false;
         }
 
-        // 我们获得了新的样式，需要重新设置它
-        self.current_style = Some(new_style.clone());
-        new_style
-            .to_nu_ansi_term_style()
-            .reset_before_style()
-            .paint(name)
-            .to_string()
+        term_style.paint(name).to_string()
     }
 }
 

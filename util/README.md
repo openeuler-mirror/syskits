@@ -22,7 +22,10 @@ mv ../../coreutils-9.4 ../../gnu
 运行如下的构建和测试脚本：
 
 ```bash
-# 构建
+# 以root用户构建
+FORCE_UNSAFE_CONFIGURE=1 bash build-gnu.sh
+
+# 以非root用户构建
 bash build-gnu.sh
 
 # 全量测试

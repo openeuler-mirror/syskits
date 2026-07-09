@@ -223,9 +223,17 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
     // 收集并忽略不相关的参数
     let mut args = args.collect_ignore();
 
-    // 默认模式严格对齐 bash 内嵌 kill，不使用 clap 的 GNU 长选项解析。
+    // 默认 Bash 模式走 Bash 风格解析；仅对单独 help/version 请求复用 clap 输出。
     if compat_mode == KillCompatMode::Bash {
-        return kill_main_bash(writer, &args);
+        let bash_args = kill_strip_utility_name(&args);
+        if kill_is_help_or_version_request(bash_args) {
+            let mut clap_args = Vec::with_capacity(bash_args.len() + 1);
+            clap_args.push(ctcore::ct_util_name().to_string());
+            clap_args.extend(bash_args.iter().cloned());
+            let _ = ct_app().try_get_matches_from(clap_args)?;
+            return Ok(());
+        }
+        return kill_main_bash(writer, bash_args);
     }
 
     // 处理过时的kill命令参数
@@ -276,7 +284,10 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
 
 fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
     if args.is_empty() {
-        return Err(CtSimpleError::new(1, BASH_KILL_USAGE));
+        return Err(CtSimpleError::new(
+            KillCompatMode::Bash.no_args_exit_code(),
+            BASH_KILL_USAGE,
+        ));
     }
 
     let mut index = 0usize;
@@ -350,7 +361,10 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         }
 
         if kill_is_exact_short_option(word, '?') {
-            return Err(CtSimpleError::new(1, BASH_KILL_USAGE));
+            return Err(CtSimpleError::new(
+                KillCompatMode::Bash.no_args_exit_code(),
+                BASH_KILL_USAGE,
+            ));
         }
 
         // 旧式信号指定 (-SIG)
@@ -413,17 +427,29 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
 
     // 区分无参数和只有信号没有pid的情况
     if operands.is_empty() {
-        if saw_signal {
-            return Err(CtSimpleError::new(
-                1,
-                "arguments must be process or job IDs",
-            ));
-        } else {
-            return Err(CtSimpleError::new(1, BASH_KILL_USAGE));
-        }
+        return Err(CtSimpleError::new(
+            KillCompatMode::Bash.no_args_exit_code(),
+            BASH_KILL_USAGE,
+        ));
     }
 
     kill_exec_bash(sig_value, operands)
+}
+
+fn kill_strip_utility_name(args: &[String]) -> &[String] {
+    if let Some(first) = args.first()
+        && (first == "kill" || first == ctcore::ct_util_name())
+    {
+        return &args[1..];
+    }
+    args
+}
+
+fn kill_is_help_or_version_request(args: &[String]) -> bool {
+    matches!(
+        args,
+        [arg] if arg == "--help" || arg == "-h" || arg == "--version" || arg == "-V"
+    )
 }
 
 fn kill_is_exact_short_option(word: &str, option: char) -> bool {
@@ -1914,6 +1940,7 @@ mod tests {
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             // 无参数时返回错误 (默认 bash 模式退出码为 2)
             assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 2);
         }
 
         #[test]
@@ -1922,7 +1949,7 @@ mod tests {
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().code(), 1);
+            assert_eq!(result.unwrap_err().code(), 2);
         }
 
         #[test]
@@ -1962,7 +1989,26 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--help"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
-            assert!(result.is_err()); // Expecting error due to help flag
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn kill_main_with_help_flag_without_utility_name() {
+            let args = ["--help"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
+        }
+
+        #[test]
+        fn kill_main_with_version_flag() {
+            let args = [ctcore::ct_util_name(), "--version"];
+            let mut output = Cursor::new(Vec::new());
+            let result = kill_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 0);
         }
     }
 

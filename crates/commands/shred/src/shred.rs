@@ -463,14 +463,6 @@ pub fn shred_main(args: impl ctcore::Args) -> CTResult<()> {
     let settings = ShredSettings::new(&matches)?;
 
     for setting in settings {
-        if setting.n_passes == 0 {
-            if let Some(_s) = setting.size {
-                File::create(setting.path_str).map_err_context(|| {
-                    format!("failed to open {} for writing", setting.path_str.quote())
-                })?;
-            }
-            continue;
-        }
         shred_exec(&setting)?;
     }
 

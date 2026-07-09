@@ -264,12 +264,6 @@ pub fn kill_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
             ));
         }
 
-        // 如果是表格模式,不接受额外参数
-        if !pids_or_signals.is_empty() {
-            // coreutils 的 -t 不接受参数,如果有参数则报错
-            let err_message = format!("extra operand {}", pids_or_signals[0].quote());
-            return Err(CtSimpleError::new(1, err_message));
-        }
         kill_table(writer)
     } else if matches.get_flag(kill_flags::LIST) {
         // 如果是列表模式，调用kill_list函数，并传入第一个进程ID或信号
@@ -285,8 +279,7 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         return Err(CtSimpleError::new(1, BASH_KILL_USAGE));
     }
 
-    // Skip the program name (args[0]) and start processing from args[1]
-    let mut index = 1usize;
+    let mut index = 0usize;
     let mut listing = false;
     let mut listing_count = 0; // 新增：统计列表选项数量
     let mut saw_signal = false;
@@ -421,14 +414,12 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
     // 区分无参数和只有信号没有pid的情况
     if operands.is_empty() {
         if saw_signal {
-            // 有信号但没有pid，返回2（bash usage error）
             return Err(CtSimpleError::new(
-                2,
+                1,
                 "arguments must be process or job IDs",
             ));
         } else {
-            // 完全没有参数，返回2（bash usage error）
-            return Err(CtSimpleError::new(2, BASH_KILL_USAGE));
+            return Err(CtSimpleError::new(1, BASH_KILL_USAGE));
         }
     }
 
@@ -1883,7 +1874,7 @@ mod tests {
 
         #[test]
         fn kill_main_with_list_flag() {
-            let args = [ctcore::ct_util_name(), "-l"];
+            let args = ["-l"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
@@ -1908,8 +1899,7 @@ mod tests {
 
         #[test]
         fn kill_main_with_invalid_signal() {
-            let args = [ctcore::ct_util_name(), "-s", "INVALID", "1234"];
-
+            let args = ["-s", "INVALID", "1234"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
@@ -1928,16 +1918,16 @@ mod tests {
 
         #[test]
         fn kill_main_with_obsolete_signal() {
-            let args = [ctcore::ct_util_name(), "-TERM"];
+            let args = ["-TERM"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().code(), 2);
+            assert_eq!(result.unwrap_err().code(), 1);
         }
 
         #[test]
         fn kill_main_with_multiple_pids() {
-            let args = [ctcore::ct_util_name(), "-l", "HUP", "TERM"];
+            let args = ["-l", "HUP", "TERM"];
             let mut output = Cursor::new(Vec::new());
             let result = kill_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());

@@ -707,6 +707,10 @@ mod tests {
 
     #[test]
     fn test_chgrp_r_ctmain() {
+        if ctcore::ct_process::geteuid() != 0 {
+            println!("Skipping test_chgrp_r_ctmain: requires root privileges");
+            return;
+        }
         let dir_path = "test_chgrp_r_ctmain";
         let subdir_name = "subdirectory";
         let file_name = "test_chgrp_r_ctmain_w.txt";
@@ -734,6 +738,10 @@ mod tests {
 
     #[test]
     fn test_chgrp_single_file_ctmain() {
+        if ctcore::ct_process::geteuid() != 0 {
+            println!("Skipping test_chgrp_single_file_ctmain: requires root privileges");
+            return;
+        }
         let file_name = "test_chcon_single_file.txt";
         let file_path = file_name.to_owned();
 
@@ -754,6 +762,10 @@ mod tests {
 
     #[test]
     fn test_chgrp_recursive_ctmain() {
+        if ctcore::ct_process::geteuid() != 0 {
+            println!("Skipping test_chgrp_recursive_ctmain: requires root privileges");
+            return;
+        }
         let dir_path = "test_chgrp__recursive_ctmain";
         let subdir_name = "subdirectory";
         let file_name = "test_chgrp_no_recursive_ctmain.txt";

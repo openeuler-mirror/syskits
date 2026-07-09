@@ -803,6 +803,12 @@ mod tests {
 
     #[test]
     fn test_chown() {
+        use crate::ct_process;
+
+        if ct_process::geteuid() != 0 {
+            println!("Skipping test_chown: requires root privileges");
+            return;
+        }
         // Prepare test data
         let test_path = "/tmp/test_file";
         fs::create_dir_all("/tmp").expect("create_dir_all FAIL");

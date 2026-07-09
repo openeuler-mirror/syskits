@@ -90,6 +90,10 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn test_check_files_permission_denied() {
+        if ctcore::ct_process::geteuid() != 0 {
+            println!("Skipping test_check_files_permission_denied: requires root privileges");
+            return;
+        }
         let file_path = "/root/testfile"; // Assuming the test is run by a non-root user
         let result = check_files(&file_path.to_string());
         assert!(result.is_err());

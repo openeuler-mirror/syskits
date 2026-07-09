@@ -1185,6 +1185,10 @@ mod tests {
                 use std::fs::set_permissions;
                 use std::os::unix::fs::PermissionsExt;
 
+                if ctcore::ct_process::geteuid() != 0 {
+                    println!("Skipping test_truncate_file_no_permission: requires root privileges");
+                    return;
+                }
                 let mut temp_file = NamedTempFile::new().unwrap();
                 let temp_path = temp_file.path().to_str().unwrap().to_string();
                 writeln!(temp_file, "Hello, world!").unwrap();

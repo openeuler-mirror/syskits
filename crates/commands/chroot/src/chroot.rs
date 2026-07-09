@@ -1153,6 +1153,10 @@ mod tests {
 
         #[test]
         fn test_set_groups_from_str_empty() {
+            if ctcore::ct_process::geteuid() != 0 {
+                println!("Skipping test_set_groups_from_str_empty: requires root privileges");
+                return;
+            }
             let result = chroot_set_groups_from_str("");
             assert!(result.is_ok());
         }
@@ -1306,6 +1310,10 @@ mod tests {
 
         #[test]
         fn test_enter_chroot_skip_chdir() {
+            if ctcore::ct_process::geteuid() != 0 {
+                println!("Skipping test_enter_chroot_skip_chdir: requires root privileges");
+                return;
+            }
             let root = Path::new("/home/user");
             let result = chroot_enter(root, true);
             assert!(result.is_ok());

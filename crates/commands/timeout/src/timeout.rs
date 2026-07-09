@@ -397,41 +397,46 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
         process.wait_or_timeout(flags.duration)
     };
 
-    // 如果中途收到了外部的 SIGALRM（级联超时），我们必须等子进程把后事料理完！
-    if ALARM_RECEIVED.load(Ordering::Relaxed) {
+    let result = if ALARM_RECEIVED.load(Ordering::Relaxed) {
         // 阻塞等待子进程执行完 trap 清理逻辑并正式退出
         let _ = process.wait();
-        return Err(ExitStatus::CommandTimedOut.into()); // 等子进程死透了，我们再优雅返回 124
-    }
-
-    match wait_result {
-        Ok(Some(status)) => {
-            // 进程在超时前结束 (未超时)
-            if let Some(signal) = status.signal() {
-                Err(ExitStatus::SignalTerminated(signal).into())
-            } else {
-                let exit_code = status.code().unwrap_or(0);
-                if exit_code == 0 {
-                    Ok(())
+        Err(ExitStatus::CommandTimedOut.into()) // 等子进程死透了，我们再优雅返回 124
+    } else {
+        match wait_result {
+            Ok(Some(status)) => {
+                // 进程在超时前结束 (未超时)
+                if let Some(signal) = status.signal() {
+                    Err(ExitStatus::SignalTerminated(signal).into())
                 } else {
-                    Err(exit_code.into())
+                    let exit_code = status.code().unwrap_or(0);
+                    if exit_code == 0 {
+                        Ok(())
+                    } else {
+                        Err(exit_code.into())
+                    }
                 }
             }
-        }
-        Ok(None) => {
-            // 进程超时，发送信号
-            timeout_report_if_verbose(flags.signal, &flags.command[0], flags.is_verbose);
-            timeout_send_signal(process, flags.signal, flags.is_foreground);
+            Ok(None) => {
+                // 进程超时，发送信号
+                timeout_report_if_verbose(flags.signal, &flags.command[0], flags.is_verbose);
+                timeout_send_signal(process, flags.signal, flags.is_foreground);
 
-            if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
-                let _ = process.wait()?;
-                Err(ExitStatus::SignalTerminated(9).into())
-            } else {
-                handle_timeout_exceeded(process, flags)
+                if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
+                    let _ = process.wait()?;
+                    Err(ExitStatus::SignalTerminated(9).into())
+                } else {
+                    handle_timeout_exceeded(process, flags)
+                }
             }
+            Err(_) => Err(ExitStatus::TimeoutFailed.into()),
         }
-        Err(_) => Err(ExitStatus::TimeoutFailed.into()),
-    }
+    };
+
+    CHILD_PID.store(0, Ordering::Relaxed);
+    TIMEOUT_SIGNAL.store(0, Ordering::Relaxed);
+    IS_FOREGROUND.store(false, Ordering::Relaxed);
+
+    result
 }
 
 /// 处理超时情况

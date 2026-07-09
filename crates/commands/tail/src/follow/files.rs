@@ -115,21 +115,22 @@ impl FileHandling {
     }
 
     /// Reopen the file at the monitored `path`
-    pub fn update_reader(&mut self, path: &Path) -> CTResult<()> {
+    pub fn update_reader(&mut self, path: &Path) -> std::io::Result<()> {
         /*
         BUG: If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
         However we can't call seek here because `BufRead` does not implement `Seek`.
         As a workaround we always reopen the file even though this might not always
         be necessary.
         */
+        let file = File::open(path)?;
         self.get_mut(path)
             .reader
-            .replace(Box::new(BufReader::new(File::open(path)?)));
+            .replace(Box::new(BufReader::new(file)));
         Ok(())
     }
 
     /// Reopen the file and position the reader at EOF.
-    pub fn update_reader_at_end(&mut self, path: &Path) -> CTResult<()> {
+    pub fn update_reader_at_end(&mut self, path: &Path) -> std::io::Result<()> {
         let mut file = File::open(path)?;
         let _ = file.seek(SeekFrom::End(0))?;
         self.get_mut(path)

@@ -5345,25 +5345,47 @@ mod tests {
             let file_name = file_path.to_str().unwrap();
 
             let random_path = dir.path().join("random");
-            let mut tmp_random_file = File::create(&random_path).unwrap();
-            writeln!(tmp_random_file, "ABC").unwrap();
+            std::fs::write(&random_path, b"0123456789abcdef").unwrap();
             let random_file_name = random_path.to_str().unwrap();
             let random_source_flags = "--random-source=".to_string() + random_file_name;
-            let args = [
+            let output_1 = dir.path().join("out1");
+            let output_2 = dir.path().join("out2");
+
+            let args_1 = [
                 ctcore::ct_util_name(),
                 &random_source_flags,
                 "--random-sort",
                 file_name,
+                "-o",
+                output_1.to_str().unwrap(),
             ];
-            let result = sort_main(args.iter().map(OsString::from));
-            // let mut s = String::new();
-            // 使用模式匹配提取字段值
-            if let Err(output) = result {
-                let code = output.code();
-                let message = output.usage();
-                println!("Error code: {code}");
-                println!("Error message: {message}");
+            let args_2 = [
+                ctcore::ct_util_name(),
+                &random_source_flags,
+                "--random-sort",
+                file_name,
+                "-o",
+                output_2.to_str().unwrap(),
+            ];
+
+            if let Err(output) = sort_main(args_1.iter().map(OsString::from)) {
+                panic!(
+                    "run #1 failed: code={}, msg={}",
+                    output.code(),
+                    output.usage()
+                );
             }
+            if let Err(output) = sort_main(args_2.iter().map(OsString::from)) {
+                panic!(
+                    "run #2 failed: code={}, msg={}",
+                    output.code(),
+                    output.usage()
+                );
+            }
+
+            let out_1 = std::fs::read_to_string(output_1).unwrap();
+            let out_2 = std::fs::read_to_string(output_2).unwrap();
+            assert_eq!(out_1, out_2);
         }
 
         #[test]
@@ -5379,8 +5401,7 @@ mod tests {
             let file_name = file_path.to_str().unwrap();
 
             let random_path = dir.path().join("random");
-            let mut tmp_random_file = File::create(&random_path).unwrap();
-            writeln!(tmp_random_file, "ABC").unwrap();
+            std::fs::write(&random_path, b"x").unwrap();
             let random_file_name = random_path.to_str().unwrap();
             let random_source_flags = "--random-source=".to_string() + random_file_name;
             let args = [
@@ -5390,14 +5411,10 @@ mod tests {
                 file_name,
             ];
             let result = sort_main(args.iter().map(OsString::from));
-            // let mut s = String::new();
-            // 使用模式匹配提取字段值
-            if let Err(output) = result {
-                let code = output.code();
-                let message = output.usage();
-                println!("Error code: {code}");
-                println!("Error message: {message}");
-            }
+            assert!(result.is_err());
+            let output = result.unwrap_err();
+            assert_eq!(output.code(), 2);
+            assert!(format!("{output}").contains("cannot read:"));
         }
 
         #[test]

@@ -47,21 +47,10 @@ echo "path_GNU='${path_GNU}'"
 
 # 把syskits的coreutils构建出来，放在一个确定的目录，供GNU的测试调用
 
-### 确定Rust构建的输出目录
-### 如果用户显式设置了 CARGO_TARGET_DIR，就使用它
-if [[ ! -z  "$CARGO_TARGET_DIR" ]]; then
-SYSKITS_BUILD_DIR="${CARGO_TARGET_DIR}/${PROFILE}"
-else
-### 否则，使用默认syskits/target/debug
 SYSKITS_BUILD_DIR="${path_SYSKITS}/target/${PROFILE}"
-fi
 echo "SYSKITS_BUILD_DIR='${SYSKITS_BUILD_DIR}'"
 
 cd "${path_SYSKITS}" && echo "[ pwd:'${PWD}' ]"
-
-# 如果SELINUX_ENABLED=1 bash build-gnu.sh，则会启用selinux相关的测试
-export SELINUX_ENABLED
-[ "${SELINUX_ENABLED}" = 1 ] && CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
 
 # 处理参数：清理CARGO_FEATURE_FLAGS前后的空白
 CARGO_FEATURE_FLAGS="$(echo "${CARGO_FEATURE_FLAGS}" | sed -e 's/^[[:space:]]*//')"
@@ -75,7 +64,6 @@ echo "==== Building syskits with cargo ===="
 cd "${path_SYSKITS}"
 
 CARGO_BUILD_FLAGS=""
-[ "${PROFILE}" = "release" ] && CARGO_BUILD_FLAGS="--release"
 [ ! -z "${CARGO_FEATURE_FLAGS}" ] && CARGO_BUILD_FLAGS="${CARGO_BUILD_FLAGS} ${CARGO_FEATURE_FLAGS}"
 
 # 构建整个 workspace
@@ -95,10 +83,6 @@ ln -vf "${SYSKITS_BUILD_DIR}/syskits" "${SYSKITS_BUILD_DIR}/coreutils"
 echo '#!/bin/bash' > "${SYSKITS_BUILD_DIR}/ginstall"
 echo 'exec -a install "${0%/*}/install" "$@"' >> "${SYSKITS_BUILD_DIR}/ginstall"
 chmod +x "${SYSKITS_BUILD_DIR}/ginstall"
-
-if [ "${SELINUX_ENABLED}" = 1 ]; then
-    CARGO_BUILD_FLAGS="${CARGO_BUILD_FLAGS} --features selinux"
-fi
 
 # 进入GNU目录
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"

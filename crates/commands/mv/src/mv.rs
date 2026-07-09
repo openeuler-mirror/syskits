@@ -506,7 +506,9 @@ fn mv_handle_two_paths(
                             source_path.quote(),
                             target_path.quote()
                         );
-                        if err_str.contains(&msg) {
+                        if err_str.contains("inter-device move failed") {
+                            Err(CtSimpleError::new(1, err_str))
+                        } else if err_str.contains(&msg) {
                             Err(e.map_err_context(|| "".to_string()))
                         } else {
                             Err(e.map_err_context(|| msg))
@@ -812,15 +814,24 @@ fn move_files_into_dir(
                         source_path.quote(),
                         targetpath.quote()
                     );
-                    let final_err = if err_str.contains(&msg) {
-                        CTIoError::new(err.kind(), err_str)
+
+                    if err_str.contains("inter-device move failed") {
+                        let final_err = CtSimpleError::new(1, err_str);
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                            None => ct_show!(final_err),
+                        };
                     } else {
-                        err.map_err_context(|| msg)
-                    };
-                    match multi_progress {
-                        Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
-                        None => ct_show!(final_err),
-                    };
+                        let final_err = if err_str.contains(&msg) {
+                            CTIoError::new(err.kind(), err_str)
+                        } else {
+                            err.map_err_context(|| msg)
+                        };
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                            None => ct_show!(final_err),
+                        };
+                    }
                 }
                 Ok(()) => (),
             }
@@ -842,15 +853,24 @@ fn move_files_into_dir(
                         source_path.quote(),
                         targetpath.quote()
                     );
-                    let final_err = if err_str.contains(&msg) {
-                        CTIoError::new(err.kind(), err_str)
+
+                    if err_str.contains("inter-device move failed") {
+                        let final_err = CtSimpleError::new(1, err_str);
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                            None => ct_show!(final_err),
+                        };
                     } else {
-                        err.map_err_context(|| msg)
-                    };
-                    match multi_progress {
-                        Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
-                        None => ct_show!(final_err),
-                    };
+                        let final_err = if err_str.contains(&msg) {
+                            CTIoError::new(err.kind(), err_str)
+                        } else {
+                            err.map_err_context(|| msg)
+                        };
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
+                            None => ct_show!(final_err),
+                        };
+                    }
                 }
                 Ok(()) => (),
             }

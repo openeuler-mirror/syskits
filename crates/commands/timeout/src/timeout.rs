@@ -50,6 +50,7 @@ static CHILD_PID: AtomicI32 = AtomicI32::new(0);
 static TIMEOUT_SIGNAL: AtomicI32 = AtomicI32::new(0);
 static IS_FOREGROUND: AtomicBool = AtomicBool::new(false);
 static ALARM_RECEIVED: AtomicBool = AtomicBool::new(false);
+static MONITOR_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[inline]
 fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) {
@@ -58,6 +59,11 @@ fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) 
     }
 
     unsafe {
+        // Child already exited (or PID is stale); nothing to forward.
+        if libc::kill(pid, 0) != 0 {
+            return;
+        }
+
         // Always signal the direct child first.
         libc::kill(pid, sig);
 
@@ -70,18 +76,24 @@ fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) 
 
 /// 专用于兼容 GNU 行为的 SIGALRM 处理器
 extern "C" fn handle_sigalrm(_sig: libc::c_int) {
-    ALARM_RECEIVED.store(true, Ordering::Relaxed);
-    let pid = CHILD_PID.load(Ordering::Relaxed);
-    let sig = TIMEOUT_SIGNAL.load(Ordering::Relaxed);
-    let is_fg = IS_FOREGROUND.load(Ordering::Relaxed);
+    if !MONITOR_ACTIVE.load(Ordering::Acquire) {
+        return;
+    }
+    ALARM_RECEIVED.store(true, Ordering::Release);
+    let pid = CHILD_PID.load(Ordering::Acquire);
+    let sig = TIMEOUT_SIGNAL.load(Ordering::Acquire);
+    let is_fg = IS_FOREGROUND.load(Ordering::Acquire);
     forward_signal_to_monitored_process(pid, sig, is_fg);
     // 我们只负责发信号，然后立刻返回，让操作系统的 wait() 正常回收子进程。
 }
 
 /// 转发 timeout 自身收到的终止信号，避免子进程残留
 extern "C" fn handle_forwarding_signal(sig: libc::c_int) {
-    let pid = CHILD_PID.load(Ordering::Relaxed);
-    let is_fg = IS_FOREGROUND.load(Ordering::Relaxed);
+    if !MONITOR_ACTIVE.load(Ordering::Acquire) {
+        return;
+    }
+    let pid = CHILD_PID.load(Ordering::Acquire);
+    let is_fg = IS_FOREGROUND.load(Ordering::Acquire);
     forward_signal_to_monitored_process(pid, sig, is_fg);
 }
 
@@ -356,10 +368,11 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 ///   则返回Ok(())；否则返回一个错误状态。
 /// 处理进程超时逻辑
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
-    CHILD_PID.store(process.id() as i32, Ordering::Relaxed);
-    TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Relaxed);
-    IS_FOREGROUND.store(flags.is_foreground, Ordering::Relaxed);
-    ALARM_RECEIVED.store(false, Ordering::Relaxed);
+    CHILD_PID.store(process.id() as i32, Ordering::Release);
+    TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Release);
+    IS_FOREGROUND.store(flags.is_foreground, Ordering::Release);
+    ALARM_RECEIVED.store(false, Ordering::Release);
+    MONITOR_ACTIVE.store(true, Ordering::Release);
 
     unsafe {
         let alarm_sa = nix::sys::signal::SigAction::new(
@@ -397,7 +410,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
         process.wait_or_timeout(flags.duration)
     };
 
-    let result = if ALARM_RECEIVED.load(Ordering::Relaxed) {
+    let result = if ALARM_RECEIVED.load(Ordering::Acquire) {
         // 阻塞等待子进程执行完 trap 清理逻辑并正式退出
         let _ = process.wait();
         Err(ExitStatus::CommandTimedOut.into()) // 等子进程死透了，我们再优雅返回 124
@@ -432,9 +445,10 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
         }
     };
 
-    CHILD_PID.store(0, Ordering::Relaxed);
-    TIMEOUT_SIGNAL.store(0, Ordering::Relaxed);
-    IS_FOREGROUND.store(false, Ordering::Relaxed);
+    MONITOR_ACTIVE.store(false, Ordering::Release);
+    CHILD_PID.store(0, Ordering::Release);
+    TIMEOUT_SIGNAL.store(0, Ordering::Release);
+    IS_FOREGROUND.store(false, Ordering::Release);
 
     result
 }

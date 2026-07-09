@@ -10186,28 +10186,40 @@ mod tests {
         static LOCALE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
         struct LocaleGuard {
-            previous: Option<String>,
+            previous_lc_time: Option<String>,
+            previous_lc_all: Option<String>,
         }
 
         impl LocaleGuard {
             fn new(value: Option<&str>) -> Self {
-                let previous = env::var("LC_TIME").ok();
+                let previous_lc_time = env::var("LC_TIME").ok();
+                let previous_lc_all = env::var("LC_ALL").ok();
                 unsafe {
+                    // LC_ALL has higher precedence than LC_TIME. Clear it to make
+                    // LC_TIME-based assertions deterministic for these tests.
+                    env::remove_var("LC_ALL");
                     match value {
                         Some(val) => env::set_var("LC_TIME", val),
                         None => env::remove_var("LC_TIME"),
                     }
                 }
-                Self { previous }
+                Self {
+                    previous_lc_time,
+                    previous_lc_all,
+                }
             }
         }
 
         impl Drop for LocaleGuard {
             fn drop(&mut self) {
                 unsafe {
-                    match &self.previous {
+                    match &self.previous_lc_time {
                         Some(val) => env::set_var("LC_TIME", val),
                         None => env::remove_var("LC_TIME"),
+                    }
+                    match &self.previous_lc_all {
+                        Some(val) => env::set_var("LC_ALL", val),
+                        None => env::remove_var("LC_ALL"),
                     }
                 }
             }
@@ -10215,7 +10227,7 @@ mod tests {
 
         #[test]
         fn test_sort_month_parse_chinese_locale() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
             let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
             // 模拟中文locale环境
 
@@ -10232,7 +10244,7 @@ mod tests {
 
         #[test]
         fn test_sort_month_parse_c_locale() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
             let _guard = LocaleGuard::new(Some("C"));
             // 模拟C locale环境
 
@@ -10246,7 +10258,7 @@ mod tests {
 
         #[test]
         fn test_sort_month_compare_with_locale() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
             let _guard = LocaleGuard::new(None);
             // 测试月份比较在不同locale下的一致性
             assert_eq!(sort_month_compare("JAN", "FEB"), Ordering::Less);
@@ -10279,7 +10291,7 @@ mod tests {
 
         #[test]
         fn test_hard_locale_time_integration() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap();
+            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
             // 测试hard_locale_time函数的使用
             let _guard = LocaleGuard::new(Some("C"));
             assert!(!hard_locale_time());

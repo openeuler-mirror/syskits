@@ -701,14 +701,14 @@ fn pr_build_options(
 
     let is_pad_columns =
         !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) && !is_join_lines;
-    let expand_tabs = parse_tab_args(arg_matches, "expand-tabs");
+    let expand_tabs = parse_tab_args(arg_matches, "expand-tabs")?;
     let expand_tabs =
         if columns_to_print > 1 && expand_tabs.is_none() && col_sep_for_printing != "\t" {
             Some((PR_TAB, 8))
         } else {
             expand_tabs
         };
-    let output_tabs = parse_tab_args(arg_matches, "output-tabs");
+    let output_tabs = parse_tab_args(arg_matches, "output-tabs")?;
     let output_tabs = if columns_to_print > 1 {
         output_tabs.or(Some((PR_TAB, 8)))
     } else {
@@ -750,13 +750,31 @@ fn pr_build_options(
     })
 }
 
-fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Option<(char, usize)> {
+fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Result<Option<(char, usize)>, PrError> {
     if !arg_matches.contains_id(name) {
-        return None;
+        return Ok(None);
     }
+    let invalid_tab_arg = |opt_name: &str, invalid_value: &str| {
+        PrError::EncounteredErrors(format!(
+            "{} extra characters or invalid number in the argument: {}",
+            opt_name.quote(),
+            invalid_value.quote()
+        ))
+    };
+
+    let opt_name = match name {
+        "expand-tabs" => "-e",
+        "output-tabs" => "-i",
+        _ => name,
+    };
+
     match arg_matches.get_one::<String>(name) {
-        None => Some(('\t', 8)),
+        None => Ok(Some(('\t', 8))),
         Some(val) => {
+            if val.is_empty() {
+                return Ok(Some(('\t', 8)));
+            }
+
             let mut ch = '\t';
             let mut width_str = val.as_str();
             if let Some(first) = val.chars().next() {
@@ -765,8 +783,21 @@ fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Option<(char, usize)>
                     width_str = &val[first.len_utf8()..];
                 }
             }
-            let w = width_str.parse::<usize>().unwrap_or(8);
-            Some((ch, w))
+
+            if width_str.is_empty() {
+                return Ok(Some((ch, 8)));
+            }
+            if !width_str.chars().all(|c| c.is_ascii_digit()) {
+                return Err(invalid_tab_arg(opt_name, width_str));
+            }
+            let width = width_str
+                .parse::<usize>()
+                .map_err(|_| invalid_tab_arg(opt_name, width_str))?;
+            if width == 0 {
+                return Err(invalid_tab_arg(opt_name, width_str));
+            }
+
+            Ok(Some((ch, width)))
         }
     }
 }
@@ -5648,6 +5679,21 @@ mod tests {
         }
 
         #[test]
+        fn test_pr_recreate_arguments_preserves_operands_after_double_dash() {
+            let args = vec![
+                "pr".to_string(),
+                "-t".to_string(),
+                "--".to_string(),
+                "-nfoo".to_string(),
+                "+12".to_string(),
+            ];
+
+            let result = pr_recreate_arguments(&args);
+
+            assert_eq!(result, args);
+        }
+
+        #[test]
         fn test_expand_tabs_to_spaces_handles_backspace_underflow() {
             assert_eq!(
                 expand_tabs_to_spaces("\u{0008}\u{0008}\tx", '\t', 8, 0, false),
@@ -5811,9 +5857,9 @@ mod tests {
         fn test_parse_start_end_page_invalid_format() {
             // 测试无效的页码格式
             let args = create_matches_with_args("--pages=5:3");
-            let args_str = build_args("--pages=5:3");
+            let argv = build_args("--pages=5:3");
 
-            let result = parse_start_end_page(&args, &args_str);
+            let result = parse_start_end_page(&args, &argv);
 
             // 起始页大于结束页，应该返回错误
             assert!(result.is_err());
@@ -5837,6 +5883,43 @@ mod tests {
             let numbering_mode = result.unwrap().unwrap();
             assert_eq!(numbering_mode.separator, "x"); // 第一个字符作为分隔符
             assert_eq!(numbering_mode.width, 5); // 使用默认宽度
+        }
+
+        #[test]
+        fn test_parse_tab_args_rejects_invalid_width() {
+            let args = create_matches_with_args("-e=0");
+            let err = parse_tab_args(&args, "expand-tabs").unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("'-e' extra characters or invalid number in the argument")
+            );
+
+            let args = create_matches_with_args("-i=abc");
+            let err = parse_tab_args(&args, "output-tabs").unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("'-i' extra characters or invalid number in the argument")
+            );
+        }
+
+        #[test]
+        fn test_parse_start_end_page_ignores_plus_syntax_after_double_dash() {
+            let args = create_matches_with_args("-t -- +5:10");
+            let argv = build_args("-t -- +5:10");
+            let result = parse_start_end_page(&args, &argv).unwrap();
+            assert_eq!(result, (1, None));
+        }
+
+        #[test]
+        fn test_parse_start_end_page_with_date_format_containing_double_dash() {
+            let argv = vec![
+                "pr".to_string(),
+                "--date-format=-- Date/Time --".to_string(),
+                "+5:7".to_string(),
+            ];
+            let args = ct_app().try_get_matches_from(&argv).unwrap();
+            let result = parse_start_end_page(&args, &argv).unwrap();
+            assert_eq!(result, (5, Some(7)));
         }
 
         #[test]
@@ -6654,24 +6737,24 @@ mod tests {
 
             // 测试 +5 语法
             let matches = create_matches_with_args("");
-            let args = build_args("+5");
-            let result = parse_start_end_page(&matches, &args).unwrap();
+            let argv = build_args("+5");
+            let result = parse_start_end_page(&matches, &argv).unwrap();
             assert_eq!(result.0, 5); // start_page
             assert_eq!(result.1, None); // end_page
 
             // 测试 +5:10 语法
             let matches = create_matches_with_args("");
-            let args = build_args("+5:10");
-            let result = parse_start_end_page(&matches, &args).unwrap();
+            let argv = build_args("+5:10");
+            let result = parse_start_end_page(&matches, &argv).unwrap();
             assert_eq!(result.0, 5); // start_page
             assert_eq!(result.1, Some(10)); // end_page
 
             // 测试无效的 +page 语法
             let matches = create_matches_with_args("");
-            let args = build_args("+abc");
+            let argv = build_args("+abc");
             // 注意：由于正则表达式的匹配方式，+abc可能不会被解析为+page格式，
             // 因此可能会返回默认的start_page=1，不产生错误
-            let result = parse_start_end_page(&matches, &args);
+            let result = parse_start_end_page(&matches, &argv);
             if result.is_ok() {
                 let (start_page, end_page) = result.unwrap();
                 assert_eq!(start_page, 1); // 默认值
@@ -6680,8 +6763,8 @@ mod tests {
 
             // 测试另一种格式的无效 +page 语法，这个会导致实际解析错误
             let matches = create_matches_with_args("");
-            let args = build_args("+1a:10");
-            let result = parse_start_end_page(&matches, &args);
+            let argv = build_args("+1a:10");
+            let result = parse_start_end_page(&matches, &argv);
             assert!(result.is_err() || result.unwrap().0 == 1);
         }
 
@@ -6691,15 +6774,15 @@ mod tests {
 
             // 测试有效的 --pages 参数
             let matches = create_matches_with_args("--pages=5:10");
-            let args = build_args("");
-            let result = parse_start_end_page(&matches, &args).unwrap();
+            let argv = build_args("");
+            let result = parse_start_end_page(&matches, &argv).unwrap();
             assert_eq!(result.0, 5); // start_page
             assert_eq!(result.1, Some(10)); // end_page
 
             // 测试无效的 --pages 参数 (非数字)
             let matches = create_matches_with_args("--pages=abc");
-            let args = build_args("");
-            let result = parse_start_end_page(&matches, &args);
+            let argv = build_args("");
+            let result = parse_start_end_page(&matches, &argv);
             assert!(result.is_err());
             let err = result.unwrap_err();
             match err {
@@ -6711,8 +6794,8 @@ mod tests {
 
             // 测试无效的 --pages 参数范围 (起始页大于结束页)
             let matches = create_matches_with_args("--pages=10:5");
-            let args = build_args("");
-            let result = parse_start_end_page(&matches, &args);
+            let argv = build_args("");
+            let result = parse_start_end_page(&matches, &argv);
             assert!(result.is_err());
             let err = result.unwrap_err();
             match err {
@@ -6724,30 +6807,10 @@ mod tests {
 
             // 测试 --pages 参数优先级高于 +page 语法
             let matches = create_matches_with_args("--pages=7:15");
-            let args = build_args("+5:10");
-            let result = parse_start_end_page(&matches, &args).unwrap();
+            let argv = build_args("+5:10");
+            let result = parse_start_end_page(&matches, &argv).unwrap();
             assert_eq!(result.0, 7); // start_page 来自 --pages
             assert_eq!(result.1, Some(15)); // end_page 来自 --pages
-        }
-
-        #[test]
-        fn test_parse_start_end_page_ignores_plus_syntax_after_double_dash() {
-            let args = create_matches_with_args("-t -- +5:10");
-            let argv = build_args("-t -- +5:10");
-            let result = parse_start_end_page(&args, &argv).unwrap();
-            assert_eq!(result, (1, None));
-        }
-
-        #[test]
-        fn test_parse_start_end_page_with_date_format_containing_double_dash() {
-            let argv = vec![
-                "pr".to_string(),
-                "--date-format=-- Date/Time --".to_string(),
-                "+5:7".to_string(),
-            ];
-            let args = ct_app().try_get_matches_from(&argv).unwrap();
-            let result = parse_start_end_page(&args, &argv).unwrap();
-            assert_eq!(result, (5, Some(7)));
         }
     }
 

@@ -1886,6 +1886,35 @@ mod tests {
     }
 
     #[test]
+    fn test_move_files_into_dir_keeps_distinct_symlink_sources() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+
+        let real_file = root.join("real.txt");
+        fs::write(&real_file, b"data").unwrap();
+
+        let link_a = root.join("link_a");
+        let link_b = root.join("link_b");
+        symlink(&real_file, &link_a).unwrap();
+        symlink(&real_file, &link_b).unwrap();
+
+        let target = root.join("dest");
+        fs::create_dir(&target).unwrap();
+
+        let opts = temp_mv_opts();
+        move_files_into_dir(&[link_a.clone(), link_b.clone()], &target, &opts).unwrap();
+
+        assert!(!link_a.exists());
+        assert!(!link_b.exists());
+        assert!(target.join("link_a").exists());
+        assert!(target.join("link_b").exists());
+        assert_eq!(fs::read_link(target.join("link_a")).unwrap(), real_file);
+        assert_eq!(fs::read_link(target.join("link_b")).unwrap(), real_file);
+    }
+
+    #[test]
     fn test_move_files_into_dir_rejects_non_directory_target() {
         let temp = tempdir().unwrap();
         let root = temp.path();

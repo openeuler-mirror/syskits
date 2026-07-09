@@ -696,54 +696,94 @@ impl Observer {
 
         for (path, md) in replaced_paths {
             let display_name = self.files.get(&path).display_name.clone();
-            ct_show_error!(
-                "{} has been replaced;  following new file",
-                display_name.quote()
-            );
             self.files.update_metadata(&path, Some(md));
-            self.files.update_reader(&path)?;
-            read_some = self.files.tail_file(&path, verbose)? || read_some;
+            if let Err(e) = self.files.update_reader(&path) {
+                ct_show_error!(
+                    "{} has been replaced;  following new file",
+                    display_name.quote()
+                );
+                ct_show_error!(
+                    "cannot open '{}' for reading: {}",
+                    display_name,
+                    strip_errno(&e)
+                );
+            } else {
+                ct_show_error!(
+                    "{} has been replaced;  following new file",
+                    display_name.quote()
+                );
+                read_some = self.files.tail_file(&path, verbose).unwrap_or(false) || read_some;
+            }
         }
 
         for (path, md) in truncated_paths {
             let display_name = self.files.get(&path).display_name.clone();
             ct_show_error!("{}: file truncated", display_name);
             self.files.update_metadata(&path, Some(md));
-            self.files.update_reader(&path)?;
-            read_some = self.files.tail_file(&path, verbose)? || read_some;
+            if let Err(e) = self.files.update_reader(&path) {
+                ct_show_error!(
+                    "cannot open '{}' for reading: {}",
+                    display_name,
+                    strip_errno(&e)
+                );
+            } else {
+                read_some = self.files.tail_file(&path, verbose).unwrap_or(false) || read_some;
+            }
         }
 
         for new_path in newly_appeared_paths {
             if let Ok(md) = new_path.metadata() {
                 if md.is_tailable() {
-                    let pd = self.files.get(&new_path);
+                    let (same_file_reappeared, was_tailable, pd_metadata_is_none, display_name) = {
+                        let pd = self.files.get(&new_path);
+                        let same = pd.metadata.as_ref().is_some_and(|old_md| {
+                            old_md.is_tailable()
+                                && old_md.file_id_eq(&md)
+                                && old_md.len() == md.len()
+                        });
+                        let was_tailable =
+                            pd.metadata.as_ref().is_some_and(|old| old.is_tailable());
+                        let is_none = pd.metadata.is_none();
+                        let name = pd.display_name.clone();
 
-                    let same_file_reappeared = pd.metadata.as_ref().is_some_and(|old_md| {
-                        old_md.is_tailable() && old_md.file_id_eq(&md) && old_md.len() == md.len()
-                    });
+                        (same, was_tailable, is_none, name)
+                    };
 
                     if same_file_reappeared {
                         self.files.update_metadata(&new_path, Some(md));
-                        self.files.update_reader_at_end(&new_path)?;
+                        if self.files.update_reader_at_end(&new_path).is_err() {
+                            continue;
+                        }
                         if let Some(rx) = self.watcher_rx.as_mut() {
                             let _ = rx.watch_with_parent(&new_path);
                         }
                         continue;
                     }
 
-                    let was_tailable = pd.metadata.as_ref().is_some_and(|old| old.is_tailable());
-                    if pd.metadata.is_some() && !was_tailable {
-                        ct_show_error!("{} has become accessible", pd.display_name.quote());
+                    if let Err(e) = self.files.update_reader(&new_path) {
+                        if pd_metadata_is_none || !was_tailable {
+                            ct_show_error!(
+                                "cannot open '{}' for reading: {}",
+                                display_name,
+                                strip_errno(&e)
+                            );
+                        }
+                        self.files.update_metadata(&new_path, Some(md));
+                        continue;
+                    }
+
+                    if !pd_metadata_is_none && !was_tailable {
+                        ct_show_error!("{} has become accessible", display_name.quote());
                     } else {
                         ct_show_error!(
                             "{} has appeared;  following new file",
-                            pd.display_name.quote()
+                            display_name.quote()
                         );
                     }
 
                     self.files.update_metadata(&new_path, Some(md));
-                    self.files.update_reader(&new_path)?;
-                    read_some = self.files.tail_file(&new_path, verbose)? || read_some;
+                    read_some =
+                        self.files.tail_file(&new_path, verbose).unwrap_or(false) || read_some;
                     if let Some(rx) = self.watcher_rx.as_mut() {
                         let _ = rx.watch_with_parent(&new_path);
                     }

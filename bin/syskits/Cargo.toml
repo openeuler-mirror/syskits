@@ -47,6 +47,7 @@ feat_common_core_unix = ["chgrp", "chmod", "chown", "chroot", "groups", "id",
 ]
 
 feat_os_unix = [
+  "feat_selinux", 
   "feat_common_core",
   "feat_common_core_unix",
 ]

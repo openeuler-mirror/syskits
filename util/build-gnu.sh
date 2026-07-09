@@ -652,6 +652,9 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 "${SED}" -i 's/touch setuid &&/rm -rf setuid setgid sticky owt owr; touch setuid \&\&/' tests/ls/ls-misc.pl
 # 修复 multihardlink.sh 中硬链接 ANSI 颜色序列的规范化顺序差异 (37;44 -> 44;37)
 "${SED}" -i "s/code_mh='37;44'/code_mh='44;37'/" tests/ls/multihardlink.sh
+# 修复 color-dtype-dir.sh 中 ANSI 颜色序列的规范化顺序差异 (34;42 -> 42;34, 37;44 -> 44;37)
+"${SED}" -i 's/\^\[\[34;42mother-writable/\^\[\[42;34mother-writable/' tests/ls/color-dtype-dir.sh
+"${SED}" -i 's/\^\[\[37;44msticky/\^\[\[44;37msticky/' tests/ls/color-dtype-dir.sh
 
 
 ### cp tests

@@ -86,8 +86,8 @@ impl RMOptions {
             .get_one::<String>(rm_flags::RM_PRESERVE_ROOT)
             .map(|s| s.as_str());
         let preserve_root_all = preserve_root_val == Some("all");
-        let preserve_root =
-            preserve_root_val.is_some() || !matches.get_flag(rm_flags::RM_NO_PRESERVE_ROOT);
+        let preserve_root = matches.contains_id(rm_flags::RM_PRESERVE_ROOT)
+            || !matches.get_flag(rm_flags::RM_NO_PRESERVE_ROOT);
 
         Ok(RMOptions {
             force,
@@ -331,8 +331,7 @@ pub fn ct_app() -> Command {
             .value_name("all")
             .num_args(0..=1)
             .require_equals(true)
-            .value_parser(["all"])
-            .default_missing_value("true"),
+            .value_parser(["all"]),
         Arg::new(rm_flags::RM_RECURSIVE)
             .short('r')
             .visible_short_alias('R')
@@ -990,6 +989,36 @@ mod tests {
             .unwrap();
         let opts = RMOptions::new(&matches).unwrap();
         assert!(matches!(opts.interactive, InteractiveMode::Never));
+    }
+
+    #[test]
+    fn test_preserve_root_parsing_variants() {
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "--preserve-root", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(opts.preserve_root);
+        assert!(!opts.preserve_root_all);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "--preserve-root=all", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(opts.preserve_root);
+        assert!(opts.preserve_root_all);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "--no-preserve-root", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(!opts.preserve_root);
+        assert!(!opts.preserve_root_all);
+
+        assert!(
+            ct_app()
+                .try_get_matches_from(vec!["rm", "--preserve-root=invalid", "target"])
+                .is_err()
+        );
     }
 
     #[test]

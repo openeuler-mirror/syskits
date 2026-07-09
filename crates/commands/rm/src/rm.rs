@@ -522,7 +522,7 @@ fn remove_dir_tree(
 
     // 2. 准备深入目录。尝试保存当前目录现场。
     let restorer = DirRestorer::new();
-    let mut use_chdir = restorer.is_valid();
+    let mut use_chdir = restorer.is_valid() && should_use_chdir_strategy(local_path);
 
     // 如果允许 chdir，尝试下沉。如果下沉失败（例如缺乏 x 权限），优雅降级为非 chdir 模式
     if use_chdir && std::env::set_current_dir(local_path).is_err() {
@@ -635,6 +635,11 @@ fn remove_dir_tree(
     }
 
     had_err
+}
+
+fn should_use_chdir_strategy(local_path: &Path) -> bool {
+    const CHDIR_PATH_LEN_THRESHOLD: usize = 1024;
+    local_path.as_os_str().len() > CHDIR_PATH_LEN_THRESHOLD
 }
 
 fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
@@ -906,6 +911,15 @@ mod tests {
             dir: false,
             verbose: false,
         }
+    }
+
+    #[test]
+    fn test_should_use_chdir_strategy_threshold() {
+        let short = PathBuf::from("/tmp/short");
+        assert!(!should_use_chdir_strategy(&short));
+
+        let long = PathBuf::from(format!("/tmp/{}", "a".repeat(1300)));
+        assert!(should_use_chdir_strategy(&long));
     }
 
     #[test]
@@ -1242,7 +1256,7 @@ mod tests {
     mod test_handle_writable_directory {
         use super::*;
         use std::fs;
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use std::os::unix::fs::PermissionsExt;
 
         #[test]
         fn test_handle_writable_directory() {
@@ -1283,14 +1297,13 @@ mod tests {
 
         use crate::RMOptions;
 
-        use std::path::Path;
-
         use std::os::unix::fs::PermissionsExt;
 
         #[test]
         fn test_remove_file_success() {
-            // 创建一个临时文件
-            let temp_file = Path::new("temp_file.txt");
+            let temp_dir = tempfile::tempdir().unwrap();
+            let temp_file_path = temp_dir.path().join("temp_file.txt");
+            let temp_file = temp_file_path.as_path();
             fs::write(temp_file, "Test content").unwrap();
 
             let options = RMOptions {
@@ -1314,8 +1327,9 @@ mod tests {
 
         #[test]
         pub(crate) fn test_remove_file_permission_denied() {
-            // 创建一个只读文件
-            let read_only_file = Path::new("read_only_file.txt");
+            let temp_dir = tempfile::tempdir().unwrap();
+            let read_only_file_path = temp_dir.path().join("read_only_file.txt");
+            let read_only_file = read_only_file_path.as_path();
             fs::write(read_only_file, "Test content").unwrap();
             let mode = 0o444; // 只读权限
             let permissions = PermissionsExt::from_mode(mode);

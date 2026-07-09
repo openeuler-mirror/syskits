@@ -1116,6 +1116,34 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let (settings, mut files, mut tmp_dir, output) = sort_handle_settings(matches)?;
 
+    // 前置可用性扫描 (Early Validation)
+    // 扫描所有输入文件是否可读，如果有不可读的直接报错，决不提前触碰 stdin
+    for file in &files {
+        if file != "-" {
+            if let Err(e) = File::open(file) {
+                return Err(SortError::SortReadFailed {
+                    path: PathBuf::from(file),
+                    error: e,
+                }
+                .into());
+            }
+        }
+    }
+
+    if let Some(out_name) = output.as_output_name() {
+        let out_path = Path::new(out_name);
+        if out_path.exists() {
+            // 使用 append(true) 仅作写权限探测，避免提前 truncate 清空目标文件
+            if let Err(e) = OpenOptions::new().write(true).append(true).open(out_path) {
+                return Err(SortError::SortOpenFailed {
+                    path: out_name.to_string(),
+                    error: e,
+                }
+                .into());
+            }
+        }
+    }
+
     let result = sort_exec(&mut files, &settings, output, &mut tmp_dir);
     //Wait here if `SIGINT` was received、
     // for signal handler to do its work and terminate the program.

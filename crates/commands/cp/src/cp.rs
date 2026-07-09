@@ -683,7 +683,6 @@ impl Tool for Cp {
 }
 
 pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
-    let stdout_initially_closed = ctcore::ct_stdout_is_closed();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args);
@@ -701,11 +700,6 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
         };
     } else if let Ok(mut args_matches) = args_match {
         let cp_options = CpOptions::cp_from_matches(&args_matches)?;
-
-        // 对于会向 stdout 写输出的模式，保持与 GNU close-stdout 行为一致。
-        if cp_options.verbose && (stdout_initially_closed || ctcore::ct_stdout_was_closed()) {
-            return Err(CTsageError::new(EXIT_ERR, "write error"));
-        }
 
         if cp_options.overwrite == CpOverwriteMode::NoClobber
             && cp_options.backup != CtBackupMode::NoBackup
@@ -2140,7 +2134,8 @@ fn cp_write_verbose_output<W: Write>(
         }
     }
 
-    writeln!(writer, "{}", cp_context_for(sour_path, dest_path))
+    writeln!(writer, "{}", cp_context_for(sour_path, dest_path))?;
+    writer.flush()
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2474,11 +2469,6 @@ fn copy_file(
         };
     }
 
-    // 如请求，输出详细信息。
-    if cp_opts.verbose {
-        cp_print_verbose_output(cp_opts.parents, progress_bar, sour_path, dest_path)?;
-    }
-
     // 准备上下文并获取源文件元数据以进行复制。
     let context = cp_context_for(sour_path, dest_path);
 
@@ -2563,6 +2553,15 @@ fn copy_file(
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(sour_path)?.len());
+    }
+
+    if cp_opts.verbose {
+        cp_print_verbose_output(cp_opts.parents, progress_bar, sour_path, dest_path)?;
+        // 对于“stdout 初始关闭并被运行时兜底重定向”的场景（close-stdout 语义），
+        // 复制已经完成，但命令仍需以写错误退出。
+        if ctcore::ct_stdout_was_closed() {
+            return Err(CpError::Error("write error".to_string()));
+        }
     }
 
     Ok(())

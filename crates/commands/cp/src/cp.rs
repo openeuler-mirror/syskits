@@ -2802,10 +2802,13 @@ mod tests {
         use crate::cp_disk_usage;
         use crate::cp_disk_usage_directory;
 
+        use crate::CpError;
         use crate::cp_localize_to_target;
         use crate::cp_write_verbose_output;
+        use crate::ct_app;
 
         use crate::CpOffloadReflinkDebug;
+        use crate::CpOptions;
         use crate::CpPreserve;
         use crate::CpSparseDebug;
 
@@ -2863,6 +2866,52 @@ mod tests {
             let err = cp_write_verbose_output(&mut writer, false, Path::new("a"), Path::new("b"))
                 .unwrap_err();
             assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
+        }
+
+        #[test]
+        fn test_cp_bare_context_sets_default_selinux_context() {
+            let args = [ctcore::ct_util_name(), "--context", "src", "dst"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            let opts = CpOptions::cp_from_matches(&matches).unwrap();
+            assert_eq!(opts.attributes.selinux_context, Some(None));
+        }
+
+        #[test]
+        fn test_cp_context_with_value_sets_explicit_selinux_context() {
+            let args = [
+                ctcore::ct_util_name(),
+                "--context=system_u:object_r:tmp_t:s0",
+                "src",
+                "dst",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            let opts = CpOptions::cp_from_matches(&matches).unwrap();
+            assert_eq!(
+                opts.attributes.selinux_context,
+                Some(Some("system_u:object_r:tmp_t:s0".to_string()))
+            );
+        }
+
+        #[test]
+        fn test_cp_preserve_context_conflicts_with_bare_context() {
+            let args = [
+                ctcore::ct_util_name(),
+                "--preserve=context",
+                "--context",
+                "src",
+                "dst",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            match CpOptions::cp_from_matches(&matches) {
+                Err(CpError::Error(msg)) => {
+                    assert!(msg.contains("cannot set target context and preserve it"));
+                }
+                Ok(_) => panic!("expected conflict error"),
+                Err(_) => panic!("unexpected error variant"),
+            }
         }
 
         #[test]

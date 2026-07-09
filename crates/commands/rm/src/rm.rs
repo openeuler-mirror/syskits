@@ -387,9 +387,9 @@ pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
                 if metadata.is_dir() {
                     handle_dir(file, options, top_dev)
                 } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, options)
+                    remove_dir(file, file, options)
                 } else {
-                    remove_file(file, options)
+                    remove_file(file, file, options)
                 }
             }
             Err(_e) => {
@@ -435,7 +435,7 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
             had_err = interactive_remove_dir_all(path, options, top_dev, true);
         }
     } else if options.dir && (!is_root || !options.preserve_root) {
-        had_err = remove_dir(path, options).bitor(had_err);
+        had_err = remove_dir(path, path, options).bitor(had_err);
     } else if options.recursive {
         ct_show_error!("could not remove directory {}", path.quote());
         had_err = true;
@@ -447,44 +447,51 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     had_err
 }
 
-fn remove_dir(path: &Path, options: &RMOptions) -> bool {
-    if prompt_dir(path, options) {
-        if let Ok(mut read_dir) = fs::read_dir(path) {
+fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
+    if prompt_dir(local_path, display_path, options) {
+        if let Ok(mut read_dir) = fs::read_dir(local_path) {
             if options.dir || options.recursive {
                 if read_dir.next().is_none() {
-                    match fs::remove_dir(path) {
+                    match fs::remove_dir(local_path) {
                         Ok(_) => {
                             if options.verbose {
-                                println!("removed directory {}", normalize(path).quote());
+                                println!("removed directory {}", normalize(display_path).quote());
                             }
+                            return false;
                         }
                         Err(e) => {
                             if e.kind() == std::io::ErrorKind::PermissionDenied {
                                 // GNU compatibility (rm/fail-eacces.sh)
                                 ct_show_error!(
                                     "cannot remove {}: {}",
-                                    path.quote(),
+                                    display_path.quote(),
                                     "Permission denied"
                                 );
                             } else {
-                                ct_show_error!("cannot remove {}: {}", path.quote(), e);
+                                ct_show_error!("cannot remove {}: {}", display_path.quote(), e);
                             }
                             return true;
                         }
                     }
                 } else {
                     // directory can be read but is not empty
-                    ct_show_error!("cannot remove {}: Directory not empty", path.quote());
+                    ct_show_error!(
+                        "cannot remove {}: Directory not empty",
+                        display_path.quote()
+                    );
                     return true;
                 }
             } else {
                 // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                ct_show_error!("cannot remove {}: Is a directory", path.quote());
+                ct_show_error!("cannot remove {}: Is a directory", display_path.quote());
                 return true;
             }
         } else {
             // GNU's rm shows this message if directory is empty but not readable
-            ct_show_error!("cannot remove {}: Directory not empty", path.quote());
+            ct_show_error!(
+                "cannot remove {}: Directory not empty",
+                display_path.quote()
+            );
             return true;
         }
     }
@@ -492,20 +499,25 @@ fn remove_dir(path: &Path, options: &RMOptions) -> bool {
     false
 }
 
-fn remove_file(path: &Path, options: &RMOptions) -> bool {
-    if prompt_file(path, options) {
-        match fs::remove_file(path) {
+fn remove_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
+    if prompt_file(local_path, display_path, options) {
+        match fs::remove_file(local_path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed {}", normalize(path).quote());
+                    println!("removed {}", normalize(display_path).quote());
                 }
+                return false;
             }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     // GNU compatibility (rm/fail-eacces.sh)
-                    ct_show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
+                    ct_show_error!(
+                        "cannot remove {}: {}",
+                        display_path.quote(),
+                        "Permission denied"
+                    );
                 } else {
-                    ct_show_error!("cannot remove {}: {}", path.quote(), e);
+                    ct_show_error!("cannot remove {}: {}", display_path.quote(), e);
                 }
                 return true;
             }
@@ -515,7 +527,7 @@ fn remove_file(path: &Path, options: &RMOptions) -> bool {
     false
 }
 
-fn prompt_dir(path: &Path, options: &RMOptions) -> bool {
+fn prompt_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
@@ -523,28 +535,28 @@ fn prompt_dir(path: &Path, options: &RMOptions) -> bool {
 
     // We can't use metadata.permissions.readonly for directories because it only works on files
     // So we have to handle whether a directory is writable manually
-    if let Ok(metadata) = fs::metadata(path) {
-        handle_writable_directory(path, options, &metadata)
+    if let Ok(metadata) = fs::metadata(local_path) {
+        handle_writable_directory(local_path, display_path, options, &metadata)
     } else {
         true
     }
 }
 
-fn prompt_file(path: &Path, options: &RMOptions) -> bool {
+fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
     }
     // If interactive is Always we want to check if the file is symlink to prompt the right message
     if options.interactive == InteractiveMode::Always {
-        if let Ok(metadata) = fs::symlink_metadata(path) {
+        if let Ok(metadata) = fs::symlink_metadata(local_path) {
             if metadata.is_symlink() {
-                return ct_prompt_yes!("remove symbolic link {}?", path.quote());
+                return ct_prompt_yes!("remove symbolic link {}?", display_path.quote());
             }
         }
     }
     // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
-    match File::options().read(true).write(true).open(path) {
+    match File::options().read(true).write(true).open(local_path) {
         Ok(file) => {
             let Ok(metadata) = file.metadata() else {
                 return true;
@@ -553,9 +565,9 @@ fn prompt_file(path: &Path, options: &RMOptions) -> bool {
             if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly()
             {
                 return if metadata.len() == 0 {
-                    ct_prompt_yes!("remove regular empty file {}?", path.quote())
+                    ct_prompt_yes!("remove regular empty file {}?", display_path.quote())
                 } else {
-                    ct_prompt_yes!("remove file {}?", path.quote())
+                    ct_prompt_yes!("remove file {}?", display_path.quote())
                 };
             }
         }
@@ -565,29 +577,37 @@ fn prompt_file(path: &Path, options: &RMOptions) -> bool {
             }
         }
     }
-    prompt_file_permission_readonly(path)
+    prompt_file_permission_readonly(local_path, display_path)
 }
 
-fn prompt_file_permission_readonly(path: &Path) -> bool {
+fn prompt_file_permission_readonly(local_path: &Path, display_path: &Path) -> bool {
     #[cfg(unix)]
     if unsafe { libc::geteuid() } == 0 {
         return true; // root 不受只读保护限制，直接放行
     }
 
-    match fs::metadata(path) {
+    match fs::metadata(local_path) {
         Ok(metadata) if !metadata.permissions().readonly() => true,
         Ok(metadata) if metadata.len() == 0 => ct_prompt_yes!(
             "remove write-protected regular empty file {}?",
-            path.quote()
+            display_path.quote()
         ),
-        _ => ct_prompt_yes!("remove write-protected regular file {}?", path.quote()),
+        _ => ct_prompt_yes!(
+            "remove write-protected regular file {}?",
+            display_path.quote()
+        ),
     }
 }
 
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to to check mode bits. But other os don't have something similar afaik
 // Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
-fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metadata) -> bool {
+fn handle_writable_directory(
+    _local_path: &Path,
+    display_path: &Path,
+    options: &RMOptions,
+    metadata: &Metadata,
+) -> bool {
     use std::os::unix::fs::PermissionsExt;
     let mode = metadata.permissions().mode();
     // Check if directory has user write permissions
@@ -598,9 +618,9 @@ fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metada
     let is_root = unsafe { libc::geteuid() } == 0;
 
     if !user_writable && !is_root {
-        ct_prompt_yes!("remove write-protected directory {}?", path.quote())
+        ct_prompt_yes!("remove write-protected directory {}?", display_path.quote())
     } else if options.interactive == InteractiveMode::Always {
-        ct_prompt_yes!("remove directory {}?", path.quote())
+        ct_prompt_yes!("remove directory {}?", display_path.quote())
     } else {
         true
     }
@@ -608,14 +628,19 @@ fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metada
 
 // For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
-fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metadata) -> bool {
+fn handle_writable_directory(
+    _local_path: &Path,
+    display_path: &Path,
+    options: &RMOptions,
+    metadata: &Metadata,
+) -> bool {
     use std::os::windows::prelude::MetadataExt;
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
     let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
     if not_user_writable {
-        ct_prompt_yes!("remove write-protected directory {}?", path.quote())
+        ct_prompt_yes!("remove write-protected directory {}?", display_path.quote())
     } else if options.interactive == InteractiveMode::Always {
-        ct_prompt_yes!("remove directory {}?", path.quote())
+        ct_prompt_yes!("remove directory {}?", display_path.quote())
     } else {
         true
     }
@@ -624,16 +649,21 @@ fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metada
 // I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
 #[cfg(not(windows))]
 #[cfg(not(unix))]
-fn handle_writable_directory(path: &Path, options: &RMOptions, metadata: &Metadata) -> bool {
+fn handle_writable_directory(
+    _local_path: &Path,
+    display_path: &Path,
+    options: &RMOptions,
+    _metadata: &Metadata,
+) -> bool {
     if options.interactive == InteractiveMode::Always {
-        ct_prompt_yes!("remove directory {}?", path.quote())
+        ct_prompt_yes!("remove directory {}?", display_path.quote())
     } else {
         true
     }
 }
 
-fn prompt_descend(path: &Path) -> bool {
-    ct_prompt_yes!("descend into directory {}?", path.quote())
+fn prompt_descend(display_path: &Path) -> bool {
+    ct_prompt_yes!("descend into directory {}?", display_path.quote())
 }
 
 fn normalize(path: &Path) -> PathBuf {
@@ -732,12 +762,12 @@ fn interactive_remove_dir_all(
             had_err |= interactive_remove_dir_all(&entry_path, options, top_dev, false);
         } else {
             // 删除普通文件
-            had_err |= remove_file(&entry_path, options);
+            had_err |= remove_file(&entry_path, &entry_path, options);
         }
     }
 
     // 5. 子项清理完毕，最后删除当前目录自己
-    had_err |= remove_dir(path, options);
+    had_err |= remove_dir(path, path, options);
 
     had_err
 }

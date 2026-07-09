@@ -608,6 +608,15 @@ fn move_files_into_dir(
     // 用于存储已移动文件的目标路径，避免重复移动
     let mut moved_dests: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
+    // 用于检测重复的源文件（通过inode和设备号）
+    #[cfg(unix)]
+    let mut processed_sources: HashSet<(u64, u64)> = HashSet::with_capacity(mv_files.len());
+    #[cfg(not(unix))]
+    let mut processed_sources: HashSet<std::path::PathBuf> = HashSet::with_capacity(mv_files.len());
+
+    // 标记是否发生过错误
+    let mut has_error = false;
+
     // 检查目标路径是否为目录
     if !target_directory.is_dir() {
         return Err(MvError::NotADirectory(target_directory.quote().to_string()).into());
@@ -653,6 +662,82 @@ fn move_files_into_dir(
             pb.set_message(source_path.to_string_lossy().to_string());
         }
 
+        // 首先检查源文件是否存在（GNU 行为：如果源不存在，立即报告 cannot stat）
+        let source_metadata = match source_path.symlink_metadata() {
+            Ok(meta) => meta,
+            Err(_) => {
+                ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
+                set_ct_exit_code(1);
+                continue;
+            }
+        };
+
+        // 检查源文件是否已经被处理过（检测重复源）
+        // 注意：使用 source_path.display() 而不是 quote()，因为警告消息的格式是 'path' 而不是 'path'
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let source_key = (source_metadata.dev(), source_metadata.ino());
+            if processed_sources.contains(&source_key) {
+                // 源文件重复，但需要检查源文件是否仍然存在
+                // 如果之前的移动成功导致源文件不存在，应该输出 "cannot stat" 而不是警告
+                if source_path.symlink_metadata().is_err() {
+                    // 源文件已不存在（被之前的操作移动了），输出 cannot stat
+                    ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
+                    set_ct_exit_code(1);
+                } else {
+                    // 源文件仍然存在，输出警告
+                    let file_type = source_metadata.file_type();
+                    let source_type = if file_type.is_dir() {
+                        "directory"
+                    } else {
+                        "file"
+                    };
+                    ct_show!(CtSimpleError::new(
+                        0,
+                        format!(
+                            "warning: source {} '{}' specified more than once",
+                            source_type,
+                            source_path.display()
+                        ),
+                    ));
+                }
+                continue;
+            }
+            processed_sources.insert(source_key);
+        }
+        #[cfg(not(unix))]
+        {
+            if let Ok(canonical) = source_path.canonicalize() {
+                if processed_sources.contains(&canonical) {
+                    // 源文件重复，但需要检查源文件是否仍然存在
+                    if source_path.symlink_metadata().is_err() {
+                        // 源文件已不存在（被之前的操作移动了），输出 cannot stat
+                        ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
+                        set_ct_exit_code(1);
+                    } else {
+                        // 源文件仍然存在，输出警告
+                        let file_type = source_metadata.file_type();
+                        let source_type = if file_type.is_dir() {
+                            "directory"
+                        } else {
+                            "file"
+                        };
+                        ct_show!(CtSimpleError::new(
+                            0,
+                            format!(
+                                "warning: source {} '{}' specified more than once",
+                                source_type,
+                                source_path.display()
+                            ),
+                        ));
+                    }
+                    continue;
+                }
+                processed_sources.insert(canonical);
+            }
+        }
+
         // 确定目标路径
         let targetpath = match source_path.file_name() {
             Some(name) => target_directory.join(name),
@@ -677,26 +762,28 @@ fn move_files_into_dir(
         }
 
         // 检查是否尝试将目录移动到自身，仅对真实目录进行判断，避免符号链接误报。
-        if let (Some(canonical_target), Ok(source_meta)) = (
-            canonical_target_dir.as_ref(),
-            source_path.symlink_metadata(),
-        ) {
-            let file_type = source_meta.file_type();
+        // 使用前面已获取的 source_metadata
+        if let Some(canonical_target) = canonical_target_dir.as_ref() {
+            let file_type = source_metadata.file_type();
             if file_type.is_dir() && !file_type.is_symlink() {
                 if let Ok(canonical_source) = source_path.canonicalize() {
                     if canonical_target.starts_with(&canonical_source) {
+                        // 使用 Path::join 来正确组合路径，避免双斜杠
+                        let subdir_path = target_directory.join(
+                            source_path
+                                .file_name()
+                                .map(|s| s.to_string_lossy().into_owned())
+                                .unwrap_or_default(),
+                        );
                         ct_show!(CtSimpleError::new(
                             1,
                             format!(
-                                "cannot move '{}' to a subdirectory of itself, '{}/{}'",
+                                "cannot move '{}' to a subdirectory of itself, '{}'",
                                 source_path.display(),
-                                target_directory.display(),
-                                source_path
-                                    .file_name()
-                                    .map(|s| s.to_string_lossy().into_owned())
-                                    .unwrap_or_default()
+                                subdir_path.display()
                             )
                         ));
+                        has_error = true;
                         continue;
                     }
                 }
@@ -773,7 +860,10 @@ fn move_files_into_dir(
         // 将目标路径加入到已移动文件的集合中
         moved_dests.insert(targetpath.clone());
     }
-    // 移动全部文件完成后，返回成功
+    // 移动全部文件完成后，如果有错误发生，返回错误
+    if has_error {
+        return Err(CtSimpleError::new(1, ""));
+    }
     Ok(())
 }
 

@@ -23,11 +23,11 @@ mod exit_status;
 use crate::exit_status::ExitStatus;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
+use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
@@ -64,11 +64,6 @@ fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) 
         // In background mode we also signal the entire monitored process group.
         if !is_foreground {
             libc::kill(-pid, sig);
-            // Ensure stopped jobs can handle the termination signal.
-            if sig != libc::SIGKILL && sig != libc::SIGCONT {
-                libc::kill(pid, libc::SIGCONT);
-                libc::kill(-pid, libc::SIGCONT);
-            }
         }
     }
 }

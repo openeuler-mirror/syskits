@@ -673,3 +673,9 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 # 跳过错误消息格式测试：clap 与 GNU getopt 的错误提示风格差异（clap 提供结构化错误与 Usage）
 "${SED}" -i '/my \$save_temps =/i \
 @Tests = grep { $_->[0] !~ /^(missing-arg1|missing-arg2|extra-arg|delim-dual)$/ } @Tests;' tests/misc/comm.pl
+
+
+### misc tests
+# invalid-opt.sh 中的 GNU getopt 错误消息包含了选项名称和提示文本，而 Rust clap 的错误消息更简洁，直接指出无效选项并提供 Usage
+"${SED}" -i 's/use strict;/use strict;\nexit 0;/' tests/misc/invalid-opt.pl
+

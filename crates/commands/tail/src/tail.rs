@@ -172,7 +172,6 @@ fn handle_directory(
 ) -> CTResult<()> {
     set_ct_exit_code(1);
     ct_show_error!("error reading '{}': Is a directory", input.display_name);
-    observer.add_bad_path(path, input.display_name.as_str(), false)?;
 
     if options.follow.is_some() {
         let msg = if options.retry {
@@ -187,9 +186,14 @@ fn handle_directory(
         );
     }
 
+    // 如果没有启用 retry (例如单纯的 tail -f 遇到目录)，直接返回，放弃处理
     if !observer.follow_name_retry() {
         return Ok(());
     }
+
+    // 只有在确实需要 follow_name_retry（即 -F 模式）时，
+    // 才将该目录加入到坏路径队列，交由 follow.rs 在后台持续重试和监听。
+    observer.add_bad_path(path, input.display_name.as_str(), false)?;
 
     Ok(())
 }

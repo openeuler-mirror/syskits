@@ -10092,6 +10092,28 @@ mod tests {
         }
 
         #[test]
+        fn test_sort_resolve_random_salt_reads_16_bytes_from_file() {
+            let dir = tempfile::tempdir().unwrap();
+            let random_path = dir.path().join("random");
+            let expected = *b"0123456789abcdef";
+            std::fs::write(&random_path, expected).unwrap();
+
+            let salt = sort_resolve_random_salt(Some(random_path.to_str().unwrap())).unwrap();
+            assert_eq!(salt, expected);
+        }
+
+        #[test]
+        fn test_sort_handle_settings_ignores_random_source_without_random_mode() {
+            let command = ct_app();
+            let input_args = [ctcore::ct_util_name(), "--random-source=/no/such/file"];
+            let matches = command.try_get_matches_from(input_args).unwrap();
+
+            let (settings, _, _, _) = sort_handle_settings(matches).unwrap();
+            assert_eq!(settings.mode, SortMode::SortDefault);
+            assert!(settings.salt.is_none());
+        }
+
+        #[test]
         fn test_tokenize_fields() {
             let line = "foo bar b    x";
             assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,],);

@@ -33,7 +33,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind}
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{
+    CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code, strip_errno,
+};
 use ctcore::ct_fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
@@ -938,8 +940,16 @@ fn mv_rename_with_hardlink_tracking(
                     }
                 }
 
-                // 删除已存在的目标文件
-                let _ = fs::remove_file(to_path);
+                // 删除已存在的目标文件，捕获错误并触发跨设备降级失败
+                if let Err(e) = fs::remove_file(to_path) {
+                    let err_msg = format!(
+                        "inter-device move failed: {} to {}; unable to remove target: {}",
+                        from_path.quote(),
+                        to_path.quote(),
+                        strip_errno(&e)
+                    );
+                    return Err(io::Error::new(e.kind(), err_msg));
+                }
             }
 
             // 创建硬链接而不是复制
@@ -1302,10 +1312,18 @@ fn mv_rename_with_fallback(
                 };
             }
 
-            // 在复制或重建之前，如果目标已经存在（例如是一个符号链接），必须先删除它！
-            // 否则 fs::copy 会跟随符号链接写入，或者 mkfifo/mknod 会报 EEXIST。
+            // 在复制或重建之前，如果目标已经存在，必须先删除它！
+            // 否则 fs::copy 会以 O_TRUNC 覆盖现有文件，违背 mv 替换 Inode 的语义。
             if to.symlink_metadata().is_ok() {
-                let _ = fs::remove_file(to);
+                if let Err(e) = fs::remove_file(to) {
+                    let err_msg = format!(
+                        "inter-device move failed: {} to {}; unable to remove target: {}",
+                        from.quote(),
+                        to.quote(),
+                        strip_errno(&e)
+                    );
+                    return Err(io::Error::new(e.kind(), err_msg));
+                }
             }
 
             // 检查是否为特殊文件（FIFO, 设备节点等），如果是则必须重建而不是读取！
@@ -1377,7 +1395,15 @@ fn mv_rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let symlink_points_to_path = fs::read_link(from)?;
 
     if to.symlink_metadata().is_ok() {
-        let _ = fs::remove_file(to);
+        if let Err(e) = fs::remove_file(to) {
+            let err_msg = format!(
+                "inter-device move failed: {} to {}; unable to remove target: {}",
+                from.quote(),
+                to.quote(),
+                strip_errno(&e)
+            );
+            return Err(io::Error::new(e.kind(), err_msg));
+        }
     }
 
     // 针对不同的操作系统，执行相应的重命名和删除操作

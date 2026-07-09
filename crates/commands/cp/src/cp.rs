@@ -25,6 +25,8 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
+#[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 // 这些是为了让诸如 nushell 等项目能够创建 Options 值而公开的，而创建 Options 值需要依赖于这些枚举类型。
 use crate::copydir::copy_directory;
@@ -1657,6 +1659,100 @@ fn cp_handle_preserve<F: Fn() -> CopyResult<()>>(p: &CpPreserve, f: F) -> CopyRe
     Ok(())
 }
 
+#[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+static CP_CONTEXT_UNSUPPORTED_WARNED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+fn cp_selinux_err_msg(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(source) = current {
+        if let Some(io_err) = source.downcast_ref::<io::Error>() {
+            return io_err.to_string();
+        }
+        current = source.source();
+    }
+    err.to_string()
+}
+
+#[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+fn cp_selinux_is_ignorable_err(err: &(dyn std::error::Error + 'static)) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(source) = current {
+        if let Some(io_err) = source.downcast_ref::<io::Error>() {
+            return matches!(io_err.raw_os_error(), Some(libc::ENOTSUP | libc::ENODATA));
+        }
+        current = source.source();
+    }
+    false
+}
+
+#[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+fn cp_handle_default_selinux_context_err(
+    dest_path: &Path,
+    err: &(dyn std::error::Error + 'static),
+) -> CopyResult<()> {
+    if cp_selinux_is_ignorable_err(err) {
+        return Ok(());
+    }
+
+    Err(CpError::Error(format!(
+        "failed to set the security context of {}: {}",
+        dest_path.quote(),
+        cp_selinux_err_msg(err)
+    )))
+}
+
+#[cfg(all(feature = "feat_selinux", target_os = "linux"))]
+fn cp_apply_explicit_selinux_context(
+    dest_path: &Path,
+    selinux_ctx: &Option<String>,
+) -> CopyResult<()> {
+    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        if selinux_ctx.is_some()
+            && !CP_CONTEXT_UNSUPPORTED_WARNED.swap(true, AtomicOrdering::Relaxed)
+        {
+            ct_show_warning!("ignoring --context; it requires an SELinux-enabled kernel");
+        }
+        return Ok(());
+    }
+
+    match selinux_ctx {
+        Some(ctx_str) => {
+            let c_ctx = CString::new(ctx_str.as_str()).map_err(|_| {
+                CpError::Error(format!(
+                    "failed to set the security context of {}: invalid context {}",
+                    dest_path.quote(),
+                    ctx_str.quote()
+                ))
+            })?;
+
+            let context = selinux::SecurityContext::from_c_str(&c_ctx, false);
+            context.set_for_path(dest_path, false, false).map_err(|e| {
+                CpError::Error(format!(
+                    "failed to set the security context of {}: {}",
+                    dest_path.quote(),
+                    cp_selinux_err_msg(&e)
+                ))
+            })?;
+        }
+        None => {
+            if let Err(e) = selinux::SecurityContext::set_default_for_path(dest_path) {
+                cp_handle_default_selinux_context_err(dest_path, &e)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(all(feature = "feat_selinux", not(target_os = "linux")))]
+fn cp_apply_explicit_selinux_context(
+    _dest_path: &Path,
+    _selinux_ctx: &Option<String>,
+) -> CopyResult<()> {
+    Ok(())
+}
+
 pub(crate) fn copy_attributes_with_deref(
     source_path: &Path,
     dest_path: &Path,
@@ -1846,16 +1942,7 @@ pub(crate) fn copy_attributes_with_deref(
     #[cfg(feature = "feat_selinux")]
     {
         if let Some(ref selinux_ctx) = attr.selinux_context {
-            if let Some(ctx_str) = selinux_ctx {
-                // --context=CTX 显式指定上下文，直接通过底层 xattr 设置
-                #[cfg(target_os = "linux")]
-                let _ = xattr::set(dest_path, "security.selinux", ctx_str.as_bytes());
-            } else {
-                // -Z 恢复为系统默认上下文，借助外部绝对可靠的 restorecon 工具
-                let _ = std::process::Command::new("restorecon")
-                    .arg(dest_path)
-                    .output();
-            }
+            cp_apply_explicit_selinux_context(dest_path, selinux_ctx)?;
         }
     }
 

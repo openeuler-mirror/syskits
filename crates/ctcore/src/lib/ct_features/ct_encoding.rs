@@ -266,9 +266,10 @@ impl<R: Read> Data<R> {
             match self.input.read_to_end(&mut buf) {
                 Ok(_) => {
                     let encoded = encode(self.format, buf.as_slice())?;
-                    let _ = wrap_write_stream(&mut writer, self.line_wrap, &encoded, 0);
+                    wrap_write_stream(&mut writer, self.line_wrap, &encoded, 0)
+                        .map_err(|_| CtEncodeError::InvalidInput)?;
                     if self.line_wrap > 0 && !encoded.is_empty() && (!encoded.ends_with('\n')) {
-                        let _ = writeln!(writer);
+                        writeln!(writer).map_err(|_| CtEncodeError::InvalidInput)?;
                     } else if self.line_wrap == 0
                         && self.format as u8 != Format::Base64 as u8
                         && self.format as u8 != Format::Base32 as u8

@@ -21,7 +21,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -133,8 +133,12 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
     #[cfg(unix)]
     setup_signal_handlers(options)?;
 
-    let writers = create_writers(options)?;
+    // 核心修复：追踪文件打开（初始化）阶段的错误
+    let mut ignored_errors = 0;
+    let writers = create_writers(options, &mut ignored_errors)?;
     let mut output = MultiWriter::new(writers, options.output_error.clone());
+    // 将初始化时遇到的错误累加到 MultiWriter 的错误记录中
+    output.ignored_errors += ignored_errors;
 
     #[cfg(unix)]
     {
@@ -233,7 +237,8 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                             stdout_active = output.has_stdout();
                         }
                         Err(e) => {
-                            ct_show_error!("stdin: {}", e);
+                            // 修复：加上 strip_errno
+                            ct_show_error!("stdin: {}", strip_errno(&e));
                             return Err(e);
                         }
                     }
@@ -271,21 +276,23 @@ fn setup_signal_handlers(options: &TeeOptions) -> Result<()> {
     Ok(())
 }
 
-fn create_writers(options: &TeeOptions) -> Result<Vec<NamedWriter>> {
-    let mut writers = options
-        .files
-        .iter()
-        .map(|file| {
-            Ok(NamedWriter {
+fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Vec<NamedWriter>> {
+    let mut writers = Vec::new();
+
+    for file in &options.files {
+        match open(
+            file.clone(),
+            options.is_append,
+            options.output_error.as_ref(),
+            ignored_errors,
+        ) {
+            Ok(writer) => writers.push(NamedWriter {
                 name: file.clone(),
-                inner: open(
-                    file.clone(),
-                    options.is_append,
-                    options.output_error.as_ref(),
-                )?,
-            })
-        })
-        .collect::<Result<Vec<NamedWriter>>>()?;
+                inner: writer,
+            }),
+            Err(e) => return Err(e),
+        }
+    }
 
     // 添加标准输出作为第一个写入器
     writers.insert(
@@ -362,6 +369,7 @@ fn open(
     name: String,
     append: bool,
     output_error: Option<&OutputErrorMode>,
+    ignored_errors: &mut usize,
 ) -> Result<Box<dyn Write>> {
     let path = PathBuf::from(name.clone());
     let inner: Box<dyn Write> = {
@@ -374,7 +382,9 @@ fn open(
         match mode.write(true).create(true).open(path.as_path()) {
             Ok(file) => Box::new(file),
             Err(f) => {
-                ct_show_error!("{}: {}", name.maybe_quote(), f);
+                ct_show_error!("{}: {}", name.maybe_quote(), strip_errno(&f));
+                *ignored_errors += 1;
+
                 match output_error {
                     Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => return Err(f),
                     _ => Box::new(sink()),
@@ -382,7 +392,7 @@ fn open(
             }
         }
     };
-    Ok(Box::new(NamedWriter { inner, name }) as Box<dyn Write>)
+    Ok(inner)
 }
 
 struct MultiWriter {
@@ -455,26 +465,26 @@ fn process_error(
 ) -> Result<()> {
     match mode {
         Some(OutputErrorMode::Warn) => {
-            ct_show_error!("{}: {}", writer.name.maybe_quote(), f);
+            ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
             *ignored_errors += 1;
             Ok(())
         }
         Some(OutputErrorMode::WarnNoPipe) | None => {
             if f.kind() != IoErrorKind::BrokenPipe {
-                ct_show_error!("{}: {}", writer.name.maybe_quote(), f);
+                ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
                 *ignored_errors += 1;
             }
             Ok(())
         }
         Some(OutputErrorMode::Exit) => {
-            ct_show_error!("{}: {}", writer.name.maybe_quote(), f);
+            ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
             Err(f)
         }
         Some(OutputErrorMode::ExitNoPipe) => {
             if f.kind() == IoErrorKind::BrokenPipe {
                 Ok(())
             } else {
-                ct_show_error!("{}: {}", writer.name.maybe_quote(), f);
+                ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
                 Err(f)
             }
         }
@@ -579,7 +589,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                ct_show_error!("stdin: {}", f);
+                ct_show_error!("stdin: {}", strip_errno(&f));
                 Err(f)
             }
             okay => okay,
@@ -866,30 +876,46 @@ mod test_basic {
 
     #[test]
     fn test_open() {
+        let mut ignored_errors = 0;
+
         // 测试正常打开文件
         let temp_file = NamedTempFile::new().unwrap();
-        let result = open(temp_file.path().to_string_lossy().to_string(), false, None);
+        let result = open(
+            temp_file.path().to_string_lossy().to_string(),
+            false,
+            None,
+            &mut ignored_errors,
+        );
         assert!(result.is_ok());
+        assert_eq!(ignored_errors, 0);
 
-        // 测试追加模式
-        let result = open(temp_file.path().to_string_lossy().to_string(), true, None);
+        let result = open(
+            temp_file.path().to_string_lossy().to_string(),
+            true,
+            None,
+            &mut ignored_errors,
+        );
         assert!(result.is_ok());
+        assert_eq!(ignored_errors, 0);
 
-        // 测试打开不存在的文件
         let result = open(
             "/nonexistent/file".to_string(),
             false,
             Some(&OutputErrorMode::Warn),
+            &mut ignored_errors,
         );
-        assert!(result.is_ok()); // 应该返回 sink writer
+        assert!(result.is_ok());
+        assert_eq!(ignored_errors, 1);
 
-        // 测试错误模式
+        let mut exit_ignored_errors = 0;
         let result = open(
             "/nonexistent/file".to_string(),
             false,
             Some(&OutputErrorMode::Exit),
+            &mut exit_ignored_errors,
         );
         assert!(result.is_err());
+        assert_eq!(exit_ignored_errors, 1);
     }
 
     #[test]

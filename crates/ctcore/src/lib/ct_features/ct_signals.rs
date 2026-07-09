@@ -241,23 +241,28 @@ pub fn parse_rt_signal(name: &str) -> Option<usize> {
         return Some(*rtmax as usize);
     }
 
+    let parse_offset = |offset_str: &str| -> Option<i32> {
+        let offset = offset_str.parse::<u32>().ok()?;
+        i32::try_from(offset).ok()
+    };
+
     // 解析 RTMIN+N
     if let Some(offset_str) = name.strip_prefix("RTMIN+") {
-        if let Ok(offset) = offset_str.parse::<i32>() {
-            let sig = rtmin + offset;
-            if sig <= *rtmax {
-                return Some(sig as usize);
-            }
+        if let Some(offset) = parse_offset(offset_str)
+            && let Some(sig) = rtmin.checked_add(offset)
+            && (*rtmin..=*rtmax).contains(&sig)
+        {
+            return Some(sig as usize);
         }
     }
 
     // 解析 RTMAX-N
     if let Some(offset_str) = name.strip_prefix("RTMAX-") {
-        if let Ok(offset) = offset_str.parse::<i32>() {
-            let sig = rtmax - offset;
-            if sig >= *rtmin {
-                return Some(sig as usize);
-            }
+        if let Some(offset) = parse_offset(offset_str)
+            && let Some(sig) = rtmax.checked_sub(offset)
+            && (*rtmin..=*rtmax).contains(&sig)
+        {
+            return Some(sig as usize);
         }
     }
 

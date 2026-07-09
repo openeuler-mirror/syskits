@@ -16,15 +16,15 @@
 //! 如果指定了 -z 选项，则使用 NUL 字符代替换行符作为行分隔符。
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::Tool;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write, stdin, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 

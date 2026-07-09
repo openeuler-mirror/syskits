@@ -13,6 +13,7 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::cmp::Ordering;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use bigdecimal::BigDecimal;
 use std::env;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -23,9 +24,8 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
-use std::str::Utf8Error;
-use bigdecimal::BigDecimal;
 use std::str::FromStr;
+use std::str::Utf8Error;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -156,6 +156,7 @@ enum SortError {
         prog: String,
     },
     SortTmpDirCreationFailed,
+    #[allow(dead_code)]
     SortUft8Error {
         error: Utf8Error,
     },
@@ -542,7 +543,11 @@ impl<'a> SortLine<'a> {
                 }
             }
         }
-        Self { line, raw_bytes, index }
+        Self {
+            line,
+            raw_bytes,
+            index,
+        }
     }
 
     fn print(&self, w: &mut impl Write, sort_settings: &SortGlobalConfigs) {
@@ -655,7 +660,8 @@ impl<'a> SortLine<'a> {
                 _ => {}
             }
 
-            let prefix_width = UnicodeWidthStr::width(line[..selection.start].replace('\0', "").as_str());
+            let prefix_width =
+                UnicodeWidthStr::width(line[..selection.start].replace('\0', "").as_str());
             write!(w, "{}", " ".repeat(prefix_width))?;
 
             if selection.is_empty() {
@@ -765,10 +771,14 @@ impl SortKeyPosition {
             if *e.kind() == std::num::IntErrorKind::PosOverflow {
                 Ok(usize::MAX)
             } else {
-                Err(format!("failed to parse field index {}: {}", field.quote(), e))
+                Err(format!(
+                    "failed to parse field index {}: {}",
+                    field.quote(),
+                    e
+                ))
             }
         })?;
-        
+
         if field == 0 {
             return Err("field index can not be 0".to_string());
         }
@@ -778,7 +788,11 @@ impl SortKeyPosition {
                 if *e.kind() == std::num::IntErrorKind::PosOverflow {
                     Ok(usize::MAX)
                 } else {
-                    Err(format!("failed to parse character index {}: {}", char.quote(), e))
+                    Err(format!(
+                        "failed to parse character index {}: {}",
+                        char.quote(),
+                        e
+                    ))
                 }
             })
         })?;
@@ -1314,7 +1328,7 @@ fn sort_get_settings_buffer_size(matches: &ArgMatches) -> CTResult<usize> {
                 })
                 .map(|size| {
                     // 核心修复：防止缓冲区过小导致 ext_sort 陷入死循环
-                    std::cmp::max(size, 1024) 
+                    std::cmp::max(size, 1024)
                 })
         })
 }
@@ -1338,8 +1352,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                     extra.quote(),
                     ctcore::ct_util_name()
                 ),
-            )
-            .into());
+            ));
         }
 
         let files0_from: Vec<OsString> = matches
@@ -1361,7 +1374,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                             path: path.to_string_lossy().into_owned(),
                             error: e,
                         }
-                        .into())
+                        .into());
                     }
                 }
             };
@@ -1382,7 +1395,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                             path: PathBuf::from(path),
                             error: e,
                         }
-                        .into())
+                        .into());
                     }
                 }
 
@@ -1405,20 +1418,18 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                             path.to_string_lossy(),
                             file_idx
                         ),
-                    )
-                    .into());
+                    ));
                 }
 
                 let file_name_string = String::from_utf8_lossy(line_slice).into_owned();
-                
+
                 // 捕捉 stdin 里嵌套读取 stdin 的死循环异常
                 if is_stdin && file_name_string == "-" {
                     return Err(CtSimpleError::new(
                         2,
                         "when reading file names from stdin, no file name of '-' allowed"
                             .to_string(),
-                    )
-                    .into());
+                    ));
                 }
 
                 // 兼容 Unix 系统下非 UTF-8 文件名的安全转换
@@ -1440,8 +1451,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                 return Err(CtSimpleError::new(
                     2,
                     format!("no input from {}", path.quote()),
-                )
-                .into());
+                ));
             }
         }
         Ok(files)
@@ -1957,12 +1967,14 @@ fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
     // 手动处理特殊值
     if normalized.eq_ignore_ascii_case("nan") {
         return SortGeneralF64ParseResult::SortNaN;
-    } else if normalized.eq_ignore_ascii_case("inf") 
-        || normalized.eq_ignore_ascii_case("+inf") 
-        || normalized.eq_ignore_ascii_case("infinity") {
+    } else if normalized.eq_ignore_ascii_case("inf")
+        || normalized.eq_ignore_ascii_case("+inf")
+        || normalized.eq_ignore_ascii_case("infinity")
+    {
         return SortGeneralF64ParseResult::SortInfinity;
-    } else if normalized.eq_ignore_ascii_case("-inf") 
-        || normalized.eq_ignore_ascii_case("-infinity") {
+    } else if normalized.eq_ignore_ascii_case("-inf")
+        || normalized.eq_ignore_ascii_case("-infinity")
+    {
         return SortGeneralF64ParseResult::SortNegInfinity;
     }
 
@@ -1981,7 +1993,9 @@ fn sort_general_numeric_compare(
 ) -> Ordering {
     // 严格遵循 GNU 的隐式排序规则: Invalid < NaN < -Inf < Numbers < +Inf
     match (a, b) {
-        (SortGeneralF64ParseResult::SortInvalid, SortGeneralF64ParseResult::SortInvalid) => Ordering::Equal,
+        (SortGeneralF64ParseResult::SortInvalid, SortGeneralF64ParseResult::SortInvalid) => {
+            Ordering::Equal
+        }
         (SortGeneralF64ParseResult::SortInvalid, _) => Ordering::Less,
         (_, SortGeneralF64ParseResult::SortInvalid) => Ordering::Greater,
 
@@ -1989,17 +2003,23 @@ fn sort_general_numeric_compare(
         (SortGeneralF64ParseResult::SortNaN, _) => Ordering::Less,
         (_, SortGeneralF64ParseResult::SortNaN) => Ordering::Greater,
 
-        (SortGeneralF64ParseResult::SortNegInfinity, SortGeneralF64ParseResult::SortNegInfinity) => Ordering::Equal,
+        (
+            SortGeneralF64ParseResult::SortNegInfinity,
+            SortGeneralF64ParseResult::SortNegInfinity,
+        ) => Ordering::Equal,
         (SortGeneralF64ParseResult::SortNegInfinity, _) => Ordering::Less,
         (_, SortGeneralF64ParseResult::SortNegInfinity) => Ordering::Greater,
 
-        (SortGeneralF64ParseResult::SortInfinity, SortGeneralF64ParseResult::SortInfinity) => Ordering::Equal,
+        (SortGeneralF64ParseResult::SortInfinity, SortGeneralF64ParseResult::SortInfinity) => {
+            Ordering::Equal
+        }
         (SortGeneralF64ParseResult::SortInfinity, _) => Ordering::Greater,
         (_, SortGeneralF64ParseResult::SortInfinity) => Ordering::Less,
 
-        (SortGeneralF64ParseResult::SortNumber(num_a), SortGeneralF64ParseResult::SortNumber(num_b)) => {
-            num_a.cmp(num_b)
-        }
+        (
+            SortGeneralF64ParseResult::SortNumber(num_a),
+            SortGeneralF64ParseResult::SortNumber(num_b),
+        ) => num_a.cmp(num_b),
     }
 }
 
@@ -2059,10 +2079,10 @@ fn get_locale_month_abbr(line_upper: &str) -> SortMonth {
         let ptr = unsafe { ctcore::libc::nl_langinfo(abmon) };
         if !ptr.is_null() {
             let cstr = unsafe { CStr::from_ptr(ptr) };
-            
+
             let s = cstr.to_string_lossy();
             let s_trimmed = s.trim_start().to_uppercase();
-            
+
             if !s_trimmed.is_empty() && line_upper.starts_with(&s_trimmed) {
                 return month;
             }

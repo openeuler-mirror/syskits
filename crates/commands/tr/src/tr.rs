@@ -14,20 +14,20 @@
 extern crate rust_i18n;
 mod operation;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_show;
 use operation::{
-    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
-use std::io::{stdin, stdout, BufRead, BufWriter, Write};
+use std::io::{BufRead, BufWriter, Write, stdin, stdout};
 use sys_locale::get_locale;
 
 use crate::operation::DeleteOperation;
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use ctcore::Tool;
 use std::ffi::OsString;
 
 // 1. 定义配置标志常量
@@ -228,7 +228,7 @@ fn tr_process<R: BufRead, W: Write>(
     // 提前触发一次缓冲区读取。
     // 如果输入流是一个目录，底层的 read 会立即返回 EISDIR 错误并被拦截。
     if let Err(e) = reader.fill_buf() {
-        return Err(CtSimpleError::new(1, format!("read error: {}", e)));
+        return Err(CtSimpleError::new(1, format!("read error: {e}")));
     }
 
     let mut sets_iter = flags.sets.iter().map(|c| c.as_str());
@@ -407,18 +407,22 @@ mod tests {
             let app = ct_app();
 
             // 验证基本参数
-            assert!(app
-                .get_arguments()
-                .any(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT));
-            assert!(app
-                .get_arguments()
-                .any(|arg| arg.get_id() == tr_flags::TR_DELETE));
-            assert!(app
-                .get_arguments()
-                .any(|arg| arg.get_id() == tr_flags::TR_SQUEEZE));
-            assert!(app
-                .get_arguments()
-                .any(|arg| arg.get_id() == tr_flags::TR_TRUNCATE_SET1));
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_COMPLEMENT)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_DELETE)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_SQUEEZE)
+            );
+            assert!(
+                app.get_arguments()
+                    .any(|arg| arg.get_id() == tr_flags::TR_TRUNCATE_SET1)
+            );
 
             // 验证参数别名
             let complement_arg = app

@@ -19,10 +19,7 @@ use std::time::Duration;
 
 use ctcore::ct_error::CTResult;
 
-use crate::numbers::{to_magnitude_and_suffix, SuffixType};
-
-#[cfg(unix)]
-use ctcore::ct_error::set_ct_exit_code;
+use crate::numbers::{SuffixType, to_magnitude_and_suffix};
 
 // On Linux, we register a signal handler that prints progress updates.
 #[cfg(target_os = "linux")]
@@ -32,8 +29,8 @@ use std::{
     env,
     error::Error,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 

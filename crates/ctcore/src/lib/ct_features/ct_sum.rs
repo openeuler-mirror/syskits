@@ -543,7 +543,7 @@ impl CtDigest for CtCRC32b {
     fn result_str(&mut self) -> String {
         let result = self.state ^ 0xFFFFFFFF;
         // 保持与 CtCRC 一致的十进制字符串输出格式
-        format!("{}", result)
+        format!("{result}")
     }
 
     fn reset(&mut self) {

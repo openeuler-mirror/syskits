@@ -13,13 +13,13 @@ extern crate rust_i18n;
 use chrono::{DateTime, Local};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use ctcore::ct_display::{ct_print_verbatim, Quotable};
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
+use ctcore::ct_display::{Quotable, ct_print_verbatim};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_glob;
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
-use ctcore::Tool;
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{ct_show, ct_show_error, ct_show_warning};
 use glob::Pattern;
 use std::collections::HashSet;
@@ -49,8 +49,8 @@ use sys_locale::get_locale;
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
-    FILE_STANDARD_INFO,
+    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+    GetFileInformationByHandleEx,
 };
 mod opt_flags {
     pub const HELP: &str = "help";

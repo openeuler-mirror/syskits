@@ -15,21 +15,21 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::error::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::fmt;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show;
 use ctcore::ct_show_error;
-use ctcore::Tool;
 use std::ffi::OsString;
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
@@ -773,7 +773,7 @@ mod tests {
     mod unexpand_tests {
         use std::fs::write;
 
-        use tempfile::{tempdir, NamedTempFile};
+        use tempfile::{NamedTempFile, tempdir};
 
         use super::*;
 

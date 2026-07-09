@@ -16,13 +16,13 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::{Arg, ArgMatches, Command};
+use ctcore::Tool;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_sum::{
-    CtBlake2b, CtBlake3, CtDigest, CtDigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
-    Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
+    CtBlake2b, CtBlake3, CtDigest, CtDigestWriter, Md5, Sha1, Sha3_224, Sha3_256, Sha3_384,
+    Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256,
 };
-use ctcore::Tool;
 use ctcore::{ct_display::Quotable, ct_show_warning};
 use hex::encode;
 use regex::Captures;
@@ -33,7 +33,7 @@ use sys_locale::get_locale;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
@@ -162,7 +162,7 @@ impl HashsumFlags {
             ctcore::ct_show_error!(
                 "the --ignore-missing option is meaningful only when verifying checksums"
             );
-            return Err(CtSimpleError::new(1, "").into());
+            return Err(CtSimpleError::new(1, ""));
         }
 
         Ok(Self {
@@ -773,7 +773,7 @@ pub fn hashsum_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
             {
                 return Ok(());
             }
-            return Err(CtSimpleError::new(1, "").into());
+            return Err(CtSimpleError::new(1, ""));
         }
     };
 
@@ -1113,11 +1113,11 @@ where
             || no_valid_lines
             || no_files_verified)
     {
-        return Err(CtSimpleError::new(1, "").into());
+        return Err(CtSimpleError::new(1, ""));
     }
 
     if missing_file > 0 {
-        return Err(CtSimpleError::new(1, "").into());
+        return Err(CtSimpleError::new(1, ""));
     }
 
     Ok(())
@@ -1135,6 +1135,7 @@ fn open_file(filename: &Path) -> CTResult<BufReader<Box<dyn Read>>> {
 }
 
 /// 从文件中读取哈希值并与计算的哈希值进行比较
+#[allow(clippy::too_many_arguments)]
 fn check_hash_file<W: Write>(
     flags: &mut HashsumFlags,
     filename: &Path,
@@ -1320,6 +1321,7 @@ fn handle_captures(
 }
 
 /// 验证文件的哈希值是否匹配
+#[allow(clippy::too_many_arguments)]
 fn verify_file_hash<W: Write>(
     flags: &mut HashsumFlags,
     ck_filename: &str,
@@ -1576,6 +1578,7 @@ enum HashsumError {
     /// 表示提供的正则表达式无效
     InvalidRegex,
     /// 表示提供的哈希格式无效
+    #[allow(dead_code)]
     InvalidFormat,
 }
 

@@ -65,8 +65,7 @@ fn chgrp_parse_from_spec(spec: &str) -> CTResult<CtIfFrom> {
 
     // 解析 GROUP 部分为 GID
     let gid = match group_part {
-        None => None,
-        Some(g) if g.is_empty() => None,
+        None | Some("") => None,
         Some(g) => match Group::locate(g) {
             Ok(gr) => Some(gr.gid),
             Err(_) => match g.parse::<u32>() {

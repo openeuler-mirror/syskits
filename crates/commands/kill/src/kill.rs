@@ -287,9 +287,9 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
 
     let mut index = 0usize;
     let mut listing = false;
-    let mut listing_count = 0;  // 新增：统计列表选项数量
+    let mut listing_count = 0; // 新增：统计列表选项数量
     let mut saw_signal = false;
-    let mut signal_count = 0;     // 新增：统计信号指定次数
+    let mut signal_count = 0; // 新增：统计信号指定次数
     let mut sigspec = String::from("TERM");
     let mut sig_value = 15usize;
 
@@ -297,12 +297,12 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         let word = args[index].as_str();
 
         // 检查列表选项 (-l, -L, -t)
-        if kill_is_exact_short_option(word, 'l') 
-            || kill_is_exact_short_option(word, 'L') 
-            || kill_is_exact_short_option(word, 't') 
+        if kill_is_exact_short_option(word, 'l')
+            || kill_is_exact_short_option(word, 'L')
+            || kill_is_exact_short_option(word, 't')
         {
             listing = true;
-            listing_count += 1;  // 计数
+            listing_count += 1; // 计数
             index += 1;
             continue;
         }
@@ -319,7 +319,7 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
             sigspec = args[index].clone();
             sig_value = kill_parse_signal_value_bash(&sigspec).unwrap_or(BASH_NO_SIGNAL);
             saw_signal = true;
-            signal_count += 1;  // 计数
+            signal_count += 1; // 计数
             index += 1;
             continue;
         }
@@ -363,7 +363,7 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
         // 注意：bash 只接受大写的信号名称，或者首字母大写的名称，但不接受全小写
         if word.starts_with('-') && !saw_signal {
             let rest = &word[1..];
-            
+
             // 首先检查是否是纯数字信号（如 -0, -9）
             if let Ok(num) = rest.parse::<usize>() {
                 sigspec = rest.to_string();
@@ -373,13 +373,18 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
                 index += 1;
                 continue;
             }
-            
+
             // 检查是否看起来像信号名（首字母是大写）
-            if rest.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) {
+            if rest
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_uppercase())
+                .unwrap_or(false)
+            {
                 sigspec = rest.to_string();
                 sig_value = kill_parse_signal_value_bash(rest).unwrap_or(BASH_NO_SIGNAL);
                 saw_signal = true;
-                signal_count += 1;  // 计数
+                signal_count += 1; // 计数
                 index += 1;
                 continue;
             } else {
@@ -415,7 +420,10 @@ fn kill_main_bash<W: Write>(writer: &mut W, args: &[String]) -> CTResult<()> {
     if operands.is_empty() {
         if saw_signal {
             // 有信号但没有pid，返回1（测试期望）
-            return Err(CtSimpleError::new(1, "arguments must be process or job IDs"));
+            return Err(CtSimpleError::new(
+                1,
+                "arguments must be process or job IDs",
+            ));
         } else {
             // 完全没有参数，返回2（bash usage error）
             return Err(CtSimpleError::new(2, BASH_KILL_USAGE));
@@ -512,7 +520,8 @@ fn kill_print_signal_bash<W: Write>(writer: &mut W, signal_name_or_value: &str) 
         } else if num >= 128 {
             num -= 128;
         }
-        if num >= 0 && (num as usize) < ALL_SIGNALS.len()
+        if num >= 0
+            && (num as usize) < ALL_SIGNALS.len()
             && let Some(name) = kill_bash_signal_name(num as usize)
         {
             writeln!(writer, "{name}")?;
@@ -539,15 +548,20 @@ fn kill_parse_signal_value_bash(signal: &str) -> Option<usize> {
         // 数字超出范围也是无效的
         return None;
     }
-    
+
     // 严格匹配：要求全大写，以兼容 bash 行为（-cont 应该失败，-CONT 应该成功）
     // 但保留对首字母大写的支持（如 -Cont）
-    let normalized = if signal.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) {
+    let normalized = if signal
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_uppercase())
+        .unwrap_or(false)
+    {
         signal.to_ascii_uppercase()
     } else {
         return None; // 不以大写字母开头，无效
     };
-    
+
     let has_sig_prefix = normalized.starts_with("SIG");
     let name = normalized.strip_prefix("SIG").unwrap_or(&normalized);
 

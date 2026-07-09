@@ -32,14 +32,14 @@ use spec::IndexedSpec; // 引入包装后的 IndexedSpec
 use std::{
     error::Error,
     fmt::Display,
-    io::{stdout, Write},
+    io::{Write, stdout},
     ops::ControlFlow,
 };
 
 use crate::ct_error::CTError;
 
 use self::{
-    escape::{parse_escape_code, EscapedChar},
+    escape::{EscapedChar, parse_escape_code},
     num_format::Formatter,
 };
 

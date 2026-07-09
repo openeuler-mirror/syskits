@@ -230,8 +230,7 @@ impl NlFlags {
                 Ok(n) => flags.starting_line_number = n,
                 Err(_) => {
                     errs.push(format!(
-                        "invalid starting line number: '{}': Numerical result out of range",
-                        num
+                        "invalid starting line number: '{num}': Numerical result out of range"
                     ));
                 }
             }
@@ -516,12 +515,13 @@ where
         // 将字节流进行容错转换，以便进行字符串比较和正则匹配
         let lossy_line = String::from_utf8_lossy(&buf[..line_len]);
 
-        let new_numbering_style = match NlSectionDelimiter::parse(&lossy_line, &flags.section_delimiter) {
-            Some(NlSectionDelimiter::Header) => Some(&flags.header_numbering),
-            Some(NlSectionDelimiter::Body) => Some(&flags.body_numbering),
-            Some(NlSectionDelimiter::Footer) => Some(&flags.footer_numbering),
-            None => None,
-        };
+        let new_numbering_style =
+            match NlSectionDelimiter::parse(&lossy_line, &flags.section_delimiter) {
+                Some(NlSectionDelimiter::Header) => Some(&flags.header_numbering),
+                Some(NlSectionDelimiter::Body) => Some(&flags.body_numbering),
+                Some(NlSectionDelimiter::Footer) => Some(&flags.footer_numbering),
+                None => None,
+            };
 
         if let Some(new_style) = new_numbering_style {
             current_numbering_style = new_style;
@@ -553,7 +553,7 @@ where
             let Some(line_number) = flags.stats.line_number else {
                 return Err(CtSimpleError::new(1, "line number overflow"));
             };
-            
+
             // 写入行号和分隔符
             write!(
                 writer,
@@ -561,10 +561,10 @@ where
                 flags.number_format.format(line_number, flags.number_width),
                 flags.number_separator
             )?;
-            
+
             // 直接原封不动地写入原始字节流（包含潜在的非 UTF-8 字符和换行符）
             writer.write_all(&buf)?;
-            
+
             // 如果最后一行没有换行符，补上一个
             if buf.last() != Some(&b'\n') {
                 writeln!(writer)?;

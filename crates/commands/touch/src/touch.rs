@@ -24,8 +24,8 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
+use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
@@ -33,7 +33,7 @@ use sys_locale::get_locale;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_parse_datetime;
-use ctcore::{ct_show, Tool};
+use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
     // 需要SOURCES和sources，因为我们需要能够引用ArgGroup。
@@ -112,7 +112,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
                 let yy = s[8..10].parse::<i32>().unwrap_or(0);
                 // 关键点：POSIX.2-1992 严格规定 10 位过时时间戳的 YY 必须在 69 到 99 之间
                 // 如果是 00 (比如 Y2000 用例)，则不属于此格式，必须作为普通文件处理
-                yy >= 69 && yy <= 99
+                (69..=99).contains(&yy)
             } else {
                 false
             };
@@ -505,7 +505,7 @@ fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
         let mmddhhmm = &s[0..8];
         let yy = &s[8..10];
         let year = yy.parse::<i32>().unwrap_or(0) + 1900;
-        format!("{:04}{}", year, mmddhhmm)
+        format!("{year:04}{mmddhhmm}")
     } else {
         return Err(CtSimpleError::new(
             1,
@@ -516,7 +516,7 @@ fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| CtSimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
 
-    let mut local = match chrono::Local.from_local_datetime(&local) {
+    let local = match chrono::Local.from_local_datetime(&local) {
         LocalResult::Single(dt) => dt,
         _ => {
             return Err(CtSimpleError::new(
@@ -551,11 +551,11 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -629,7 +629,7 @@ mod tests {
         use super::*;
         use chrono::Local;
         use clap::ArgMatches;
-        use filetime::{set_file_times, FileTime};
+        use filetime::{FileTime, set_file_times};
         use tempfile::tempdir;
 
         fn build_matches(args: &[&str]) -> ArgMatches {
@@ -963,7 +963,7 @@ mod tests {
 
     #[cfg(test)]
     mod stat_tests {
-        use std::fs::{create_dir, File};
+        use std::fs::{File, create_dir};
         use std::io::Write;
         use std::os::unix::fs::symlink;
 
@@ -1879,10 +1879,12 @@ mod tests {
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         // 我们可以通过不设置stdout来触发错误（将失败，代码为1）
-        assert!(super::touch_pathbuf_from_stdout()
-            .expect_err("pathbuf_from_stdout should have failed")
-            .to_string()
-            .contains("GetFinalPathNameByHandleW failed with code 1"));
+        assert!(
+            super::touch_pathbuf_from_stdout()
+                .expect_err("pathbuf_from_stdout should have failed")
+                .to_string()
+                .contains("GetFinalPathNameByHandleW failed with code 1")
+        );
     }
 
     #[cfg(test)]

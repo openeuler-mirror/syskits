@@ -35,29 +35,29 @@ extern crate rust_i18n;
 use clap::Arg;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::crate_version;
 use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
+use clap::crate_version;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
+use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_show_error;
 
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
-use std::io::stdin;
-use std::io::stdout;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
+use std::io::stdin;
+use std::io::stdout;
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -956,8 +956,8 @@ mod tests {
     mod tests_expand_functions {
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
-            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
-            ExpandParseError, RemainingMode, DEFAULT_TABSTOP,
+            DEFAULT_TABSTOP, ExpandParseError, RemainingMode, expand_next_tabstop, expand_open,
+            expand_shortcuts, expand_tabstops_parse,
         };
 
         use crate::is_digit_or_comma;

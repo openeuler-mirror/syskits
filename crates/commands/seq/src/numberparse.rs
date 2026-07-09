@@ -47,12 +47,12 @@ fn parse_bigdecimal_compat(s: &str) -> Result<BigDecimal, ParseNumberError> {
     if s.starts_with('.') {
         norm.push('0');
         norm.push_str(s);
-    } else if s.starts_with("-.") {
+    } else if let Some(stripped) = s.strip_prefix("-.") {
         norm.push_str("-0.");
-        norm.push_str(&s[2..]);
-    } else if s.starts_with("+.") {
+        norm.push_str(stripped);
+    } else if let Some(stripped) = s.strip_prefix("+.") {
         norm.push_str("+0.");
-        norm.push_str(&s[2..]);
+        norm.push_str(stripped);
     } else {
         norm.push_str(s);
     }
@@ -126,10 +126,9 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     let is_exp_neg = exp_str.starts_with('-');
 
     // 如果指数大到无法放入 i64，根据符号给予最大/最小值
-    let exponent =
-        exp_str
-            .parse::<i64>()
-            .unwrap_or_else(|_| if is_exp_neg { i64::MIN } else { i64::MAX });
+    let exponent = exp_str
+        .parse::<i64>()
+        .unwrap_or(if is_exp_neg { i64::MIN } else { i64::MAX });
 
     // 拦截极其离谱的指数，防止 BigDecimal 崩溃或内存耗尽 (模拟 strtod 的 Overflow/Underflow)
     if exponent > 100_000 {
@@ -239,10 +238,9 @@ fn parse_decimal_and_exponent(
     let exp_str = &s[j + 1..];
     let is_exp_neg = exp_str.starts_with('-');
 
-    let exponent =
-        exp_str
-            .parse::<i64>()
-            .unwrap_or_else(|_| if is_exp_neg { i64::MIN } else { i64::MAX });
+    let exponent = exp_str
+        .parse::<i64>()
+        .unwrap_or(if is_exp_neg { i64::MIN } else { i64::MAX });
 
     // 同上，拦截极其离谱的指数
     if exponent > 100_000 {
@@ -325,10 +323,10 @@ fn parse_decimal_and_exponent(
 
 /// Parse a hexadecimal integer OR a C99 hexadecimal float from a string.
 fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
-    let (is_neg, tail) = if s.starts_with('-') {
-        (true, &s[1..])
-    } else if s.starts_with('+') {
-        (false, &s[1..])
+    let (is_neg, tail) = if let Some(tail) = s.strip_prefix('-') {
+        (true, tail)
+    } else if let Some(tail) = s.strip_prefix('+') {
+        (false, tail)
     } else {
         (false, s)
     };

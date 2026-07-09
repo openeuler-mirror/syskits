@@ -63,7 +63,7 @@ pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
         if matches!(err.kind(), io::ErrorKind::BrokenPipe) {
             Ok(())
         } else {
-            let msg = format!("standard output: {}", err);
+            let msg = format!("standard output: {err}");
             Err(CtSimpleError::new(1, msg))
         }
     } else {

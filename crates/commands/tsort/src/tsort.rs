@@ -50,10 +50,7 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(CtSimpleError::new(1, ""));
     }
 
-    let input_file = input_files
-        .first()
-        .map(|s| s.as_str())
-        .unwrap_or("-");
+    let input_file = input_files.first().map(|s| s.as_str()).unwrap_or("-");
 
     let mut stdin_buf;
     let mut file_buf;
@@ -111,14 +108,14 @@ pub fn ct_app() -> Command {
     let command_version = crate_version!();
     let application_info = t!("tsort.about");
     let usage_description = t!("tsort.usage");
-    
+
     // 修改：允许多个参数被解析（0个或多个），但在代码中检查数量
     // 这样可以在代码中输出 GNU 风格的错误，而不是使用 clap 的默认错误格式
     let arg = Arg::new(tsort_flags::TSORT_FILE)
         .default_value("-")
         .hide(true)
         .value_hint(clap::ValueHint::FilePath)
-        .num_args(0..);  // 关键修改：允许 0 到多个参数，后续手动验证
+        .num_args(0..); // 关键修改：允许 0 到多个参数，后续手动验证
 
     Command::new(utility_name)
         .version(command_version)

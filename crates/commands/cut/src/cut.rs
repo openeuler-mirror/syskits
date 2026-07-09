@@ -14,17 +14,17 @@ use bstr::io::BufReadExt;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use self::searcher::Searcher;
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_ranges::CtRange;
-use ctcore::Tool;
 use ctcore::{ct_show_error, ct_show_if_err};
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
+use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -653,15 +653,17 @@ fn cut_files(mut filenames: Vec<String>, mode: &CutMode) {
             }
 
             // 尝试打开文件，并根据模式对文件内容进行切割
-            ct_show_if_err!(File::open(path)
-                .map_err_context(|| filename.maybe_quote().to_string())
-                .and_then(|file| {
-                    match &mode {
-                        CutMode::Bytes(ranges, opts) => cut_bytes(file, ranges, opts),
-                        CutMode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
-                        CutMode::Characters(ranges, opts) => cut_characters(file, ranges, opts),
-                    }
-                }));
+            ct_show_if_err!(
+                File::open(path)
+                    .map_err_context(|| filename.maybe_quote().to_string())
+                    .and_then(|file| {
+                        match &mode {
+                            CutMode::Bytes(ranges, opts) => cut_bytes(file, ranges, opts),
+                            CutMode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
+                            CutMode::Characters(ranges, opts) => cut_characters(file, ranges, opts),
+                        }
+                    })
+            );
         }
     }
 }
@@ -921,7 +923,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 检查是否使用了等号形式的分隔符参数。
     let delimiter_is_equal = args.contains(&OsString::from("-d=")); // 特殊情况处理
-                                                                    // 使用 clap 库解析命令行参数。
+    // 使用 clap 库解析命令行参数。
     let args_match = ct_app().try_get_matches_from(args)?;
 
     // 获取命令行指定的额外选项。
@@ -2056,8 +2058,8 @@ mod tests {
 
     mod tests_cut_functions {
         use crate::{
-            ct_app, cut_get_delimiters, cut_mode_param_parse, cut_mode_parse, opt_flags,
-            CutDelimiter,
+            CutDelimiter, ct_app, cut_get_delimiters, cut_mode_param_parse, cut_mode_parse,
+            opt_flags,
         };
         use ctcore::ct_line_ending::CtLineEnding;
         use std::fs;

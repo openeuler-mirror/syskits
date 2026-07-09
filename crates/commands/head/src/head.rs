@@ -12,15 +12,15 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
 use ctcore::ct_show;
-use ctcore::Tool;
 use std::ffi::OsString;
 use std::io::{BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use sys_locale::get_locale;
@@ -255,7 +255,7 @@ impl HeadOptions {
     }
 }
 
-fn read_n_bytes<R>(mut input: R, n: u64, mut buffer: Option<&mut Vec<u8>>) -> std::io::Result<u64>
+fn read_n_bytes<R>(input: R, n: u64, mut buffer: Option<&mut Vec<u8>>) -> std::io::Result<u64>
 where
     R: Read,
 {
@@ -431,10 +431,7 @@ fn read_but_last_n_lines(
 }
 
 fn write_error(e: std::io::Error) -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("error writing 'standard output': {}", e),
-    )
+    std::io::Error::other(format!("error writing 'standard output': {e}"))
 }
 
 fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::Result<u64>
@@ -662,7 +659,7 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
         let msg = e.to_string();
         return Err(CtSimpleError::new(
             1,
-            format!("error writing 'standard output': {}", msg),
+            format!("error writing 'standard output': {msg}"),
         ));
     }
 
@@ -680,8 +677,8 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
             use std::os::unix::io::FromRawFd;
             let mut stdin_file =
                 std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
-            if !options.presume_input_pipe && is_seekable(&mut *stdin_file) {
-                head_file(&mut *stdin_file, options)
+            if !options.presume_input_pipe && is_seekable(&mut stdin_file) {
+                head_file(&mut stdin_file, options)
             } else {
                 handle_stdin(options)
             }

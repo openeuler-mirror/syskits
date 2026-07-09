@@ -112,6 +112,7 @@ impl<T: Read> Read for TakeLines<T> {
 ///
 /// The `separator` defines the character to interpret as the line
 /// ending. For the usual notion of "line", set this to `b'\n'`.
+#[allow(dead_code)]
 pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
     TakeLines {
         inner: reader,

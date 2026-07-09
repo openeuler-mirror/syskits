@@ -31,17 +31,17 @@ extern crate rust_i18n;
 /// - `ln_exec()`: 执行链接操作
 /// - `ln_link()`: 创建单个链接
 /// - `link_files_in_dir()`: 在目录中创建多个链接
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_fs::make_path_relative_to;
-use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
+use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::libc;
-use ctcore::Tool;
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -50,7 +50,7 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 #[cfg(unix)]
-use std::os::unix::fs::{symlink, MetadataExt};
+use std::os::unix::fs::{MetadataExt, symlink};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};

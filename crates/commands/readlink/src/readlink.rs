@@ -12,18 +12,18 @@
 //! readlink命令是Linux中用于读取符号链接（symlink）并显示其指向的文件或目录的命令。
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_fs::{canonicalize, MissingHandling, ResolveMode};
+use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_show_error;
-use ctcore::Tool;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 

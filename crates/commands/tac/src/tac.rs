@@ -13,22 +13,22 @@
 //! 这个命令的名字是 cat（concatenate，连接）的反向拼写，因此它以相反的顺序显示文件的行。
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
-use ctcore::ct_show;
+
 use ctcore::Tool;
 use memchr::memmem;
 use memmap2::Mmap;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
-use std::io::{stdin, stdout, Read, Write};
+use std::io::{Read, Write, stdin, stdout};
 use std::{
-    fs::{read, File},
+    fs::{File, read},
     path::Path,
 };
 use sys_locale::get_locale;
@@ -453,7 +453,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
 
     if has_error {
         // 使用 CtSimpleError 返回一个通用的非零退出码
-        return Err(ctcore::ct_error::CtSimpleError::new(1, String::new()).into());
+        return Err(ctcore::ct_error::CtSimpleError::new(1, String::new()));
     }
 
     Ok(())

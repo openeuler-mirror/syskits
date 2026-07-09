@@ -14,7 +14,7 @@
 
 use std::io::{self, Read, Write};
 
-use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
+use data_encoding::{BASE32, BASE32HEX, BASE64, BASE64URL, Encoding, HEXUPPER};
 use data_encoding_macro::new_encoding;
 #[cfg(feature = "thiserror")]
 use thiserror::Error;

@@ -22,9 +22,7 @@ use self_cell::self_cell;
 
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
-use crate::{
-    SortError, SortGeneralF64ParseResult, SortGlobalConfigs, SortLine, numeric_str_cmp::NumInfo,
-};
+use crate::{SortGeneralF64ParseResult, SortGlobalConfigs, SortLine, numeric_str_cmp::NumInfo};
 
 self_cell!(
     /// 在线程之间传递的块。
@@ -191,17 +189,16 @@ pub fn chunk_read<T: Read>(
         };
 
         let payload: CTResult<Chunk> = Chunk::try_new(buffer, |buffer| {
-            let selections_str = unsafe {
-                std::mem::transmute::<Vec<&'static str>, Vec<&'_ str>>(selections)
-            };
-            let mut sort_lines = unsafe {
-                std::mem::transmute::<Vec<SortLine<'static>>, Vec<SortLine<'_>>>(lines)
-            };
-            
+            let selections_str =
+                unsafe { std::mem::transmute::<Vec<&'static str>, Vec<&'_ str>>(selections) };
+            let mut sort_lines =
+                unsafe { std::mem::transmute::<Vec<SortLine<'static>>, Vec<SortLine<'_>>>(lines) };
+
             // 分别获取原始字节流和容错字符串
             let raw_read = &buffer[..read];
-            let lossy_read_str = unsafe { std::str::from_utf8_unchecked(&buffer[read..read + lossy_len]) };
-            
+            let lossy_read_str =
+                unsafe { std::str::from_utf8_unchecked(&buffer[read..read + lossy_len]) };
+
             let mut chunk_line_data = ChunkLineData {
                 selections: selections_str,
                 num_infos,
@@ -241,7 +238,7 @@ fn chunk_parse_lines<'a>(
     assert!(chunk_line_data.selections.is_empty());
     assert!(chunk_line_data.num_infos.is_empty());
     assert!(chunk_line_data.parsed_floats.is_empty());
-    
+
     let mut token_buffer = vec![];
     let mut raw_lines = raw_read.split(|&b| b == separator); // 同步切割原始字节流
 

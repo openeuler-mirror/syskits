@@ -19,10 +19,10 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, stdin, BufRead, BufReader, Stdin};
+use std::io::{self, BufRead, BufReader, Stdin, stdin};
 use std::path::Path;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -607,10 +607,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_1)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_1)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -620,10 +622,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_2)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_2)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -633,10 +637,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_3)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_3)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -646,10 +652,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_1)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_1)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -659,10 +667,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_3)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_3)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -672,10 +682,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_3)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_3)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -715,10 +727,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::COLUMN_1)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::COLUMN_1)
+                    .unwrap()
+            );
             // assert!(result.unwrap().get_one::<bool>(opt_flags::COLUMN_2).unwrap());
             // assert!(result.unwrap().get_one::<bool>(opt_flags::COLUMN_3).unwrap());
         }
@@ -735,10 +749,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ZERO_TERMINATED)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ZERO_TERMINATED)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -748,10 +764,12 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
-            assert!(result
-                .unwrap()
-                .get_one::<bool>(opt_flags::ZERO_TERMINATED)
-                .unwrap());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<bool>(opt_flags::ZERO_TERMINATED)
+                    .unwrap()
+            );
         }
 
         #[test]
@@ -787,7 +805,7 @@ mod tests {
         fn test_ct_app_file_2() {
             let command = ct_app();
             let test_file_path = "test_ct_app_file_2.txt"; // 测试文件路径
-                                                           // let expected_result = FILE_2;
+            // let expected_result = FILE_2;
             let flag = FILE_2.to_string();
             let files = test_file_path.to_string();
             let args = vec![ctcore::ct_util_name(), &flag, &files];
@@ -1139,7 +1157,7 @@ mod tests {
         #[test]
         fn test_ct_main_file_2() {
             let test_file_path = "test_ct_main_file_2.txt"; // 测试文件路径
-                                                            // let expected_result = FILE_2;
+            // let expected_result = FILE_2;
             let flag = FILE_2.to_string();
             let files = test_file_path.to_string();
             let args = [ctcore::ct_util_name(), &flag, &files];

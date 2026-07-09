@@ -19,18 +19,18 @@ use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
+use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
+use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::uio_error;
-use ctcore::Tool;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io;
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -7967,8 +7967,8 @@ mod tests {
     }
 
     mod tests_settings {
-        use crate::ct_app;
         use crate::SpliceSettings;
+        use crate::ct_app;
         use std::fs;
         use std::fs::File;
         use std::path::Path;
@@ -10150,10 +10150,10 @@ mod tests {
         }
     }
     mod tests_setting_error {
-        use crate::split_should_extract_obs_lines;
         use crate::FilenameSuffixError;
         use crate::SpliceSettingsError;
         use crate::StrategyError;
+        use crate::split_should_extract_obs_lines;
 
         #[test]
         fn test_strategy_lines_does_not_require_usage() {
@@ -10345,8 +10345,8 @@ mod tests {
             assert_eq!(obs_lines, Some("100".to_string()));
         }
         #[test]
-        fn test_handle_extract_obs_lines_no_obs_lines_with_long_options_and_value_and_short_options(
-        ) {
+        fn test_handle_extract_obs_lines_no_obs_lines_with_long_options_and_value_and_short_options()
+         {
             let slice = "--extract-obs-lines=100a-x";
             let mut obs_lines = None;
             let result = splice_handle_extract_obs_lines(slice, &mut obs_lines);
@@ -10431,8 +10431,8 @@ mod tests {
             assert_eq!(obs_lines, Some("100".to_string()));
         }
         #[test]
-        fn test_handle_extract_obs_lines_with_long_options_before_and_after_and_value_and_value_and_value(
-        ) {
+        fn test_handle_extract_obs_lines_with_long_options_before_and_after_and_value_and_value_and_value()
+         {
             let slice = "--x100de=100a100a100";
             let mut obs_lines = None;
             let result = splice_handle_extract_obs_lines(slice, &mut obs_lines);

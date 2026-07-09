@@ -40,7 +40,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
 use ctcore::{ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
@@ -665,8 +665,7 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
             settings.path_str,
             settings.verbose,
             settings.remove_method,
-        )
-        .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
+        )?;
     }
     Ok(())
 }
@@ -794,7 +793,7 @@ fn shred_do_remove(
     orig_filename: &str,
     verbose: bool,
     remove_method: RemoveMethod,
-) -> Result<(), io::Error> {
+) -> CTResult<()> {
     if verbose {
         ct_show_error!("{}: removing", orig_filename.maybe_quote());
     }
@@ -808,7 +807,19 @@ fn shred_do_remove(
 
     // 删除文件
     if let Some(rp) = remove_path {
-        fs::remove_file(rp)?;
+        if let Err(e) = fs::remove_file(&rp) {
+            return Err(io::Error::new(
+                e.kind(),
+                format!(
+                    "{}: failed to remove file: {}",
+                    rp.maybe_quote(),
+                    strip_errno(&e)
+                ),
+            )
+            .into());
+        }
+    } else {
+        return Err(CtSimpleError::new(1, String::new()));
     }
 
     if verbose {

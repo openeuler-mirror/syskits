@@ -609,11 +609,9 @@ fn move_files_into_dir(
     // 用于存储已移动文件的目标路径，避免重复移动
     let mut moved_dests: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
-    // 用于检测重复的源文件（通过inode和设备号）
-    #[cfg(unix)]
-    let mut processed_sources: HashSet<(u64, u64)> = HashSet::with_capacity(mv_files.len());
-    #[cfg(not(unix))]
-    let mut processed_sources: HashSet<std::path::PathBuf> = HashSet::with_capacity(mv_files.len());
+    // 将重复检测依据从 (device_id, inode) 改为规范化路径。
+    // 这样，互为硬链接的不同路径就不会被误判为重复指定的同一个源文件。
+    let mut processed_sources: HashSet<PathBuf> = HashSet::with_capacity(mv_files.len());
 
     // 标记是否发生过错误
     let mut has_error = false;
@@ -663,94 +661,59 @@ fn move_files_into_dir(
             pb.set_message(source_path.to_string_lossy().to_string());
         }
 
-        // 首先检查源文件是否存在（GNU 行为：如果源不存在，立即报告 cannot stat）
+        // 首先检查源文件是否存在
         let source_metadata = match source_path.symlink_metadata() {
             Ok(meta) => meta,
             Err(_) => {
                 ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
                 set_ct_exit_code(1);
+                has_error = true;
                 continue;
             }
         };
 
         // 检查源文件是否已经被处理过（检测重复源）
-        // 注意：使用 source_path.display() 而不是 quote()，因为警告消息的格式是 'path' 而不是 'path'
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            let source_key = (source_metadata.dev(), source_metadata.ino());
-            if processed_sources.contains(&source_key) {
-                // 源文件重复，但需要检查源文件是否仍然存在
-                // 如果之前的移动成功导致源文件不存在，应该输出 "cannot stat" 而不是警告
-                if source_path.symlink_metadata().is_err() {
-                    // 源文件已不存在（被之前的操作移动了），输出 cannot stat
-                    ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
-                    set_ct_exit_code(1);
+        let canonical_source = source_path
+            .canonicalize()
+            .unwrap_or_else(|_| source_path.to_path_buf());
+
+        if processed_sources.contains(&canonical_source) {
+            if source_path.symlink_metadata().is_err() {
+                ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
+                set_ct_exit_code(1);
+                has_error = true;
+            } else {
+                let file_type = source_metadata.file_type();
+                let source_type = if file_type.is_dir() {
+                    "directory"
                 } else {
-                    // 源文件仍然存在，输出警告
-                    let file_type = source_metadata.file_type();
-                    let source_type = if file_type.is_dir() {
-                        "directory"
-                    } else {
-                        "file"
-                    };
-                    ct_show!(CtSimpleError::new(
-                        0,
-                        format!(
-                            "warning: source {} '{}' specified more than once",
-                            source_type,
-                            source_path.display()
-                        ),
-                    ));
-                }
-                continue;
+                    "file"
+                };
+                ct_show!(CtSimpleError::new(
+                    0,
+                    format!(
+                        "warning: source {} '{}' specified more than once",
+                        source_type,
+                        source_path.display()
+                    ),
+                ));
             }
-            processed_sources.insert(source_key);
+            continue;
         }
-        #[cfg(not(unix))]
-        {
-            if let Ok(canonical) = source_path.canonicalize() {
-                if processed_sources.contains(&canonical) {
-                    // 源文件重复，但需要检查源文件是否仍然存在
-                    if source_path.symlink_metadata().is_err() {
-                        // 源文件已不存在（被之前的操作移动了），输出 cannot stat
-                        ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
-                        set_ct_exit_code(1);
-                    } else {
-                        // 源文件仍然存在，输出警告
-                        let file_type = source_metadata.file_type();
-                        let source_type = if file_type.is_dir() {
-                            "directory"
-                        } else {
-                            "file"
-                        };
-                        ct_show!(CtSimpleError::new(
-                            0,
-                            format!(
-                                "warning: source {} '{}' specified more than once",
-                                source_type,
-                                source_path.display()
-                            ),
-                        ));
-                    }
-                    continue;
-                }
-                processed_sources.insert(canonical);
-            }
-        }
+        processed_sources.insert(canonical_source);
 
         // 确定目标路径
         let targetpath = match source_path.file_name() {
             Some(name) => target_directory.join(name),
             None => {
                 ct_show!(MvError::NoSuchFile(source_path.quote().to_string()));
+                has_error = true;
                 continue;
             }
         };
 
         // 检查是否已存在相同目标路径的文件，并根据备份选项处理
         if moved_dests.contains(&targetpath) && mv_opts.backup != CtBackupMode::NumberedBackup {
-            // 如果目标文件是此mv调用中已创建的，不覆盖
             ct_show!(CtSimpleError::new(
                 1,
                 format!(
@@ -759,17 +722,16 @@ fn move_files_into_dir(
                     source_path.display()
                 ),
             ));
+            has_error = true;
             continue;
         }
 
-        // 检查是否尝试将目录移动到自身，仅对真实目录进行判断，避免符号链接误报。
-        // 使用前面已获取的 source_metadata
+        // 检查是否尝试将目录移动到自身
         if let Some(canonical_target) = canonical_target_dir.as_ref() {
             let file_type = source_metadata.file_type();
             if file_type.is_dir() && !file_type.is_symlink() {
                 if let Ok(canonical_source) = source_path.canonicalize() {
                     if canonical_target.starts_with(&canonical_source) {
-                        // 使用 Path::join 来正确组合路径，避免双斜杠
                         let subdir_path = target_directory.join(
                             source_path
                                 .file_name()
@@ -791,7 +753,7 @@ fn move_files_into_dir(
             }
         }
 
-        // 尝试重命名文件（即移动文件），根据结果进行相应处理
+        // 尝试重命名文件
         #[cfg(unix)]
         {
             match mv_rename_with_hardlink_tracking(
@@ -800,10 +762,12 @@ fn move_files_into_dir(
                 mv_opts,
                 multi_progress.as_ref(),
                 &mut hardlink_map,
-                // 用于递归时传递 inode_map 给 move_dir_cross_device_with_links
                 true,
             ) {
-                Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
+                Err(err) if err.to_string().is_empty() => {
+                    set_ct_exit_code(1);
+                    has_error = true;
+                }
                 Err(err) => {
                     let err_str = err.to_string();
                     let msg = format!(
@@ -829,6 +793,7 @@ fn move_files_into_dir(
                             None => ct_show!(final_err),
                         };
                     }
+                    has_error = true;
                 }
                 Ok(()) => (),
             }
@@ -842,7 +807,10 @@ fn move_files_into_dir(
                 multi_progress.as_ref(),
                 None,
             ) {
-                Err(err) if err.to_string().is_empty() => set_ct_exit_code(1),
+                Err(err) if err.to_string().is_empty() => {
+                    set_ct_exit_code(1);
+                    has_error = true;
+                }
                 Err(err) => {
                     let err_str = err.to_string();
                     let msg = format!(
@@ -868,10 +836,12 @@ fn move_files_into_dir(
                             None => ct_show!(final_err),
                         };
                     }
+                    has_error = true;
                 }
                 Ok(()) => (),
             }
         }
+
         // 更新进度条
         if let Some(ref pb) = progress {
             pb.inc(1);

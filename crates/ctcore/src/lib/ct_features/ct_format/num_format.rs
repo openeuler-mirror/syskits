@@ -113,6 +113,7 @@ impl Formatter for SignedInt {
             precision,
             positive_sign,
             alignment,
+            thousand_separate: _,
         } = s
         {
             let width = if let Some(CanAsterisk::Fixed(x)) = width {
@@ -196,6 +197,7 @@ impl Formatter for UnsignedInt {
             precision,
             positive_sign: PositiveSign::None,
             alignment,
+            thousand_separate: _,
         } = s
         {
             Spec::UnsignedInt {
@@ -203,6 +205,7 @@ impl Formatter for UnsignedInt {
                 width,
                 precision,
                 alignment,
+                thousand_separate: false,
             }
         } else {
             s
@@ -213,6 +216,7 @@ impl Formatter for UnsignedInt {
             width,
             precision,
             alignment,
+            thousand_separate: _,
         } = s
         {
             let width = if let Some(CanAsterisk::Fixed(x)) = width {
@@ -322,6 +326,7 @@ impl Formatter for Float {
             positive_sign,
             alignment,
             precision,
+            thousand_separate: _,
         } = s
         {
             let width = if let Some(CanAsterisk::Fixed(x)) = width {
@@ -557,6 +562,7 @@ mod test {
             precision: Some(CanAsterisk::Fixed(4)),
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
+            thousand_separate: false,
         };
 
         let signed_int = SignedInt::try_from_spec(spec).unwrap();
@@ -575,6 +581,7 @@ mod test {
             precision: Some(CanAsterisk::Fixed(4)),
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::RightSpace,
+            thousand_separate: false,
         };
 
         let result = SignedInt::try_from_spec(spec);
@@ -595,6 +602,7 @@ mod test {
             precision: Some(CanAsterisk::Fixed(4)),
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
+            thousand_separate: false,
         };
 
         let result = SignedInt::try_from_spec(spec);
@@ -615,6 +623,7 @@ mod test {
             precision: Some(CanAsterisk::Fixed(i64::MAX as usize)),
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::RightZero,
+            thousand_separate: false,
         };
 
         let result = SignedInt::try_from_spec(spec);
@@ -746,6 +755,7 @@ mod test {
             width: Some(CanAsterisk::Fixed(10)),
             precision: Some(CanAsterisk::Fixed(2)),
             alignment: NumberAlignment::Left,
+            thousand_separate: false,
         };
 
         let unsigned_int = UnsignedInt::try_from_spec(spec).unwrap();
@@ -763,6 +773,7 @@ mod test {
             width: Some(CanAsterisk::Fixed(8)),
             precision: None,
             alignment: NumberAlignment::RightSpace,
+            thousand_separate: false,
         };
 
         let unsigned_int = UnsignedInt::try_from_spec(spec).unwrap();
@@ -780,6 +791,7 @@ mod test {
             width: Some(CanAsterisk::Fixed(16)),
             precision: Some(CanAsterisk::Asterisk), // Precision as asterisk should fail
             alignment: NumberAlignment::Left,
+            thousand_separate: false,
         };
 
         let result = UnsignedInt::try_from_spec(spec);
@@ -928,6 +940,7 @@ mod test {
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
             precision: Some(CanAsterisk::Fixed(6)),
+            thousand_separate: false,
         };
 
         let float = Float::try_from_spec(spec).unwrap();
@@ -951,6 +964,7 @@ mod test {
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
             precision: None, // Precision not provided
+            thousand_separate: false,
         };
 
         let float = Float::try_from_spec(spec).unwrap();
@@ -974,6 +988,7 @@ mod test {
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
             precision: Some(CanAsterisk::Fixed(0)), // Zero precision
+            thousand_separate: false,
         };
 
         let float = Float::try_from_spec(spec).unwrap();

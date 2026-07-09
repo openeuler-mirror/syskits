@@ -440,24 +440,36 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
 
 struct DirRestorer {
     #[cfg(unix)]
-    fd: File,
+    fd: Option<File>,
     #[cfg(not(unix))]
-    path: PathBuf,
+    path: Option<PathBuf>,
 }
 
 impl DirRestorer {
-    fn new() -> std::io::Result<Self> {
+    fn new() -> Self {
         #[cfg(unix)]
         {
-            Ok(Self {
-                fd: File::open(".")?,
-            })
+            // 尝试打开当前目录保存现场，如果失败（如无读权限），则静默返回 None
+            Self {
+                fd: File::open(".").ok(),
+            }
         }
         #[cfg(not(unix))]
         {
-            Ok(Self {
-                path: std::env::current_dir()?,
-            })
+            Self {
+                path: std::env::current_dir().ok(),
+            }
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.fd.is_some()
+        }
+        #[cfg(not(unix))]
+        {
+            self.path.is_some()
         }
     }
 
@@ -465,16 +477,21 @@ impl DirRestorer {
         #[cfg(unix)]
         {
             use std::os::unix::io::AsRawFd;
-            unsafe {
-                if libc::fchdir(self.fd.as_raw_fd()) != 0 {
-                    return Err(std::io::Error::last_os_error());
+            if let Some(fd) = &self.fd {
+                unsafe {
+                    if libc::fchdir(fd.as_raw_fd()) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
                 }
             }
             Ok(())
         }
         #[cfg(not(unix))]
         {
-            std::env::set_current_dir(&self.path)
+            if let Some(p) = &self.path {
+                std::env::set_current_dir(p)?;
+            }
+            Ok(())
         }
     }
 }
@@ -504,86 +521,27 @@ fn remove_dir_tree(
         }
     }
 
-    // 2. 准备深入目录。先保存当前目录现场。
-    let restorer = match DirRestorer::new() {
-        Ok(r) => r,
-        Err(e) => {
-            ct_show_error!("cannot open current directory: {}", e);
-            return true;
-        }
-    };
+    // 2. 准备深入目录。尝试保存当前目录现场。
+    let restorer = DirRestorer::new();
+    let mut use_chdir = restorer.is_valid();
 
-    // 执行 chdir 下沉：规避超长路径崩溃
-    if let Err(chdir_err) = std::env::set_current_dir(local_path) {
-        // 无法 chdir (缺乏 x 权限)。但如果它有 r 权限，我们依然可以在外部读取列表！
-        if let Ok(iter) = fs::read_dir(local_path) {
-            for entry in iter {
-                match entry {
-                    Ok(e) => {
-                        let name = e.file_name();
-                        let child_display = display_path.join(&name);
-                        let child_local = local_path.join(&name);
-
-                        // 我们没有 x 权限，系统不允许解析下级路径，任何操作都会返回 EACCES。
-                        // 强制触发系统的拒绝删除响应，以对齐 GNU 的子文件报警逻辑
-                        if let Err(err) =
-                            fs::remove_file(&child_local).or_else(|_| fs::remove_dir(&child_local))
-                        {
-                            if err.kind() == std::io::ErrorKind::PermissionDenied {
-                                ct_show_error!(
-                                    "cannot remove {}: {}",
-                                    child_display.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                ct_show_error!("cannot remove {}: {}", child_display.quote(), err);
-                            }
-                            had_err = true;
-                        }
-                    }
-                    Err(e) => {
-                        ct_show_error!("cannot read directory {}: {}", display_path.quote(), e);
-                        had_err = true;
-                    }
-                }
-            }
-            // 如果内部报错了，父级删除就会顺理成章地被跳过，这就完美吻合了 exp-solaris 测试预期！
-            if !had_err {
-                had_err |= remove_dir(local_path, display_path, options);
-            }
-            return had_err;
-        }
-
-        // 如果连 read_dir 都失败了，说明连 r 权限都没有。走原本的兜底逻辑。
-        if !prompt_dir(local_path, display_path, options) {
-            return false;
-        }
-
-        if fs::remove_dir(local_path).is_ok() {
-            if options.verbose {
-                println!("removed directory {}", normalize(display_path).quote());
-            }
-            return false;
-        }
-
-        let err_msg = if chdir_err.kind() == std::io::ErrorKind::PermissionDenied {
-            "Permission denied".to_string()
-        } else {
-            chdir_err.to_string()
-        };
-        ct_show_error!(
-            "cannot read directory {}: {}",
-            display_path.quote(),
-            err_msg
-        );
-        return true;
+    // 如果允许 chdir，尝试下沉。如果下沉失败（例如缺乏 x 权限），优雅降级为非 chdir 模式
+    if use_chdir && std::env::set_current_dir(local_path).is_err() {
+        use_chdir = false;
     }
+
+    // 决定读取哪个目录：如果下沉成功，读取 "."；否则直接读取 local_path
+    let dir_to_read = if use_chdir {
+        Path::new(".")
+    } else {
+        local_path
+    };
 
     let mut is_empty = true;
     let mut entries = Vec::new();
     let mut read_dir_err = None;
 
-    match fs::read_dir(".") {
+    match fs::read_dir(dir_to_read) {
         Ok(iter) => {
             for entry in iter {
                 match entry {
@@ -603,14 +561,17 @@ fn remove_dir_tree(
         }
     }
 
-    // 如果能够进入 (有 x 权限) 但无权读取列表 (无 r 权限)，尝试以空目录直接抹杀它！
+    // 3. 处理读取目录失败的情况
     if let Some(e) = read_dir_err {
-        let _ = restorer.restore();
+        if use_chdir {
+            let _ = restorer.restore();
+        }
 
         if !prompt_dir(local_path, display_path, options) {
             return false;
         }
 
+        // 退而求其次：尝试将其作为空目录直接删除
         if fs::remove_dir(local_path).is_ok() {
             if options.verbose {
                 println!("removed directory {}", normalize(display_path).quote());
@@ -634,37 +595,45 @@ fn remove_dir_tree(
     // 3. 交互式确认
     if options.interactive == InteractiveMode::Always && !is_empty && !prompt_descend(display_path)
     {
-        let _ = restorer.restore();
-        return true; // 拒绝进入子树，标记为错误以防止父目录被删
+        if use_chdir {
+            let _ = restorer.restore();
+        }
+        return true;
     }
 
-    // 4. 清理内层所有文件，此时 entry 仅为一个极短的 local filename
+    // 4. 清理内层所有文件
     for entry in entries {
         let name = entry.file_name();
         let child_display = display_path.join(&name);
-        let child_local = Path::new(&name);
+        // 如果成功下沉，子路径就是裸文件名；否则是完整拼接的路径
+        let child_local = if use_chdir {
+            PathBuf::from(&name)
+        } else {
+            local_path.join(&name)
+        };
 
         let is_dir = match entry.file_type() {
             Ok(ft) => ft.is_dir(),
-            Err(_) => fs::symlink_metadata(child_local)
+            Err(_) => fs::symlink_metadata(&child_local)
                 .map(|m| m.is_dir())
                 .unwrap_or(false),
         };
 
         if is_dir {
-            had_err |= remove_dir_tree(child_local, &child_display, options, top_dev, false);
+            had_err |= remove_dir_tree(&child_local, &child_display, options, top_dev, false);
         } else {
-            had_err |= remove_file(child_local, &child_display, options);
+            had_err |= remove_file(&child_local, &child_display, options);
         }
     }
 
-    // 5. 子文件清理完毕。为了删除自己，必须先跳出回到父目录！
-    if let Err(e) = restorer.restore() {
-        ct_show_error!("failed to restore directory: {}", e);
-        return true;
+    // 5. 恢复现场并删除自身
+    if use_chdir {
+        if let Err(e) = restorer.restore() {
+            ct_show_error!("failed to restore directory: {}", e);
+            return true;
+        }
     }
 
-    // 6. 只要子节点无报错，就在外部（父层）将其彻底移除
     if !had_err {
         had_err |= remove_dir(local_path, display_path, options);
     }

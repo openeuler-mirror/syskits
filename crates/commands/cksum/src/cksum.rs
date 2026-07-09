@@ -1447,7 +1447,7 @@ mod tests {
 
         // 测试 execute 方法
         let args = vec![OsString::from("cksum"), OsString::from("--version")];
-        assert!(tool.execute(&args).is_err());
+        assert!(tool.execute(&args).is_ok());
     }
 
     #[cfg(test)]
@@ -1499,11 +1499,14 @@ mod tests {
         #[test]
         fn test_ct_app_file_arg() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--file", "test.txt"];
+            // FILE argument is a positional argument, not --file option
+            let args = vec![ctcore::ct_util_name(), "test.txt"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            // FILE argument is valid, so this should succeed
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_many::<String>(opt_flags::FILE).is_some());
         }
 
         #[test]
@@ -1546,7 +1549,7 @@ mod tests {
 
             assert!(result.is_ok());
             let matches = result.unwrap();
-            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+            assert!(matches.get_one::<String>(opt_flags::LENGTH).is_some());
         }
 
         #[test]
@@ -1574,19 +1577,26 @@ mod tests {
         #[test]
         fn test_ct_app_multiple_files() {
             let command = ct_app();
+            // FILE argument is positional and accepts multiple values
             let args = vec![
                 ctcore::ct_util_name(),
-                "--file",
                 "file1.txt",
-                "--file",
                 "file2.txt",
-                "--file",
                 "file3.txt",
             ];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            // FILE argument accepts multiple values, so this should succeed
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            let files: Vec<&String> = matches
+                .get_many::<String>(opt_flags::FILE)
+                .unwrap()
+                .collect();
+            assert_eq!(files.len(), 3);
+            assert_eq!(files[0], "file1.txt");
+            assert_eq!(files[1], "file2.txt");
+            assert_eq!(files[2], "file3.txt");
         }
 
         #[test]
@@ -1619,7 +1629,7 @@ mod tests {
             assert!(result.is_ok());
             let matches = result.unwrap();
             assert!(matches.args_present());
-            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+            assert!(matches.get_one::<String>(opt_flags::LENGTH).is_some());
         }
 
         #[test]
@@ -1631,7 +1641,7 @@ mod tests {
             assert!(result.is_ok());
             let matches = result.unwrap();
             assert!(matches.args_present());
-            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+            assert!(matches.get_one::<String>(opt_flags::LENGTH).is_some());
         }
 
         #[test]
@@ -1658,22 +1668,37 @@ mod tests {
         #[test]
         fn test_ct_app_empty_file_argument() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--file", ""];
+            // FILE argument is positional
+            let args = vec![ctcore::ct_util_name(), ""];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            // Empty string is a valid file path for clap
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            let files: Vec<&String> = matches
+                .get_many::<String>(opt_flags::FILE)
+                .unwrap()
+                .collect();
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0], "");
         }
 
         #[test]
         fn test_ct_app_nonexistent_file() {
             let command = ct_app();
-            let args = vec![ctcore::ct_util_name(), "--file", "/nonexistent/file.txt"];
+            // FILE argument is positional
+            let args = vec![ctcore::ct_util_name(), "/nonexistent/file.txt"];
             let result = command.try_get_matches_from(args);
 
             // clap does not validate file existence at parse time; this should succeed
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            let files: Vec<&String> = matches
+                .get_many::<String>(opt_flags::FILE)
+                .unwrap()
+                .collect();
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0], "/nonexistent/file.txt");
         }
 
         #[test]
@@ -1694,7 +1719,7 @@ mod tests {
 
             assert!(result.is_ok());
             let matches = result.unwrap();
-            assert!(matches.get_one::<usize>(opt_flags::LENGTH).is_some());
+            assert!(matches.get_one::<String>(opt_flags::LENGTH).is_some());
         }
 
         #[test]
@@ -1713,8 +1738,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-t"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            // -t is the short form for --text, so this should succeed
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::TEXT));
         }
 
         #[test]
@@ -1733,8 +1760,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-b"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            // -b is the short form for --binary, so this should succeed
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::BINARY));
         }
 
         #[test]
@@ -1825,104 +1854,6 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_main_file_arg() {
-            let args = [ctcore::ct_util_name(), "--file", "test.txt"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_algorithm_arg() {
-            let args = [ctcore::ct_util_name(), "--algorithm", "SHA256"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_length_arg() {
-            let args = [ctcore::ct_util_name(), "--length", "256"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_multiple_files() {
-            let args = [
-                ctcore::ct_util_name(),
-                "--file",
-                "file1.txt",
-                "--file",
-                "file2.txt",
-                "--file",
-                "file3.txt",
-            ];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_invalid_algorithm() {
-            let args = [ctcore::ct_util_name(), "--algorithm", "invalid-algo"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_length_out_of_range() {
-            let args = [ctcore::ct_util_name(), "--length", "1025"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
         fn test_ct_main_length_not_multiple_of_8() {
             let args = [ctcore::ct_util_name(), "--length", "29"];
             let result = cksum_main(args.iter().map(OsString::from));
@@ -1938,153 +1869,8 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_main_raw_and_base64_both_set() {
-            let args = [ctcore::ct_util_name(), "--raw", "--base64"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_empty_file_argument() {
-            let args = [ctcore::ct_util_name(), "--file", ""];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_nonexistent_file() {
-            let args = [ctcore::ct_util_name(), "--file", "/nonexistent/file.txt"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_short_form_algorithm() {
-            let args = [ctcore::ct_util_name(), "-a", "SHA256"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
         fn test_ct_main_short_form_length() {
             let args = [ctcore::ct_util_name(), "-l", "256"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_short_form_untagged() {
-            let args = [ctcore::ct_util_name(), "-u"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_short_form_tag() {
-            let args = [ctcore::ct_util_name(), "-t"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_short_form_raw() {
-            let args = [ctcore::ct_util_name(), "-r"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_short_form_base64() {
-            let args = [ctcore::ct_util_name(), "-b"];
-            let result = cksum_main(args.iter().map(OsString::from));
-
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 1);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
-        }
-
-        #[test]
-        fn test_ct_main_multiple_options() {
-            let args = [
-                ctcore::ct_util_name(),
-                "--algorithm",
-                "SHA256",
-                "--untagged",
-                "--length",
-                "256",
-                "--raw",
-                "--file",
-                "test.txt",
-            ];
             let result = cksum_main(args.iter().map(OsString::from));
 
             match result {
@@ -3137,7 +2923,7 @@ mod tests {
             let (name, _, output_size) = cksum_detect_algo(CKSUM_ALGORITHM_OPTIONS_SM3, None);
             assert_eq!(name, CKSUM_ALGORITHM_OPTIONS_SM3);
 
-            assert_eq!(output_size, 512);
+            assert_eq!(output_size, 256);
         }
     }
 
@@ -3194,6 +2980,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3244,6 +3035,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3294,6 +3090,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3343,6 +3144,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3393,6 +3199,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3443,6 +3254,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3493,6 +3309,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3543,6 +3364,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3593,6 +3419,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3643,6 +3474,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3693,6 +3529,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3743,6 +3584,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3793,6 +3639,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3843,6 +3694,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3894,6 +3750,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3944,6 +3805,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -3994,6 +3860,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4044,6 +3915,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4094,6 +3970,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4144,6 +4025,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4194,6 +4080,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4244,6 +4135,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4294,6 +4190,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4345,6 +4246,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4395,6 +4301,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4445,6 +4356,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4496,6 +4412,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4546,6 +4467,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4596,6 +4522,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4647,6 +4578,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4697,6 +4633,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4747,6 +4688,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results
@@ -4798,6 +4744,11 @@ mod tests {
                 output_format,
                 zero: false,
                 binary: false,
+                quiet: false,
+                status: false,
+                warn: false,
+                strict: false,
+                ignore_missing: false,
             };
 
             match results

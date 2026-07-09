@@ -204,6 +204,65 @@ mod tests {
             fn new(args: &'a [FormatArgument]) -> Self {
                 MockArgumentIter { args, index: 0 }
             }
+
+            fn get_char(&mut self) -> u8 {
+                if let Some(arg) = self.next() {
+                    match arg {
+                        FormatArgument::Unparsed(s) => s.bytes().next().unwrap_or(b'\0'),
+                        FormatArgument::Char(c) => *c as u8,
+                        _ => b'\0',
+                    }
+                } else {
+                    b'\0'
+                }
+            }
+
+            fn get_i64(&mut self) -> i64 {
+                if let Some(arg) = self.next() {
+                    match arg {
+                        FormatArgument::Unparsed(s) => s.parse::<i64>().unwrap_or(0),
+                        FormatArgument::SignedInt(n) => *n,
+                        _ => 0,
+                    }
+                } else {
+                    0
+                }
+            }
+
+            fn get_u64(&mut self) -> u64 {
+                if let Some(arg) = self.next() {
+                    match arg {
+                        FormatArgument::Unparsed(s) => s.parse::<u64>().unwrap_or(0),
+                        FormatArgument::UnsignedInt(n) => *n,
+                        _ => 0,
+                    }
+                } else {
+                    0
+                }
+            }
+
+            fn get_f64(&mut self) -> f64 {
+                if let Some(arg) = self.next() {
+                    match arg {
+                        FormatArgument::Unparsed(s) => s.parse::<f64>().unwrap_or(0.0),
+                        FormatArgument::Float(n) => *n,
+                        _ => 0.0,
+                    }
+                } else {
+                    0.0
+                }
+            }
+
+            fn get_str(&mut self) -> &'a str {
+                if let Some(arg) = self.next() {
+                    match arg {
+                        FormatArgument::Unparsed(s) | FormatArgument::String(s) => s,
+                        _ => "",
+                    }
+                } else {
+                    ""
+                }
+            }
         }
 
         impl<'a> Iterator for MockArgumentIter<'a> {

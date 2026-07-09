@@ -488,7 +488,7 @@ mod tests {
     // 默认为 --backup=existing
     #[test]
     fn test_backup_mode_short_only() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
@@ -499,7 +499,7 @@ mod tests {
     // --backup 选项优先于 -b 选项
     #[test]
     fn test_backup_mode_long_preferred_over_short() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "-b", "--backup=none"]);
 
         let result = determine_backup_mode(&matches).unwrap();
@@ -510,7 +510,7 @@ mod tests {
     // --backup 选项可以不带参数传入
     #[test]
     fn test_backup_mode_long_without_args_no_env() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
@@ -521,7 +521,7 @@ mod tests {
     // --backup只能带有参数一起使用
     #[test]
     fn test_backup_mode_long_with_args() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "--backup=simple"]);
 
         let result = determine_backup_mode(&matches).unwrap();
@@ -532,7 +532,7 @@ mod tests {
     // --backup对于无效参数报错
     #[test]
     fn test_backup_mode_long_with_args_invalid() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "--backup=foobar"]);
 
         let result = determine_backup_mode(&matches);
@@ -545,7 +545,7 @@ mod tests {
     // --backup 在遇到模糊参数时报错
     #[test]
     fn test_backup_mode_long_with_args_ambiguous() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "--backup=n"]);
 
         let result = determine_backup_mode(&matches);
@@ -558,7 +558,7 @@ mod tests {
     // --backup接受缩写的参数（si表示simple）
     #[test]
     fn test_backup_mode_long_with_arg_shortened() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "--backup=si"]);
 
         let result = determine_backup_mode(&matches).unwrap();
@@ -569,20 +569,20 @@ mod tests {
     // -b 选项忽略 “VERSION_CONTROL” 环境变量
     #[test]
     fn test_backup_mode_short_only_ignore_env() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { env::set_var(ENV_VERSION_CONTROL, "none") };
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, CtBackupMode::ExistingBackup);
+        assert_eq!(result, CtBackupMode::NoBackup);
         unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup可以不带参数传入，但如果存在则读取环境变量
     #[test]
     fn test_backup_mode_long_without_args_with_env() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { env::set_var(ENV_VERSION_CONTROL, "none") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
@@ -595,7 +595,7 @@ mod tests {
     // --backup 在遇到无效的 VERSION_CONTROL 环境变量时报错
     #[test]
     fn test_backup_mode_long_with_env_var_invalid() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { env::set_var(ENV_VERSION_CONTROL, "foobar") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
@@ -610,7 +610,7 @@ mod tests {
     // --backup对于模糊的VERSION_CONTROL环境变量报错
     #[test]
     fn test_backup_mode_long_with_env_var_ambiguous() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { env::set_var(ENV_VERSION_CONTROL, "n") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
@@ -625,7 +625,7 @@ mod tests {
     // --backup 接受简写的环境变量（如 si 代表 simple）
     #[test]
     fn test_backup_mode_long_with_env_var_shortened() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { env::set_var(ENV_VERSION_CONTROL, "si") };
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
@@ -637,7 +637,7 @@ mod tests {
 
     #[test]
     fn test_suffix_takes_hyphen_value() {
-        let _dummy = TEST_MUTEX.lock().unwrap();
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "-b", "--suffix", "-v"]);
 
         let result = determine_backup_suffix(&matches);

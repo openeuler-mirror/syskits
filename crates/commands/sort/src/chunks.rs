@@ -548,10 +548,12 @@ mod tests {
             let lines = vec![
                 SortLine {
                     line: "Line 1",
+                    raw_bytes: b"Line 1",
                     index: 0,
                 },
                 SortLine {
                     line: "Line 2",
+                    raw_bytes: b"Line 2",
                     index: 1,
                 },
             ];
@@ -608,10 +610,12 @@ mod tests {
             let lines = vec![
                 SortLine {
                     line: "Line with special characters: #@!",
+                    raw_bytes: b"Line with special characters: #@!",
                     index: 0,
                 },
                 SortLine {
                     line: "Line with unicode: привет",
+                    raw_bytes: "Line with unicode: привет".as_bytes(),
                     index: 1,
                 },
             ];
@@ -657,6 +661,7 @@ mod tests {
         let chunk = Chunk::new(vec![0; 10], |_buffer| {
             let lines = vec![SortLine {
                 line: "Partial data line",
+                raw_bytes: b"Partial data line",
                 index: 0,
             }];
             let settings = NumInfoParseSettings::default();
@@ -2386,13 +2391,21 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(lines.len(), 3);
         assert_eq!(
             lines[0],
             SortLine {
                 line: "line1",
+                raw_bytes: b"line1",
                 index: 0,
             }
         );
@@ -2400,6 +2413,7 @@ mod tests {
             lines[1],
             SortLine {
                 line: "line2",
+                raw_bytes: b"line2",
                 index: 1,
             }
         );
@@ -2407,6 +2421,7 @@ mod tests {
             lines[2],
             SortLine {
                 line: "line3",
+                raw_bytes: b"line3",
                 index: 2,
             }
         );
@@ -2422,13 +2437,21 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'|', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'|',
+            &settings,
+        );
 
         assert_eq!(lines.len(), 3);
         assert_eq!(
             lines[0],
             SortLine {
                 line: "part1",
+                raw_bytes: b"part1",
                 index: 0,
             }
         );
@@ -2436,6 +2459,7 @@ mod tests {
             lines[1],
             SortLine {
                 line: "part2",
+                raw_bytes: b"part2",
                 index: 1,
             }
         );
@@ -2443,6 +2467,7 @@ mod tests {
             lines[2],
             SortLine {
                 line: "part3",
+                raw_bytes: b"part3",
                 index: 2,
             }
         );
@@ -2458,7 +2483,14 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert!(!lines.is_empty());
     }
@@ -2470,7 +2502,14 @@ mod tests {
         let mut line_data = line_data_default();
         let settings = SortGlobalConfigs::default();
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(
             lines.len(),
@@ -2548,7 +2587,14 @@ mod tests {
         let mut line_data = line_data_default();
         let settings = SortGlobalConfigs::default();
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(
             lines.len(),
@@ -2569,7 +2615,14 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(lines.len(), 4, "Should correctly parse complex input");
         assert_eq!(
@@ -2592,7 +2645,14 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(lines.len(), 3);
         assert!(
@@ -2615,7 +2675,14 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(lines.len(), 3);
         assert!(
@@ -2638,7 +2705,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Depending on the implementation, this might affect sorting or comparison rather than parsing.
         // This test assumes that the implementation of parsing might lowercase everything if ignore_case is true.
@@ -2658,7 +2732,14 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(
             lines.len(),
@@ -2685,7 +2766,14 @@ mod tests {
             ..Default::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         assert_eq!(
             lines.len(),
@@ -2712,7 +2800,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming parse_lines filters out duplicates when unique is true
         assert_eq!(lines.len(), 3, "Only one unique line should be parsed");
@@ -2728,7 +2823,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming parse_lines filters out duplicates when unique is true
         assert_eq!(lines.len(), 3, "Only one unique line should be parsed");
@@ -2744,7 +2846,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2767,7 +2876,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2790,7 +2906,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming some sort of validation mechanism, perhaps an error or a bool indicating unsorted data
         // assert!(lines.is_sorted(), "Lines should be sorted, or an error/flag should indicate they are not");
@@ -2806,7 +2929,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming some sort of validation mechanism, perhaps an error or a bool indicating unsorted data
         // assert!(lines.is_sorted(), "Lines should be sorted, or an error/flag should indicate they are not");
@@ -2822,7 +2952,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2845,7 +2982,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2868,7 +3012,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2891,7 +3042,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2914,7 +3072,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2937,7 +3102,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2960,7 +3132,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -2983,7 +3162,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3006,7 +3192,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3029,7 +3222,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3052,7 +3252,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3075,7 +3282,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3098,7 +3312,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3121,7 +3342,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3144,7 +3372,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3167,7 +3402,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(lines[0].line, "11", "First line should be '11' if reversed");
@@ -3184,7 +3426,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(lines[0].line, "11", "First line should be '11' if reversed");
@@ -3201,7 +3450,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(lines[0].line, "11", "First line should be '11' if reversed");
@@ -3218,7 +3474,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(lines[0].line, "11", "First line should be '11' if reversed");
@@ -3234,7 +3497,14 @@ mod tests {
             mode: SortMode::SortGeneralNumeric,
             ..SortGlobalConfigs::default()
         };
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(lines[0].line, "11", "First line should be '11' if reversed");
@@ -3251,7 +3521,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3274,7 +3551,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3297,7 +3581,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3320,7 +3611,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3343,7 +3641,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3366,7 +3671,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3389,7 +3701,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3412,7 +3731,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3435,7 +3761,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3458,7 +3791,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3481,7 +3821,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3504,7 +3851,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3527,7 +3881,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3550,7 +3911,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3578,7 +3946,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3605,7 +3980,14 @@ mod tests {
             },
             ..SortGlobalConfigs::default()
         };
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3632,7 +4014,14 @@ mod tests {
             },
             ..SortGlobalConfigs::default()
         };
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3659,7 +4048,14 @@ mod tests {
             },
             ..SortGlobalConfigs::default()
         };
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(
@@ -3682,7 +4078,14 @@ mod tests {
             ..SortGlobalConfigs::default()
         };
 
-        chunk_parse_lines(input, &mut lines, &mut line_data, b'\n', &settings);
+        chunk_parse_lines(
+            input,
+            input.as_bytes(),
+            &mut lines,
+            &mut line_data,
+            b'\n',
+            &settings,
+        );
 
         // Assuming the implementation reverses the order of lines post-parsing
         assert_eq!(

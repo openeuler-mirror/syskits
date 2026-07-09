@@ -1616,39 +1616,67 @@ impl CpOverwriteMode {
             }
             Self::Interactive(_) => {
                 let mut prompt = format!("overwrite {}?", path.quote());
-                
+
                 if let Ok(meta) = fs::metadata(path) {
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
                         let mode = meta.permissions().mode() & 0o7777;
-                        
+
                         // 动态探测文件是否拥有写权限
                         let is_writable = unsafe {
-                            let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+                            let c_path =
+                                std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
                             libc::access(c_path.as_ptr(), libc::W_OK) == 0
                         };
-                        
+
                         if !is_writable {
                             // 精准复刻 GNU 风格的 rwx 权限字符串，例如 "---------"
-                            let rwx = format!("{}{}{}{}{}{}{}{}{}",
+                            let rwx = format!(
+                                "{}{}{}{}{}{}{}{}{}",
                                 if mode & 0o400 != 0 { 'r' } else { '-' },
                                 if mode & 0o200 != 0 { 'w' } else { '-' },
-                                if mode & 0o100 != 0 { if mode & 0o4000 != 0 { 's' } else { 'x' } } else if mode & 0o4000 != 0 { 'S' } else { '-' },
+                                if mode & 0o100 != 0 {
+                                    if mode & 0o4000 != 0 { 's' } else { 'x' }
+                                } else if mode & 0o4000 != 0 {
+                                    'S'
+                                } else {
+                                    '-'
+                                },
                                 if mode & 0o040 != 0 { 'r' } else { '-' },
                                 if mode & 0o020 != 0 { 'w' } else { '-' },
-                                if mode & 0o010 != 0 { if mode & 0o2000 != 0 { 's' } else { 'x' } } else if mode & 0o2000 != 0 { 'S' } else { '-' },
+                                if mode & 0o010 != 0 {
+                                    if mode & 0o2000 != 0 { 's' } else { 'x' }
+                                } else if mode & 0o2000 != 0 {
+                                    'S'
+                                } else {
+                                    '-'
+                                },
                                 if mode & 0o004 != 0 { 'r' } else { '-' },
                                 if mode & 0o002 != 0 { 'w' } else { '-' },
-                                if mode & 0o001 != 0 { if mode & 0o1000 != 0 { 't' } else { 'x' } } else if mode & 0o1000 != 0 { 'T' } else { '-' },
+                                if mode & 0o001 != 0 {
+                                    if mode & 0o1000 != 0 { 't' } else { 'x' }
+                                } else if mode & 0o1000 != 0 {
+                                    'T'
+                                } else {
+                                    '-'
+                                },
                             );
-                            prompt = format!("replace {}, overriding mode {:04o} ({})?", path.quote(), mode, rwx);
+                            prompt = format!(
+                                "replace {}, overriding mode {:04o} ({})?",
+                                path.quote(),
+                                mode,
+                                rwx
+                            );
                         }
                     }
                     #[cfg(not(unix))]
                     {
                         if meta.permissions().readonly() {
-                            prompt = format!("replace {}, overriding mode 0444 (-r--r--r--)?", path.quote());
+                            prompt = format!(
+                                "replace {}, overriding mode 0444 (-r--r--r--)?",
+                                path.quote()
+                            );
                         }
                     }
                 }

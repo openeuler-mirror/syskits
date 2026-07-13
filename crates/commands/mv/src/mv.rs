@@ -1125,12 +1125,6 @@ fn mv_rename(
             return Ok(());
         }
 
-        if options.update == CtUpdateMode::ReplaceIfOlder
-            && options.overwrite == MvOverwriteMode::Interactive
-        {
-            return Ok(());
-        }
-
         if options.update == CtUpdateMode::ReplaceNone {
             return Ok(());
         }

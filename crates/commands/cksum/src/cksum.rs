@@ -715,6 +715,9 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         }
     }
 
+    let binary_requested = binary;
+    let text_requested = text;
+
     if untagged && tag && last_tag_idx > last_untagged_idx {
         untagged = false;
     }
@@ -835,6 +838,25 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     };
 
     if matches.get_flag(opt_flags::CHECK) {
+        if opts.zero {
+            ctcore::ct_show_error!("the --zero option is not supported when verifying checksums");
+            return Ok(1);
+        }
+
+        if binary_requested || text_requested {
+            let text_selected =
+                text_requested && (!binary_requested || last_text_idx > last_binary_idx);
+
+            if text_selected && !untagged {
+                ctcore::ct_show_error!("--text mode is only supported with --untagged");
+            } else {
+                ctcore::ct_show_error!(
+                    "the --binary and --text options are meaningless when verifying checksums"
+                );
+            }
+            return Ok(1);
+        }
+
         if matches.contains_id(opt_flags::ALGORITHM)
             && matches!(
                 opts.algo_name,

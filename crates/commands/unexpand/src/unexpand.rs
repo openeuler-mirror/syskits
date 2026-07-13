@@ -540,82 +540,135 @@ fn is_blank_char(ch: char) -> bool {
     ch.is_whitespace()
 }
 
+#[derive(Default)]
+struct UnexpandLineState {
+    column: usize,
+    tab_index: usize,
+    one_blank_before_tab_stop: bool,
+    prev_blank: bool,
+    pending: Vec<Vec<u8>>,
+    convert: bool,
+}
+
+impl UnexpandLineState {
+    fn new() -> Self {
+        let mut state = Self::default();
+        state.reset();
+        state
+    }
+
+    fn reset(&mut self) {
+        self.column = 0;
+        self.tab_index = 0;
+        self.one_blank_before_tab_stop = false;
+        self.prev_blank = true;
+        self.pending.clear();
+        self.convert = true;
+    }
+
+    fn flush_pending<W: Write>(&mut self, output: &mut W) -> std::io::Result<()> {
+        if self.pending.is_empty() {
+            return Ok(());
+        }
+
+        if self.pending.len() > 1 && self.one_blank_before_tab_stop {
+            self.pending[0] = vec![b'\t'];
+        }
+        for blank in &self.pending {
+            output.write_all(blank)?;
+        }
+        self.pending.clear();
+        self.one_blank_before_tab_stop = false;
+        Ok(())
+    }
+
+    fn finish_line<W: Write>(&mut self, output: &mut W) -> std::io::Result<()> {
+        self.flush_pending(output)?;
+        self.reset();
+        Ok(())
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
-fn unexpand_line<W: Write>(
-    buf: &mut Vec<u8>,
+fn unexpand_line_with_state<W: Write>(
+    buf: &[u8],
     output: &mut W,
     flags: &UnexpandFlags,
     tabstops: &[usize],
     remaining_mode: RemainingMode,
+    state: &mut UnexpandLineState,
+    line_complete: bool,
 ) -> std::io::Result<()> {
     let mut byte = 0;
-    let mut column: usize = 0;
-    let mut tab_index: usize = 0;
-    let mut one_blank_before_tab_stop = false;
-    let mut prev_blank = true;
-    let mut pending: Vec<Vec<u8>> = Vec::new();
     let convert_entire_line = flags.is_a_flag;
-    let mut convert = true;
 
     while byte < buf.len() {
         let (c_type, c_width, n_bytes) = unexpand_next_char_info(flags.is_u_flag, buf, byte);
         let mut emit_tab = false;
 
-        if convert {
+        if state.convert {
             let blank = matches!(c_type, UnexpandCharType::Space | UnexpandCharType::Tab);
             if blank {
-                let (next_tab_column, last_tab) =
-                    unexpand_next_tab_column(tabstops, remaining_mode, column, &mut tab_index);
+                let (next_tab_column, last_tab) = unexpand_next_tab_column(
+                    tabstops,
+                    remaining_mode,
+                    state.column,
+                    &mut state.tab_index,
+                );
                 if last_tab {
-                    convert = false;
+                    state.convert = false;
                 }
-                if convert {
-                    if next_tab_column < column {
+                if state.convert {
+                    if next_tab_column < state.column {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             "input line is too long",
                         ));
                     }
                     if c_type == UnexpandCharType::Tab {
-                        column = next_tab_column;
-                        if !pending.is_empty() {
-                            pending[0] = vec![b'\t'];
+                        state.column = next_tab_column;
+                        if !state.pending.is_empty() {
+                            state.pending[0] = vec![b'\t'];
                         }
                     } else {
-                        let next_column = column.saturating_add(c_width);
-                        if next_column < column {
+                        let next_column = state.column.saturating_add(c_width);
+                        if next_column < state.column {
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
                                 "input line is too long",
                             ));
                         }
-                        column = next_column;
+                        state.column = next_column;
 
-                        if !(prev_blank && column == next_tab_column) {
-                            if column == next_tab_column {
-                                one_blank_before_tab_stop = true;
+                        if !(state.prev_blank && state.column == next_tab_column) {
+                            if state.column == next_tab_column {
+                                state.one_blank_before_tab_stop = true;
                             }
-                            pending.push(buf[byte..byte + n_bytes].to_vec());
-                            prev_blank = true;
+                            state.pending.push(buf[byte..byte + n_bytes].to_vec());
+                            state.prev_blank = true;
                             byte += n_bytes;
                             continue;
                         }
 
                         emit_tab = true;
-                        if !pending.is_empty() {
-                            pending[0] = vec![b'\t'];
+                        if !state.pending.is_empty() {
+                            state.pending[0] = vec![b'\t'];
                         }
                     }
 
-                    pending.truncate(if one_blank_before_tab_stop { 1 } else { 0 });
+                    state.pending.truncate(if state.one_blank_before_tab_stop {
+                        1
+                    } else {
+                        0
+                    });
                 }
             } else if c_type == UnexpandCharType::Backspace {
-                column = column.saturating_sub(1);
-                tab_index = tab_index.saturating_sub(1);
+                state.column = state.column.saturating_sub(1);
+                state.tab_index = state.tab_index.saturating_sub(1);
             } else {
-                let orig = column;
-                column = column.saturating_add(c_width);
-                if column < orig {
+                let orig = state.column;
+                state.column = state.column.saturating_add(c_width);
+                if state.column < orig {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         "input line is too long",
@@ -623,19 +676,10 @@ fn unexpand_line<W: Write>(
                 }
             }
 
-            if !pending.is_empty() {
-                if pending.len() > 1 && one_blank_before_tab_stop {
-                    pending[0] = vec![b'\t'];
-                }
-                for blank in &pending {
-                    output.write_all(blank)?;
-                }
-                pending.clear();
-                one_blank_before_tab_stop = false;
-            }
+            state.flush_pending(output)?;
 
-            prev_blank = matches!(c_type, UnexpandCharType::Space | UnexpandCharType::Tab);
-            convert = convert && (convert_entire_line || prev_blank);
+            state.prev_blank = matches!(c_type, UnexpandCharType::Space | UnexpandCharType::Tab);
+            state.convert = state.convert && (convert_entire_line || state.prev_blank);
         }
 
         if emit_tab {
@@ -646,16 +690,33 @@ fn unexpand_line<W: Write>(
         byte += n_bytes;
     }
 
-    if !pending.is_empty() {
-        if pending.len() > 1 && one_blank_before_tab_stop {
-            pending[0] = vec![b'\t'];
-        }
-        for blank in &pending {
-            output.write_all(blank)?;
-        }
+    if line_complete {
+        state.finish_line(output)?;
     }
 
     output.flush()?;
+    Ok(())
+}
+
+#[allow(clippy::cognitive_complexity)]
+#[cfg(test)]
+fn unexpand_line<W: Write>(
+    buf: &mut Vec<u8>,
+    output: &mut W,
+    flags: &UnexpandFlags,
+    tabstops: &[usize],
+    remaining_mode: RemainingMode,
+) -> std::io::Result<()> {
+    let mut state = UnexpandLineState::new();
+    unexpand_line_with_state(
+        buf,
+        output,
+        flags,
+        tabstops,
+        remaining_mode,
+        &mut state,
+        true,
+    )?;
     buf.truncate(0);
     Ok(())
 }
@@ -667,10 +728,7 @@ fn unexpand(flags: &UnexpandFlags) -> CTResult<()> {
     Ok(())
 }
 
-fn unexpand_exe<W: Write>(
-    flags: &UnexpandFlags,
-    mut output: &mut W,
-) -> Result<(), Box<dyn CTError>> {
+fn unexpand_exe<W: Write>(flags: &UnexpandFlags, output: &mut W) -> Result<(), Box<dyn CTError>> {
     let tabstops = &flags.tabstops[..];
     let remaining_mode = flags.remaining_mode;
     let mut data_buf = Vec::new();
@@ -686,6 +744,7 @@ fn unexpand_exe<W: Write>(
             }
         };
         let mut is_first_chunk = true;
+        let mut line_state = UnexpandLineState::new();
 
         loop {
             data_buf.clear();
@@ -720,10 +779,21 @@ fn unexpand_exe<W: Write>(
                 continue;
             }
 
-            // 使用 ? 运算符让 Rust 自动处理所有的 Box 类型转换，避免“盒中盒”错误
-            unexpand_line(&mut data_buf, &mut output, flags, tabstops, remaining_mode)
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            let line_complete = data_buf.last() == Some(&b'\n');
+            unexpand_line_with_state(
+                &data_buf,
+                output,
+                flags,
+                tabstops,
+                remaining_mode,
+                &mut line_state,
+                line_complete,
+            )
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         }
+        line_state
+            .finish_line(output)
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         is_first_file = false;
     }
     Ok(())
@@ -880,6 +950,7 @@ mod tests {
             let result = String::from_utf8(output).unwrap();
             assert_eq!(result, "");
         }
+
     }
 
     #[cfg(test)]

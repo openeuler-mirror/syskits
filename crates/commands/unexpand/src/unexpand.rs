@@ -951,6 +951,30 @@ mod tests {
             assert_eq!(result, "");
         }
 
+        #[test]
+        fn test_unexpand_exe_with_long_line_across_chunks_keeps_column_state() {
+            let file = NamedTempFile::new().unwrap();
+            let mut input = vec![b' '; 70_000];
+            input.extend_from_slice(b"X\n");
+            write(file.path(), &input).unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![file.path().to_str().unwrap().to_string()],
+                tabstops: vec![3],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let mut expected = vec![b'\t'; 70_000 / 3];
+            expected.extend(std::iter::repeat(b' ').take(70_000 % 3));
+            expected.extend_from_slice(b"X\n");
+
+            assert_eq!(output, expected);
+        }
     }
 
     #[cfg(test)]

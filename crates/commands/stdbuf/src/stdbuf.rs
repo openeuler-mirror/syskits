@@ -16,7 +16,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
 use ctcore::ct_parse_size::parse_size_u64;
 use std::ffi::OsString;
 use std::fs::File;
@@ -301,11 +301,7 @@ pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    // 解析命令行参数 - handle clap errors with exit code 125
-    let matches = ct_app().try_get_matches_from(args).map_err(|e| {
-        // Clap errors should return exit code 125
-        CtSimpleError::new(125, e.to_string())
-    })?;
+    let matches = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
     // 创建配置对象
     let settings = StdbufFlags::new(matches)?;

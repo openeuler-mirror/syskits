@@ -77,14 +77,7 @@ pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // GNU split accepts only `---io-blksize` (hidden option), not `--io-blksize`.
     // Pre-check to return GNU-compatible diagnostics instead of clap's generic error.
-    if let Some(invalid_opt) = args.iter().find_map(|arg| {
-        let s = arg.to_str()?;
-        if s == "--io-blksize" || s.starts_with("--io-blksize=") {
-            Some(s.to_string())
-        } else {
-            None
-        }
-    }) {
+    if let Some(invalid_opt) = split_find_invalid_io_blksize_opt(&args) {
         let util_name = ctcore::ct_util_name();
         return Err(CtSimpleError::new(
             1,
@@ -111,6 +104,24 @@ pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
         Err(e) if e.splice_requires_usage() => Err(CTsageError::new(1, format!("{e}"))),
         Err(e) => Err(CtSimpleError::new(1, format!("{e}"))),
     }
+}
+
+fn split_find_invalid_io_blksize_opt(args: &[OsString]) -> Option<String> {
+    let mut end_of_options = false;
+    for arg in args {
+        let s = arg.to_str()?;
+        if end_of_options {
+            continue;
+        }
+        if s == "--" {
+            end_of_options = true;
+            continue;
+        }
+        if s == "--io-blksize" || s.starts_with("--io-blksize=") {
+            return Some(s.to_string());
+        }
+    }
+    None
 }
 
 #[cfg(test)]

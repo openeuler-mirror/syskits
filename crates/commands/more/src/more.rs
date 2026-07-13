@@ -706,6 +706,25 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_args_respects_double_dash() {
+        let args = vec![
+            OsString::from("more"),
+            OsString::from("--"),
+            OsString::from("-10"),
+            OsString::from("+7"),
+            OsString::from("+/pattern"),
+        ];
+
+        let normalized = normalize_more_args(args.into_iter());
+
+        assert_eq!(normalized[0], OsString::from("more"));
+        assert_eq!(normalized[1], OsString::from("--"));
+        assert_eq!(normalized[2], OsString::from("-10"));
+        assert_eq!(normalized[3], OsString::from("+7"));
+        assert_eq!(normalized[4], OsString::from("+/pattern"));
+    }
+
+    #[test]
     fn test_tool_implementation() {
         let tool = More;
         assert_eq!(tool.name(), "more");

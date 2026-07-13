@@ -364,7 +364,7 @@ mod tests {
 
         #[test]
         fn test_uptime_print_n_users() {
-            assert_eq!(uptime_print_n_users(0), "0 user,  ");
+            assert_eq!(uptime_print_n_users(0), "0 users,  ");
             assert_eq!(uptime_print_n_users(1), "1 user,  ");
             assert_eq!(uptime_print_n_users(2), "2 users,  ");
         }
@@ -393,6 +393,7 @@ mod tests {
     #[cfg(test)]
     mod ct_main_tests {
         use super::*;
+        use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
         use std::ffi::OsString;
 
         #[test]
@@ -430,6 +431,24 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--invalid-argument"];
             let result = uptime_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_ct_app_rejects_extra_operand() {
+            let args = [ctcore::ct_util_name(), "first-file", "second-file"];
+            let result = uptime_main(args.iter().map(OsString::from));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 1);
+        }
+
+        #[test]
+        fn test_ct_app_missing_file_operand_sets_exit_code() {
+            set_ct_exit_code(0);
+            let args = [ctcore::ct_util_name(), "/nonexistent/utmp-file"];
+            let result = uptime_main(args.iter().map(OsString::from));
+            assert!(result.is_ok());
+            assert_eq!(get_ct_exit_code(), 1);
+            set_ct_exit_code(0);
         }
     }
 
@@ -535,6 +554,30 @@ mod tests {
             let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
             let result = command.try_get_matches_from(missing_args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_accepts_single_file_operand() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "unexpected-file"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_ok());
+            assert_eq!(
+                result
+                    .unwrap()
+                    .get_one::<String>("file")
+                    .map(String::as_str),
+                Some("unexpected-file")
+            );
+        }
+
+        #[test]
+        fn test_ct_app_rejects_extra_operand() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "first-file", "second-file"];
+            let result = command.try_get_matches_from(args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
     }
 }

@@ -412,6 +412,35 @@ mod tests {
             _ => panic!("expected SkipToMatch pattern"),
         };
     }
+
+    #[test]
+    fn test_bre_unescaped_gnu_extensions_are_literals() {
+        let input = vec!["/a+b/".to_string()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        match patterns.first() {
+            Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
+                assert!(!reg.is_match("aaab"));
+                assert!(reg.is_match("a+b"));
+                assert_eq!(format!("{reg}"), r"a\+b");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        }
+    }
+
+    #[test]
+    fn test_bre_escaped_gnu_extensions_remain_operators() {
+        let input = vec![r"/a\+b/".to_string()];
+        let patterns = get_patterns(input.as_slice()).unwrap();
+        match patterns.first() {
+            Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
+                assert!(reg.is_match("aaab"));
+                assert!(!reg.is_match("a+b"));
+                assert_eq!(format!("{reg}"), "a+b");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        }
+    }
+
     #[test]
     fn test_skip_to_match_pattern_test2() {
         let input: Vec<String> = vec!["%test2.*end$%".parse().unwrap()];

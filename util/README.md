@@ -7,7 +7,7 @@
 ## 1. 解压GNU源码
 
 解压本目录的coreutils-9.4.tar.gz至syskits的上一级目录：
-
+基线来源https://gitcode.com/src-openeuler/coreutils.git  e89fe97281803a9ad88f4db28a629772c110676f （9.4-21）
 ```bash
 # 当前目录为xxx/syskits/util
 tar -xzf coreutils-9.4.tar.gz -C ../..

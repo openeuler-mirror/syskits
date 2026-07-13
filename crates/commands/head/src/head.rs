@@ -1378,6 +1378,34 @@ mod tests_other {
     }
 
     #[test]
+    fn mode_from_rejects_overflow_counts() {
+        let byte_matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "-c",
+                "18446744073709551616",
+                "input",
+            ])
+            .unwrap();
+        let line_matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "-n",
+                "18446744073709551616",
+                "input",
+            ])
+            .unwrap();
+
+        let byte_err = Mode::from(&byte_matches).unwrap_err();
+        let line_err = Mode::from(&line_matches).unwrap_err();
+
+        assert!(byte_err.starts_with("invalid number of bytes:"));
+        assert!(byte_err.contains("Value too large"));
+        assert!(line_err.starts_with("invalid number of lines:"));
+        assert!(line_err.contains("Value too large"));
+    }
+
+    #[test]
     fn test_find_nth_line_from_end() {
         let mut input = Cursor::new("x\ny\nz\n");
         assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 6);

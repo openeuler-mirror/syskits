@@ -140,7 +140,9 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
     } else if args_match.get_flag(chmod_flags::TRAVERSE_H) {
         TraverseMode::First
     } else {
-        TraverseMode::Physical
+        // GNU chmod recursive walk behaves like FTS_COMFOLLOW|FTS_PHYSICAL by default:
+        // command-line symlinked directories are traversed, but nested symlinks are not.
+        TraverseMode::First
     };
     let mode_reference = match args_match.get_one::<String>(chmod_flags::REFERENCE) {
         Some(reference) => match fs::metadata(reference) {
@@ -271,7 +273,7 @@ fn chmod_args_init() -> Vec<Arg> {
         Arg::new(chmod_flags::TRAVERSE_P)
             .short('P')
             .overrides_with_all([chmod_flags::TRAVERSE_H, chmod_flags::TRAVERSE_L])
-            .help("do not traverse any symbolic links (default)")
+            .help("do not traverse any symbolic links")
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::REFERENCE)
             .long("reference")

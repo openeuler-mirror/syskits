@@ -806,6 +806,7 @@ fn kill_get_signal_value(obs_signal: Option<usize>, matches: ArgMatches) -> CTRe
     if sig == 0 {
         return Ok(KillSignal::Null);
     }
+
     // 将获取到的信号值转换为i32，并尝试将其转换为`Signal`类型，如果失败，则返回一个错误
     let kill_signal: Signal = (sig as i32)
         .try_into()
@@ -1614,7 +1615,6 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert_eq!(output_str, "1\n15\n");
         }
-
     }
     #[cfg(test)]
     mod kill_print_signals_tests {
@@ -1747,6 +1747,18 @@ mod tests {
             assert!(result.is_ok());
             let output = String::from_utf8(writer.into_inner()).unwrap();
             assert_eq!(output.trim(), "SYS");
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn kill_print_signal_rejects_signed_rt_offsets() {
+            let mut writer = Cursor::new(Vec::new());
+            let result = kill_print_signal(&mut writer, "RTMIN+-1");
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "unknown signal name 'RTMIN+-1'"
+            );
         }
 
         #[test]
@@ -1971,7 +1983,6 @@ mod tests {
                 vec!["kill".to_string(), "-cont".to_string(), "1234".to_string()]
             );
         }
-
 
         #[test]
         fn kill_handle_obsolete_with_mixed_valid_and_invalid_signals() {

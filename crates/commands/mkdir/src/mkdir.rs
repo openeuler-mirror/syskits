@@ -2360,4 +2360,54 @@ mod tests {
         }
     }
 
+    mod tests_locale_selection {
+        use super::{
+            SecurityContextRequest, map_locale_name, parse_security_context_request,
+            preferred_locale_from_values,
+        };
+        use std::ffi::OsString;
+
+        #[test]
+        fn test_map_locale_name_c_locale() {
+            assert_eq!(map_locale_name("C"), "en-US");
+            assert_eq!(map_locale_name("C.UTF-8"), "en-US");
+            assert_eq!(map_locale_name("POSIX"), "en-US");
+        }
+
+        #[test]
+        fn test_preferred_locale_respects_priority() {
+            let locale =
+                preferred_locale_from_values([Some("zh_CN.UTF-8"), Some("en_US.UTF-8"), Some("C")]);
+            assert_eq!(locale, Some("zh-CN".to_string()));
+
+            let locale = preferred_locale_from_values([None, Some("zh_CN.UTF-8"), Some("C")]);
+            assert_eq!(locale, Some("zh-CN".to_string()));
+
+            let locale = preferred_locale_from_values([None, None, Some("C")]);
+            assert_eq!(locale, Some("en-US".to_string()));
+        }
+
+        #[test]
+        fn test_parse_security_context_request_distinguishes_empty_value() {
+            let args = vec![
+                OsString::from("mkdir"),
+                OsString::from("--context="),
+                OsString::from("dir"),
+            ];
+            match parse_security_context_request(&args) {
+                SecurityContextRequest::Explicit(value) => assert!(value.is_empty()),
+                _ => panic!("expected explicit empty context"),
+            }
+
+            let args = vec![
+                OsString::from("mkdir"),
+                OsString::from("--context"),
+                OsString::from("dir"),
+            ];
+            assert!(matches!(
+                parse_security_context_request(&args),
+                SecurityContextRequest::Default
+            ));
+        }
+    }
 }

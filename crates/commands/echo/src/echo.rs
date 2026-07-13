@@ -398,6 +398,29 @@ mod tests {
         assert_eq!(values, vec!["foo".to_string()]);
     }
 
+    #[test]
+    fn test_echo_is_help_or_version_request() {
+        assert!(echo_is_help_or_version_request(
+            &["--help".to_string()],
+            false
+        ));
+        assert!(echo_is_help_or_version_request(&["-h".to_string()], false));
+        assert!(echo_is_help_or_version_request(
+            &["--version".to_string()],
+            false
+        ));
+        assert!(echo_is_help_or_version_request(&["-V".to_string()], false));
+        assert!(!echo_is_help_or_version_request(
+            &["--help".to_string()],
+            true
+        ));
+        assert!(!echo_is_help_or_version_request(
+            &["--help".to_string(), "extra".to_string()],
+            false
+        ));
+        assert!(!echo_is_help_or_version_request(&["--".to_string()], false));
+    }
+
 
     mod tests_echo_main {
         use crate::echo_main;

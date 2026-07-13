@@ -17,10 +17,10 @@
 //  | --help 选项        | 支持           | 支持   | 支持 | 一致 |
 //  | --version 选项     | 支持           | 支持   | 支持 | 一致 |
 //  | -p/--pretty 选项   | 不支持         | 支持   | 支持 | (coreutils 不支持) |
-//  | FILE 参数          | 支持           | 不支持 | 支持 | 兼容(Procps均不支持) |
+//  | FILE 参数          | 支持           | 不支持 | 支持 | GNU 兼容 |
 //  | 错误处理            | 支持           | 支持   | 支持 | 一致|
 //  |  输出格式            | 支持           | 支持   | 支持 | 一致 |
-// 因为系统都默认使用procps的uptime，所以实现和其对齐版本4.0.4，并实现file 参数
+// 默认行为尽量兼容 procps，同时保留 GNU coreutils 的 [FILE] 语义。
 
 extern crate rust_i18n;
 use chrono::{Local, TimeZone, Utc};
@@ -29,11 +29,12 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
+use ctcore::ct_show_error;
 use std::ffi::OsString;
 use sys_locale::get_locale;
 
-use crate::platform::{get_uptime, print_loadavg, process_utmpx};
+use crate::platform::{get_uptime, get_uptime_from_boot_time, print_loadavg, process_utmpx};
 
 mod platform;
 
@@ -69,14 +70,14 @@ fn uptime_print_uptime(up_secs: i64) -> String {
 fn uptime_print_time() -> String {
     let local_time = Local::now().time();
 
-    format!(" {} ", local_time.format("%H:%M:%S"))
+    format!(" {}  ", local_time.format("%H:%M:%S"))
 }
 
 fn uptime_print_n_users(n_users: usize) -> String {
     match n_users.cmp(&1) {
         std::cmp::Ordering::Equal => "1 user,  ".to_string(),
         std::cmp::Ordering::Greater => format!("{n_users} users,  "),
-        _ => "0 user,  ".to_string(),
+        _ => "0 users,  ".to_string(),
     }
 }
 
@@ -118,21 +119,34 @@ fn uptime_print_pretty(up_secs: i64) -> String {
     }
 }
 
+fn uptime_print_unknown_uptime() -> &'static str {
+    "up ???? days ??:??,  "
+}
+
 pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
+    let file_path = matches.get_one::<String>("file").map(String::as_str);
 
-    // 获取 FILE 参数
-    let file_path = matches.get_one::<String>("file").map(|s| s.as_str());
+    let (boot_time, user_count, read_error) = process_utmpx(file_path);
+    let uptime = if file_path.is_some() {
+        get_uptime_from_boot_time(boot_time)
+    } else {
+        get_uptime(boot_time)
+    };
 
-    let (boot_time, user_count) = process_utmpx(file_path);
-    let uptime = get_uptime(boot_time);
-    if uptime < 0 {
+    if uptime < 0 && file_path.is_none() {
         Err(CtSimpleError::new(1, "could not retrieve system uptime"))
     } else {
         // -s 选项优先
         if matches.get_flag(uptime_flags::SINCE) {
+            if uptime < 0 {
+                let msg = read_error
+                    .map(|err| format!("couldn't get boot time: {}", strip_errno(&err)))
+                    .unwrap_or_else(|| "couldn't get boot time".to_string());
+                return Err(CtSimpleError::new(1, msg));
+            }
             let initial_date = Local
                 .timestamp_opt(Utc::now().timestamp() - uptime, 0)
                 .unwrap();
@@ -142,14 +156,32 @@ pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
 
         // -p 选项
         if matches.get_flag(uptime_flags::PRETTY) {
+            if uptime < 0 {
+                let msg = read_error
+                    .map(|err| format!("couldn't get boot time: {}", strip_errno(&err)))
+                    .unwrap_or_else(|| "couldn't get boot time".to_string());
+                return Err(CtSimpleError::new(1, msg));
+            }
             println!("{}", uptime_print_pretty(uptime));
             return Ok(());
         }
 
+        if file_path.is_some() && uptime < 0 {
+            if let Some(err) = read_error {
+                ct_show_error!("couldn't get boot time: {}", strip_errno(&err));
+            } else {
+                ct_show_error!("couldn't get boot time");
+            }
+            set_ct_exit_code(1);
+        }
+
         // 默认格式
         let time_result = uptime_print_time();
-        let up_secs = uptime;
-        let uptime_result = uptime_print_uptime(up_secs);
+        let uptime_result = if uptime < 0 {
+            uptime_print_unknown_uptime().to_string()
+        } else {
+            uptime_print_uptime(uptime)
+        };
         let users_result = uptime_print_n_users(user_count);
         let loadavg_result = print_loadavg();
 
@@ -184,12 +216,7 @@ pub fn ct_app() -> Command {
                 .help("show uptime in pretty format")
                 .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new("file")
-                .value_name("FILE")
-                .help("utmp file to read (default: /var/run/utmp)")
-                .num_args(0..=1),
-        )
+        .arg(Arg::new("file").value_name("FILE"))
 }
 
 #[derive(Default)]

@@ -240,28 +240,21 @@ fn interactive_mode_stdin(options: PagerOptions) -> CTResult<()> {
         return Ok(());
     }
 
-    // For multi-page content in PTY with piped stdin, display all and exit
-    // This handles the test case where stdin is piped into a PTY
-    let mut stdout = stdout();
-    let mut stderr = stderr();
+    let mut tty_input = TtyInput::new();
+    tty_input.enable_raw_mode()?;
+    let mut command_parser = CommandParser::new();
 
-    // If we started from a pattern match, show the skipping message
-    if options.start_pattern.is_some() && pager.current_line() > 0 {
-        writeln!(stdout, "\n{}", t!("more.skipping"))?;
+    let result = paging_loop(&mut pager, &mut tty_input, &mut command_parser);
+    if result.is_ok() {
+        tty_input.disable_raw_mode()?;
     }
 
-    // Display first page
-    pager.execute_action(&MoreAction::NextPage(1), &mut stdout, &mut stderr, 0)?;
-
-    // Auto-advance through remaining pages
-    loop {
-        let result = pager.execute_action(&MoreAction::NextPage(1), &mut stdout, &mut stderr, 0)?;
-        if matches!(result, PagerResult::Quit) {
-            break;
-        }
+    match result? {
+        LoopResult::Quit
+        | LoopResult::Continue
+        | LoopResult::NextFile(_)
+        | LoopResult::PrevFile(_) => Ok(()),
     }
-
-    Ok(())
 }
 
 /// Main paging loop
@@ -274,7 +267,7 @@ fn paging_loop(
     let mut stderr = stderr();
 
     // Initial draw
-    pager.execute_action(&MoreAction::Continue, &mut stdout, &mut stderr, 0)?;
+    pager.draw_current_screen(&mut stdout, &mut stderr)?;
 
     loop {
         let key = tty_input.read_key()?;

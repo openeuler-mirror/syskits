@@ -269,6 +269,18 @@ impl Tool for Nohup {
 
 #[cfg(test)]
 mod tests {
+    mod tests_messages {
+        use crate::nohup_append_msg;
+
+        #[test]
+        fn test_nohup_append_msg_uses_actual_path() {
+            assert_eq!(
+                nohup_append_msg("/tmp/home/nohup.out"),
+                "ignoring input and appending output to '/tmp/home/nohup.out'"
+            );
+        }
+    }
+
     mod tests_tool_implementation {
         use crate::Nohup;
         use ctcore::Tool;

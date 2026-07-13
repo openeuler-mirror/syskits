@@ -57,6 +57,26 @@ impl ExecutionContext {
 }
 
 impl SysKits {
+    fn render_help(binary_name: &str) -> String {
+        let mut output = String::with_capacity(1024);
+        output.push_str(&format!("{binary_name} {CT_VERSION} (multi-call binary)\n"));
+        output.push_str(&format!("Usage: {binary_name} [function [arguments...]]\n"));
+        output.push_str("Currently defined functions:\n\n");
+
+        let mut utils: Vec<&str> = ALL_COMMANDS.to_vec();
+        utils.sort_unstable();
+
+        let display_list = utils.join(", ");
+        let width = std::cmp::min(textwrap::termwidth(), 100) - 4 * 2;
+
+        output.push_str(&textwrap::indent(
+            &textwrap::fill(&display_list, width),
+            "    ",
+        ));
+        output.push('\n');
+        output
+    }
+
     /// 运行应用程序的主入口
     fn run(mut context: ExecutionContext) {
         // 首先尝试通过二进制名称直接执行
@@ -75,8 +95,10 @@ impl SysKits {
             }
             None => {
                 // 没有提供参数，显示帮助信息
-                Self::show_help(&context.binary_name);
-                process::exit(0);
+                CommandHandler::exit_after_stdout_write(
+                    &context.binary_name,
+                    Self::show_help(&context.binary_name),
+                );
             }
         }
     }
@@ -111,24 +133,11 @@ impl SysKits {
     }
 
     /// 显示帮助信息，包括可用命令列表
-    fn show_help(binary_name: &str) {
-        // 预分配字符串缓冲区
-        let mut output = String::with_capacity(1024);
-        output.push_str(&format!("{binary_name} {CT_VERSION} (multi-call binary)\n"));
-        output.push_str(&format!("Usage: {binary_name} [function [arguments...]]\n"));
-        output.push_str("Currently defined functions:\n\n");
-
-        let mut utils: Vec<&str> = ALL_COMMANDS.to_vec();
-        utils.sort_unstable();
-
-        let display_list = utils.join(", ");
-        let width = std::cmp::min(textwrap::termwidth(), 100) - 4 * 2;
-
-        output.push_str(&textwrap::indent(
-            &textwrap::fill(&display_list, width),
-            "    ",
-        ));
-        println!("{output}");
+    fn show_help(binary_name: &str) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(Self::render_help(binary_name).as_bytes())?;
+        stdout.flush()
     }
 }
 
@@ -139,6 +148,30 @@ struct CommandHandler {
 }
 
 impl CommandHandler {
+    fn exit_after_stdout_write(binary_name: &str, result: io::Result<()>) -> ! {
+        match result {
+            Ok(()) => process::exit(0),
+            Err(err) => {
+                eprintln!("{binary_name}: {err}");
+                process::exit(1);
+            }
+        }
+    }
+
+    fn write_version_to<W: Write>(writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "{CT_VERSION}")?;
+        writer.flush()
+    }
+
+    fn write_list_to<W: Write>(writer: &mut W) -> io::Result<()> {
+        let mut utils: Vec<_> = ALL_COMMANDS.to_vec();
+        utils.sort();
+        for util in utils {
+            writeln!(writer, "{util}")?;
+        }
+        writer.flush()
+    }
+
     /// 创建新的命令处理器
     fn new(util_name: OsString, context: ExecutionContext) -> Self {
         Self { util_name, context }
@@ -180,23 +213,26 @@ impl CommandHandler {
 
     /// 处理版本请求
     fn handle_version(&self) -> ! {
-        println!("{CT_VERSION}");
-        process::exit(0);
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        Self::exit_after_stdout_write(
+            &self.context.binary_name,
+            Self::write_version_to(&mut stdout),
+        );
     }
 
     fn handle_list(&self) -> ! {
-        let mut utils: Vec<_> = ALL_COMMANDS.to_vec();
-        utils.sort();
-        for util in utils {
-            println!("{util}");
-        }
-        process::exit(0);
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        Self::exit_after_stdout_write(&self.context.binary_name, Self::write_list_to(&mut stdout));
     }
 
     /// 处理帮助请求
     fn handle_help(&self) -> ! {
-        SysKits::show_help(&self.context.binary_name);
-        process::exit(0);
+        Self::exit_after_stdout_write(
+            &self.context.binary_name,
+            SysKits::show_help(&self.context.binary_name),
+        );
     }
 
     /// 处理shell补全生成
@@ -268,8 +304,7 @@ impl CommandHandler {
         let utility = match matches.get_one::<String>("utility") {
             Some(utility) => utility,
             None => {
-                SysKits::show_help("manpage");
-                process::exit(1);
+                Self::exit_after_stdout_write("manpage", SysKits::show_help("manpage"));
             }
         };
 
@@ -384,8 +419,10 @@ fn main() {
     let execute_as_util = match execute_name(&execute_path) {
         Some(name) => name,
         None => {
-            SysKits::show_help("<unknown binary name>");
-            process::exit(0);
+            CommandHandler::exit_after_stdout_write(
+                "<unknown binary name>",
+                SysKits::show_help("<unknown binary name>"),
+            );
         }
     };
 
@@ -402,7 +439,20 @@ fn main() {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::io::{self, Write};
     use std::path::Path;
+
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("write failed"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("flush failed"))
+        }
+    }
 
     #[test]
     fn test_execute_name() {
@@ -518,9 +568,22 @@ mod tests {
 
     #[test]
     fn test_show_help() {
-        // 测试帮助信息显示
-        // 注意：这是一个输出测试，可能需要重定向 stdout 来捕获输出
-        SysKits::show_help("syskits");
-        // 在实际测试中，你可能需要重构代码以使其可测试
+        assert!(SysKits::show_help("syskits").is_ok());
+    }
+
+    #[test]
+    fn test_help_render_contains_usage() {
+        let help = SysKits::render_help("syskits");
+        assert!(help.contains("Usage: syskits [function [arguments...]]"));
+        assert!(help.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_stdout_helpers_propagate_write_errors() {
+        let mut writer = FailingWriter;
+        assert!(CommandHandler::write_version_to(&mut writer).is_err());
+
+        let mut writer = FailingWriter;
+        assert!(CommandHandler::write_list_to(&mut writer).is_err());
     }
 }

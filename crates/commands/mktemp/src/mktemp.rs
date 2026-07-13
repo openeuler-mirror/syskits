@@ -348,11 +348,6 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_suppress_file_err = flags.is_quiet;
     let is_make_dir = flags.is_directory;
 
-    // close-stdout 兼容：stdout 初始关闭时，mktemp 需要以写失败退出。
-    if stdout_initially_closed || ctcore::ct_stdout_was_closed() {
-        return Err(CTsageError::new(1, "write error"));
-    }
-
     // 从命令行选项解析文件路径参数。
     let MkTempParams {
         directory: tmpdir,
@@ -375,7 +370,20 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
         false => exec_res,
     };
 
-    ct_println_verbatim(res?).map_err_context(|| "failed to print directory name".to_owned())
+    finish_mktemp_output(res, stdout_initially_closed)
+}
+
+fn finish_mktemp_output(
+    path_res: CTResult<PathBuf>,
+    stdout_initially_closed: bool,
+) -> CTResult<()> {
+    let path = path_res?;
+
+    if stdout_initially_closed || ctcore::ct_stdout_was_closed() {
+        return Err(CTsageError::new(1, "write error"));
+    }
+
+    ct_println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
 }
 
 pub fn ct_app() -> Command {
@@ -2439,6 +2447,27 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--invalid-argument"];
             let result = mktemp_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_finish_mktemp_output_prefers_original_error_over_write_error() {
+            let result = finish_mktemp_output(
+                Err(Box::new(MkTempError::TooFewXs("bad".to_string()))),
+                true,
+            );
+
+            let error = result.unwrap_err();
+            assert_eq!(error.to_string(), "too few X's in template 'bad'");
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_finish_mktemp_output_reports_write_error_for_successful_path() {
+            let result = finish_mktemp_output(Ok(PathBuf::from("tmp.XXXXXX")), true);
+
+            let error = result.unwrap_err();
+            assert_eq!(error.to_string(), "write error");
+            assert_eq!(error.code(), 1);
         }
 
         #[test]

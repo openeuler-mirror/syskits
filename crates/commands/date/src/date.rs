@@ -1185,6 +1185,20 @@ mod tests {
         assert!(tool.execute(&args).is_ok());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_strftime_width_flags_for_nanoseconds_timezone_and_year() {
+        let dt = DateTime::parse_from_rfc3339("1970-01-01T00:00:00+00:00").unwrap();
+
+        assert_eq!(format_using_strftime(&dt, "%_9N").unwrap(), "0        ");
+        assert_eq!(format_using_strftime(&dt, "%_8z").unwrap(), "      +0");
+        assert_eq!(format_using_strftime(&dt, "%+5Y").unwrap(), "+1970");
+
+        let wide_nsec = format_using_strftime(&dt, "%99N").unwrap();
+        assert_eq!(wide_nsec.len(), 99);
+        assert!(wide_nsec.chars().all(|c| c == '0'));
+    }
+
     mod tests_ct_app {
         use crate::ct_app;
         use clap::error::ErrorKind;

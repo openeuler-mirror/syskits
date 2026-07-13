@@ -348,10 +348,6 @@ fn prompt_overwrite(target_path: &Path, mode: &MvOverwriteMode) -> io::Result<()
     if *mode == MvOverwriteMode::Force {
         return Ok(());
     }
-    if *mode == MvOverwriteMode::NoClobber {
-        let err_msg = format!("not replacing {}", target_path.quote());
-        return Err(io::Error::other(err_msg));
-    }
 
     let is_interactive = *mode == MvOverwriteMode::Interactive;
     let mut prompt = format!("overwrite {}?", target_path.quote());
@@ -632,6 +628,10 @@ fn mv_handle_two_paths(
         }
         // 如果目标存在且源是目录
     } else if target_exists && source_is_directory {
+        if mv_options.overwrite == MvOverwriteMode::NoClobber {
+            return Ok(());
+        }
+
         // 调用统一的 overwrite 提示校验器
         if let Err(e) = prompt_overwrite(target_path, &mv_options.overwrite) {
             // 遇到空错误不再吞噬，而是设置退出码为 1 并安静返回
@@ -995,6 +995,10 @@ fn mv_rename_with_hardlink_tracking(
         if let Some(existing_dest) = hardlink_map.get(&key) {
             // 检查目标文件系统是否已存在该文件（需要覆盖）
             if to_path.exists() {
+                if options.overwrite == MvOverwriteMode::NoClobber {
+                    return Ok(());
+                }
+
                 prompt_overwrite(to_path, &options.overwrite)?;
 
                 // 处理备份
@@ -1117,6 +1121,10 @@ fn mv_rename(
 
     // 如果目标路径已存在，根据更新和覆盖选项进行处理
     if to_path.exists() {
+        if options.overwrite == MvOverwriteMode::NoClobber {
+            return Ok(());
+        }
+
         if options.update == CtUpdateMode::ReplaceIfOlder
             && options.overwrite == MvOverwriteMode::Interactive
         {

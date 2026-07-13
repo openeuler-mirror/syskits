@@ -224,7 +224,12 @@ impl CommandParser {
             // Half page
             KeyEvent {
                 code: KeyCode::Char('d'),
-                modifiers: KeyModifiers::NONE | KeyModifiers::CONTROL,
+                modifiers: KeyModifiers::NONE,
+                ..
+            }
+            | KeyEvent {
+                code: KeyCode::Char('d'),
+                modifiers: KeyModifiers::CONTROL,
                 ..
             } => Some(MoreAction::HalfPageDown(count)),
 
@@ -437,5 +442,23 @@ mod tests {
         parser.parse_key(key);
 
         assert_eq!(parser.last_command(), Some(&MoreAction::NextPage(0)));
+    }
+
+    #[test]
+    fn test_parse_d_key() {
+        let mut parser = CommandParser::new();
+        let key = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+
+        let action = parser.parse_key(key);
+        assert_eq!(action, Some(MoreAction::HalfPageDown(0)));
+    }
+
+    #[test]
+    fn test_parse_ctrl_d_key() {
+        let mut parser = CommandParser::new();
+        let key = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL);
+
+        let action = parser.parse_key(key);
+        assert_eq!(action, Some(MoreAction::HalfPageDown(0)));
     }
 }

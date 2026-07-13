@@ -193,34 +193,31 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|s| s.to_string_lossy().into_owned())
         .collect();
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
+    let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);
 
+    echo_execute(no_newline, escaped, &values)
+        .map_err_context(|| "could not write to stdout".to_string())
+}
+
+fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<String>) {
     let mut no_newline = false;
     let mut escaped = false;
     let mut values = Vec::new();
 
     if posix_mode {
-        // POSIXLY_CORRECT 模式：
-        // 只有单独的 -n 作为第一个参数时才启用选项处理
-        // 此时 -E 被忽略（跳过），其他参数原样输出
         if args_vec.first() == Some(&"-n".to_string()) {
             no_newline = true;
-            // 启用选项处理，扫描剩余参数
             for arg in args_vec.iter().skip(1) {
                 if arg == "-E" {
-                    // 忽略 -E（POSIX 模式下转义始终启用，-E 只是禁用转义的选项，但被忽略）
                     continue;
-                } else {
-                    values.push(arg.clone());
                 }
+                values.push(arg.clone());
             }
         } else {
-            // 未启用选项处理，所有参数原样输出
-            values = args_vec.clone();
+            values = args_vec.to_vec();
         }
-        // POSIX 模式下始终启用转义
         escaped = true;
     } else {
-        // 标准模式：解析 -n, -e, -E，但保留 --
         let mut parsing_options = true;
         for arg in args_vec {
             if parsing_options {
@@ -234,31 +231,25 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
                     escaped = false;
                     continue;
                 } else if arg == "--" {
-                    values.push(arg);
+                    values.push(arg.clone());
                     parsing_options = false;
                     continue;
-                } else if arg.starts_with('-') && arg.len() > 1 {
-                    // 处理组合选项如 -ne, -nE
-                    if let Some(rest) = arg.strip_prefix("-n") {
-                        no_newline = true;
-                        for c in rest.chars() {
-                            match c {
-                                'e' => escaped = true,
-                                'E' => escaped = false,
-                                _ => {}
-                            }
+                } else if let Some(rest) = arg.strip_prefix('-')
+                    && !rest.is_empty()
+                    && rest.chars().all(|c| matches!(c, 'n' | 'e' | 'E'))
+                {
+                    for c in rest.chars() {
+                        match c {
+                            'n' => no_newline = true,
+                            'e' => escaped = true,
+                            'E' => escaped = false,
+                            _ => unreachable!("filtered by chars().all"),
                         }
-                        continue;
-                    } else if arg == "-e" {
-                        escaped = true;
-                        continue;
-                    } else if arg == "-E" {
-                        escaped = false;
-                        continue;
                     }
+                    continue;
                 }
             }
-            values.push(arg);
+            values.push(arg.clone());
             parsing_options = false;
         }
     }
@@ -267,8 +258,7 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
         values.push(String::new());
     }
 
-    echo_execute(no_newline, escaped, &values)
-        .map_err_context(|| "could not write to stdout".to_string())
+    (no_newline, escaped, values)
 }
 
 pub fn ct_app() -> Command {
@@ -365,6 +355,7 @@ mod tests {
         let args = vec![OsString::from("echo"), OsString::from("hello")];
         assert!(tool.execute(&args).is_ok());
     }
+
 
     mod tests_echo_main {
         use crate::echo_main;

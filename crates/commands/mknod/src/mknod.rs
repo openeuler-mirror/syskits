@@ -519,7 +519,7 @@ mod tests {
     }
 
     mod tests_mknod_app {
-        use crate::ct_app;
+        use crate::{SecurityContextRequest, ct_app, parse_security_context_request};
 
         use clap::error::ErrorKind;
 
@@ -568,6 +568,36 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_context_without_value_maps_to_default_context() {
+            let args = vec![ctcore::ct_util_name(), "--context", "file", "p"];
+            let command = ct_app();
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.contains_id("context"));
+            let request = parse_security_context_request(&[
+                std::ffi::OsString::from("mknod"),
+                std::ffi::OsString::from("--context"),
+                std::ffi::OsString::from("file"),
+                std::ffi::OsString::from("p"),
+            ]);
+            assert!(matches!(request, SecurityContextRequest::Default));
+        }
+
+        #[test]
+        fn test_ct_app_context_with_explicit_empty_value_is_preserved() {
+            let request = parse_security_context_request(&[
+                std::ffi::OsString::from("mknod"),
+                std::ffi::OsString::from("--context="),
+                std::ffi::OsString::from("file"),
+                std::ffi::OsString::from("p"),
+            ]);
+            match request {
+                SecurityContextRequest::Explicit(value) => assert!(value.is_empty()),
+                _ => panic!("expected explicit empty context"),
+            }
         }
     }
 }

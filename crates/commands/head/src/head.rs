@@ -126,49 +126,20 @@ impl Default for Mode {
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(head_flags::BYTES_NAME) {
-            match parse::parse_num(v) {
-                Ok((n, all_but_last)) => {
-                    if all_but_last {
-                        Ok(Self::AllButLastBytes(n))
-                    } else {
-                        Ok(Self::FirstBytes(n))
-                    }
-                }
-                Err(err) => {
-                    // 兼容 GNU 针对超大数字的 OOM 攻击测试
-                    let err_str = err.to_string();
-                    if err_str.contains("too large") || err_str.contains("overflow") {
-                        if v.starts_with('-') {
-                            Ok(Self::AllButLastBytes(u64::MAX))
-                        } else {
-                            Ok(Self::FirstBytes(u64::MAX))
-                        }
-                    } else {
-                        Err(format!("invalid number of bytes: {err}"))
-                    }
-                }
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
+            if all_but_last {
+                Ok(Self::AllButLastBytes(n))
+            } else {
+                Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(head_flags::LINES_NAME) {
-            match parse::parse_num(v) {
-                Ok((n, all_but_last)) => {
-                    if all_but_last {
-                        Ok(Self::AllButLastLines(n))
-                    } else {
-                        Ok(Self::FirstLines(n))
-                    }
-                }
-                Err(err) => {
-                    let err_str = err.to_string();
-                    if err_str.contains("too large") || err_str.contains("overflow") {
-                        if v.starts_with('-') {
-                            Ok(Self::AllButLastLines(u64::MAX))
-                        } else {
-                            Ok(Self::FirstLines(u64::MAX))
-                        }
-                    } else {
-                        Err(format!("invalid number of lines: {err}"))
-                    }
-                }
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
+            if all_but_last {
+                Ok(Self::AllButLastLines(n))
+            } else {
+                Ok(Self::FirstLines(n))
             }
         } else {
             Ok(Self::default())

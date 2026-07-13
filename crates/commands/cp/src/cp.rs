@@ -2887,6 +2887,7 @@ mod tests {
         use std::io::{self, Write};
 
         use crate::cp_aligned_ancestors;
+        use crate::cp_copy;
         use crate::cp_disk_usage;
         use crate::cp_disk_usage_directory;
 
@@ -3081,6 +3082,44 @@ mod tests {
             } else {
                 assert!(result.is_err());
             }
+        }
+
+        #[test]
+        fn test_cp_copy_missing_source_does_not_block_later_valid_same_basename() {
+            let dir = Builder::new()
+                .prefix("cp_copy_collision")
+                .tempdir()
+                .unwrap();
+            let missing_parent = dir.path().join("missing_parent");
+            let existing_parent = dir.path().join("existing_parent");
+            let dest_dir = dir.path().join("dest");
+            fs::create_dir_all(&existing_parent).unwrap();
+            fs::create_dir_all(&dest_dir).unwrap();
+
+            let missing_source = missing_parent.join("same_name");
+            let existing_source = existing_parent.join("same_name");
+            fs::write(&existing_source, b"copied payload").unwrap();
+
+            let args = [
+                ctcore::ct_util_name().to_string(),
+                missing_source.display().to_string(),
+                existing_source.display().to_string(),
+                dest_dir.display().to_string(),
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let opts = CpOptions::cp_from_matches(&matches).unwrap();
+
+            match cp_copy(
+                &[missing_source.clone(), existing_source.clone()],
+                &dest_dir,
+                &opts,
+            ) {
+                Err(CpError::NotAllFilesCopied) => {}
+                other => panic!("expected NotAllFilesCopied, got {other:?}"),
+            }
+
+            let copied = dest_dir.join("same_name");
+            assert_eq!(fs::read(&copied).unwrap(), b"copied payload");
         }
 
         #[test]

@@ -1346,8 +1346,9 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                 ) {
                     show_error_if_needed(&error);
                     is_non_fatal_errors = true;
+                } else {
+                    copied_dest_sources.insert(dest_path, None);
                 }
-                copied_dest_sources.insert(dest_path, None);
                 continue;
             }
         };
@@ -1400,9 +1401,6 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
             }
         }
 
-        // 记录这一次的成功生成，防止后续参数与之碰撞
-        copied_dest_sources.insert(dest_path.clone(), source_info);
-
         // 尝试复制源文件到目标路径
         if let Err(error) = copy_source(
             &process_bar,
@@ -1415,6 +1413,9 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
         ) {
             show_error_if_needed(&error);
             is_non_fatal_errors = true;
+        } else {
+            // 仅在复制成功后登记这一次的生成结果，避免失败源占坑影响后续合法输入。
+            copied_dest_sources.insert(dest_path, source_info);
         }
     }
 

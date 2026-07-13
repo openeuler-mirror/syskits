@@ -57,7 +57,7 @@
 use std::{
     error::Error,
     fmt::{Display, Formatter},
-    sync::atomic::{AtomicI32, Ordering},
+    sync::atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
 static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
@@ -687,6 +687,7 @@ impl From<i32> for Box<dyn CTError> {
 pub struct ClapErrorWrapper {
     code: i32,
     error: clap::Error,
+    output_failed: AtomicBool,
 }
 
 /// 用于clap::Error调整退出码的扩展特性。
@@ -696,13 +697,21 @@ pub trait UClapError<T> {
 
 impl From<clap::Error> for Box<dyn CTError> {
     fn from(e: clap::Error) -> Self {
-        Box::new(ClapErrorWrapper { code: 1, error: e })
+        Box::new(ClapErrorWrapper {
+            code: 1,
+            error: e,
+            output_failed: AtomicBool::new(false),
+        })
     }
 }
 
 impl UClapError<ClapErrorWrapper> for clap::Error {
     fn with_exit_code(self, code: i32) -> ClapErrorWrapper {
-        ClapErrorWrapper { code, error: self }
+        ClapErrorWrapper {
+            code,
+            error: self,
+            output_failed: AtomicBool::new(false),
+        }
     }
 }
 
@@ -717,7 +726,13 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
 impl CTError for ClapErrorWrapper {
     fn code(&self) -> i32 {
         match self.error.kind() {
-            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                if self.output_failed.load(Ordering::SeqCst) {
+                    self.code
+                } else {
+                    0
+                }
+            }
             _ => self.code,
         }
     }
@@ -725,12 +740,21 @@ impl CTError for ClapErrorWrapper {
 
 impl Error for ClapErrorWrapper {}
 
+impl ClapErrorWrapper {
+    fn note_output_failed(&self) {
+        self.output_failed.store(true, Ordering::SeqCst);
+    }
+}
+
 // 这是对Display特性的滥用
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self.error.print() {
             Ok(_) => Ok(()),
-            Err(e) => panic!("{}", e),
+            Err(_) => {
+                self.note_output_failed();
+                Ok(())
+            }
         }
     }
 }

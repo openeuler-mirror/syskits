@@ -1814,6 +1814,27 @@ mod tests {
         use crate::cksum_main;
 
         use std::ffi::OsString;
+        use std::fs;
+        use std::path::PathBuf;
+        use tempfile::{TempDir, tempdir};
+
+        fn write_md5_check_file() -> (TempDir, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("input.txt");
+            let check_path = temp_dir.path().join("md5.txt");
+
+            fs::write(&file_path, b"").unwrap();
+            fs::write(
+                &check_path,
+                format!(
+                    "d41d8cd98f00b204e9800998ecf8427e  {}\n",
+                    file_path.display()
+                ),
+            )
+            .unwrap();
+
+            (temp_dir, check_path)
+        }
 
         #[test]
         fn test_ct_main_version() {
@@ -1901,6 +1922,95 @@ mod tests {
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_check_rejects_zero() {
+            let (_temp_dir, check_path) = write_md5_check_file();
+            let args = [
+                ctcore::ct_util_name(),
+                "--algorithm=md5",
+                "--check",
+                "--zero",
+                check_path.to_str().unwrap(),
+            ];
+            let result = cksum_main(args.iter().map(OsString::from));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 1);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_check_rejects_binary() {
+            let (_temp_dir, check_path) = write_md5_check_file();
+            let args = [
+                ctcore::ct_util_name(),
+                "--algorithm=md5",
+                "--check",
+                "--binary",
+                check_path.to_str().unwrap(),
+            ];
+            let result = cksum_main(args.iter().map(OsString::from));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 1);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_check_rejects_text_without_untagged() {
+            let (_temp_dir, check_path) = write_md5_check_file();
+            let args = [
+                ctcore::ct_util_name(),
+                "--algorithm=md5",
+                "--check",
+                "--text",
+                check_path.to_str().unwrap(),
+            ];
+            let result = cksum_main(args.iter().map(OsString::from));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 1);
+                }
+            }
+        }
+
+        #[test]
+        fn test_ct_main_check_rejects_text_with_untagged() {
+            let (_temp_dir, check_path) = write_md5_check_file();
+            let args = [
+                ctcore::ct_util_name(),
+                "--algorithm=md5",
+                "--check",
+                "--text",
+                "--untagged",
+                check_path.to_str().unwrap(),
+            ];
+            let result = cksum_main(args.iter().map(OsString::from));
+
+            match result {
+                Err(output) => {
+                    assert_eq!(output.code(), 1);
+                }
+                Ok(output) => {
+                    assert_eq!(output, 1);
                 }
             }
         }

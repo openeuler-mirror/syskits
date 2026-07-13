@@ -442,7 +442,7 @@ impl Observer {
                                 } else {
                                     ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
                                 }
-                            } else if old_md.got_truncated(&new_md).unwrap_or(false) {
+                            } else if old_md.got_truncated(&new_md)? {
                                 if let Err(e) = self.files.update_reader(&tracked_path) {
                                     ct_show_error!("{}: file truncated", display_name);
                                     ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
@@ -712,7 +712,7 @@ impl Observer {
                     "{} has been replaced;  following new file",
                     display_name.quote()
                 );
-                read_some = self.files.tail_file(&path, verbose).unwrap_or(false) || read_some;
+                read_some = self.files.tail_file(&path, verbose)? || read_some;
             }
         }
 
@@ -727,7 +727,7 @@ impl Observer {
                     strip_errno(&e)
                 );
             } else {
-                read_some = self.files.tail_file(&path, verbose).unwrap_or(false) || read_some;
+                read_some = self.files.tail_file(&path, verbose)? || read_some;
             }
         }
 
@@ -782,8 +782,7 @@ impl Observer {
                     }
 
                     self.files.update_metadata(&new_path, Some(md));
-                    read_some =
-                        self.files.tail_file(&new_path, verbose).unwrap_or(false) || read_some;
+                    read_some = self.files.tail_file(&new_path, verbose)? || read_some;
                     if let Some(rx) = self.watcher_rx.as_mut() {
                         let _ = rx.watch_with_parent(&new_path);
                     }

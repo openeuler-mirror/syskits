@@ -739,9 +739,10 @@ fn tokenize_with_separator(line: &str, separator: char, token_buf: &mut Vec<Fiel
         .char_indices()
         .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
+    let sep_len = separator.len_utf8();
     for sep_idx in separator_indices {
         token_buf.push(start..sep_idx);
-        start = sep_idx + 1;
+        start = sep_idx + sep_len;
     }
     if start < line.len() {
         token_buf.push(start..line.len());
@@ -1311,7 +1312,7 @@ fn sort_get_settings_sparator(matches: &ArgMatches) -> CTResult<Option<char>> {
         // 这将拒绝非 ASCII 编码点，但也许我们不必这样做。
         // 另一方面，GNU 接受任何单字节，无论是否为有效的 unicode。
         // 支持多字节字符需要修改 tokenize_with_separator()）。
-        if separator.len() != 1 {
+        if separator.chars().count() != 1 {
             return Err(CTsageError::new(
                 2,
                 format!(
@@ -3699,6 +3700,7 @@ mod tests {
             ];
             assert_eq!(token_buffer, expected);
         }
+
     }
 
     mod tokenize_default_tests {

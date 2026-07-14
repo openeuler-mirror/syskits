@@ -1099,6 +1099,7 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     unsafe {
         ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr() as *const _);
     }
+    let args = preprocess_sort_args(args.into_iter().collect());
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(t) => t,
         Err(e) => {
@@ -1151,6 +1152,123 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     tmp_dir.wait_if_signal();
     result
     // Ok(())
+}
+
+fn parse_posix2_version() -> i32 {
+    env::var("_POSIX2_VERSION")
+        .ok()
+        .and_then(|value| value.parse::<i32>().ok())
+        .unwrap_or(200809)
+}
+
+fn traditional_sort_usage() -> bool {
+    let posix_ver = parse_posix2_version();
+    !(200112..200809).contains(&posix_ver)
+}
+
+fn parse_obsolete_key_spec(spec: &str, is_start: bool) -> Option<String> {
+    let bytes = spec.as_bytes();
+    let sign = *bytes.first()?;
+    if (is_start && sign != b'+') || (!is_start && sign != b'-') {
+        return None;
+    }
+
+    let mut idx = 1;
+    if idx >= bytes.len() || !bytes[idx].is_ascii_digit() {
+        return None;
+    }
+
+    let field_start = idx;
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    let field = spec[field_start..idx].parse::<u128>().ok()?;
+
+    let mut char_pos = None;
+    if idx < bytes.len() && bytes[idx] == b'.' {
+        idx += 1;
+        let char_start = idx;
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+            idx += 1;
+        }
+        let digits = &spec[char_start..idx];
+        char_pos = Some(if digits.is_empty() {
+            0
+        } else {
+            digits.parse::<u128>().ok()?
+        });
+    }
+
+    let options = &spec[idx..];
+    if !options.chars().all(|c| {
+        matches!(
+            c,
+            'M' | 'b' | 'd' | 'f' | 'g' | 'h' | 'i' | 'n' | 'R' | 'r' | 'V'
+        )
+    }) {
+        return None;
+    }
+
+    Some(if is_start {
+        let field = field.saturating_add(1);
+        let char_part = char_pos
+            .map(|c| format!(".{}", c.saturating_add(1)))
+            .unwrap_or_default();
+        format!("{field}{char_part}{options}")
+    } else {
+        let end_char = char_pos.unwrap_or(0);
+        let field = if end_char == 0 {
+            field
+        } else {
+            field.saturating_add(1)
+        };
+        let char_part = if char_pos.is_some() {
+            format!(".{end_char}")
+        } else {
+            String::new()
+        };
+        format!("{field}{char_part}{options}")
+    })
+}
+
+fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
+    if !traditional_sort_usage() {
+        return args;
+    }
+
+    let mut processed = Vec::with_capacity(args.len() + 4);
+    if let Some(program) = args.first() {
+        processed.push(program.clone());
+    }
+
+    let mut idx = 1;
+    while idx < args.len() {
+        let Some(arg) = args[idx].to_str() else {
+            processed.push(args[idx].clone());
+            idx += 1;
+            continue;
+        };
+
+        if let Some(start) = parse_obsolete_key_spec(arg, true) {
+            let mut key = start;
+            if idx + 1 < args.len() {
+                if let Some(next) = args[idx + 1].to_str() {
+                    if let Some(end) = parse_obsolete_key_spec(next, false) {
+                        key.push(',');
+                        key.push_str(&end);
+                        idx += 1;
+                    }
+                }
+            }
+            processed.push(OsString::from("-k"));
+            processed.push(OsString::from(key));
+        } else {
+            processed.push(args[idx].clone());
+        }
+        idx += 1;
+    }
+
+    processed
 }
 
 fn sort_handle_settings(
@@ -3788,6 +3906,7 @@ mod tests {
             assert_eq!(token_buffer, expected);
         }
     }
+
 
     #[cfg(test)]
     mod tokenize_tests {

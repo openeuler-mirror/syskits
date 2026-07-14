@@ -1093,6 +1093,13 @@ fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<(
     let wstat_update = output.flush()?;
     output.sync()?;
 
+    #[cfg(target_os = "linux")]
+    if state.input.settings.oflags.is_direct {
+        let final_written = state.write_offset.saturating_add(wstat_update.bytes_total);
+        let offset = i64::try_from(final_written).unwrap_or(i64::MAX);
+        output.discard_cache(offset, 0);
+    }
+
     // 如果需要，截断文件
     if !state.input.settings.oconv.is_notrunc {
         output.truncate();

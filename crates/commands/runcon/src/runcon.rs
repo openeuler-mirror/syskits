@@ -793,6 +793,7 @@ mod tests {
 
     mod conversion_tests {
         use super::*;
+        use ctcore::ct_error::CTError;
 
         #[test]
         fn test_os_str_to_c_string_valid() {
@@ -805,6 +806,12 @@ mod tests {
         fn test_os_str_to_c_string_with_null() {
             let result = os_str_to_c_string(OsStr::new("test\0string"));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_selinux_not_enabled_maps_to_canceled_exit_code() {
+            let err = RunconError::new(DefaultError::SELinuxNotEnabled);
+            assert_eq!(err.code(), error_exit_status::RUNCON_CANCELED);
         }
     }
 

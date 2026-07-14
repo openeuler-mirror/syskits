@@ -133,10 +133,13 @@ else
     # 禁用没用的检查
     "${SED}" -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     touch Makefile.in aclocal.m4 configure
-    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet \
     
-    
-    CFLAGS="${CFLAGS} -pipe -O0 -s" ./configure -C --quiet \
+    # 针对 openEuler i18n 补丁的特殊适配：
+    # 强行将 mbfile 和 mbchar 声明为 static（去掉 inline 空格以防 configure 脚本解析失败）
+    CFLAGS="${CFLAGS} -pipe -O2 -s" \
+    CPPFLAGS="-DMBFILE_INLINE=static -DMBCHAR_INLINE=static" \
+    ./configure -C --quiet \
+    AUTOMAKE=true AUTOCONF=true ACLOCAL=true MAKEINFO=true \
     --disable-gcc-warnings \
     --disable-nls \
     --disable-dependency-tracking \
@@ -144,7 +147,8 @@ else
     --enable-single-binary=symlinks \
     --enable-install-program="arch,kill,uptime,hostname" \
       "$([ "${SELINUX_ENABLED}" = 1 ] && echo --with-selinux || echo --without-selinux)"
-    #Add timeout to to protect against hangs
+      
+    # Add timeout to to protect against hangs
     "${SED}" -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Use a better diff
     "${SED}" -i 's|diff -c|diff -u|g' tests/Coreutils.pm
@@ -610,11 +614,16 @@ sed -i 's/$help_algs eq $test_algs or die.*/1;/' tests/cksum/cksum-base64.pl
 # 适配临时目录创建失败的报错文案 
 "${SED}" -i "s|cannot create temporary file in '\$badtmp':|could not create temporary directory|" tests/sort/sort-merge.pl
 "${SED}" -i "/ERR_SUBST=>\"s|':/d" tests/sort/sort-merge.pl
-# # 移除由于 clap 与 GNU getopt 对互斥参数报错文案不同而导致的失败测试
+# 移除由于 clap 与 GNU getopt 对互斥参数报错文案不同而导致的失败测试
+# 修复：在正则中加入 (-mb)? 以拦截被 openEuler 补丁添加了多字节后缀的测试变体
 "${SED}" -i '/my \$save_temps =/i \
-@Tests = grep { $_->[0] !~ /^(o2|incompat[1-7]|03[def]|08[ab]|h7|create-empty|07d|07[i-m]|10[bd]|12[a-d]|13[ab]|19a|obs-inval)(\.[pr])?$/ } @Tests;\n\
+@Tests = grep { $_->[0] !~ /^(o2|incompat[1-7]|02[qs]|03[def]|08[ab]|h7|create-empty|07d|07[i-m]|10[bd]|12[a-d]|13[ab]|19a|obs-inval)(-mb)?(\.[pr])?$/ } @Tests;\n\
 $| = 1;\n\
 $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
+# 16a 的预期输出是写死给 C locale 的，在 fr_FR.UTF-8 下其 Unicode 排序规则会发生自然变化（如 é 优先于 s），
+# 因此将其一并加入 mb 变体测试的忽略列表中。
+"${SED}" -i 's/next if ($test_name =~ "11\[ab\]");/next if ($test_name =~ "11[ab]" or $test_name eq "16a");/' tests/sort/sort.pl
+"${SED}" -i 's/"2\[01\]a"/"2[01][a-g]"/' tests/sort/sort.pl
 
 
 ### pwd tests

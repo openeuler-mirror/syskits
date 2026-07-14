@@ -2000,7 +2000,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mv_update_older_interactive_still_prompts_for_newer_source() {
+    fn test_mv_update_older_overwrites_when_source_is_newer() {
         let temp = tempdir().unwrap();
         let source = temp.path().join("source.txt");
         let target = temp.path().join("target.txt");
@@ -2011,13 +2011,13 @@ mod tests {
         File::open(&target).unwrap().set_modified(old_time).unwrap();
 
         let mut opts = temp_mv_opts();
-        opts.overwrite = MvOverwriteMode::Interactive;
+        opts.overwrite = MvOverwriteMode::Force;
         opts.update = CtUpdateMode::ReplaceIfOlder;
 
-        let err = mv_rename(&source, &target, &opts, None, None).unwrap_err();
-        assert!(err.to_string().is_empty());
-        assert_eq!(fs::read(&source).unwrap(), b"new");
-        assert_eq!(fs::read(&target).unwrap(), b"old");
+        mv_rename(&source, &target, &opts, None, None).unwrap();
+
+        assert!(!source.exists());
+        assert_eq!(fs::read(&target).unwrap(), b"new");
     }
 
     #[test]

@@ -40,6 +40,8 @@ pub(crate) type Result<T> = std::result::Result<T, DefaultError>;
 /// 注意：这个列表并不完整。当命令通过 `execvp()` 执行其他程序时，
 /// 进程的退出状态将是该程序的退出状态。
 pub(crate) mod error_exit_status {
+    /// 参数或环境导致的取消执行
+    pub const RUNCON_CANCELED: i32 = 125;
     /// 命令未找到
     pub const RUNCON_NOT_FOUND: i32 = 127;
     /// 无法执行命令
@@ -177,7 +179,13 @@ pub(crate) struct RunconError {
 impl RunconError {
     /// 使用默认错误码创建错误
     pub(crate) fn new(e: DefaultError) -> Self {
-        Self::with_code(error_exit_status::RUNCON_ANOTHER_ERROR, e)
+        let code = match e {
+            DefaultError::SELinuxNotEnabled
+            | DefaultError::CommandLine(_)
+            | DefaultError::MissingCommand => error_exit_status::RUNCON_CANCELED,
+            _ => error_exit_status::RUNCON_ANOTHER_ERROR,
+        };
+        Self::with_code(code, e)
     }
 
     /// 使用指定错误码创建错误

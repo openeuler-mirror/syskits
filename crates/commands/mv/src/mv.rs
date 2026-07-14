@@ -2863,14 +2863,18 @@ mod tests {
     }
     #[cfg(test)]
     mod tests_mv_fun {
-        use crate::{MvOpts, MvOverwriteMode, mv, mv_parse_paths};
+        use crate::{
+            DirectorySourceKey, MvOpts, MvOverwriteMode, is_duplicate_directory_source, mv,
+            mv_parse_paths,
+        };
         use ctcore::ct_backup_control::CtBackupMode;
         use ctcore::ct_update_control::CtUpdateMode;
 
-        use std::ffi::OsString;
+        use std::collections::HashMap;
+        use std::ffi::{OsStr, OsString};
         use std::fs;
 
-        use std::path::PathBuf;
+        use std::path::{Path, PathBuf};
         use tempfile::tempdir;
 
         fn create_test_opts(overwrite: MvOverwriteMode, strip_slashes: bool) -> MvOpts {
@@ -2960,5 +2964,32 @@ mod tests {
             assert_eq!(fs::read_link(&dest_path).unwrap(), real_dir);
         }
 
+        #[test]
+        fn test_duplicate_directory_source_tracks_same_directory_entity() {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let dir = base.join("b");
+            fs::create_dir(&dir).unwrap();
+
+            let metadata = fs::symlink_metadata(&dir).unwrap();
+            let mut processed_directories = HashMap::new();
+
+            assert!(!is_duplicate_directory_source(
+                &mut processed_directories,
+                &metadata,
+                Path::new("./b"),
+                OsStr::new("b")
+            ));
+            assert_eq!(
+                processed_directories.get(&DirectorySourceKey::from_metadata(&metadata)),
+                Some(&OsString::from("b"))
+            );
+            assert!(is_duplicate_directory_source(
+                &mut processed_directories,
+                &metadata,
+                Path::new("b"),
+                OsStr::new("b")
+            ));
+        }
     }
 }

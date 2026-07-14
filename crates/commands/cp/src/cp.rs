@@ -23,7 +23,7 @@ use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
 #[cfg(all(feature = "feat_selinux", target_os = "linux"))]
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -1263,6 +1263,44 @@ fn show_error_if_needed(err: &CpError) {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct DirectorySourceKey {
+    dev: u64,
+    ino: u64,
+}
+
+impl DirectorySourceKey {
+    fn from_metadata(metadata: &Metadata) -> Self {
+        Self {
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+        }
+    }
+}
+
+fn is_duplicate_directory_source(
+    processed_directories: &mut HashMap<DirectorySourceKey, PathBuf>,
+    source_metadata: &Metadata,
+    source_path: &Path,
+    dest_path: &Path,
+) -> bool {
+    let directory_key = DirectorySourceKey::from_metadata(source_metadata);
+
+    if let Some(previous_dest_path) = processed_directories.get(&directory_key) {
+        if previous_dest_path == dest_path {
+            ct_show_warning!(
+                "source directory '{}' specified more than once",
+                source_path.display()
+            );
+            return true;
+        }
+        return false;
+    }
+
+    processed_directories.insert(directory_key, dest_path.to_path_buf());
+    false
+}
+
 /// Copy all `sources` to `target`.
 ///
 /// Returns an `Err(Error::NotAllFilesCopied)` if at least one non-fatal error
@@ -1289,6 +1327,10 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
 
     // 记录：目标路径 -> 生成它的源文件信息。用于防碰撞和防重复检测
     let mut copied_dest_sources: HashMap<PathBuf, Option<CtFileInformation>> =
+        HashMap::with_capacity(sour_path.len());
+
+    // 记录已处理的目录源实体，用于将 `./b` 和 `b` 这类同一目录识别为重复源。
+    let mut processed_directories: HashMap<DirectorySourceKey, PathBuf> =
         HashMap::with_capacity(sour_path.len());
 
     let process_bar = if cp_opts.progress_bar {
@@ -1358,6 +1400,19 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
             .unwrap_or_else(|_| target_path.to_path_buf());
         let source_info =
             CtFileInformation::from_path(source_path, cp_opts.cp_dereference(true)).ok();
+        let file_type = source_metadata.file_type();
+
+        if file_type.is_dir()
+            && !file_type.is_symlink()
+            && is_duplicate_directory_source(
+                &mut processed_directories,
+                &source_metadata,
+                source_path,
+                &dest_path,
+            )
+        {
+            continue;
+        }
 
         // 碰撞检测：如果即将写入的目标路径已经被别人生成过了
         if let Some(prev_source_info_opt) = copied_dest_sources.get(&dest_path) {
@@ -1367,7 +1422,6 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                 // NumberedBackup 允许对同一个目标多次生成（会自动创建 .~1~ 等后缀），安全放行
             } else if is_same_source && cp_opts.backup == CtBackupMode::NoBackup {
                 // 同一个源文件，在无备份模式下输入了多次，抛出 warning 并安全跳过
-                let file_type = source_metadata.file_type();
                 let source_type = if file_type.is_dir() {
                     "directory"
                 } else {

@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "tac ~ (ctutils) concatenate and display input lines in reverse order"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/tac"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/tac"
 
 [lib]
 path = "src/tac.rs"

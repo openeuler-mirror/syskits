@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "wc ~ (ctutils) display newline, word, and byte counts for input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/wc"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/wc"
 
 [lib]
 path = "src/wc.rs"

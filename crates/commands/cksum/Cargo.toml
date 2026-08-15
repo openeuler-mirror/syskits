@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "cksum ~ (ctutils) display CRC and size of input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/cksum"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/cksum"
 
 [lib]
 path = "src/cksum.rs"

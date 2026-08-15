@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "chgrp ~ (ctutils) change the group ownership of FILE"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/chgrp"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/chgrp"
 
 [lib]
 path = "src/chgrp.rs"

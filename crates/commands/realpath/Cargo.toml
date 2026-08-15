@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "realpath ~ (ctutils) display resolved absolute path of PATHNAME"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/realpath"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/realpath"
 
 [lib]
 path = "src/realpath.rs"

@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "runcon ~ (ctutils) run command with specified security context"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/runcon"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/runcon"
 
 [lib]
 path = "src/runcon.rs"

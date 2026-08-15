@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "basenc ~ (ctutils) decode/encode input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/basenc"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/basenc"
 
 [lib]
 path = "src/basenc.rs"

@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "nl ~ (ctutils) display input with added line numbers"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/nl"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/nl"
 
 [lib]
 path = "src/nl.rs"

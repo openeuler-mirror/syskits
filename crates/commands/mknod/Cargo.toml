@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "mknod ~ (ctutils) create special file NAME of TYPE"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/mknod"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/mknod"
 
 [lib]
 name = "ct_mknod"

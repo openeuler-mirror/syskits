@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "pinky ~ (ctutils) display user information"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/pinky"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/pinky"
 
 [lib]
 path = "src/pinky.rs"

@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "tty ~ (ctutils) display the name of the terminal connected to standard input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/tty"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/tty"
 
 
 [lib]

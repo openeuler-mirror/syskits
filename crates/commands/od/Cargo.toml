@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "od ~ (ctutils) display formatted representation of input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/od"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/od"
 
 [lib]
 path = "src/od.rs"

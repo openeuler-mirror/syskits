@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "chroot ~ (ctutils) run COMMAND under a new root directory"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/chroot"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/chroot"
 
 [lib]
 path = "src/chroot.rs"

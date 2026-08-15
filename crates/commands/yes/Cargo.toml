@@ -9,7 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 
 description = "yes ~ (ctutils) repeatedly display a line with STRING (or 'y')"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/yes"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/yes"
 
 [lib]
 path = "src/yes.rs"

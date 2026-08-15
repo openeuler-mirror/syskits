@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "base64 ~ (ctutils) decode/encode input (base64-encoding)"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/base64"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/base64"
 
 [lib]
 path = "src/base64.rs"

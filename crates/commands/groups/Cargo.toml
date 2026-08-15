@@ -9,7 +9,7 @@ categories.workspace = true
 edition.workspace = true
 homepage.workspace = true
 description = "groups ~ (ctutils) display group memberships for USERNAME"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/groups"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/groups"
 
 [lib]
 path = "src/groups.rs"

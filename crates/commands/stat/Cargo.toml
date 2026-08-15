@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "stat ~ (ctutils) display FILE status"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/stat"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/stat"
 
 [lib]
 path = "src/stat.rs"

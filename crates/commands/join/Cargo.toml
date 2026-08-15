@@ -9,7 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
 
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/join"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/join"
 description = "join ~ (ctutils) merge lines from inputs with matching join fields"
 
 [lib]

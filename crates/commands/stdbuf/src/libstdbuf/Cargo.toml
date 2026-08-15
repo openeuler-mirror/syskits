@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "stdbuf/libstdbuf ~ (ctutils); dynamic library required for stdbuf"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/stdbuf"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/stdbuf"
 
 [lib]
 name = "libstdbuf"

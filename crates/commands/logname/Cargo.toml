@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "logname ~ (ctutils) display the login name of the current user"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/logname"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/logname"
 
 [lib]
 path = "src/logname.rs"

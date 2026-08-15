@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "factor ~ (ctutils) display the prime factors of each NUMBER"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/"
 default-run = "factor"
 
 

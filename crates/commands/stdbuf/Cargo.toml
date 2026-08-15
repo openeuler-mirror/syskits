@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "stdbuf ~ (ctutils) run COMMAND with modified standard stream buffering"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/stdbuf"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/stdbuf"
 
 [lib]
 path = "src/stdbuf.rs"

@@ -9,7 +9,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "pwd ~ (ctutils) display current working directory"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/pwd"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/pwd"
 
 [lib]
 path = "src/pwd.rs"

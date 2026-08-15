@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "nice ~ (ctutils) run PROGRAM with modified scheduling priority"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/nice"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/nice"
 
 [lib]
 path = "src/nice.rs"

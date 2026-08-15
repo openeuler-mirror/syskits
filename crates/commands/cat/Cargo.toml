@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "cat ~ (ctutils) concatenate and display input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/cat"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/cat"
 
 [lib]
 path = "src/cat.rs"

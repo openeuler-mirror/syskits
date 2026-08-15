@@ -6,7 +6,7 @@ license.workspace = true
 description = "unexpand ~ (ctutils) convert input spaces to tabs"
 
 homepage.workspace = true
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/unexpand"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/unexpand"
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true

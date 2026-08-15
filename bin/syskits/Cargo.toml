@@ -8,7 +8,7 @@ keywords = { workspace = true }
 categories = { workspace = true }
 edition = { workspace = true }
 description = "CTyunOS implemented as universal utils, written in Rust"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits" 
+repository = "https://atomgit.com/openeuler/syskits" 
 default-run = "syskits"
 readme = "../../../README.md" 
 rust-version = { workspace = true }

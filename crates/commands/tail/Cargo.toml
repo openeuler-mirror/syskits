@@ -11,7 +11,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "tail ~ (ctutils) display the last lines of input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/tail"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/tail"
 
 [lib]
 path = "src/tail.rs"

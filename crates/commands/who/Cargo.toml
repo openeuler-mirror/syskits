@@ -9,7 +9,7 @@ keywords.workspace = true
 homepage.workspace = true
 
 description = "who ~ (ctutils) display information about currently logged-in users"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/who"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/who"
 
 [lib]
 path = "src/who.rs"

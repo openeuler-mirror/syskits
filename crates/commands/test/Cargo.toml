@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "test ~ (ctutils) evaluate comparison and file type expressions"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/test"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/test"
 
 
 [lib]

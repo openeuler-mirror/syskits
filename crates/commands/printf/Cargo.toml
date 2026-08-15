@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "printf ~ (ctutils) FORMAT and display ARGUMENTS"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/printf"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/printf"
 
 [lib]
 path = "src/printf.rs"

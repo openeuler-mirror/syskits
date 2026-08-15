@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "nproc ~ (ctutils) display the number of processing units available"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/nproc"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/nproc"
 
 [lib]
 path = "src/nproc.rs"

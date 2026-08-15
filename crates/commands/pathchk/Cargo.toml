@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "pathchk ~ (ctutils) diagnose invalid or non-portable PATHNAME"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/pathchk"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/pathchk"
 
 
 [lib]

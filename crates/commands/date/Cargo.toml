@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "date ~ (ctutils) display or set the current time"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/date"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/date"
 
 [lib]
 path = "src/date.rs"

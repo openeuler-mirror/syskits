@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "readlink ~ (ctutils) display resolved path of PATHNAME"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/readlink"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/readlink"
 
 [lib]
 path = "src/readlink.rs"

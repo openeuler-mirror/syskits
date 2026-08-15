@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "shred ~ (ctutils) hide former FILE contents with repeated overwrites"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/shred"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/shred"
 
 [lib]
 path = "src/shred.rs"

@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "du ~ (ctutils) display disk usage"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/du"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/du"
 
 [lib]
 path = "src/du.rs"

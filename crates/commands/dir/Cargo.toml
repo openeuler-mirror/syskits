@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "shortcut to ls -C -b"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/ls"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/ls"
 [lib]
 path = "src/dir.rs"
 

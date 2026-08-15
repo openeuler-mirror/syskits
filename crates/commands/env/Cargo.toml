@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "env ~ (ctutils) set each NAME to VALUE in the environment and run COMMAND"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/env"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/env"
 
 [lib]
 path = "src/env.rs"

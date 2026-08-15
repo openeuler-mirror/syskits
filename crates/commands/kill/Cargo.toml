@@ -8,7 +8,7 @@ categories.workspace = true
 edition.workspace = true
 homepage.workspace = true
 description = "kill ~ (ctutils) send a signal to a process"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/kill"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/kill"
 
 [lib]
 path = "src/kill.rs"

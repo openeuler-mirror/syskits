@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "printenv ~ (ctutils) display value of environment VAR"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/printenv"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/printenv"
 
 [lib]
 path = "src/printenv.rs"

@@ -8,7 +8,7 @@ categories.workspace = true
 edition.workspace = true
 homepage.workspace = true
 
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/hostid"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/hostid"
 
 [lib]
 path = "src/hostid.rs"

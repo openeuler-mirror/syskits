@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "chown ~ (ctutils) change the ownership of FILE"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/chown"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/chown"
 
 [lib]
 path = "src/chown.rs"

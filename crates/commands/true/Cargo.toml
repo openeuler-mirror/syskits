@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "true ~ (ctutils) do nothing and succeed"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/true"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/true"
 
 [lib]
 path = "src/true.rs"

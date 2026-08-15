@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "basename ~ (ctutils) display PATHNAME with leading directory components removed"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/basename"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/basename"
 
 [lib]
 path = "src/basename.rs"

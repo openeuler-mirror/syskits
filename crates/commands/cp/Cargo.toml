@@ -9,7 +9,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "cp ~ (ctutils) copy SOURCE to DESTINATION"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/cp"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/cp"
 
 [lib]
 path = "src/cp.rs"

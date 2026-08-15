@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "pr ~ (ctutils) convert text files for printing"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/pr"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/pr"
 
 [lib]
 path = "src/pr.rs"

@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "hashsum ~ (ctutils) display or check input digests"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/hashsum"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/hashsum"
 
 [lib]
 path = "src/hashsum.rs"

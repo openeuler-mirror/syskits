@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "fold ~ (ctutils) wrap each line of input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/fold"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/fold"
 
 [lib]
 path = "src/fold.rs"

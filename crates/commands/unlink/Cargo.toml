@@ -6,7 +6,7 @@ license.workspace = true
 description = "unlink ~ (ctutils) remove a (file system) link to FILE"
 
 homepage.workspace = true
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/unlink"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/unlink"
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true

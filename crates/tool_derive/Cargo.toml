@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "Derive macros for syskits tools registration"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/c/tool_derive"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/c/tool_derive"
 
 [lib]
 proc-macro = true

@@ -10,7 +10,7 @@ categories.workspace = true
 edition.workspace = true
 
 description = "tee ~ (ctutils) display input and copy to FILE"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/tee"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/tee"
 
 [lib]
 path = "src/tee.rs"

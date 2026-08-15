@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "more ~ (ctutils) input perusal filter"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/more"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/more"
 
 [lib]
 path = "src/lib.rs"

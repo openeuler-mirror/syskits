@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "sleep ~ (ctutils) pause for DURATION"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/sleep"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/sleep"
 
 [lib]
 path = "src/sleep.rs"

@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "expr ~ (ctutils) display the value of EXPRESSION"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/expr"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/expr"
 
 [lib]
 path = "src/expr.rs"

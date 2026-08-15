@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "dircolors ~ (ctutils) display commands to set LS_COLORS"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/dircolors"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/dircolors"
 
 [lib]
 path = "src/dircolors.rs"

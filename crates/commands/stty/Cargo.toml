@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "stty ~ (ctutils) print or change terminal characteristics"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/stty"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/stty"
 
 [lib]
 path = "src/stty.rs"

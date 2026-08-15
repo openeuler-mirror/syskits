@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "ctutils ~ 'core' ctutils code library (cross-platform)"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/ctcore"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/ctcore"
 # readme = "README.md"
 
 

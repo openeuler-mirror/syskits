@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "hostname ~ (ctutils) display or set the host name of the current host"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/hostname"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/hostname"
 
 [lib]
 path = "src/hostname.rs"

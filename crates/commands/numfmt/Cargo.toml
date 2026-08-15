@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "numfmt ~ (ctutils) reformat NUMBER"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/numfmt"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/numfmt"
 
 [lib]
 path = "src/numfmt.rs"

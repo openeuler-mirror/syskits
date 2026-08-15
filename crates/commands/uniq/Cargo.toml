@@ -6,7 +6,7 @@ license.workspace = true
 description = "uniq ~ (ctutils) filter identical adjacent lines from input"
 
 homepage.workspace = true
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/uniq"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/uniq"
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true

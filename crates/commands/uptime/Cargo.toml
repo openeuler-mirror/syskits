@@ -6,7 +6,7 @@ license.workspace = true
 description = "uptime ~ (ctutils) display dynamic system information"
 
 homepage.workspace = true
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/uptime"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/uptime"
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true

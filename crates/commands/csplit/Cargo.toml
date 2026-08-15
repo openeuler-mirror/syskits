@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "csplit ~ (ctutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/ls"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/ls"
 
 [lib]
 path = "src/csplit.rs"

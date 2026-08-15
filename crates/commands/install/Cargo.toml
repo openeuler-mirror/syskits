@@ -10,7 +10,7 @@ categories = { workspace = true }
 edition = { workspace = true }
 
 description = "install ~ (ctutils) copy files from SOURCE to DESTINATION (with specified attributes)"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/install"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/install"
 
 [lib]
 path = "src/install.rs"

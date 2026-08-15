@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "ptx ~ (ctutils) display a permuted index of input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/ptx"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/ptx"
 
 [lib]
 path = "src/ptx.rs"

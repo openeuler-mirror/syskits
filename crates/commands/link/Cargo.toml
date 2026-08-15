@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "link ~ (ctutils) create a hard (file system) link to FILE"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/link"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/link"
 
 [lib]
 path = "src/link.rs"

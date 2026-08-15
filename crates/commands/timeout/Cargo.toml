@@ -10,7 +10,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "timeout ~ (ctutils) run COMMAND with a DURATION time limit"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/timeout"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/timeout"
 
 [lib]
 path = "src/timeout.rs"

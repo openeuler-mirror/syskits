@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "mkdir ~ (ctutils) create DIRECTORY"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/mkdir"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/mkdir"
 
 [lib]
 path = "src/mkdir.rs"

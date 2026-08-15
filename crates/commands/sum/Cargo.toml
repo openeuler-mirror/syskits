@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "sum ~ (ctutils) display checksum and block counts for input"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits/src/branch/master/crates/commands/sum"
+repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/commands/sum"
 
 [lib]
 path = "src/sum.rs"

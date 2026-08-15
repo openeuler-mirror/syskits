@@ -1,0 +1,11 @@
+# 使用 docker 基础镜像
+FROM demo:latest
+
+# 添加自定义 YUM 仓库配置，安装依赖curl git tar clang libacl-devel libselinux-devel
+# 设置 Rust 工具链镜像源
+# 配置 cargo 镜像源
+# 验证安装
+
+# 设置工作目录
+WORKDIR /home
+

@@ -1,0 +1,16 @@
+[package]
+name = "ctpipeline"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "Core pipeline data model for syskits data pipeline (CtValue, CtPipelineData, CtSpan)"
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+os_pipe = "1.2.3"
+
+[dev-dependencies]
+serde_json = { workspace = true }

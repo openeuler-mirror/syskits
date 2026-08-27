@@ -736,6 +736,10 @@ impl CTError for ClapErrorWrapper {
             _ => self.code,
         }
     }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 impl Error for ClapErrorWrapper {}
@@ -763,18 +767,29 @@ impl Display for ClapErrorWrapper {
 mod tests {
     use super::*;
 
+    fn assert_set_get_exit_code(expected: i32) {
+        // EXIT_CODE is process-global and other tests may update it concurrently.
+        // Retry a few times to verify set/get consistency without introducing flaky failures.
+        for _ in 0..64 {
+            set_ct_exit_code(expected);
+            if get_ct_exit_code() == expected {
+                return;
+            }
+            std::thread::yield_now();
+        }
+        panic!("failed to observe exit code {expected} after repeated set/get");
+    }
+
     #[test]
     fn test_get_exit_code() {
-        // 测试默认退出码是否为0
-        set_ct_exit_code(0);
-        assert_eq!(get_ct_exit_code(), 0);
+        // 验证设置后可以读取到同一退出码
+        assert_set_get_exit_code(0);
     }
 
     #[test]
     fn test_set_exit_code() {
         // 测试设置退出码是否成功
-        set_ct_exit_code(1);
-        assert_eq!(get_ct_exit_code(), 1);
+        assert_set_get_exit_code(1);
     }
 
     #[test]
@@ -836,8 +851,7 @@ mod tests {
 
     #[test]
     fn test_set_get_exit_code() {
-        set_ct_exit_code(5);
-        assert_eq!(get_ct_exit_code(), 5);
+        assert_set_get_exit_code(5);
     }
 
     #[test]

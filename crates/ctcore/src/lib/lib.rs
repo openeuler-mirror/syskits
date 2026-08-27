@@ -111,6 +111,7 @@ pub use crate::ct_features::ct_fsxattr;
 //## core functions
 
 use std::ffi::OsString;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use once_cell::sync::Lazy;
@@ -143,7 +144,7 @@ macro_rules! ct_bin {
                     if err.usage() {
                         eprintln!(
                             "Try '{} --help' for more information.",
-                            ctcore::ct_execute_phrase()
+                            ctcore::ct_help_utility_name()
                         );
                     }
                     err.code()
@@ -343,6 +344,18 @@ static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
 /// 为"usage"派生完整的执行短语
 pub fn ct_execute_phrase() -> &'static str {
     &EXECUTION_PHRASE
+}
+
+static HELP_UTILITY_NAME: Lazy<String> = Lazy::new(|| {
+    Path::new(ct_util_name()).file_name().map_or_else(
+        || ct_util_name().to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+});
+
+/// 为 help 提示派生工具名（不包含可执行文件路径）。
+pub fn ct_help_utility_name() -> &'static str {
+    &HELP_UTILITY_NAME
 }
 
 pub trait Args: Iterator<Item = OsString> + Sized {

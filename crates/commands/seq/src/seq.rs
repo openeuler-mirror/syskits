@@ -91,6 +91,18 @@ struct PrintConfig<'a> {
     buffer: Option<&'a mut Vec<u8>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeqRow {
+    pub index: usize,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeqSemantic {
+    pub rows: Vec<SeqRow>,
+    pub classic_text: String,
+}
+
 pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -156,6 +168,62 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
         Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
     }
+}
+
+pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let mut modified_args: Vec<OsString> = Vec::new();
+    for arg in args {
+        let arg_str = arg.to_string_lossy();
+        if arg_str.starts_with('-') && arg_str.len() > 1 {
+            let second_char = arg_str.chars().nth(1).unwrap();
+            if second_char.is_ascii_digit() || second_char == '.' {
+                let mut safe_arg = "CT_NEG_".to_string();
+                safe_arg.push_str(&arg_str[1..]);
+                modified_args.push(safe_arg.into());
+                continue;
+            }
+        }
+        modified_args.push(arg);
+    }
+
+    let matches = ct_app().try_get_matches_from(modified_args)?;
+    let options = SeqOptions::new(&matches);
+    let numbers = parse_number_args(&matches)?;
+    let (first, increment, last) = get_sequence_range(&numbers)?;
+
+    let padding = calculate_padding(&first, &increment, &last);
+    let largest_dec = calculate_largest_decimal(&first, &increment);
+    let format = parse_format_option(options.format.as_deref())?;
+
+    let mut classic_buffer = Vec::new();
+    let mut rows = Vec::new();
+    collect_seq_rows(
+        (
+            first.number.clone(),
+            increment.number.clone(),
+            last.number.clone(),
+        ),
+        &SeqRenderConfig {
+            largest_dec,
+            separator: &options.separator,
+            terminator: &options.terminator,
+            pad: options.is_equal_width,
+            padding,
+            format: &format,
+            format_str: options.format.as_deref(),
+        },
+        &mut rows,
+        &mut classic_buffer,
+    )
+    .map_err(|e| CtSimpleError::new(1, format!("write error: {e}")))?;
+
+    Ok(SeqSemantic {
+        rows,
+        classic_text: String::from_utf8(classic_buffer).expect("seq output should be utf-8"),
+    })
 }
 
 fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
@@ -400,6 +468,79 @@ fn write_value_float(
     } else {
         write!(writer, "{s}")
     }
+}
+
+struct SeqRenderConfig<'a> {
+    largest_dec: usize,
+    separator: &'a str,
+    terminator: &'a str,
+    pad: bool,
+    padding: usize,
+    format: &'a Option<Format<num_format::Float>>,
+    format_str: Option<&'a str>,
+}
+
+fn render_seq_value(
+    value: &ExtendedBigDecimal,
+    config: &SeqRenderConfig<'_>,
+) -> std::io::Result<String> {
+    let padding = if config.pad {
+        config.padding
+            + if config.largest_dec > 0 {
+                config.largest_dec + 1
+            } else {
+                0
+            }
+    } else {
+        0
+    };
+
+    let mut buffer = Vec::new();
+    match config.format {
+        Some(f) => {
+            let float = match value {
+                ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
+                ExtendedBigDecimal::Infinity => f64::INFINITY,
+                ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
+                ExtendedBigDecimal::MinusZero => -0.0,
+                ExtendedBigDecimal::Nan => f64::NAN,
+            };
+            format_with_zero_padding(&mut buffer, f, float, config.format_str)?;
+        }
+        None => write_value_float(&mut buffer, value, padding, config.largest_dec)?,
+    }
+    Ok(String::from_utf8(buffer).expect("seq rendered value should be utf-8"))
+}
+
+fn collect_seq_rows(
+    range: RangeFloat,
+    config: &SeqRenderConfig<'_>,
+    rows: &mut Vec<SeqRow>,
+    writer: &mut Vec<u8>,
+) -> std::io::Result<()> {
+    let (first, increment, last) = range;
+    let mut value = first;
+    let mut is_first_iteration = true;
+    let mut index = 0usize;
+
+    while !done_printing(&value, &increment, &last) {
+        let rendered = render_seq_value(&value, config)?;
+        if !is_first_iteration {
+            write!(writer, "{}", config.separator)?;
+        }
+        write!(writer, "{rendered}")?;
+        rows.push(SeqRow {
+            index,
+            value: rendered,
+        });
+        value = value + increment.clone();
+        is_first_iteration = false;
+        index += 1;
+    }
+    if !is_first_iteration {
+        write!(writer, "{}", config.terminator)?;
+    }
+    Ok(())
 }
 
 /// Custom format function that handles zero-padding with signs correctly

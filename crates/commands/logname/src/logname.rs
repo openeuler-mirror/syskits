@@ -38,6 +38,80 @@ fn get_user_login() -> Option<String> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LognameSemanticRow {
+    pub login_name: String,
+    pub available: bool,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LognameSemantic {
+    pub rows: Vec<LognameSemanticRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+fn logname_semantic_from_parse_error(err: clap::Error) -> LognameSemantic {
+    let rendered = err.to_string();
+    let exit_code = match err.kind() {
+        clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
+        _ => 1,
+    };
+
+    if err.use_stderr() {
+        LognameSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text: rendered,
+            exit_code,
+        }
+    } else {
+        LognameSemantic {
+            rows: Vec::new(),
+            classic_text: rendered,
+            stderr_text: String::new(),
+            exit_code,
+        }
+    }
+}
+
+pub fn logname_native_semantic(args: impl ctcore::Args) -> CTResult<LognameSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    if let Err(err) = ct_app().try_get_matches_from(args) {
+        return Ok(logname_semantic_from_parse_error(err));
+    }
+
+    let source = "posix:getlogin".to_string();
+    let semantic = match get_user_login() {
+        Some(login_name) => LognameSemantic {
+            rows: vec![LognameSemanticRow {
+                login_name: login_name.clone(),
+                available: true,
+                source,
+            }],
+            classic_text: format!("{login_name}\n"),
+            stderr_text: String::new(),
+            exit_code: 0,
+        },
+        None => LognameSemantic {
+            rows: vec![LognameSemanticRow {
+                login_name: String::new(),
+                available: false,
+                source,
+            }],
+            classic_text: String::new(),
+            stderr_text: "logname: no login name\n".to_string(),
+            exit_code: 1,
+        },
+    };
+
+    Ok(semantic)
+}
+
 #[derive(Default)]
 pub struct Logname;
 impl Tool for Logname {
@@ -181,6 +255,46 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--invalid-argument"];
             let result = logname_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_logname_native_semantic_success_or_unavailable() {
+            let args = [ctcore::ct_util_name()];
+            let semantic =
+                logname_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].source, "posix:getlogin");
+
+            if let Some(login_name) = super::get_user_login() {
+                assert_eq!(semantic.exit_code, 0);
+                assert_eq!(semantic.rows[0].login_name, login_name);
+                assert!(semantic.rows[0].available);
+                assert_eq!(semantic.classic_text, format!("{login_name}\n"));
+                assert!(semantic.stderr_text.is_empty());
+            } else {
+                assert_eq!(semantic.exit_code, 1);
+                assert!(semantic.rows[0].login_name.is_empty());
+                assert!(!semantic.rows[0].available);
+                assert!(semantic.classic_text.is_empty());
+                assert_eq!(semantic.stderr_text, "logname: no login name\n");
+            }
+        }
+
+        #[test]
+        fn test_logname_native_semantic_invalid_argument() {
+            let args = [ctcore::ct_util_name(), "--invalid-argument"];
+            let semantic =
+                logname_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert!(semantic.rows.is_empty());
+            assert!(semantic.classic_text.is_empty());
+            assert_eq!(semantic.exit_code, 1);
+            assert!(
+                semantic.stderr_text.contains("unexpected argument"),
+                "stderr: {:?}",
+                semantic.stderr_text
+            );
         }
     }
 

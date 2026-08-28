@@ -65,6 +65,35 @@ mod realpath_flags {
     pub const REALPATH_ARG_FILES: &str = "files";
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RealpathResolutionMode {
+    None,
+    Physical,
+    Logical,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RealpathMissingHandling {
+    Normal,
+    Existing,
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealpathSemanticRow {
+    pub input: String,
+    pub resolved_path: String,
+    pub output_path: String,
+    pub resolution_mode: RealpathResolutionMode,
+    pub missing_handling: RealpathMissingHandling,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealpathSemantic {
+    pub rows: Vec<RealpathSemanticRow>,
+    pub classic_text: String,
+}
+
 struct RealpathFlags {
     is_quiet: bool,
     relative_to: Option<PathBuf>,
@@ -240,6 +269,59 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
     // 执行实时路径解析操作
     realpath_exec(writer, &flags)?;
     Ok(())
+}
+
+pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
+    let flags = RealpathFlags::new(matches)?;
+
+    let mut rows = Vec::with_capacity(flags.files.len());
+    let mut classic_text = Vec::new();
+
+    for path in &flags.files {
+        let resolved = canonicalize(path, flags.can_mode, flags.resolve_mode)
+            .map_err_context(|| path.maybe_quote().to_string())?;
+        let output = realpath_process_relative(
+            resolved.clone(),
+            flags.relative_base.as_deref(),
+            flags.relative_to.as_deref(),
+        );
+
+        classic_text.extend_from_slice(output.as_path().to_string_lossy().as_bytes());
+        classic_text.push(flags.line_ending.into());
+
+        rows.push(RealpathSemanticRow {
+            input: path.display().to_string(),
+            resolved_path: resolved.display().to_string(),
+            output_path: output.display().to_string(),
+            resolution_mode: semantic_resolution_mode(flags.resolve_mode),
+            missing_handling: semantic_missing_handling(flags.can_mode),
+        });
+    }
+
+    Ok(RealpathSemantic {
+        rows,
+        classic_text: String::from_utf8(classic_text)
+            .expect("realpath classic output should be valid utf-8"),
+    })
+}
+
+fn semantic_resolution_mode(mode: ResolveMode) -> RealpathResolutionMode {
+    match mode {
+        ResolveMode::None => RealpathResolutionMode::None,
+        ResolveMode::Physical => RealpathResolutionMode::Physical,
+        ResolveMode::Logical => RealpathResolutionMode::Logical,
+    }
+}
+
+fn semantic_missing_handling(mode: MissingHandling) -> RealpathMissingHandling {
+    match mode {
+        MissingHandling::Normal => RealpathMissingHandling::Normal,
+        MissingHandling::Existing => RealpathMissingHandling::Existing,
+        MissingHandling::Missing => RealpathMissingHandling::Missing,
+    }
 }
 
 /// 根据RealpathFlags中的配置解析文件路径

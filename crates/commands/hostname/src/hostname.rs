@@ -26,7 +26,7 @@ use std::os::raw::c_char;
 use sys_locale::get_locale;
 
 rust_i18n::i18n!("locales", fallback = "en-US");
-mod opt_flags {
+pub mod opt_flags {
     pub const ALIAS: &str = "alias";
     pub const ALL_FQDNS: &str = "all-fqdns";
     pub const BOOT: &str = "boot";
@@ -42,7 +42,7 @@ mod opt_flags {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum NameType {
+pub enum NameType {
     Default,
     Dns,
     Fqdn,
@@ -349,7 +349,7 @@ fn emit_getopt_style_error(progname: &str, argv: &[OsString]) -> bool {
 }
 
 #[cfg(unix)]
-fn resolve_name_type(default: NameType, argv: &[OsString]) -> NameType {
+pub fn resolve_name_type(default: NameType, argv: &[OsString]) -> NameType {
     let mut name_type = default;
     let mut i = 1usize;
 
@@ -414,7 +414,7 @@ fn resolve_name_type(default: NameType, argv: &[OsString]) -> NameType {
     name_type
 }
 
-fn hostname_app(name: &'static str) -> Command {
+pub fn hostname_app(name: &'static str) -> Command {
     let command_version = crate_version!();
     Command::new(name)
         .about(t!("hostname.about"))
@@ -733,7 +733,7 @@ fn gai_error(code: i32) -> String {
         .into_owned()
 }
 
-fn show_all_ifaddrs(progname: &str, as_ips: bool) -> CTResult<()> {
+fn show_all_ifaddrs_values(progname: &str, as_ips: bool) -> CTResult<Vec<String>> {
     let flags = if as_ips {
         libc::NI_NUMERICHOST
     } else {
@@ -747,6 +747,8 @@ fn show_all_ifaddrs(progname: &str, as_ips: bool) -> CTResult<()> {
             return print_io_error(progname, &io_err);
         }
     };
+
+    let mut values = Vec::new();
 
     for iface in ifaddrs {
         let Some(addr) = iface.address else {
@@ -803,14 +805,13 @@ fn show_all_ifaddrs(progname: &str, as_ips: bool) -> CTResult<()> {
         }
 
         let value = unsafe { CStr::from_ptr(host.as_ptr()) }.to_string_lossy();
-        print!("{value} ");
+        values.push(value.into_owned());
     }
 
-    println!();
-    Ok(())
+    Ok(values)
 }
 
-fn show_resolved_name(progname: &str, name_type: NameType) -> CTResult<()> {
+fn show_resolved_name_value(progname: &str, name_type: NameType) -> CTResult<String> {
     let host = local_host_name(progname)?;
     let host_c = c_string(&host, progname)?;
 
@@ -845,7 +846,7 @@ fn show_resolved_name(progname: &str, name_type: NameType) -> CTResult<()> {
     let _guard = AddrInfoGuard(res);
 
     if res.is_null() {
-        return Ok(());
+        return Ok(String::new());
     }
 
     let canon = unsafe {
@@ -883,18 +884,13 @@ fn show_resolved_name(progname: &str, name_type: NameType) -> CTResult<()> {
                     .copied()
                     .filter(|name| *name != host)
                     .collect();
-                if !aliases.is_empty() {
-                    print!("{}", aliases.join(" "));
-                }
-                println!();
-                return Ok(());
+                return Ok(aliases.join(" "));
             }
 
-            println!();
-            Ok(())
+            Ok(String::new())
         }
         NameType::Ip => {
-            let mut first = true;
+            let mut values = Vec::new();
             let mut cur = res;
             while !cur.is_null() {
                 let mut buf = [0 as c_char; 46];
@@ -920,60 +916,48 @@ fn show_resolved_name(progname: &str, name_type: NameType) -> CTResult<()> {
                     );
                     return exit_with_code(1);
                 }
-                if !first {
-                    print!(" ");
-                }
-                first = false;
                 let value = unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy();
-                print!("{value}");
+                values.push(value.into_owned());
                 cur = unsafe { (*cur).ai_next };
             }
-            println!();
-            Ok(())
+            Ok(values.join(" "))
         }
         NameType::Dns => {
             if let Some(pos) = canon.find('.') {
-                println!("{}", &canon[pos + 1..]);
+                Ok(canon[pos + 1..].to_string())
+            } else {
+                Ok(String::new())
             }
-            Ok(())
         }
-        NameType::Fqdn => {
-            println!("{canon}");
-            Ok(())
+        NameType::Fqdn => Ok(canon),
+        _ => Ok(String::new()),
+    }
+}
+
+pub fn hostname_text_for_name_type(progname: &str, name_type: NameType) -> CTResult<String> {
+    match name_type {
+        NameType::Default => local_host_name(progname),
+        NameType::Short => {
+            let host = local_host_name(progname)?;
+            if let Some(pos) = host.find('.') {
+                Ok(host[..pos].to_string())
+            } else {
+                Ok(host)
+            }
         }
-        _ => Ok(()),
+        NameType::Nis => local_domain_name(progname),
+        NameType::NisDef => local_nis_domain_name(progname),
+        NameType::AllIps => Ok(show_all_ifaddrs_values(progname, true)?.join(" ")),
+        NameType::AllFqdns => Ok(show_all_ifaddrs_values(progname, false)?.join(" ")),
+        NameType::Alias | NameType::Ip | NameType::Dns | NameType::Fqdn => {
+            show_resolved_name_value(progname, name_type)
+        }
     }
 }
 
 fn show_name(progname: &str, name_type: NameType) -> CTResult<()> {
-    match name_type {
-        NameType::Default => {
-            println!("{}", local_host_name(progname)?);
-            Ok(())
-        }
-        NameType::Short => {
-            let host = local_host_name(progname)?;
-            if let Some(pos) = host.find('.') {
-                println!("{}", &host[..pos]);
-            } else {
-                println!("{host}");
-            }
-            Ok(())
-        }
-        NameType::Nis => {
-            println!("{}", local_domain_name(progname)?);
-            Ok(())
-        }
-        NameType::NisDef => {
-            println!("{}", local_nis_domain_name(progname)?);
-            Ok(())
-        }
-        NameType::AllIps => show_all_ifaddrs(progname, true),
-        NameType::AllFqdns => show_all_ifaddrs(progname, false),
-        NameType::Alias | NameType::Ip | NameType::Dns | NameType::Fqdn => {
-            show_resolved_name(progname, name_type)
-        }
-    }
+    println!("{}", hostname_text_for_name_type(progname, name_type)?);
+    Ok(())
 }
 
 fn read_name_from_file(progname: &str, path: &str, boot: bool) -> CTResult<Option<String>> {

@@ -1,0 +1,23 @@
+[package]
+name = "cmd_stty"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Structured data command for stty"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ct_stty = { package = "ct_stty", path = "../../commands/stty" }
+
+[dev-dependencies]

@@ -1,0 +1,18 @@
+[package]
+name = "cmd_printenv"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Phase A native printenv command"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[dependencies]
+ct_printenv = { path = "../../commands/printenv" }
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }

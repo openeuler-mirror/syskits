@@ -1,0 +1,13 @@
+[package]
+name = "cmd_where"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "DataCommand: where — filter records by field comparison"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }

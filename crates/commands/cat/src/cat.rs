@@ -12,14 +12,14 @@
 extern crate rust_i18n;
 use clap::Arg;
 use clap::ArgAction;
+use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_fs::CtFileInformation;
-use ctcore::ct_show_error;
 use rust_i18n::t;
 use std::ffi::OsString;
 use std::fs::File;
@@ -72,7 +72,7 @@ enum CatError {
 
 type CatResult<T> = Result<T, CatError>;
 
-#[derive(PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CatNumberingMode {
     None,
     NonEmpty,
@@ -132,6 +132,31 @@ struct CatOutputState {
     one_blank_kept: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatRow {
+    pub row_index: usize,
+    pub line: String,
+    pub is_blank: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatSemantic {
+    pub number_mode: String,
+    pub squeeze_blank: bool,
+    pub show_tabs: bool,
+    pub show_ends: bool,
+    pub show_non_print: bool,
+    pub rows: Vec<CatRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct CatRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
+}
+
 #[cfg(unix)]
 trait CatFdReadable: Read + AsRawFd {}
 #[cfg(not(unix))]
@@ -185,53 +210,7 @@ pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args)?;
-
-    let cat_num_mode = if args_match.get_flag(opt_flags::CAT_NUMBER_NO_NBLANK) {
-        CatNumberingMode::NonEmpty
-    } else if args_match.get_flag(opt_flags::CAT_NUMBER) {
-        CatNumberingMode::All
-    } else {
-        CatNumberingMode::None
-    };
-
-    let cat_show_non_print = [
-        opt_flags::CAT_SHOW_ALL.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_ENDS.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_TABS.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING.to_owned(),
-    ]
-    .iter()
-    .any(|v| args_match.get_flag(v));
-
-    let cat_show_ends = [
-        opt_flags::CAT_SHOW_ENDS.to_owned(),
-        opt_flags::CAT_SHOW_ALL.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_ENDS.to_owned(),
-    ]
-    .iter()
-    .any(|v| args_match.get_flag(v));
-
-    let cat_show_tabs = [
-        opt_flags::CAT_SHOW_ALL.to_owned(),
-        opt_flags::CAT_SHOW_TABS.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_TABS.to_owned(),
-    ]
-    .iter()
-    .any(|v| args_match.get_flag(v));
-
-    let cat_squeeze_blank_status = args_match.get_flag(opt_flags::CAT_SQUEEZE_BLANK);
-    let cat_files: Vec<String> = match args_match.get_many::<String>(opt_flags::CAT_FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    let options = CatOutputOptions {
-        show_ends: cat_show_ends,
-        num_mode: cat_num_mode,
-        show_non_print: cat_show_non_print,
-        show_tabs: cat_show_tabs,
-        squeeze_blank: cat_squeeze_blank_status,
-    };
+    let (options, cat_files) = cat_options_from_matches(&args_match);
     cat_files_info(&cat_files, &options)
 }
 
@@ -321,6 +300,72 @@ fn args_init() -> Vec<Arg> {
     args
 }
 
+fn cat_numbering_mode(args_match: &ArgMatches) -> CatNumberingMode {
+    if args_match.get_flag(opt_flags::CAT_NUMBER_NO_NBLANK) {
+        CatNumberingMode::NonEmpty
+    } else if args_match.get_flag(opt_flags::CAT_NUMBER) {
+        CatNumberingMode::All
+    } else {
+        CatNumberingMode::None
+    }
+}
+
+fn cat_show_non_print(args_match: &ArgMatches) -> bool {
+    [
+        opt_flags::CAT_SHOW_ALL.to_owned(),
+        opt_flags::CAT_SHOW_NON_PRINTING_ENDS.to_owned(),
+        opt_flags::CAT_SHOW_NON_PRINTING_TABS.to_owned(),
+        opt_flags::CAT_SHOW_NON_PRINTING.to_owned(),
+    ]
+    .iter()
+    .any(|v| args_match.get_flag(v))
+}
+
+fn cat_show_ends(args_match: &ArgMatches) -> bool {
+    [
+        opt_flags::CAT_SHOW_ENDS.to_owned(),
+        opt_flags::CAT_SHOW_ALL.to_owned(),
+        opt_flags::CAT_SHOW_NON_PRINTING_ENDS.to_owned(),
+    ]
+    .iter()
+    .any(|v| args_match.get_flag(v))
+}
+
+fn cat_show_tabs(args_match: &ArgMatches) -> bool {
+    [
+        opt_flags::CAT_SHOW_ALL.to_owned(),
+        opt_flags::CAT_SHOW_TABS.to_owned(),
+        opt_flags::CAT_SHOW_NON_PRINTING_TABS.to_owned(),
+    ]
+    .iter()
+    .any(|v| args_match.get_flag(v))
+}
+
+fn cat_options_from_matches(args_match: &ArgMatches) -> (CatOutputOptions, Vec<String>) {
+    let options = CatOutputOptions {
+        show_ends: cat_show_ends(args_match),
+        num_mode: cat_numbering_mode(args_match),
+        show_non_print: cat_show_non_print(args_match),
+        show_tabs: cat_show_tabs(args_match),
+        squeeze_blank: args_match.get_flag(opt_flags::CAT_SQUEEZE_BLANK),
+    };
+
+    let files = match args_match.get_many::<String>(opt_flags::CAT_FILE) {
+        Some(v) => v.cloned().collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    (options, files)
+}
+
+fn cat_numbering_mode_name(mode: CatNumberingMode) -> &'static str {
+    match mode {
+        CatNumberingMode::None => "none",
+        CatNumberingMode::NonEmpty => "nonempty",
+        CatNumberingMode::All => "all",
+    }
+}
+
 fn cat_handle<R: CatFdReadable>(
     input_handle: &mut CatInputHandle<R>,
     output_options: &CatOutputOptions,
@@ -330,6 +375,19 @@ fn cat_handle<R: CatFdReadable>(
         cat_write_fast(input_handle)
     } else {
         cat_write_lines(input_handle, output_options, output_state)
+    }
+}
+
+fn cat_handle_to_writer<R: CatFdReadable, W: Write>(
+    input_handle: &mut CatInputHandle<R>,
+    output_options: &CatOutputOptions,
+    output_state: &mut CatOutputState,
+    cat_writer: &mut W,
+) -> CatResult<()> {
+    if output_options.cat_can_write_fast() {
+        cat_write_fast_to_writer(input_handle, cat_writer)
+    } else {
+        cat_write_lines_to_writer(input_handle, output_options, output_state, cat_writer)
     }
 }
 
@@ -447,6 +505,151 @@ fn cat_path(
     }
 }
 
+fn cat_path_to_writer<W: Write>(
+    input_path: &str,
+    output_options: &CatOutputOptions,
+    output_state: &mut CatOutputState,
+    out_info: Option<&CtFileInformation>,
+    cat_writer: &mut W,
+) -> CatResult<()> {
+    match cat_get_input_type(input_path)? {
+        CatInputType::StdIn => {
+            let stdin = io::stdin();
+
+            if let Some(out_info) = out_info {
+                if let Ok(stdin_info) = CtFileInformation::from_file(&stdin) {
+                    if stdin_info == *out_info {
+                        use std::os::unix::io::AsRawFd;
+
+                        let input_fd = stdin.as_raw_fd();
+                        let stdout_fd = std::io::stdout().as_raw_fd();
+                        let input_pos = unsafe { libc::lseek(input_fd, 0, libc::SEEK_CUR) };
+
+                        if input_pos >= 0 {
+                            let out_flags = unsafe { libc::fcntl(stdout_fd, libc::F_GETFL) };
+                            let whence = if out_flags >= 0 && (out_flags & libc::O_APPEND) != 0 {
+                                libc::SEEK_END
+                            } else {
+                                libc::SEEK_CUR
+                            };
+                            let output_pos = unsafe { libc::lseek(stdout_fd, 0, whence) };
+
+                            if input_pos < output_pos {
+                                return Err(CatError::OutputIsInput);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let mut handle = CatInputHandle {
+                reader: stdin,
+                is_interactive: std::io::stdin().is_terminal(),
+            };
+            cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
+        }
+        CatInputType::Directory => Err(CatError::IsDirectory),
+        #[cfg(unix)]
+        CatInputType::Socket => {
+            let socket = UnixStream::connect(input_path)?;
+            socket.shutdown(Shutdown::Write)?;
+            let mut handle = CatInputHandle {
+                reader: socket,
+                is_interactive: false,
+            };
+            cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
+        }
+        _ => {
+            let file = File::open(input_path)?;
+
+            if let Some(out_info) = out_info {
+                if CtFileInformation::from_file(&file).ok().as_ref() == Some(out_info) {
+                    use std::os::unix::io::AsRawFd;
+
+                    let input_fd = file.as_raw_fd();
+                    let stdout_fd = std::io::stdout().as_raw_fd();
+                    let input_pos = unsafe { libc::lseek(input_fd, 0, libc::SEEK_CUR) };
+
+                    if input_pos >= 0 {
+                        let out_flags = unsafe { libc::fcntl(stdout_fd, libc::F_GETFL) };
+                        let whence = if out_flags >= 0 && (out_flags & libc::O_APPEND) != 0 {
+                            libc::SEEK_END
+                        } else {
+                            libc::SEEK_CUR
+                        };
+                        let output_pos = unsafe { libc::lseek(stdout_fd, 0, whence) };
+
+                        if input_pos < output_pos {
+                            return Err(CatError::OutputIsInput);
+                        }
+                    }
+                }
+            }
+
+            let mut handle = CatInputHandle {
+                reader: file,
+                is_interactive: false,
+            };
+            cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
+        }
+    }
+}
+
+fn render_cat_file_error(file_path: &str, err: &CatError) -> String {
+    match err {
+        CatError::OutputIsInput => {
+            format!(
+                "cat: {}: input file is output file\n",
+                file_path.maybe_quote()
+            )
+        }
+        CatError::Io(io_err) => format!(
+            "cat: {}: {}\n",
+            file_path.maybe_quote(),
+            strip_errno(io_err)
+        ),
+        other => format!("cat: {}: {}\n", file_path.maybe_quote(), other),
+    }
+}
+
+fn cat_files_to_writer<W: Write>(
+    input_files: &[String],
+    output_options: &CatOutputOptions,
+    cat_writer: &mut W,
+) -> CatRunOutcome {
+    let output_info = CtFileInformation::from_file(&std::io::stdout()).ok();
+    let mut output_state = CatOutputState {
+        line_number: 1,
+        at_line_start: true,
+        skipped_carriage_return: false,
+        one_blank_kept: false,
+    };
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    for file_path in input_files {
+        if let Err(err) = cat_path_to_writer(
+            file_path,
+            output_options,
+            &mut output_state,
+            output_info.as_ref(),
+            cat_writer,
+        ) {
+            exit_code = 1;
+            stderr_text.push_str(&render_cat_file_error(file_path, &err));
+        }
+    }
+
+    if output_state.skipped_carriage_return {
+        let _ = cat_writer.write_all(b"\r");
+    }
+
+    CatRunOutcome {
+        stderr_text,
+        exit_code,
+    }
+}
+
 /**
  * 合并文件信息。
  *
@@ -454,20 +657,15 @@ fn cat_path(
  * 它处理各种输出选项，并在遇到错误时收集错误信息，最后返回成功或失败的结果。
  */
 fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> CTResult<()> {
-    // 尝试从标准输出创建文件信息，可能失败（例如没有权限）。
     let output_info = CtFileInformation::from_file(&std::io::stdout()).ok();
-
-    // 初始化输出状态，用于跟踪输出过程中的状态，如行号、是否在行首等。
     let mut output_state = CatOutputState {
         line_number: 1,
         at_line_start: true,
         skipped_carriage_return: false,
         one_blank_kept: false,
     };
-    // 标记处理过程中是否出现错误
-    let mut had_error = false;
+    let mut stderr_text = String::new();
 
-    // 遍历每个文件路径，尝试合并其内容。
     for file_path in input_files {
         if let Err(err) = cat_path(
             file_path,
@@ -475,33 +673,20 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
             &mut output_state,
             output_info.as_ref(),
         ) {
-            had_error = true;
             set_ct_exit_code(1);
-            match &err {
-                CatError::OutputIsInput => {
-                    ct_show_error!("{}: input file is output file", file_path.maybe_quote());
-                }
-                CatError::Io(io_err) => {
-                    let message = strip_errno(io_err);
-                    ct_show_error!("{}: {}", file_path.maybe_quote(), message);
-                }
-                other => {
-                    ct_show_error!("{}: {}", file_path.maybe_quote(), other);
-                }
-            }
+            stderr_text.push_str(&render_cat_file_error(file_path, &err));
         }
     }
 
-    // 如果在处理过程中遇到回车符而没有紧接着输出，这里输出回车，以确保输出位置正确。
     if output_state.skipped_carriage_return {
         print!("\r");
     }
 
-    if had_error {
-        // 返回空消息，避免重复打印已输出的错误细节
-        Err(ctcore::ct_error::CtSimpleError::new(1, String::new()))
-    } else {
+    if stderr_text.is_empty() {
         Ok(())
+    } else {
+        eprint!("{stderr_text}");
+        Err(CtSimpleError::new(1, String::new()))
     }
 }
 
@@ -561,8 +746,13 @@ fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> Cat
             return Ok(());
         }
     }
-    // 如果当前运行环境不是Linux或Android系统，或者splice()系统调用执行失败，
-    // 我们将回退到使用较慢的写入方式。
+    cat_write_fast_to_writer(input_handle, &mut cat_stdout_lock)
+}
+
+fn cat_write_fast_to_writer<R: CatFdReadable, W: Write>(
+    input_handle: &mut CatInputHandle<R>,
+    cat_writer: &mut W,
+) -> CatResult<()> {
     let mut buffer = [0; 1024 * 64];
     loop {
         let n = match input_handle.reader.read(&mut buffer) {
@@ -573,7 +763,7 @@ fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> Cat
         if n == 0 {
             break;
         }
-        cat_stdout_lock.write_all(&buffer[..n])?;
+        cat_writer.write_all(&buffer[..n])?;
     }
     Ok(())
 }
@@ -585,10 +775,23 @@ fn cat_write_lines<R: CatFdReadable>(
     output_options: &CatOutputOptions,
     output_state: &mut CatOutputState,
 ) -> CatResult<()> {
-    let mut input_buffer = [0; 1024 * 31];
     let stdout_info = io::stdout();
     let mut stdout_writer = stdout_info.lock();
+    cat_write_lines_to_writer(
+        input_handle,
+        output_options,
+        output_state,
+        &mut stdout_writer,
+    )
+}
 
+fn cat_write_lines_to_writer<R: CatFdReadable, W: Write>(
+    input_handle: &mut CatInputHandle<R>,
+    output_options: &CatOutputOptions,
+    output_state: &mut CatOutputState,
+    mut stdout_writer: &mut W,
+) -> CatResult<()> {
+    let mut input_buffer = [0; 1024 * 31];
     loop {
         let n = match input_handle.reader.read(&mut input_buffer) {
             Ok(n) => n,
@@ -856,6 +1059,50 @@ fn cat_write_end_of_line<W: Write>(
         cat_writer.flush()?;
     }
     Ok(())
+}
+
+fn cat_rows_from_output(output: &str) -> Vec<CatRow> {
+    output
+        .split_inclusive('\n')
+        .enumerate()
+        .map(|(index, segment)| {
+            let line = segment.strip_suffix('\n').unwrap_or(segment).to_string();
+            CatRow {
+                row_index: index + 1,
+                is_blank: line.is_empty(),
+                line,
+            }
+        })
+        .collect()
+}
+
+fn cat_semantic_from_invocation(
+    input_files: &[String],
+    output_options: &CatOutputOptions,
+) -> CatSemantic {
+    let mut buffer = Vec::new();
+    let outcome = cat_files_to_writer(input_files, output_options, &mut buffer);
+    let classic_text = String::from_utf8_lossy(&buffer).into_owned();
+
+    CatSemantic {
+        number_mode: cat_numbering_mode_name(output_options.num_mode).into(),
+        squeeze_blank: output_options.squeeze_blank,
+        show_tabs: output_options.show_tabs,
+        show_ends: output_options.show_ends,
+        show_non_print: output_options.show_non_print,
+        rows: cat_rows_from_output(&classic_text),
+        classic_text,
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    }
+}
+
+pub fn cat_native_semantic(args: impl ctcore::Args) -> CTResult<CatSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args_match = ct_app().try_get_matches_from(args)?;
+    let (options, files) = cat_options_from_matches(&args_match);
+    Ok(cat_semantic_from_invocation(&files, &options))
 }
 
 #[derive(Default)]
@@ -2112,6 +2359,75 @@ mod tests {
         temp_dir
             .close()
             .expect("Failed to remove temporary directory");
+    }
+
+    mod native_semantic_tests {
+        use super::{CatRow, cat_native_semantic};
+        use std::ffi::OsString;
+        use tempfile::tempdir;
+
+        #[test]
+        fn test_cat_native_semantic_collects_rows_and_metadata() {
+            let temp_dir = tempdir().expect("tempdir");
+            let path = temp_dir.path().join("cat-semantic.txt");
+            std::fs::write(&path, "alpha\tbeta\n\ngamma\n").expect("write cat semantic fixture");
+
+            let semantic = cat_native_semantic(
+                [
+                    OsString::from("cat"),
+                    OsString::from(path.display().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.number_mode, "none");
+            assert!(!semantic.squeeze_blank);
+            assert!(!semantic.show_tabs);
+            assert_eq!(
+                semantic.rows,
+                vec![
+                    CatRow {
+                        row_index: 1,
+                        line: "alpha\tbeta".into(),
+                        is_blank: false,
+                    },
+                    CatRow {
+                        row_index: 2,
+                        line: String::new(),
+                        is_blank: true,
+                    },
+                    CatRow {
+                        row_index: 3,
+                        line: "gamma".into(),
+                        is_blank: false,
+                    },
+                ]
+            );
+            assert_eq!(semantic.classic_text, "alpha\tbeta\n\ngamma\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
+        fn test_cat_native_semantic_preserves_missing_file_error() {
+            let temp_dir = tempdir().expect("tempdir");
+            let missing = temp_dir.path().join("missing.txt");
+
+            let semantic = cat_native_semantic(
+                [
+                    OsString::from("cat"),
+                    OsString::from(missing.display().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert!(semantic.rows.is_empty());
+            assert_eq!(semantic.classic_text, "");
+            assert!(semantic.stderr_text.contains("No such file or directory"));
+            assert_eq!(semantic.exit_code, 1);
+        }
     }
 
     // #[test]

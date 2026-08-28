@@ -45,7 +45,6 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::set_ct_exit_code;
-use ctcore::ct_show_error;
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -87,6 +86,13 @@ enum RemainingMode {
     Plus,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpandTabstopMode {
+    None,
+    Slash,
+    Plus,
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum CharType {
     Backspace,
@@ -99,6 +105,9 @@ struct ExpandState {
     column: usize,
     is_init: bool,
     pending_utf8: Vec<u8>,
+    line_had_tabs: Vec<bool>,
+    current_line_has_tabs: bool,
+    current_line_has_content: bool,
 }
 
 impl Default for ExpandState {
@@ -107,6 +116,9 @@ impl Default for ExpandState {
             column: 0,
             is_init: true,
             pending_utf8: Vec::new(),
+            line_had_tabs: Vec::new(),
+            current_line_has_tabs: false,
+            current_line_has_content: false,
         }
     }
 }
@@ -118,6 +130,31 @@ enum ExpandCharInfo {
         n_bytes: usize,
     },
     Incomplete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandRow {
+    pub row_index: usize,
+    pub line: String,
+    pub had_tabs: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandSemantic {
+    pub tabstop_mode: ExpandTabstopMode,
+    pub tabstops: Vec<usize>,
+    pub initial_only: bool,
+    pub assume_utf8: bool,
+    pub rows: Vec<ExpandRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct ExpandRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
+    line_had_tabs: Vec<bool>,
 }
 
 /// Decide whether the character is either a space or a comma.
@@ -188,6 +225,32 @@ struct ExpandOptions {
 
     /// 确定在超出指定 `tabstops` 的列中的制表符如何展开。
     remaining_mode: RemainingMode,
+}
+
+fn expand_tabstop_mode(remaining_mode: &RemainingMode) -> ExpandTabstopMode {
+    match remaining_mode {
+        RemainingMode::None => ExpandTabstopMode::None,
+        RemainingMode::Slash => ExpandTabstopMode::Slash,
+        RemainingMode::Plus => ExpandTabstopMode::Plus,
+    }
+}
+
+fn finish_expand_line(state: &mut ExpandState) {
+    state.line_had_tabs.push(state.current_line_has_tabs);
+    state.current_line_has_tabs = false;
+    state.current_line_has_content = false;
+}
+
+fn expand_rows_from_output(output: &str, line_had_tabs: &[bool]) -> Vec<ExpandRow> {
+    output
+        .split_terminator('\n')
+        .enumerate()
+        .map(|(index, line)| ExpandRow {
+            row_index: index + 1,
+            line: line.to_string(),
+            had_tabs: line_had_tabs.get(index).copied().unwrap_or(false),
+        })
+        .collect()
 }
 
 impl ExpandOptions {
@@ -596,8 +659,13 @@ fn expand_raw_bytes(
         if byte == b'\n' {
             state.column = 0;
             state.is_init = true;
+            finish_expand_line(state);
         } else {
             state.column = state.column.saturating_add(1);
+            state.current_line_has_content = true;
+            if byte == b'\t' {
+                state.current_line_has_tabs = true;
+            }
             if byte != b' ' {
                 state.is_init = false;
             }
@@ -639,6 +707,8 @@ fn expand_line(
                 // 计算到下一个制表位需要多少空格。
                 let nts = expand_next_tabstop(tabstops, state.column, &opts.remaining_mode);
                 state.column += nts;
+                state.current_line_has_tabs = true;
+                state.current_line_has_content = true;
 
                 // 根据选项扩展制表符为空格或保留制表符。
                 if state.is_init || !opts.iflag {
@@ -668,8 +738,12 @@ fn expand_line(
                 // 如果当前字符不是空格，则标记行首空格处理完成。
                 if byte_is_newline {
                     state.is_init = true;
+                    finish_expand_line(state);
                 } else if buffer[byte] != 0x20 {
                     state.is_init = false;
+                    state.current_line_has_content = true;
+                } else {
+                    state.current_line_has_content = true;
                 }
 
                 output.write_all(&buffer[byte..byte + n_bytes])?;
@@ -689,19 +763,24 @@ fn expand_line(
  * 然后将结果写入标准输出。
  *
  * @param options 一个包含文件列表和扩展设置的结构体引用。
- * @return CTResult<()>，如果成功则返回Ok(())，如果遇到错误则返回Err()。
+ * @return CTResult<ExpandRunOutcome>，如果成功则返回执行结果，如果遇到致命错误则返回Err()。
  */
-fn expand_to_writer<W: Write>(options: &ExpandOptions, output: &mut W) -> CTResult<()> {
+fn expand_to_writer<W: Write>(
+    options: &ExpandOptions,
+    output: &mut W,
+) -> CTResult<ExpandRunOutcome> {
     let tabstops = options.tabstops.as_ref();
     let mut buffer = Vec::new();
     let mut state = ExpandState::default();
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
 
     for file in &options.files {
         if Path::new(file).is_dir() {
-            ct_show_error!("{}: Is a directory", file);
-            set_ct_exit_code(1);
+            stderr_text.push_str(&format!("expand: {file}: Is a directory\n"));
+            exit_code = 1;
             continue;
         }
         match expand_open(file) {
@@ -715,8 +794,8 @@ fn expand_to_writer<W: Write>(options: &ExpandOptions, output: &mut W) -> CTResu
                     let n = match chunk_reader.read_until(b'\n', &mut buffer) {
                         Ok(size) => size,
                         Err(e) => {
-                            ct_show_error!("{}", e);
-                            set_ct_exit_code(1);
+                            stderr_text.push_str(&format!("expand: {e}\n"));
+                            exit_code = 1;
                             break;
                         }
                     };
@@ -746,15 +825,14 @@ fn expand_to_writer<W: Write>(options: &ExpandOptions, output: &mut W) -> CTResu
                         continue;
                     }
 
-                    if let Err(e) = expand_line(&buffer, output, tabstops, options, &mut state) {
-                        return Err(ctcore::ct_error::CtSimpleError::new(1, e.to_string()));
-                    }
+                    expand_line(&buffer, output, tabstops, options, &mut state)
+                        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                     output.flush()?;
                 }
             }
             Err(e) => {
-                ct_show_error!("{}", e);
-                set_ct_exit_code(1);
+                stderr_text.push_str(&format!("expand: {e}\n"));
+                exit_code = 1;
                 continue;
             }
         }
@@ -765,12 +843,52 @@ fn expand_to_writer<W: Write>(options: &ExpandOptions, output: &mut W) -> CTResu
         }
         is_first_file = false;
     }
-    Ok(())
+
+    if state.current_line_has_content {
+        finish_expand_line(&mut state);
+    }
+
+    Ok(ExpandRunOutcome {
+        stderr_text,
+        exit_code,
+        line_had_tabs: state.line_had_tabs,
+    })
 }
 
 fn expand(options: &ExpandOptions) -> CTResult<()> {
     let mut output = BufWriter::new(stdout());
-    expand_to_writer(options, &mut output)
+    let outcome = expand_to_writer(options, &mut output)?;
+    output.flush()?;
+
+    if !outcome.stderr_text.is_empty() {
+        eprint!("{}", outcome.stderr_text);
+    }
+    if outcome.exit_code != 0 {
+        set_ct_exit_code(outcome.exit_code);
+    }
+
+    Ok(())
+}
+
+pub fn expand_native_semantic(args: impl ctcore::Args) -> CTResult<ExpandSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args_match = ct_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let options = ExpandOptions::new(&args_match)?;
+    let mut classic_output = Vec::new();
+    let outcome = expand_to_writer(&options, &mut classic_output)?;
+    let classic_text = String::from_utf8_lossy(&classic_output).into_owned();
+
+    Ok(ExpandSemantic {
+        tabstop_mode: expand_tabstop_mode(&options.remaining_mode),
+        tabstops: options.tabstops.clone(),
+        initial_only: options.iflag,
+        assume_utf8: options.uflag,
+        rows: expand_rows_from_output(&classic_text, &outcome.line_had_tabs),
+        classic_text,
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    })
 }
 
 #[derive(Default)]
@@ -1095,10 +1213,10 @@ mod tests {
     mod tests_expand_functions {
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
-            CharType, DEFAULT_TABSTOP, ExpandCharInfo, ExpandOptions, ExpandParseError,
-            ExpandState, RemainingMode, UTF8_BOM, expand_line, expand_next_char_info,
-            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
-            expand_to_writer,
+            CharType, DEFAULT_TABSTOP, ExpandCharInfo, ExpandOptions, ExpandParseError, ExpandRow,
+            ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_line,
+            expand_native_semantic, expand_next_char_info, expand_next_tabstop, expand_open,
+            expand_shortcuts, expand_tabstops_parse, expand_to_writer,
         };
 
         use crate::is_digit_or_comma;
@@ -1338,7 +1456,13 @@ mod tests {
             expand_line(b"\tX\n", &mut output, &opts.tabstops, &opts, &mut state).unwrap();
 
             assert_eq!(output, b"a  \n   X\n");
-            assert_eq!(state, ExpandState::default());
+            assert_eq!(
+                state,
+                ExpandState {
+                    line_had_tabs: vec![true, true],
+                    ..ExpandState::default()
+                }
+            );
         }
 
         #[test]
@@ -1381,7 +1505,13 @@ mod tests {
             ]
             .concat();
             assert_eq!(output, expected);
-            assert_eq!(state, ExpandState::default());
+            assert_eq!(
+                state,
+                ExpandState {
+                    line_had_tabs: vec![true],
+                    ..ExpandState::default()
+                }
+            );
         }
 
         #[test]
@@ -1409,6 +1539,66 @@ mod tests {
             expand_to_writer(&options, &mut output).unwrap();
 
             assert_eq!(output, b"\xEF\xBB\xBFa       b\nc       d\n");
+        }
+
+        #[test]
+        fn test_expand_native_semantic_collects_rows_and_metadata() {
+            let mut file = tempfile::NamedTempFile::new().unwrap();
+            file.write_all(b"a\tb\n\tc\n").unwrap();
+
+            let semantic = expand_native_semantic(
+                vec![
+                    OsString::from("expand"),
+                    OsString::from("-t"),
+                    OsString::from("4"),
+                    file.path().as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+
+            assert_eq!(semantic.tabstop_mode, ExpandTabstopMode::None);
+            assert_eq!(semantic.tabstops, vec![4]);
+            assert!(!semantic.initial_only);
+            assert!(semantic.assume_utf8);
+            assert_eq!(semantic.classic_text, "a   b\n    c\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(
+                semantic.rows,
+                vec![
+                    ExpandRow {
+                        row_index: 1,
+                        line: "a   b".into(),
+                        had_tabs: true,
+                    },
+                    ExpandRow {
+                        row_index: 2,
+                        line: "    c".into(),
+                        had_tabs: true,
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn test_expand_native_semantic_preserves_directory_error() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let input_dir = temp_dir.path().join("input");
+            std::fs::create_dir(&input_dir).unwrap();
+
+            let semantic = expand_native_semantic(
+                vec![OsString::from("expand"), input_dir.as_os_str().into()].into_iter(),
+            )
+            .unwrap();
+
+            assert!(semantic.rows.is_empty());
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(
+                semantic.stderr_text,
+                format!("expand: {}: Is a directory\n", input_dir.display())
+            );
+            assert_eq!(semantic.exit_code, 1);
         }
     }
 }

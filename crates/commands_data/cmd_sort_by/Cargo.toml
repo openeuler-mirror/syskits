@@ -1,0 +1,13 @@
+[package]
+name = "cmd_sort_by"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "DataCommand: sort-by — sort List<Record> by one or more keys"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }

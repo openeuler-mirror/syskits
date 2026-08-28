@@ -1,0 +1,18 @@
+[package]
+name = "cmd_hostname"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Native hostname data command"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[dependencies]
+ct_hostname = { package = "ct_hostname", path = "../../commands/hostname" }
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }

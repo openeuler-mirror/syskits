@@ -30,7 +30,14 @@ pub mod pwd_flags {
     pub const PWD_PHYSICAL: &str = "physical";
     pub const PWD_ARG_OTHERS: &str = "others";
 }
-fn pwd_physical_path() -> io::Result<PathBuf> {
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PwdMode {
+    Logical,
+    Physical,
+}
+
+pub fn pwd_physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() 是 libc::getcwd() 的一个包装。
 
     // 在 Unix 上，getcwd() 必须返回物理路径：
@@ -48,7 +55,7 @@ fn pwd_physical_path() -> io::Result<PathBuf> {
     }
 }
 
-fn pwd_logical_path() -> io::Result<PathBuf> {
+pub fn pwd_logical_path() -> io::Result<PathBuf> {
     // 如果我们不在 Windows 上，我们按 Unix 方式处理。
     //
     // 典型的类 Unix 内核实际上并不跟踪逻辑工作目录。它们知道进程所在的精确目录，getcwd()
@@ -109,6 +116,23 @@ fn pwd_logical_path() -> io::Result<PathBuf> {
     }
 }
 
+pub fn resolve_pwd_path(mode: PwdMode) -> io::Result<PathBuf> {
+    match mode {
+        PwdMode::Logical => pwd_logical_path(),
+        PwdMode::Physical => pwd_physical_path(),
+    }
+}
+
+fn resolve_pwd_mode(matches: &clap::ArgMatches) -> PwdMode {
+    if matches.get_flag(pwd_flags::PWD_PHYSICAL) {
+        PwdMode::Physical
+    } else if matches.get_flag(pwd_flags::PWD_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+        PwdMode::Logical
+    } else {
+        PwdMode::Physical
+    }
+}
+
 pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -116,14 +140,8 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     // 如果设置了 POSIXLY_CORRECT，我们希望进行逻辑解析。
     // 这在执行 mkdir -p a/b && ln -s a/b c && cd c && pwd 时会产生不同的输出
     // 在这种情况下，我们应该在路径末尾得到 c 而不是 a/b
-    let cwd = if matches.get_flag(pwd_flags::PWD_PHYSICAL) {
-        pwd_physical_path()
-    } else if matches.get_flag(pwd_flags::PWD_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
-        pwd_logical_path()
-    } else {
-        pwd_physical_path()
-    }
-    .map_err_context(|| "failed to get current directory".to_owned())?;
+    let cwd = resolve_pwd_path(resolve_pwd_mode(&matches))
+        .map_err_context(|| "failed to get current directory".to_owned())?;
 
     // \\?\ 是 Windows 在某些情况下给路径加的前缀，包括对它们进行规范化时。
     // 有了正确的扩展特性，我们可以无损地删除它，但我们无损地打印它，所以没有理由麻烦。

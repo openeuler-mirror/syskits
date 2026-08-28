@@ -12,6 +12,7 @@
 extern crate rust_i18n;
 use clap::Arg;
 use clap::ArgAction;
+use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
 use ctcore::Tool;
@@ -31,6 +32,69 @@ pub mod flags {
     pub static NAME: &str = "name";
     pub static SUFFIX: &str = "suffix";
     pub static ZERO: &str = "zero";
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BasenameRow {
+    pub input: String,
+    pub basename: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BasenameSemantic {
+    pub rows: Vec<BasenameRow>,
+    pub classic_text: String,
+}
+
+struct BasenameOptions {
+    line_ending: CtLineEnding,
+    names: Vec<String>,
+    suffix: String,
+}
+
+impl BasenameOptions {
+    fn from_matches(args_match: &ArgMatches) -> CTResult<Self> {
+        let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(flags::ZERO));
+
+        let mut names = args_match
+            .get_many::<String>(flags::NAME)
+            .unwrap_or_default()
+            .cloned()
+            .collect::<Vec<_>>();
+        if names.is_empty() {
+            return Err(CTsageError::new(1, t!("basename.errors.missing_operand")));
+        }
+
+        let paths = args_match.get_one::<String>(flags::SUFFIX).is_some()
+            || args_match.get_flag(flags::MULTIPLE);
+        let suffix = if paths {
+            args_match
+                .get_one::<String>(flags::SUFFIX)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            match names.len() {
+                1 => String::new(),
+                2 => names.pop().unwrap(),
+                _ => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!(
+                            "{} {}",
+                            t!("basename.errors.extra_operand"),
+                            names[2].quote()
+                        ),
+                    ));
+                }
+            }
+        };
+
+        Ok(Self {
+            line_ending,
+            names,
+            suffix,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -57,49 +121,38 @@ pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
     let args = args.collect_lossy();
 
     let args_match = ct_app().try_get_matches_from(args)?;
-
-    let line_ending_info = CtLineEnding::from_zero_flag(args_match.get_flag(flags::ZERO));
-
-    let mut names = args_match
-        .get_many::<String>(flags::NAME)
-        .unwrap_or_default()
-        .collect::<Vec<_>>();
-    if names.is_empty() {
-        return Err(CTsageError::new(1, t!("basename.errors.missing_operand")));
-    }
-    let paths = args_match.get_one::<String>(flags::SUFFIX).is_some()
-        || args_match.get_flag(flags::MULTIPLE);
-    let base_suffix = if paths {
-        args_match
-            .get_one::<String>(flags::SUFFIX)
-            .cloned()
-            .unwrap_or_default()
-    } else {
-        let length = names.len();
-
-        if length == 0 {
-            panic!("already checked");
-        } else if length == 1 {
-            String::default()
-        } else if length == 2 {
-            names.pop().unwrap().clone()
-        } else {
-            return Err(CTsageError::new(
-                1,
-                format!(
-                    "{} {}",
-                    t!("basename.errors.extra_operand"),
-                    names[2].quote()
-                ),
-            ));
-        }
-    };
-
-    for path in names {
-        print!("{}{}", basename(path, &base_suffix), line_ending_info);
-    }
+    let options = BasenameOptions::from_matches(&args_match)?;
+    let semantic = basename_semantic_from_options(&options);
+    print!("{}", semantic.classic_text);
 
     Ok(())
+}
+
+pub fn basename_native_semantic(args: impl ctcore::Args) -> CTResult<BasenameSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let args = args.collect_lossy();
+    let args_match = ct_app().try_get_matches_from(args)?;
+    let options = BasenameOptions::from_matches(&args_match)?;
+    Ok(basename_semantic_from_options(&options))
+}
+
+fn basename_semantic_from_options(options: &BasenameOptions) -> BasenameSemantic {
+    let mut rows = Vec::with_capacity(options.names.len());
+    let mut classic_text = String::new();
+
+    for input in &options.names {
+        let output = basename(input, &options.suffix);
+        classic_text.push_str(&output);
+        classic_text.push_str(&options.line_ending.to_string());
+        rows.push(BasenameRow {
+            input: input.clone(),
+            basename: output,
+        });
+    }
+
+    BasenameSemantic { rows, classic_text }
 }
 
 pub fn ct_app() -> Command {

@@ -1,0 +1,19 @@
+[package]
+name = "cmd_from"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "DataCommand: from — parse input into CtPipelineData (csv/json/yaml/toml/text/jsonl)"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+csv = "1.3"
+toml = "0.8"
+json5 = "0.4"

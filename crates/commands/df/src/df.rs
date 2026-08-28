@@ -77,6 +77,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 /// 控制`df`行为的参数。
 ///
 /// 多数参数用于控制显示哪些行和哪些列。`block_size`用于确定在显示字节数或i节点数时使用的单位。
+#[derive(Clone)]
 struct DfOptions {
     show_local_fs: bool, // 是否显示所有文件系统（包含伪文件系统）。
     pub show_all_fs: bool,
@@ -130,6 +131,52 @@ impl Default for DfOptions {
             ],
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DfRowKind {
+    Filesystem,
+    Total,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DfSemanticField {
+    Source,
+    Fstype,
+    Itotal,
+    Iused,
+    Iavail,
+    Ipcent,
+    Size,
+    Used,
+    Avail,
+    Pcent,
+    File,
+    Target,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DfSemanticRow {
+    pub row_kind: DfRowKind,
+    pub source: Option<String>,
+    pub fstype: Option<String>,
+    pub itotal: Option<u128>,
+    pub iused: Option<u128>,
+    pub iavail: Option<u128>,
+    pub ipcent: Option<u64>,
+    pub size: Option<u64>,
+    pub used: Option<u64>,
+    pub avail: Option<u64>,
+    pub pcent: Option<u64>,
+    pub file: Option<String>,
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DfSemantic {
+    pub rows: Vec<DfSemanticRow>,
+    pub selected_fields: Vec<DfSemanticField>,
+    pub classic_text: String,
 }
 // DfOptionsError定义了在处理df命令选项时可能遇到的各种错误类型。
 #[derive(Debug)]
@@ -570,6 +617,180 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
         }
         Err(err) => Err(CtSimpleError::new(1, format!("{err}"))),
     }
+}
+
+pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&normalize_locale(&lang_code));
+    let args_match = ct_app().try_get_matches_from(args)?;
+
+    #[cfg(windows)]
+    {
+        if args_match.get_flag(DF_OPT_INODES) {
+            println!("{}: doesn't support -i option", ctcore::ct_util_name());
+            return Ok(DfSemantic {
+                rows: Vec::new(),
+                selected_fields: native_selected_fields(&args_match, &DfOptions::default()),
+                classic_text: String::new(),
+            });
+        }
+    }
+
+    let classic_options = DfOptions::from(&args_match).map_err(DfError::OptionsError)?;
+    let selected_fields = native_selected_fields(&args_match, &classic_options);
+    let filesystems = get_filesystem(args_match, &classic_options)?;
+
+    if filesystems.is_empty() {
+        return Ok(DfSemantic {
+            rows: Vec::new(),
+            selected_fields,
+            classic_text: String::new(),
+        });
+    }
+
+    let classic_text = Table::new(&classic_options, filesystems.clone()).to_string();
+    let mut rows = filesystems
+        .iter()
+        .map(filesystem_to_semantic_row)
+        .collect::<Vec<_>>();
+
+    if classic_options.show_total {
+        rows.push(total_semantic_row(&filesystems));
+    }
+
+    Ok(DfSemantic {
+        rows,
+        selected_fields,
+        classic_text,
+    })
+}
+
+fn native_selected_fields(args_match: &ArgMatches, options: &DfOptions) -> Vec<DfSemanticField> {
+    if args_match.value_source(DF_OPT_OUTPUT) == Some(ValueSource::CommandLine)
+        || args_match.get_flag(DF_OPT_INODES)
+        || args_match.get_flag(DF_OPT_PRINT_TYPE)
+    {
+        options
+            .columns
+            .iter()
+            .copied()
+            .map(semantic_field_from_column)
+            .collect()
+    } else {
+        let mut fields = vec![
+            DfSemanticField::Source,
+            DfSemanticField::Fstype,
+            DfSemanticField::Size,
+            DfSemanticField::Used,
+            DfSemanticField::Avail,
+            DfSemanticField::Pcent,
+        ];
+        if options.direct {
+            fields.push(DfSemanticField::File);
+        }
+        fields.push(DfSemanticField::Target);
+        fields
+    }
+}
+
+fn semantic_field_from_column(column: Column) -> DfSemanticField {
+    match column {
+        Column::Source => DfSemanticField::Source,
+        Column::Size => DfSemanticField::Size,
+        Column::Used => DfSemanticField::Used,
+        Column::Avail => DfSemanticField::Avail,
+        Column::Pcent => DfSemanticField::Pcent,
+        Column::Target => DfSemanticField::Target,
+        Column::Itotal => DfSemanticField::Itotal,
+        Column::Iused => DfSemanticField::Iused,
+        Column::Iavail => DfSemanticField::Iavail,
+        Column::Ipcent => DfSemanticField::Ipcent,
+        Column::File => DfSemanticField::File,
+        Column::Fstype => DfSemanticField::Fstype,
+    }
+}
+
+fn filesystem_to_semantic_row(filesystem: &Filesystem) -> DfSemanticRow {
+    let bytes_used_blocks = filesystem
+        .usage
+        .blocks
+        .saturating_sub(filesystem.usage.bfree);
+    let size = filesystem
+        .usage
+        .blocksize
+        .saturating_mul(filesystem.usage.blocks);
+    let used = filesystem.usage.blocksize.saturating_mul(bytes_used_blocks);
+    let avail = filesystem
+        .usage
+        .blocksize
+        .saturating_mul(filesystem.usage.bavail);
+
+    let itotal = u128::from(filesystem.usage.files);
+    let iavail = u128::from(filesystem.usage.ffree);
+    let iused = itotal.saturating_sub(iavail);
+
+    DfSemanticRow {
+        row_kind: DfRowKind::Filesystem,
+        source: Some(filesystem.mount_info.dev_name.clone()),
+        fstype: Some(filesystem.mount_info.fs_type.clone()),
+        itotal: Some(itotal),
+        iused: Some(iused),
+        iavail: Some(iavail),
+        ipcent: percent_ceil(iused, itotal),
+        size: Some(size),
+        used: Some(used),
+        avail: Some(avail),
+        pcent: percent_ceil(u128::from(used), u128::from(used) + u128::from(avail)),
+        file: filesystem.file.clone(),
+        target: Some(filesystem.mount_info.mount_dir.clone()),
+    }
+}
+
+fn total_semantic_row(filesystems: &[Filesystem]) -> DfSemanticRow {
+    let mut size = 0u64;
+    let mut used = 0u64;
+    let mut avail = 0u64;
+    let mut itotal = 0u128;
+    let mut iused = 0u128;
+    let mut iavail = 0u128;
+
+    for filesystem in filesystems {
+        let row = filesystem_to_semantic_row(filesystem);
+        size = size.saturating_add(row.size.unwrap_or(0));
+        used = used.saturating_add(row.used.unwrap_or(0));
+        avail = avail.saturating_add(row.avail.unwrap_or(0));
+        itotal = itotal.saturating_add(row.itotal.unwrap_or(0));
+        iused = iused.saturating_add(row.iused.unwrap_or(0));
+        iavail = iavail.saturating_add(row.iavail.unwrap_or(0));
+    }
+
+    DfSemanticRow {
+        row_kind: DfRowKind::Total,
+        source: Some("total".into()),
+        fstype: Some("-".into()),
+        itotal: Some(itotal),
+        iused: Some(iused),
+        iavail: Some(iavail),
+        ipcent: percent_ceil(iused, itotal),
+        size: Some(size),
+        used: Some(used),
+        avail: Some(avail),
+        pcent: percent_ceil(u128::from(used), u128::from(used) + u128::from(avail)),
+        file: None,
+        target: Some("-".into()),
+    }
+}
+
+fn percent_ceil(numerator: u128, denominator: u128) -> Option<u64> {
+    if denominator == 0 {
+        return None;
+    }
+
+    let percent = (numerator
+        .saturating_mul(100)
+        .saturating_add(denominator - 1))
+        / denominator;
+    Some(percent.min(u128::from(u64::MAX)) as u64)
 }
 
 fn normalize_locale(lang_code: &str) -> String {

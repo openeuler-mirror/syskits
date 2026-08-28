@@ -328,6 +328,7 @@ impl<'a> TableRowFormatter<'a> {
 }
 
 /// A HeaderMode defines what header labels should be shown.
+#[derive(Clone, Copy)]
 pub(crate) enum TableHeaderMode {
     Default,
     // the user used -h or -H

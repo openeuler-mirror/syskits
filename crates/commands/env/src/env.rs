@@ -78,6 +78,20 @@ struct EnvOptions<'a> {
     list_signal_handling: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnvRow {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnvSemantic {
+    pub rows: Vec<EnvRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 fn print_env(line_ending: CtLineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
@@ -729,6 +743,118 @@ fn env_apply_specified_env_vars(options: &EnvOptions<'_>) {
     }
 }
 
+fn env_line_ending_string(line_ending: CtLineEnding) -> String {
+    format!("{line_ending}")
+}
+
+fn env_snapshot_upsert(vars: &mut Vec<(OsString, OsString)>, name: &OsStr, value: &OsStr) {
+    if let Some((_, existing)) = vars.iter_mut().find(|(existing, _)| existing == name) {
+        *existing = value.to_os_string();
+    } else {
+        vars.push((name.to_os_string(), value.to_os_string()));
+    }
+}
+
+fn env_snapshot_remove(vars: &mut Vec<(OsString, OsString)>, name: &OsStr) {
+    vars.retain(|(existing, _)| existing != name);
+}
+
+fn env_snapshot_load_config_file(
+    vars: &mut Vec<(OsString, OsString)>,
+    options: &EnvOptions<'_>,
+) -> CTResult<()> {
+    for &file in &options.files {
+        let config = if file == "-" {
+            let stdin = io::stdin();
+            let mut stdin_locked = stdin.lock();
+            Ini::read_from(&mut stdin_locked)
+        } else {
+            Ini::load_from_file(file)
+        };
+
+        let config =
+            config.map_err(|e| CtSimpleError::new(1, format!("{}: {}", file.quote(), e)))?;
+
+        for (_, prop) in &config {
+            for (key, value) in prop.iter() {
+                env_snapshot_upsert(vars, OsStr::new(key), OsStr::new(value));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn env_collect_snapshot_semantic(options: &EnvOptions<'_>) -> CTResult<EnvSemantic> {
+    if options.running_directory.is_some() {
+        env_apply_change_directory(options)?;
+    }
+
+    if !options.program.is_empty() {
+        return Err(CTsageError::new(
+            125,
+            "data env does not yet support command execution",
+        ));
+    }
+
+    let mut vars = if options.ignore_env {
+        Vec::new()
+    } else {
+        env::vars_os().collect::<Vec<_>>()
+    };
+
+    env_snapshot_load_config_file(&mut vars, options)?;
+
+    for opt_name in &options.unsets {
+        let native_name = NativeStr::new(opt_name);
+        if opt_name.is_empty()
+            || native_name.contains(&'\0').unwrap()
+            || native_name.contains(&'=').unwrap()
+        {
+            return Err(CtSimpleError::new(
+                125,
+                format!("cannot unset {}: Invalid argument", opt_name.quote()),
+            ));
+        }
+        env_snapshot_remove(&mut vars, opt_name);
+    }
+
+    let mut stderr_text = String::new();
+    for (name, val) in &options.sets {
+        if name.is_empty() {
+            stderr_text.push_str(&format!(
+                "env: warning: no name specified for value {}\n",
+                val.quote()
+            ));
+            continue;
+        }
+        env_snapshot_upsert(&mut vars, name, val);
+    }
+
+    let line_ending = env_line_ending_string(options.line_ending);
+    let rows = vars
+        .iter()
+        .map(|(name, value)| EnvRow {
+            name: name.to_string_lossy().into_owned(),
+            value: value.to_string_lossy().into_owned(),
+        })
+        .collect::<Vec<_>>();
+
+    let mut classic_text = String::new();
+    for row in &rows {
+        classic_text.push_str(&row.name);
+        classic_text.push('=');
+        classic_text.push_str(&row.value);
+        classic_text.push_str(&line_ending);
+    }
+
+    Ok(EnvSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code: 0,
+    })
+}
+
 #[derive(Default)]
 pub struct Env;
 impl Tool for Env {
@@ -749,6 +875,15 @@ pub fn env_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     EnvAppData::default().run_env(args)
+}
+
+pub fn env_native_semantic(args: impl ctcore::Args) -> CTResult<EnvSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let mut app_data = EnvAppData::default();
+    let (_source_args, matches) = app_data.parse_arguments(args)?;
+    let options = env_make_options(&matches)?;
+    env_collect_snapshot_semantic(&options)
 }
 
 #[cfg(test)]

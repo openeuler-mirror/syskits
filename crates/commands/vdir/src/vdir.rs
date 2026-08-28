@@ -10,40 +10,103 @@
  */
 
 extern crate rust_i18n;
+use std::cmp::Reverse;
 use std::ffi::OsString;
+use std::fs::{self, FileType, Metadata};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
+#[cfg(unix)]
+use std::sync::Mutex;
+use std::time::UNIX_EPOCH;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use std::path::Path;
 
-use clap::Command;
+use clap::{ArgMatches, Command};
 use sys_locale::get_locale;
 
 use ct_ls::{LsConfig, LsDereference, LsFormat, PathData, ls_flags};
 
 use ctcore::Tool;
+#[cfg(unix)]
+use ctcore::ct_entries;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_fs::display_permissions;
+use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
+use ctcore::ct_version_cmp::ct_version_cmp;
+#[cfg(unix)]
+use once_cell::sync::Lazy;
 
-pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VdirSemanticRow {
+    pub row_index: usize,
+    pub source_path: String,
+    pub path: String,
+    pub name: String,
+    pub file_type: String,
+    pub size: Option<u64>,
+    pub permissions: String,
+    pub hard_links: Option<u64>,
+    pub owner: Option<String>,
+    pub group: Option<String>,
+    pub blocks: Option<u64>,
+    pub modified_unix_seconds: Option<i64>,
+    pub link_target: Option<String>,
+    pub is_dir: bool,
+    pub is_file: bool,
+    pub is_symlink: bool,
+    pub command_line: bool,
+}
 
-    let command = ct_app();
-    let matches = command.get_matches_from(args);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VdirSemantic {
+    pub command: String,
+    pub display_format: String,
+    pub include_hidden: bool,
+    pub almost_all: bool,
+    pub directory_mode: bool,
+    pub recursive: bool,
+    pub paths: Vec<String>,
+    pub rows: Vec<VdirSemanticRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
 
-    let mut default_quoting_style = false;
-    let mut default_format_style = false;
+struct DirectVdirInvocation {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
+}
 
-    // 我们会检查是否给出了格式化或引号样式标志。
-    // 如果没有，我们将使用 dir 默认的格式化和引用样式标志
-    if !matches.contains_id(ls_flags::LS_QUOTING_STYLE)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VdirSemanticSort {
+    None,
+    Name,
+    Size,
+    Time,
+    Version,
+    Extension,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct VdirLongDisplayOptions {
+    show_owner: bool,
+    show_group: bool,
+    numeric_ids: bool,
+}
+
+fn vdir_default_quoting_style(matches: &ArgMatches) -> bool {
+    !matches.contains_id(ls_flags::LS_QUOTING_STYLE)
         && !matches.get_flag(ls_flags::quoting::LS_C)
         && !matches.get_flag(ls_flags::quoting::LS_ESCAPE)
         && !matches.get_flag(ls_flags::quoting::LS_LITERAL)
         && !matches.get_flag(ls_flags::LS_ZERO)
-    {
-        default_quoting_style = true;
-    }
-    if !matches.contains_id(ls_flags::LS_FORMAT)
+}
+
+fn vdir_default_format_style(matches: &ArgMatches) -> bool {
+    !matches.contains_id(ls_flags::LS_FORMAT)
         && !matches.get_flag(ls_flags::format::LS_ACROSS)
         && !matches.get_flag(ls_flags::format::LS_COLUMNS)
         && !matches.get_flag(ls_flags::format::LS_COMMAS)
@@ -53,18 +116,17 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
         && !matches.get_flag(ls_flags::format::LS_LONG_NUMERIC_UID_GID)
         && !matches.get_flag(ls_flags::format::LS_ONE_LINE)
         && !matches.get_flag(ls_flags::LS_ZERO)
-    {
-        default_format_style = true;
-    }
+}
 
-    let mut config = LsConfig::from(&matches)?;
+fn vdir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
+    let mut config = LsConfig::from(matches)?;
 
-    if default_quoting_style {
+    if vdir_default_quoting_style(matches) {
         config.quoting_style = CtQuotingStyle::C {
             quotes: CtQuotes::None,
         };
     }
-    if default_format_style {
+    if vdir_default_format_style(matches) {
         config.format = LsFormat::Long;
         if matches.get_flag(ls_flags::LS_DIRED) {
             config.is_dired = true;
@@ -77,10 +139,463 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
         }
     }
 
-    let paths_list = matches.get_many::<OsString>(ls_flags::LS_PATHS);
-    let paths_from_args: Vec<_> = paths_list
+    Ok(config)
+}
+
+fn vdir_paths_from_matches(matches: &ArgMatches) -> Vec<&Path> {
+    matches
+        .get_many::<OsString>(ls_flags::LS_PATHS)
         .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .unwrap_or_else(|| vec![Path::new(".")])
+}
+
+fn vdir_display_format_name(format: &LsFormat) -> &'static str {
+    match format {
+        LsFormat::Columns => "columns",
+        LsFormat::Long => "long",
+        LsFormat::OneLine => "one-line",
+        LsFormat::Across => "across",
+        LsFormat::Commas => "commas",
+    }
+}
+
+fn run_vdir_direct_process(argv: &[OsString]) -> CTResult<DirectVdirInvocation> {
+    let current_exe = std::env::current_exe()?;
+    let output = ProcessCommand::new(current_exe).args(argv).output()?;
+
+    Ok(DirectVdirInvocation {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.status.code().unwrap_or(1),
+    })
+}
+
+fn vdir_file_type_name(file_type: Option<&FileType>) -> &'static str {
+    let Some(file_type) = file_type else {
+        return "unknown";
+    };
+
+    if file_type.is_dir() {
+        "directory"
+    } else if file_type.is_file() {
+        "file"
+    } else if file_type.is_symlink() {
+        "symlink"
+    } else {
+        "other"
+    }
+}
+
+fn vdir_name_is_hidden(name: &str) -> bool {
+    name.starts_with('.')
+}
+
+fn vdir_include_hidden(matches: &ArgMatches) -> bool {
+    matches.get_flag(ls_flags::files::LS_ALL) || matches.get_flag(ls_flags::LS_F)
+}
+
+fn vdir_is_almost_all(matches: &ArgMatches) -> bool {
+    !vdir_include_hidden(matches) && matches.get_flag(ls_flags::files::LS_ALMOST_ALL)
+}
+
+fn vdir_semantic_sort(matches: &ArgMatches) -> VdirSemanticSort {
+    if let Some(field) = matches.get_one::<String>(ls_flags::LS_SORT) {
+        match field.as_str() {
+            "none" => VdirSemanticSort::None,
+            "name" => VdirSemanticSort::Name,
+            "time" => VdirSemanticSort::Time,
+            "version" => VdirSemanticSort::Version,
+            "extension" => VdirSemanticSort::Extension,
+            "size" => VdirSemanticSort::Size,
+            "width" => VdirSemanticSort::Name,
+            _ => VdirSemanticSort::Name,
+        }
+    } else if matches.get_flag(ls_flags::sort::LS_TIME) {
+        VdirSemanticSort::Time
+    } else if matches.get_flag(ls_flags::sort::LS_SIZE) {
+        VdirSemanticSort::Size
+    } else if matches.get_flag(ls_flags::sort::LS_NONE) || matches.get_flag(ls_flags::LS_F) {
+        VdirSemanticSort::None
+    } else if matches.get_flag(ls_flags::sort::LS_VERSION) {
+        VdirSemanticSort::Version
+    } else if matches.get_flag(ls_flags::sort::LS_EXTENSION) {
+        VdirSemanticSort::Extension
+    } else {
+        VdirSemanticSort::Name
+    }
+}
+
+fn vdir_long_display_options(matches: &ArgMatches) -> VdirLongDisplayOptions {
+    VdirLongDisplayOptions {
+        show_owner: !matches.get_flag(ls_flags::format::LS_LONG_NO_OWNER),
+        show_group: !matches.get_flag(ls_flags::LS_NO_GROUP)
+            && !matches.get_flag(ls_flags::format::LS_LONG_NO_GROUP),
+        numeric_ids: matches.get_flag(ls_flags::format::LS_LONG_NUMERIC_UID_GID),
+    }
+}
+
+fn vdir_should_dereference(config: &LsConfig, command_line: bool, path: &Path) -> bool {
+    match config.dereference {
+        LsDereference::LsAll => true,
+        LsDereference::LsArgs => command_line,
+        LsDereference::LsNone => false,
+        LsDereference::LsDirArgs => {
+            command_line
+                && path
+                    .metadata()
+                    .map(|metadata| metadata.is_dir())
+                    .unwrap_or(false)
+        }
+    }
+}
+
+fn vdir_metadata_for_path(
+    path: &Path,
+    command_line: bool,
+    config: &LsConfig,
+) -> std::io::Result<Metadata> {
+    if vdir_should_dereference(config, command_line, path) {
+        path.metadata()
+    } else {
+        path.symlink_metadata()
+    }
+}
+
+#[cfg(unix)]
+fn cached_uid2usr(uid: u32) -> String {
+    static UID_CACHE: Lazy<Mutex<std::collections::HashMap<u32, String>>> =
+        Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
+
+    let mut cache = UID_CACHE.lock().expect("uid cache");
+    cache
+        .entry(uid)
+        .or_insert_with(|| ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
+        .clone()
+}
+
+#[cfg(target_os = "linux")]
+fn cached_gid2grp(gid: u32) -> String {
+    static GID_CACHE: Lazy<Mutex<std::collections::HashMap<u32, String>>> =
+        Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
+
+    let mut cache = GID_CACHE.lock().expect("gid cache");
+    cache
+        .entry(gid)
+        .or_insert_with(|| ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+        .clone()
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn cached_gid2grp(gid: u32) -> String {
+    gid.to_string()
+}
+
+#[cfg(unix)]
+fn vdir_display_owner(metadata: &Metadata, options: &VdirLongDisplayOptions) -> String {
+    if options.numeric_ids {
+        metadata.uid().to_string()
+    } else {
+        cached_uid2usr(metadata.uid())
+    }
+}
+
+#[cfg(unix)]
+fn vdir_display_group(metadata: &Metadata, options: &VdirLongDisplayOptions) -> String {
+    if options.numeric_ids {
+        metadata.gid().to_string()
+    } else {
+        cached_gid2grp(metadata.gid())
+    }
+}
+
+#[cfg(not(unix))]
+fn vdir_display_owner(_metadata: &Metadata, _options: &VdirLongDisplayOptions) -> String {
+    "somebody".to_string()
+}
+
+#[cfg(not(unix))]
+fn vdir_display_group(_metadata: &Metadata, _options: &VdirLongDisplayOptions) -> String {
+    "somegroup".to_string()
+}
+
+#[cfg(unix)]
+fn vdir_hard_links(metadata: &Metadata) -> Option<u64> {
+    Some(metadata.nlink())
+}
+
+#[cfg(not(unix))]
+fn vdir_hard_links(_metadata: &Metadata) -> Option<u64> {
+    None
+}
+
+#[cfg(unix)]
+fn vdir_blocks(metadata: &Metadata) -> Option<u64> {
+    Some(metadata.blocks())
+}
+
+#[cfg(not(unix))]
+fn vdir_blocks(_metadata: &Metadata) -> Option<u64> {
+    None
+}
+
+fn vdir_modified_unix_seconds(metadata: &Metadata) -> Option<i64> {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
+}
+
+fn vdir_semantic_row(
+    row_index: usize,
+    source_path: &Path,
+    path: PathBuf,
+    name: OsString,
+    command_line: bool,
+    config: &LsConfig,
+    display_options: &VdirLongDisplayOptions,
+) -> VdirSemanticRow {
+    let metadata = vdir_metadata_for_path(&path, command_line, config).ok();
+    let symlink_metadata = path.symlink_metadata().ok();
+    let file_type = metadata.as_ref().map(Metadata::file_type);
+    let is_symlink = symlink_metadata
+        .as_ref()
+        .is_some_and(|metadata| metadata.file_type().is_symlink());
+    let is_dir = file_type.as_ref().is_some_and(FileType::is_dir);
+    let is_file = file_type.as_ref().is_some_and(FileType::is_file);
+
+    VdirSemanticRow {
+        row_index,
+        source_path: source_path.display().to_string(),
+        path: path.display().to_string(),
+        name: name.to_string_lossy().into_owned(),
+        file_type: vdir_file_type_name(file_type.as_ref()).into(),
+        size: metadata.as_ref().map(Metadata::len),
+        permissions: metadata
+            .as_ref()
+            .map(|metadata| display_permissions(metadata, true))
+            .unwrap_or_default(),
+        hard_links: metadata.as_ref().and_then(vdir_hard_links),
+        owner: metadata
+            .as_ref()
+            .filter(|_| display_options.show_owner)
+            .map(|metadata| vdir_display_owner(metadata, display_options)),
+        group: metadata
+            .as_ref()
+            .filter(|_| display_options.show_group)
+            .map(|metadata| vdir_display_group(metadata, display_options)),
+        blocks: metadata.as_ref().and_then(vdir_blocks),
+        modified_unix_seconds: metadata.as_ref().and_then(vdir_modified_unix_seconds),
+        link_target: if is_symlink {
+            fs::read_link(&path)
+                .ok()
+                .map(|target| target.display().to_string())
+        } else {
+            None
+        },
+        is_dir,
+        is_file,
+        is_symlink,
+        command_line,
+    }
+}
+
+fn vdir_collect_semantic_rows_for_path(
+    path: &Path,
+    matches: &ArgMatches,
+    config: &LsConfig,
+    display_options: &VdirLongDisplayOptions,
+) -> Vec<VdirSemanticRow> {
+    let metadata = match vdir_metadata_for_path(path, true, config) {
+        Ok(metadata) => metadata,
+        Err(_) => return Vec::new(),
+    };
+
+    if matches.get_flag(ls_flags::LS_DIRECTORY) || !metadata.file_type().is_dir() {
+        let name = if path == Path::new(".") {
+            OsString::from(".")
+        } else {
+            path.file_name()
+                .map(OsString::from)
+                .unwrap_or_else(|| path.as_os_str().to_os_string())
+        };
+        return vec![vdir_semantic_row(
+            1,
+            path,
+            path.to_path_buf(),
+            name,
+            true,
+            config,
+            display_options,
+        )];
+    }
+
+    let include_hidden = vdir_include_hidden(matches);
+    let mut rows = Vec::new();
+
+    if include_hidden {
+        rows.push(vdir_semantic_row(
+            rows.len() + 1,
+            path,
+            path.to_path_buf(),
+            OsString::from("."),
+            false,
+            config,
+            display_options,
+        ));
+        rows.push(vdir_semantic_row(
+            rows.len() + 1,
+            path,
+            path.join(".."),
+            OsString::from(".."),
+            false,
+            config,
+            display_options,
+        ));
+    }
+
+    if let Ok(read_dir) = fs::read_dir(path) {
+        for entry in read_dir.flatten() {
+            let name = entry.file_name();
+            let name_text = name.to_string_lossy();
+            if !include_hidden && !vdir_is_almost_all(matches) && vdir_name_is_hidden(&name_text) {
+                continue;
+            }
+            rows.push(vdir_semantic_row(
+                rows.len() + 1,
+                path,
+                entry.path(),
+                name,
+                false,
+                config,
+                display_options,
+            ));
+        }
+    }
+
+    match vdir_semantic_sort(matches) {
+        VdirSemanticSort::Name => {
+            rows.sort_by(|a, b| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false));
+        }
+        VdirSemanticSort::Size => {
+            rows.sort_by_key(|row| Reverse(row.size.unwrap_or(0)));
+        }
+        VdirSemanticSort::Time => {
+            rows.sort_by_key(|row| Reverse(row.modified_unix_seconds.unwrap_or(0)));
+        }
+        VdirSemanticSort::Version => {
+            rows.sort_by(|a, b| ct_version_cmp(&a.name, &b.name));
+        }
+        VdirSemanticSort::Extension => {
+            rows.sort_by(|a, b| {
+                Path::new(&a.name)
+                    .extension()
+                    .cmp(&Path::new(&b.name).extension())
+                    .then(a.name.cmp(&b.name))
+            });
+        }
+        VdirSemanticSort::None => {}
+    }
+
+    if matches.get_flag(ls_flags::LS_GROUP_DIRECTORIES_FIRST)
+        && vdir_semantic_sort(matches) != VdirSemanticSort::None
+    {
+        rows.sort_by_key(|row| !row.is_dir);
+    }
+
+    if matches.get_flag(ls_flags::LS_REVERSE) {
+        rows.reverse();
+    }
+
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+
+    rows
+}
+
+fn vdir_collect_semantic_rows(
+    paths: &[&Path],
+    matches: &ArgMatches,
+    config: &LsConfig,
+    display_options: &VdirLongDisplayOptions,
+) -> Vec<VdirSemanticRow> {
+    let mut rows = Vec::new();
+    for path in paths {
+        rows.extend(vdir_collect_semantic_rows_for_path(
+            path,
+            matches,
+            config,
+            display_options,
+        ));
+    }
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+    rows
+}
+
+pub fn vdir_native_semantic(args: impl ctcore::Args) -> CTResult<VdirSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let direct = run_vdir_direct_process(&argv)?;
+    let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
+    let stderr_text = String::from_utf8_lossy(&direct.stderr).into_owned();
+
+    let command = ct_app();
+    let matches = match command.try_get_matches_from(argv) {
+        Ok(matches) => matches,
+        Err(_) => {
+            return Ok(VdirSemantic {
+                command: "vdir".into(),
+                display_format: "unknown".into(),
+                include_hidden: false,
+                almost_all: false,
+                directory_mode: false,
+                recursive: false,
+                paths: Vec::new(),
+                rows: Vec::new(),
+                classic_text,
+                stderr_text,
+                exit_code: direct.exit_code,
+            });
+        }
+    };
+
+    let config = vdir_config_from_matches(&matches)?;
+    let display_options = vdir_long_display_options(&matches);
+    let paths_from_args = vdir_paths_from_matches(&matches);
+    let paths = paths_from_args
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let rows = vdir_collect_semantic_rows(&paths_from_args, &matches, &config, &display_options);
+
+    Ok(VdirSemantic {
+        command: "vdir".into(),
+        display_format: vdir_display_format_name(&config.format).into(),
+        include_hidden: vdir_include_hidden(&matches),
+        almost_all: vdir_is_almost_all(&matches),
+        directory_mode: matches.get_flag(ls_flags::LS_DIRECTORY),
+        recursive: matches.get_flag(ls_flags::LS_RECURSIVE),
+        paths,
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code: direct.exit_code,
+    })
+}
+
+pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let command = ct_app();
+    let matches = command.get_matches_from(args);
+    let config = vdir_config_from_matches(&matches)?;
+    let paths_from_args = vdir_paths_from_matches(&matches);
 
     ct_ls::list(paths_from_args, &config)
 }

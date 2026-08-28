@@ -112,6 +112,85 @@ pub enum StatOutputType {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatRowKind {
+    File,
+    Filesystem,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatSemanticField {
+    Name,
+    QuotedName,
+    Size,
+    Blocks,
+    BlockSizeReported,
+    IoBlock,
+    RawModeHex,
+    FileType,
+    Uid,
+    User,
+    Gid,
+    Group,
+    Device,
+    DeviceHex,
+    DeviceMajor,
+    DeviceMinor,
+    DeviceMajorHex,
+    DeviceMinorHex,
+    DeviceType,
+    DeviceTypeHex,
+    DeviceTypeMajor,
+    DeviceTypeMinor,
+    DeviceTypeMajorHex,
+    DeviceTypeMinorHex,
+    Inode,
+    Links,
+    MountPoint,
+    AccessRightsOctal,
+    AccessRightsHuman,
+    Context,
+    AccessTime,
+    AccessEpoch,
+    ModifyTime,
+    ModifyEpoch,
+    ChangeTime,
+    ChangeEpoch,
+    BirthTime,
+    BirthEpoch,
+    FilesystemIdHex,
+    NameMax,
+    FilesystemTypeHex,
+    FilesystemType,
+    BlockSize,
+    FundamentalBlockSize,
+    TotalBlocks,
+    FreeBlocks,
+    AvailableBlocks,
+    TotalFileNodes,
+    FreeFileNodes,
+    Formatted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatSemanticValue {
+    String(String),
+    Int(i64),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatSemanticRow {
+    pub row_kind: StatRowKind,
+    pub fields: Vec<(StatSemanticField, StatSemanticValue)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatSemantic {
+    pub rows: Vec<StatSemanticRow>,
+    pub selected_fields: Vec<StatSemanticField>,
+    pub classic_text: String,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum StatToken {
     Char(char),
@@ -1189,11 +1268,10 @@ impl Stater {
                 t!("default_format.file_part2_no_dev")
             };
             format!(
-                "{}{}{}{}{}",
+                "{}{}{}{}",
                 t!("default_format.file_part1"),
                 part2,
                 t!("default_format.file_part3"),
-                t!("default_format.file_part_context"),
                 t!("default_format.file_part4"),
             )
         }
@@ -1314,6 +1392,875 @@ pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
     match stater.exec() {
         0 => Ok(()),
         status => Err(status.into()),
+    }
+}
+
+pub fn stat_native_semantic(args: impl ctcore::Args) -> CTResult<StatSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let matches = ct_app()
+        .after_help(rust_i18n::t!(stat_options::STAT_LONG_USAGE))
+        .try_get_matches_from(args)?;
+    let stater = Stater::new(&matches)?;
+    let selected_fields = semantic_selected_fields(&stater, &matches);
+
+    let mut stdin_is_fifo = false;
+    if cfg!(unix)
+        && let Ok(md) = fs::metadata("/dev/stdin")
+    {
+        stdin_is_fifo = md.file_type().is_fifo();
+    }
+
+    let mut rows = Vec::with_capacity(stater.files.len());
+    let mut classic_text = String::new();
+
+    for file in &stater.files {
+        let display_name = file.to_string_lossy().to_string();
+        let resolved = match stater.resolve_file_path(display_name.as_ref(), stdin_is_fifo) {
+            Ok(path) => path,
+            Err(status) => {
+                return Err(CtSimpleError::new(
+                    status,
+                    "using '-' to denote standard input does not work in file system mode",
+                ));
+            }
+        };
+
+        if stater.is_show_fs {
+            #[cfg(unix)]
+            let path = resolved.as_bytes();
+            #[cfg(not(unix))]
+            let path = resolved.to_string_lossy();
+
+            let meta = statfs(path).map_err(|e| {
+                CtSimpleError::new(
+                    1,
+                    format!(
+                        "cannot read file system information for {}: {}",
+                        display_name.quote(),
+                        filesystem_error_description(&e)
+                    ),
+                )
+            })?;
+
+            let rendered =
+                render_filesystem_tokens(&stater, &meta, &stater.default_tokens, &display_name);
+            classic_text.push_str(&rendered);
+            rows.push(build_filesystem_semantic_row(
+                &stater,
+                &meta,
+                &display_name,
+                &selected_fields,
+                &rendered,
+            ));
+        } else {
+            let meta =
+                get_metadata(&resolved, stater.is_follow, stater.cached_mode).map_err(|e| {
+                    CtSimpleError::new(
+                        1,
+                        format!(
+                            "cannot statx {}: {}",
+                            display_name.quote(),
+                            file_error_description(&e)
+                        ),
+                    )
+                })?;
+
+            let tokens = stater.select_tokens(&meta);
+            let rendered = normalize_default_file_classic_text(
+                render_file_tokens(&stater, &meta, tokens, &resolved, &display_name),
+                &stater,
+                &matches,
+            );
+            classic_text.push_str(&rendered);
+            rows.push(build_file_semantic_row(
+                &stater,
+                &meta,
+                &resolved,
+                &display_name,
+                &selected_fields,
+                &rendered,
+            ));
+        }
+    }
+
+    if classic_text.ends_with('\n') {
+        classic_text.pop();
+    }
+
+    Ok(StatSemantic {
+        rows,
+        selected_fields,
+        classic_text,
+    })
+}
+
+fn normalize_default_file_classic_text(
+    rendered: String,
+    stater: &Stater,
+    matches: &ArgMatches,
+) -> String {
+    if stater.is_show_fs || stater.is_from_user || matches.get_flag(stat_options::STAT_TERSE) {
+        return rendered;
+    }
+
+    let unknown_context_line = rust_i18n::t!("default_format.file_part_context").replace("%C", "?");
+    rendered.replacen(&unknown_context_line, "", 1)
+}
+
+fn semantic_selected_fields(stater: &Stater, matches: &ArgMatches) -> Vec<StatSemanticField> {
+    if stater.is_from_user {
+        let mut fields = token_semantic_fields(stater.is_show_fs, &stater.default_tokens);
+        push_unique_field(&mut fields, StatSemanticField::Formatted);
+        return fields;
+    }
+
+    if stater.is_show_fs {
+        if matches.get_flag(stat_options::STAT_TERSE) {
+            terse_filesystem_fields()
+        } else {
+            rich_filesystem_fields()
+        }
+    } else if matches.get_flag(stat_options::STAT_TERSE) {
+        terse_file_fields()
+    } else {
+        rich_file_fields()
+    }
+}
+
+fn rich_file_fields() -> Vec<StatSemanticField> {
+    vec![
+        StatSemanticField::Name,
+        StatSemanticField::QuotedName,
+        StatSemanticField::Size,
+        StatSemanticField::Blocks,
+        StatSemanticField::IoBlock,
+        StatSemanticField::FileType,
+        StatSemanticField::DeviceMajor,
+        StatSemanticField::DeviceMinor,
+        StatSemanticField::Inode,
+        StatSemanticField::Links,
+        StatSemanticField::AccessRightsOctal,
+        StatSemanticField::AccessRightsHuman,
+        StatSemanticField::Uid,
+        StatSemanticField::User,
+        StatSemanticField::Gid,
+        StatSemanticField::Group,
+        StatSemanticField::MountPoint,
+        StatSemanticField::Context,
+        StatSemanticField::AccessTime,
+        StatSemanticField::ModifyTime,
+        StatSemanticField::ChangeTime,
+        StatSemanticField::BirthTime,
+        StatSemanticField::DeviceTypeMajor,
+        StatSemanticField::DeviceTypeMinor,
+    ]
+}
+
+fn terse_file_fields() -> Vec<StatSemanticField> {
+    vec![
+        StatSemanticField::Name,
+        StatSemanticField::Size,
+        StatSemanticField::Blocks,
+        StatSemanticField::RawModeHex,
+        StatSemanticField::Uid,
+        StatSemanticField::Gid,
+        StatSemanticField::DeviceHex,
+        StatSemanticField::Inode,
+        StatSemanticField::Links,
+        StatSemanticField::DeviceTypeMajorHex,
+        StatSemanticField::DeviceTypeMinorHex,
+        StatSemanticField::AccessEpoch,
+        StatSemanticField::ModifyEpoch,
+        StatSemanticField::ChangeEpoch,
+        StatSemanticField::BirthEpoch,
+        StatSemanticField::IoBlock,
+    ]
+}
+
+fn rich_filesystem_fields() -> Vec<StatSemanticField> {
+    vec![
+        StatSemanticField::Name,
+        StatSemanticField::FilesystemIdHex,
+        StatSemanticField::NameMax,
+        StatSemanticField::FilesystemType,
+        StatSemanticField::FilesystemTypeHex,
+        StatSemanticField::BlockSize,
+        StatSemanticField::FundamentalBlockSize,
+        StatSemanticField::TotalBlocks,
+        StatSemanticField::FreeBlocks,
+        StatSemanticField::AvailableBlocks,
+        StatSemanticField::TotalFileNodes,
+        StatSemanticField::FreeFileNodes,
+    ]
+}
+
+fn terse_filesystem_fields() -> Vec<StatSemanticField> {
+    vec![
+        StatSemanticField::Name,
+        StatSemanticField::FilesystemIdHex,
+        StatSemanticField::NameMax,
+        StatSemanticField::FilesystemTypeHex,
+        StatSemanticField::BlockSize,
+        StatSemanticField::FundamentalBlockSize,
+        StatSemanticField::TotalBlocks,
+        StatSemanticField::FreeBlocks,
+        StatSemanticField::AvailableBlocks,
+        StatSemanticField::TotalFileNodes,
+        StatSemanticField::FreeFileNodes,
+    ]
+}
+
+fn token_semantic_fields(is_show_fs: bool, tokens: &[StatToken]) -> Vec<StatSemanticField> {
+    let mut fields = Vec::new();
+
+    for token in tokens {
+        let StatToken::Directive {
+            modifier, format, ..
+        } = token
+        else {
+            continue;
+        };
+
+        let mapped = if is_show_fs {
+            filesystem_format_field(*format)
+        } else {
+            file_format_field(*format, *modifier)
+        };
+
+        if let Some(field) = mapped {
+            push_unique_field(&mut fields, field);
+        }
+    }
+
+    fields
+}
+
+fn filesystem_format_field(format: char) -> Option<StatSemanticField> {
+    match format {
+        'a' => Some(StatSemanticField::AvailableBlocks),
+        'b' => Some(StatSemanticField::TotalBlocks),
+        'c' => Some(StatSemanticField::TotalFileNodes),
+        'd' => Some(StatSemanticField::FreeFileNodes),
+        'f' => Some(StatSemanticField::FreeBlocks),
+        'i' => Some(StatSemanticField::FilesystemIdHex),
+        'l' => Some(StatSemanticField::NameMax),
+        'n' => Some(StatSemanticField::Name),
+        's' => Some(StatSemanticField::BlockSize),
+        'S' => Some(StatSemanticField::FundamentalBlockSize),
+        't' => Some(StatSemanticField::FilesystemTypeHex),
+        'T' => Some(StatSemanticField::FilesystemType),
+        _ => None,
+    }
+}
+
+fn file_format_field(format: char, modifier: Option<char>) -> Option<StatSemanticField> {
+    match (format, modifier) {
+        ('a', _) => Some(StatSemanticField::AccessRightsOctal),
+        ('A', _) => Some(StatSemanticField::AccessRightsHuman),
+        ('b', _) => Some(StatSemanticField::Blocks),
+        ('B', _) => Some(StatSemanticField::BlockSizeReported),
+        ('C', _) => Some(StatSemanticField::Context),
+        ('d', Some('H')) => Some(StatSemanticField::DeviceMajor),
+        ('d', Some('L')) => Some(StatSemanticField::DeviceMinor),
+        ('d', _) => Some(StatSemanticField::Device),
+        ('D', Some('H')) => Some(StatSemanticField::DeviceMajorHex),
+        ('D', Some('L')) => Some(StatSemanticField::DeviceMinorHex),
+        ('D', _) => Some(StatSemanticField::DeviceHex),
+        ('f', _) => Some(StatSemanticField::RawModeHex),
+        ('F', _) => Some(StatSemanticField::FileType),
+        ('g', _) => Some(StatSemanticField::Gid),
+        ('G', _) => Some(StatSemanticField::Group),
+        ('h', _) => Some(StatSemanticField::Links),
+        ('i', _) => Some(StatSemanticField::Inode),
+        ('m', _) => Some(StatSemanticField::MountPoint),
+        ('n', _) => Some(StatSemanticField::Name),
+        ('N', _) => Some(StatSemanticField::QuotedName),
+        ('o', _) => Some(StatSemanticField::IoBlock),
+        ('r', Some('H')) => Some(StatSemanticField::DeviceTypeMajor),
+        ('r', Some('L')) => Some(StatSemanticField::DeviceTypeMinor),
+        ('r', _) => Some(StatSemanticField::DeviceType),
+        ('R', Some('H')) => Some(StatSemanticField::DeviceTypeMajorHex),
+        ('R', Some('L')) => Some(StatSemanticField::DeviceTypeMinorHex),
+        ('R', _) => Some(StatSemanticField::DeviceTypeHex),
+        ('s', _) => Some(StatSemanticField::Size),
+        ('t', _) => Some(StatSemanticField::DeviceTypeMajorHex),
+        ('T', _) => Some(StatSemanticField::DeviceTypeMinorHex),
+        ('u', _) => Some(StatSemanticField::Uid),
+        ('U', _) => Some(StatSemanticField::User),
+        ('w', _) => Some(StatSemanticField::BirthTime),
+        ('W', _) => Some(StatSemanticField::BirthEpoch),
+        ('x', _) => Some(StatSemanticField::AccessTime),
+        ('X', _) => Some(StatSemanticField::AccessEpoch),
+        ('y', _) => Some(StatSemanticField::ModifyTime),
+        ('Y', _) => Some(StatSemanticField::ModifyEpoch),
+        ('z', _) => Some(StatSemanticField::ChangeTime),
+        ('Z', _) => Some(StatSemanticField::ChangeEpoch),
+        _ => None,
+    }
+}
+
+fn push_unique_field(fields: &mut Vec<StatSemanticField>, field: StatSemanticField) {
+    if !fields.contains(&field) {
+        fields.push(field);
+    }
+}
+
+fn push_unique_value(
+    fields: &mut Vec<(StatSemanticField, StatSemanticValue)>,
+    field: StatSemanticField,
+    value: StatSemanticValue,
+) {
+    if !fields.iter().any(|(existing, _)| *existing == field) {
+        fields.push((field, value));
+    }
+}
+
+fn build_file_semantic_row(
+    stater: &Stater,
+    meta: &fs::Metadata,
+    file: &OsStr,
+    display_name: &str,
+    selected_fields: &[StatSemanticField],
+    rendered: &str,
+) -> StatSemanticRow {
+    let mut fields = Vec::new();
+
+    for field in selected_fields {
+        let value = match field {
+            StatSemanticField::Formatted => Some(StatSemanticValue::String(rendered.to_string())),
+            _ => file_field_value(stater, meta, file, display_name, *field),
+        };
+
+        if let Some(value) = value {
+            push_unique_value(&mut fields, *field, value);
+        }
+    }
+
+    StatSemanticRow {
+        row_kind: StatRowKind::File,
+        fields,
+    }
+}
+
+fn build_filesystem_semantic_row(
+    stater: &Stater,
+    meta: &impl FsMeta,
+    display_name: &str,
+    selected_fields: &[StatSemanticField],
+    rendered: &str,
+) -> StatSemanticRow {
+    let mut fields = Vec::new();
+
+    for field in selected_fields {
+        let value = match field {
+            StatSemanticField::Formatted => Some(StatSemanticValue::String(rendered.to_string())),
+            _ => filesystem_field_value(stater, meta, display_name, *field),
+        };
+
+        if let Some(value) = value {
+            push_unique_value(&mut fields, *field, value);
+        }
+    }
+
+    StatSemanticRow {
+        row_kind: StatRowKind::Filesystem,
+        fields,
+    }
+}
+
+fn file_field_value(
+    stater: &Stater,
+    meta: &fs::Metadata,
+    file: &OsStr,
+    display_name: &str,
+    field: StatSemanticField,
+) -> Option<StatSemanticValue> {
+    let is_device = meta.file_type().is_char_device() || meta.file_type().is_block_device();
+
+    let output = match field {
+        StatSemanticField::Name => stater.get_file_output(meta, 'n', file, display_name, None),
+        StatSemanticField::QuotedName => {
+            stater.get_file_output(meta, 'N', file, display_name, None)
+        }
+        StatSemanticField::Size => stater.get_file_output(meta, 's', file, display_name, None),
+        StatSemanticField::Blocks => stater.get_file_output(meta, 'b', file, display_name, None),
+        StatSemanticField::BlockSizeReported => {
+            stater.get_file_output(meta, 'B', file, display_name, None)
+        }
+        StatSemanticField::IoBlock => stater.get_file_output(meta, 'o', file, display_name, None),
+        StatSemanticField::RawModeHex => {
+            stater.get_file_output(meta, 'f', file, display_name, None)
+        }
+        StatSemanticField::FileType => stater.get_file_output(meta, 'F', file, display_name, None),
+        StatSemanticField::Uid => stater.get_file_output(meta, 'u', file, display_name, None),
+        StatSemanticField::User => stater.get_file_output(meta, 'U', file, display_name, None),
+        StatSemanticField::Gid => stater.get_file_output(meta, 'g', file, display_name, None),
+        StatSemanticField::Group => stater.get_file_output(meta, 'G', file, display_name, None),
+        StatSemanticField::Device => stater.get_file_output(meta, 'd', file, display_name, None),
+        StatSemanticField::DeviceHex => stater.get_file_output(meta, 'D', file, display_name, None),
+        StatSemanticField::DeviceMajor => {
+            stater.get_file_output(meta, 'd', file, display_name, Some('H'))
+        }
+        StatSemanticField::DeviceMinor => {
+            stater.get_file_output(meta, 'd', file, display_name, Some('L'))
+        }
+        StatSemanticField::DeviceMajorHex => {
+            stater.get_file_output(meta, 'D', file, display_name, Some('H'))
+        }
+        StatSemanticField::DeviceMinorHex => {
+            stater.get_file_output(meta, 'D', file, display_name, Some('L'))
+        }
+        StatSemanticField::DeviceType if is_device => {
+            stater.get_file_output(meta, 'r', file, display_name, None)
+        }
+        StatSemanticField::DeviceTypeHex if is_device => {
+            stater.get_file_output(meta, 'R', file, display_name, None)
+        }
+        StatSemanticField::DeviceTypeMajor if is_device => {
+            stater.get_file_output(meta, 'r', file, display_name, Some('H'))
+        }
+        StatSemanticField::DeviceTypeMinor if is_device => {
+            stater.get_file_output(meta, 'r', file, display_name, Some('L'))
+        }
+        StatSemanticField::DeviceTypeMajorHex if is_device => {
+            stater.get_file_output(meta, 't', file, display_name, Some('H'))
+        }
+        StatSemanticField::DeviceTypeMinorHex if is_device => {
+            stater.get_file_output(meta, 'T', file, display_name, Some('L'))
+        }
+        StatSemanticField::Inode => stater.get_file_output(meta, 'i', file, display_name, None),
+        StatSemanticField::Links => stater.get_file_output(meta, 'h', file, display_name, None),
+        StatSemanticField::MountPoint => {
+            stater.get_file_output(meta, 'm', file, display_name, None)
+        }
+        StatSemanticField::AccessRightsOctal => {
+            stater.get_file_output(meta, 'a', file, display_name, None)
+        }
+        StatSemanticField::AccessRightsHuman => {
+            stater.get_file_output(meta, 'A', file, display_name, None)
+        }
+        StatSemanticField::Context => stater.get_file_output(meta, 'C', file, display_name, None),
+        StatSemanticField::AccessTime => {
+            stater.get_file_output(meta, 'x', file, display_name, None)
+        }
+        StatSemanticField::AccessEpoch => {
+            stater.get_file_output(meta, 'X', file, display_name, None)
+        }
+        StatSemanticField::ModifyTime => {
+            stater.get_file_output(meta, 'y', file, display_name, None)
+        }
+        StatSemanticField::ModifyEpoch => {
+            stater.get_file_output(meta, 'Y', file, display_name, None)
+        }
+        StatSemanticField::ChangeTime => {
+            stater.get_file_output(meta, 'z', file, display_name, None)
+        }
+        StatSemanticField::ChangeEpoch => {
+            stater.get_file_output(meta, 'Z', file, display_name, None)
+        }
+        StatSemanticField::BirthTime => stater.get_file_output(meta, 'w', file, display_name, None),
+        StatSemanticField::BirthEpoch => {
+            stater.get_file_output(meta, 'W', file, display_name, None)
+        }
+        _ => return None,
+    };
+
+    semantic_value_from_output(field, output)
+}
+
+fn filesystem_field_value(
+    stater: &Stater,
+    meta: &impl FsMeta,
+    display_name: &str,
+    field: StatSemanticField,
+) -> Option<StatSemanticValue> {
+    let output = match field {
+        StatSemanticField::Name => stater.get_filesystem_output(meta, 'n', display_name),
+        StatSemanticField::FilesystemIdHex => stater.get_filesystem_output(meta, 'i', display_name),
+        StatSemanticField::NameMax => stater.get_filesystem_output(meta, 'l', display_name),
+        StatSemanticField::FilesystemTypeHex => {
+            stater.get_filesystem_output(meta, 't', display_name)
+        }
+        StatSemanticField::FilesystemType => stater.get_filesystem_output(meta, 'T', display_name),
+        StatSemanticField::BlockSize => stater.get_filesystem_output(meta, 's', display_name),
+        StatSemanticField::FundamentalBlockSize => {
+            stater.get_filesystem_output(meta, 'S', display_name)
+        }
+        StatSemanticField::TotalBlocks => stater.get_filesystem_output(meta, 'b', display_name),
+        StatSemanticField::FreeBlocks => stater.get_filesystem_output(meta, 'f', display_name),
+        StatSemanticField::AvailableBlocks => stater.get_filesystem_output(meta, 'a', display_name),
+        StatSemanticField::TotalFileNodes => stater.get_filesystem_output(meta, 'c', display_name),
+        StatSemanticField::FreeFileNodes => stater.get_filesystem_output(meta, 'd', display_name),
+        _ => return None,
+    };
+
+    semantic_value_from_output(field, output)
+}
+
+fn semantic_value_from_output(
+    field: StatSemanticField,
+    output: StatOutputType,
+) -> Option<StatSemanticValue> {
+    match field {
+        StatSemanticField::AccessRightsOctal => match output {
+            StatOutputType::UnsignedOct(value) => {
+                Some(StatSemanticValue::String(format!("{value:o}")))
+            }
+            _ => None,
+        },
+        StatSemanticField::RawModeHex
+        | StatSemanticField::DeviceHex
+        | StatSemanticField::DeviceMajorHex
+        | StatSemanticField::DeviceMinorHex
+        | StatSemanticField::DeviceTypeHex
+        | StatSemanticField::DeviceTypeMajorHex
+        | StatSemanticField::DeviceTypeMinorHex
+        | StatSemanticField::FilesystemIdHex
+        | StatSemanticField::FilesystemTypeHex => match output {
+            StatOutputType::UnsignedHex(value) => {
+                Some(StatSemanticValue::String(format!("{value:x}")))
+            }
+            _ => None,
+        },
+        StatSemanticField::Name
+        | StatSemanticField::QuotedName
+        | StatSemanticField::FileType
+        | StatSemanticField::User
+        | StatSemanticField::Group
+        | StatSemanticField::MountPoint
+        | StatSemanticField::AccessRightsHuman
+        | StatSemanticField::Context
+        | StatSemanticField::AccessTime
+        | StatSemanticField::ModifyTime
+        | StatSemanticField::ChangeTime
+        | StatSemanticField::BirthTime
+        | StatSemanticField::FilesystemType
+        | StatSemanticField::Formatted => match output {
+            StatOutputType::Str(value) if !value.is_empty() => {
+                Some(StatSemanticValue::String(value))
+            }
+            StatOutputType::Str(_) => None,
+            _ => None,
+        },
+        StatSemanticField::AccessEpoch
+        | StatSemanticField::ModifyEpoch
+        | StatSemanticField::ChangeEpoch
+        | StatSemanticField::BirthEpoch => match output {
+            StatOutputType::Timestamp(sec, _) => Some(StatSemanticValue::Int(sec)),
+            StatOutputType::Integer(value) => Some(StatSemanticValue::Int(value)),
+            StatOutputType::Unsigned(value) => {
+                i64::try_from(value).ok().map(StatSemanticValue::Int)
+            }
+            _ => None,
+        },
+        _ => match output {
+            StatOutputType::Integer(value) => Some(StatSemanticValue::Int(value)),
+            StatOutputType::Unsigned(value) => {
+                i64::try_from(value).ok().map(StatSemanticValue::Int)
+            }
+            _ => None,
+        },
+    }
+}
+
+fn render_filesystem_tokens(
+    stater: &Stater,
+    meta: &impl FsMeta,
+    tokens: &[StatToken],
+    display_name: &str,
+) -> String {
+    let mut text = String::new();
+
+    for token in tokens {
+        match token {
+            StatToken::Char(c) => text.push(*c),
+            StatToken::Byte(b) => text.push(char::from(*b)),
+            StatToken::Directive {
+                flag,
+                width,
+                precision,
+                modifier: _,
+                format,
+            } => {
+                let output = stater.get_filesystem_output(meta, *format, display_name);
+                text.push_str(&render_output(&output, *flag, *width, *precision));
+            }
+        }
+    }
+
+    text
+}
+
+fn render_file_tokens(
+    stater: &Stater,
+    meta: &fs::Metadata,
+    tokens: &[StatToken],
+    file: &OsStr,
+    display_name: &str,
+) -> String {
+    let mut text = String::new();
+
+    for token in tokens {
+        match token {
+            StatToken::Char(c) => text.push(*c),
+            StatToken::Byte(b) => text.push(char::from(*b)),
+            StatToken::Directive {
+                flag,
+                width,
+                precision,
+                modifier,
+                format,
+            } => {
+                let output = stater.get_file_output(meta, *format, file, display_name, *modifier);
+                text.push_str(&render_output(&output, *flag, *width, *precision));
+            }
+        }
+    }
+
+    text
+}
+
+fn render_output(
+    output: &StatOutputType,
+    flags: StatFlags,
+    width: usize,
+    precision: Option<i32>,
+) -> String {
+    let padding_char = determine_padding_char(&flags, &precision);
+
+    match output {
+        StatOutputType::Str(value) => render_str(value, &flags, width, precision),
+        StatOutputType::Integer(value) => {
+            render_integer(*value, &flags, width, precision, padding_char)
+        }
+        StatOutputType::Unsigned(value) => {
+            render_unsigned(*value, &flags, width, precision, padding_char)
+        }
+        StatOutputType::UnsignedOct(value) => {
+            render_unsigned_oct(*value, &flags, width, precision, padding_char)
+        }
+        StatOutputType::UnsignedHex(value) => {
+            render_unsigned_hex(*value, &flags, width, precision, padding_char)
+        }
+        StatOutputType::Timestamp(sec, nsec) => {
+            render_timestamp(*sec, *nsec, &flags, width, precision)
+        }
+        StatOutputType::Unknown => "?".into(),
+    }
+}
+
+fn render_padded(result: &str, left: bool, width: usize, padding: StatPadding) -> String {
+    match (left, padding) {
+        (false, StatPadding::Zero) => format!("{result:0>width$}"),
+        (false, StatPadding::Space) => format!("{result:>width$}"),
+        (true, StatPadding::Zero) => format!("{result:0<width$}"),
+        (true, StatPadding::Space) => format!("{result:<width$}"),
+    }
+}
+
+fn render_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) -> String {
+    let p = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => usize::MAX,
+    };
+    let value = if p < s.len() { &s[..p] } else { s };
+    render_padded(value, flags.is_left, width, StatPadding::Space)
+}
+
+fn render_integer(
+    num: i64,
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+    padding_char: StatPadding,
+) -> String {
+    let num_str = num.to_string();
+    let arg = if flags.is_group {
+        group_num(&num_str)
+    } else {
+        Cow::Borrowed(num_str.as_str())
+    };
+    let prefix = if flags.is_sign {
+        "+"
+    } else if flags.is_space {
+        " "
+    } else {
+        ""
+    };
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    render_padded(
+        &format!("{prefix}{arg:0>prec$}"),
+        flags.is_left,
+        width,
+        padding_char,
+    )
+}
+
+fn render_unsigned(
+    num: u64,
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+    padding_char: StatPadding,
+) -> String {
+    let num_str = num.to_string();
+    let value = if flags.is_group {
+        group_num(&num_str)
+    } else {
+        Cow::Borrowed(num_str.as_str())
+    };
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    render_padded(
+        &format!("{value:0>prec$}"),
+        flags.is_left,
+        width,
+        padding_char,
+    )
+}
+
+fn render_unsigned_oct(
+    num: u32,
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+    padding_char: StatPadding,
+) -> String {
+    let prefix = if flags.is_alter { "0" } else { "" };
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    render_padded(
+        &format!("{prefix}{num:0>prec$o}"),
+        flags.is_left,
+        width,
+        padding_char,
+    )
+}
+
+fn render_unsigned_hex(
+    num: u64,
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+    padding_char: StatPadding,
+) -> String {
+    let prefix = if flags.is_alter { "0x" } else { "" };
+    let prec = match precision {
+        Some(-1) => 0,
+        Some(p) => p as usize,
+        None => 0,
+    };
+    render_padded(
+        &format!("{prefix}{num:0>prec$x}"),
+        flags.is_left,
+        width,
+        padding_char,
+    )
+}
+
+fn render_timestamp(
+    sec: i64,
+    nsec: i64,
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+) -> String {
+    let mut num = sec.to_string();
+    if flags.is_group {
+        num = group_num(&num).into_owned();
+    }
+
+    if let Some(p) = precision {
+        let p = if p == -1 { 9 } else { p as usize };
+        if p > 0 {
+            let nsec_str = format!("{nsec:09}");
+            let frac = if p <= 9 {
+                nsec_str[..p].to_string()
+            } else {
+                format!("{nsec_str:0<p$}")
+            };
+            num = format!("{num}.{frac}");
+        }
+    }
+
+    let prefix = if flags.is_sign && sec >= 0 {
+        "+"
+    } else if flags.is_space && sec >= 0 {
+        " "
+    } else {
+        ""
+    };
+    let pad_char = if flags.is_zero && !flags.is_left {
+        '0'
+    } else {
+        ' '
+    };
+    let total_len = prefix.len() + num.len();
+
+    if !flags.is_left && width > total_len {
+        let pad = pad_char.to_string().repeat(width - total_len);
+        if pad_char == '0' {
+            format!("{prefix}{pad}{num}")
+        } else {
+            format!("{pad}{prefix}{num}")
+        }
+    } else if flags.is_left && width > total_len {
+        format!("{prefix}{num}{}", " ".repeat(width - total_len))
+    } else {
+        format!("{prefix}{num}")
+    }
+}
+
+fn filesystem_error_description(err: &str) -> String {
+    if let Some(pos) = err.find("(os error ") {
+        err[..pos].trim().to_string()
+    } else {
+        err.to_string()
+    }
+}
+
+fn file_error_description(err: &std::io::Error) -> String {
+    match err.kind() {
+        std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
+        std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+        std::io::ErrorKind::ConnectionRefused => "Connection refused".to_string(),
+        std::io::ErrorKind::ConnectionReset => "Connection reset".to_string(),
+        std::io::ErrorKind::ConnectionAborted => "Connection aborted".to_string(),
+        std::io::ErrorKind::NotConnected => "Not connected".to_string(),
+        std::io::ErrorKind::AddrInUse => "Address in use".to_string(),
+        std::io::ErrorKind::AddrNotAvailable => "Address not available".to_string(),
+        std::io::ErrorKind::BrokenPipe => "Broken pipe".to_string(),
+        std::io::ErrorKind::AlreadyExists => "File exists".to_string(),
+        std::io::ErrorKind::WouldBlock => "Resource temporarily unavailable".to_string(),
+        std::io::ErrorKind::InvalidInput => "Invalid argument".to_string(),
+        std::io::ErrorKind::InvalidData => "Invalid data".to_string(),
+        std::io::ErrorKind::TimedOut => "Timed out".to_string(),
+        std::io::ErrorKind::WriteZero => "Write zero".to_string(),
+        std::io::ErrorKind::Interrupted => "Interrupted system call".to_string(),
+        std::io::ErrorKind::Unsupported => "Operation not supported".to_string(),
+        std::io::ErrorKind::UnexpectedEof => "Unexpected end of file".to_string(),
+        std::io::ErrorKind::OutOfMemory => "Out of memory".to_string(),
+        _ => {
+            let text = err.to_string();
+            if let Some(pos) = text.find("(os error ") {
+                text[..pos].trim().to_string()
+            } else {
+                text
+            }
+        }
     }
 }
 

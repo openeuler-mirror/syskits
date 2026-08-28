@@ -41,43 +41,37 @@ pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
+    let mut who_cmd = who_from_matches(&matches);
+
+    who_cmd.exec()
+}
+
+pub fn who_native_semantic(args: impl ctcore::Args) -> CTResult<WhoSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches: clap::ArgMatches = ct_app()
+        .after_help(get_long_usage())
+        .try_get_matches_from(args)?;
+    let mut who_cmd = who_from_matches(&matches);
+    who_cmd.collect_semantic()
+}
+
+fn who_from_matches(matches: &clap::ArgMatches) -> Who {
     let ct_files: Vec<String> = matches
         .get_many::<String>(who_flags::WHO_FILE)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    // 如果为 "true"，则尝试通过 DNS 查询对主机名进行规范化。
     let is_do_lookup = matches.get_flag(who_flags::WHO_LOOKUP);
-
-    // 如果为 "true"，则只显示用户名列表和已登录用户的计数。
-    //   忽略 'who am i'.
     let is_short_list = matches.get_flag(who_flags::WHO_COUNT);
-
     let si_all = matches.get_flag(who_flags::WHO_ALL);
-
-    // 如果为 "true"，则在顶部显示一行，描述每个字段。
     let is_include_heading = matches.get_flag(who_flags::WHO_HEADING);
-
-    // 如果为 "true"，则在 mesg 为 y 时为每个用户显示 "+"，
-    // 在 mesg 为 n 时显示"-"，或者在无法统计其 tty 时显示"?
     let is_include_mesg = si_all || matches.get_flag(who_flags::WHO_MESG);
-
-    // 如果为 "true"，则显示上次启动时间。
     let is_need_boottime = si_all || matches.get_flag(who_flags::WHO_BOOT);
-
-    // 如果为 "true"，则显示死亡进程。
     let is_need_deadprocs = si_all || matches.get_flag(who_flags::WHO_DEAD);
-
-    // 如果为 "true"，则显示等待用户登录的进程。
     let is_need_login = si_all || matches.get_flag(who_flags::WHO_LOGIN);
-
-    // 如果为 true，则显示 init 启动的进程。
     let is_need_initspawn = si_all || matches.get_flag(who_flags::WHO_PROCESS);
-
-    // 如果为 "true"，则显示最后一次时钟变化。
     let is_need_clockchange = si_all || matches.get_flag(who_flags::WHO_TIME);
-
-    // 如果为 true，则显示当前运行级别。
     let is_need_runlevel = si_all || matches.get_flag(who_flags::WHO_RUNLEVEL);
 
     let is_use_defaults = !(si_all
@@ -89,23 +83,14 @@ pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
         || is_need_clockchange
         || matches.get_flag(who_flags::WHO_USERS));
 
-    // 如果为 "true"，则显示用户进程。
     let is_need_users = si_all || matches.get_flag(who_flags::WHO_USERS) || is_use_defaults;
-
-    // 如果为 "true"，则显示每个用户触摸键盘后的小时：分钟，如果在最后一分钟内，则显示"."，如果 则显示 "old"。
     let is_include_idle = is_need_deadprocs || is_need_login || is_need_runlevel || is_need_users;
-
-    // 如果为 "true"，则显示进程终止和退出状态。
     let is_include_exit = is_need_deadprocs;
-
-    // 如果为 "true"，则只显示名称、行和时间字段。
     let is_short_output = !is_include_exit && is_use_defaults;
-
-    // 如果为 true，则只显示控制 tty 的信息。
     let is_my_line_only =
         matches.get_flag(who_flags::WHO_ONLY_HOSTNAME_USER) || ct_files.len() == 2;
 
-    let mut who_cmd = Who {
+    Who {
         is_do_lookup,
         is_short_list,
         is_short_output,
@@ -122,9 +107,7 @@ pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
         is_need_users,
         is_my_line_only,
         who_args: ct_files,
-    };
-
-    who_cmd.exec()
+    }
 }
 
 struct Who {
@@ -144,6 +127,43 @@ struct Who {
     is_need_users: bool,
     is_my_line_only: bool,
     who_args: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WhoRow {
+    pub kind: String,
+    pub user: Option<String>,
+    pub mesg: Option<String>,
+    pub line: Option<String>,
+    pub time: Option<String>,
+    pub idle: Option<String>,
+    pub pid: Option<i64>,
+    pub host: Option<String>,
+    pub comment: Option<String>,
+    pub exit: Option<String>,
+    pub user_names: Vec<String>,
+    pub user_count: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WhoSemantic {
+    pub view_kind: String,
+    pub source_file: String,
+    pub rows: Vec<WhoRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct WhoDisplayLine {
+    user: String,
+    state: char,
+    line: String,
+    time: String,
+    idle: String,
+    pid: String,
+    comment: String,
+    exit: String,
 }
 
 fn idle_string<'a>(when: i64, boot_time: i64) -> Cow<'a, str> {
@@ -313,9 +333,8 @@ impl Who {
         let last_runlevel = (utmpx.pid() / 256) as u8 as char;
         let current_runlevel = (utmpx.pid() % 256) as u8 as char;
         // Creating the run-level string
-        // GNU format: "run-level %c" → pad label to 11 display cols then append runlevel char
         let label = t!("who.output.run_level");
-        let runlevel_line = format!("{}{current_runlevel}", pad_right(&label, 11));
+        let runlevel_line = format!("{label} {current_runlevel}");
 
         // 生成有关最后运行级别的注释
         let comment = if last_runlevel == 'N' {
@@ -495,15 +514,29 @@ impl Who {
         comment: &str,
         exit: &str,
     ) {
-        let mut buffer = String::with_capacity(64);
-        let msg = vec![' ', state].into_iter().collect::<String>();
+        let rendered = self.render_line(&WhoDisplayLine {
+            user: user.to_string(),
+            state,
+            line: line.to_string(),
+            time: time.to_string(),
+            idle: idle.to_string(),
+            pid: pid.to_string(),
+            comment: comment.to_string(),
+            exit: exit.to_string(),
+        });
+        println!("{rendered}");
+    }
 
-        buffer.push_str(&pad_right(user, 8));
+    fn render_line(&self, fields: &WhoDisplayLine) -> String {
+        let mut buffer = String::with_capacity(64);
+        let msg = vec![' ', fields.state].into_iter().collect::<String>();
+
+        buffer.push_str(&pad_right(&fields.user, 8));
         if self.is_include_mesg {
             buffer.push_str(&msg);
         }
         buffer.push(' ');
-        buffer.push_str(&pad_right(line, 12));
+        buffer.push_str(&pad_right(&fields.line, 12));
 
         // Dynamic time width based on locale (like coreutils)
         let lc_time = std::env::var("LC_TIME").unwrap_or_else(|_| {
@@ -516,25 +549,25 @@ impl Who {
             4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2
         };
         buffer.push(' ');
-        buffer.push_str(&pad_right(time, time_size));
+        buffer.push_str(&pad_right(&fields.time, time_size));
 
         if !self.is_short_output {
             if self.is_include_idle {
                 buffer.push(' ');
-                buffer.push_str(&pad_right(idle, 6));
+                buffer.push_str(&pad_right(&fields.idle, 6));
             }
-            write!(buffer, " {pid:>10}").unwrap();
+            write!(buffer, " {:>10}", fields.pid).unwrap();
         }
 
         buffer.push(' ');
-        buffer.push_str(&pad_right(comment, 8));
+        buffer.push_str(&pad_right(&fields.comment, 8));
 
         if self.is_include_exit {
             buffer.push(' ');
-            buffer.push_str(&pad_right(exit, 12));
+            buffer.push_str(&pad_right(&fields.exit, 12));
         }
 
-        println!("{}", buffer.trim_end());
+        buffer.trim_end().to_string()
     }
 
     #[inline]
@@ -549,6 +582,383 @@ impl Who {
             &t!("who.output.heading_comment"),
             &t!("who.output.heading_exit"),
         );
+    }
+
+    fn source_file(&self) -> &str {
+        match self.who_args.len() {
+            1 => self.who_args[0].as_ref(),
+            _ => ct_utmpx::DEFAULT_FILE,
+        }
+    }
+
+    fn view_kind(&self) -> String {
+        if self.is_short_list {
+            "count".to_string()
+        } else if self.is_need_users
+            && !self.is_need_boottime
+            && !self.is_need_deadprocs
+            && !self.is_need_login
+            && !self.is_need_initspawn
+            && !self.is_need_clockchange
+            && !self.is_need_runlevel
+        {
+            "default".to_string()
+        } else {
+            "mixed".to_string()
+        }
+    }
+
+    fn push_row(&self, semantic: &mut WhoSemantic, row: WhoRow, display: WhoDisplayLine) {
+        semantic.classic_text.push_str(&self.render_line(&display));
+        semantic.classic_text.push('\n');
+        semantic.rows.push(row);
+    }
+
+    fn heading_row(&self) -> WhoRow {
+        WhoRow {
+            kind: "heading".into(),
+            user: Some(t!("who.output.heading_name").to_owned()),
+            mesg: if self.is_include_mesg {
+                Some(" ".into())
+            } else {
+                None
+            },
+            line: Some(t!("who.output.heading_line").to_owned()),
+            time: Some(t!("who.output.heading_time").to_owned()),
+            idle: if self.is_include_idle {
+                Some(t!("who.output.heading_idle").to_owned())
+            } else {
+                None
+            },
+            pid: None,
+            host: None,
+            comment: Some(t!("who.output.heading_comment").to_owned()),
+            exit: if self.is_include_exit {
+                Some(t!("who.output.heading_exit").to_owned())
+            } else {
+                None
+            },
+            user_names: Vec::new(),
+            user_count: None,
+        }
+    }
+
+    fn build_user_row(&self, utmpx: &CtUtmpx) -> CTResult<(WhoRow, WhoDisplayLine)> {
+        let mut p = PathBuf::from("/dev");
+        p.push(utmpx.tty_device().as_str());
+
+        let (mesg, last_change) = match p.metadata() {
+            Ok(meta) => {
+                let mesg = match meta.mode() & S_IWGRP == 0 {
+                    true => '-',
+                    false => '+',
+                };
+
+                (mesg, meta.atime())
+            }
+            _ => ('?', 0),
+        };
+
+        let idle = match last_change {
+            0 => "  ?".to_owned(),
+            _ => idle_string(last_change, 0).into_owned(),
+        };
+
+        let host = if self.is_do_lookup {
+            utmpx.canon_host().map_err_context(|| {
+                let host_string = utmpx.host();
+                format!(
+                    "failed to canonicalize {}",
+                    host_string
+                        .split(':')
+                        .next()
+                        .unwrap_or(&host_string)
+                        .quote()
+                )
+            })?
+        } else {
+            utmpx.host()
+        };
+
+        let host_display = if host.is_empty() {
+            String::new()
+        } else {
+            format!("({host})")
+        };
+
+        let user = utmpx.user();
+        let line = utmpx.tty_device();
+        let time = time_string(utmpx);
+        let pid = utmpx.pid();
+
+        Ok((
+            WhoRow {
+                kind: "user".into(),
+                user: Some(user.clone()),
+                mesg: Some(mesg.to_string()),
+                line: Some(line.clone()),
+                time: Some(time.clone()),
+                idle: Some(idle.clone()),
+                pid: Some(i64::from(pid)),
+                host: if host.is_empty() { None } else { Some(host) },
+                comment: if host_display.is_empty() {
+                    None
+                } else {
+                    Some(host_display.clone())
+                },
+                exit: None,
+                user_names: Vec::new(),
+                user_count: None,
+            },
+            WhoDisplayLine {
+                user,
+                state: mesg,
+                line,
+                time,
+                idle,
+                pid: pid.to_string(),
+                comment: host_display,
+                exit: String::new(),
+            },
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_simple_row(
+        &self,
+        kind: &str,
+        user: &str,
+        line: &str,
+        time: &str,
+        pid: &str,
+        comment: &str,
+        exit: &str,
+    ) -> (WhoRow, WhoDisplayLine) {
+        (
+            WhoRow {
+                kind: kind.to_string(),
+                user: if user.is_empty() {
+                    None
+                } else {
+                    Some(user.to_string())
+                },
+                mesg: Some(" ".into()),
+                line: if line.is_empty() {
+                    None
+                } else {
+                    Some(line.to_string())
+                },
+                time: if time.is_empty() {
+                    None
+                } else {
+                    Some(time.to_string())
+                },
+                idle: None,
+                pid: pid.parse::<i64>().ok(),
+                host: None,
+                comment: if comment.is_empty() {
+                    None
+                } else {
+                    Some(comment.to_string())
+                },
+                exit: if exit.is_empty() {
+                    None
+                } else {
+                    Some(exit.to_string())
+                },
+                user_names: Vec::new(),
+                user_count: None,
+            },
+            WhoDisplayLine {
+                user: user.to_string(),
+                state: ' ',
+                line: line.to_string(),
+                time: time.to_string(),
+                idle: String::new(),
+                pid: pid.to_string(),
+                comment: comment.to_string(),
+                exit: exit.to_string(),
+            },
+        )
+    }
+
+    fn collect_semantic(&mut self) -> CTResult<WhoSemantic> {
+        let run_level_chk = |_record: i16| {
+            #[cfg(target_os = "linux")]
+            return _record == ct_utmpx::RUN_LVL;
+        };
+
+        let source_file = self.source_file().to_string();
+        let mut semantic = WhoSemantic {
+            view_kind: self.view_kind(),
+            source_file: source_file.clone(),
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        };
+
+        if self.is_short_list {
+            let users = CtUtmpx::iter_all_records_from(&source_file)
+                .filter(CtUtmpx::is_user_process)
+                .map(|utmpx| utmpx.user())
+                .collect::<Vec<_>>();
+            semantic.classic_text.push_str(&users.join(" "));
+            semantic.classic_text.push('\n');
+            semantic.classic_text.push_str(&format!(
+                "{}={}\n",
+                t!("who.output.users_count"),
+                users.len()
+            ));
+            semantic.rows.push(WhoRow {
+                kind: "count".into(),
+                user: None,
+                mesg: None,
+                line: None,
+                time: None,
+                idle: None,
+                pid: None,
+                host: None,
+                comment: None,
+                exit: None,
+                user_names: users.clone(),
+                user_count: Some(users.len()),
+            });
+            return Ok(semantic);
+        }
+
+        let records = CtUtmpx::iter_all_records_from(&source_file);
+        if self.is_include_heading {
+            let row = self.heading_row();
+            self.push_row(
+                &mut semantic,
+                row,
+                WhoDisplayLine {
+                    user: t!("who.output.heading_name").to_owned(),
+                    state: ' ',
+                    line: t!("who.output.heading_line").to_owned(),
+                    time: t!("who.output.heading_time").to_owned(),
+                    idle: t!("who.output.heading_idle").to_owned(),
+                    pid: t!("who.output.heading_pid").to_owned(),
+                    comment: t!("who.output.heading_comment").to_owned(),
+                    exit: t!("who.output.heading_exit").to_owned(),
+                },
+            );
+        }
+
+        let current_tty = if self.is_my_line_only {
+            cur_tty()
+        } else {
+            String::new()
+        };
+
+        for utmpx in records {
+            if self.is_my_line_only && current_tty != utmpx.tty_device() {
+                continue;
+            }
+
+            if self.is_need_users && utmpx.is_user_process() {
+                let (row, display) = self.build_user_row(&utmpx)?;
+                self.push_row(&mut semantic, row, display);
+            } else if self.is_need_runlevel && run_level_chk(utmpx.record_type()) {
+                if cfg!(target_os = "linux") {
+                    let last_runlevel = (utmpx.pid() / 256) as u8 as char;
+                    let current_runlevel = (utmpx.pid() % 256) as u8 as char;
+                    let label = t!("who.output.run_level");
+                    let runlevel_line = format!("{label} {current_runlevel}");
+                    let comment = if last_runlevel == 'N' {
+                        "last=S".to_string()
+                    } else {
+                        "last=N".to_string()
+                    };
+                    let (row, display) = self.build_simple_row(
+                        "runlevel",
+                        "",
+                        &runlevel_line,
+                        &time_string(&utmpx),
+                        "",
+                        if last_runlevel.is_control() {
+                            ""
+                        } else {
+                            &comment
+                        },
+                        "",
+                    );
+                    self.push_row(&mut semantic, row, display);
+                }
+            } else if self.is_need_boottime && utmpx.record_type() == ct_utmpx::BOOT_TIME {
+                let (row, display) = self.build_simple_row(
+                    "boot_time",
+                    "",
+                    &t!("who.output.system_boot"),
+                    &time_string(&utmpx),
+                    "",
+                    "",
+                    "",
+                );
+                self.push_row(&mut semantic, row, display);
+            } else if self.is_need_clockchange && utmpx.record_type() == ct_utmpx::NEW_TIME {
+                let (row, display) = self.build_simple_row(
+                    "clock_change",
+                    "",
+                    &t!("who.output.clock_change"),
+                    &time_string(&utmpx),
+                    "",
+                    "",
+                    "",
+                );
+                self.push_row(&mut semantic, row, display);
+            } else if self.is_need_initspawn && utmpx.record_type() == ct_utmpx::INIT_PROCESS {
+                let comment = format!("id={}", utmpx.terminal_suffix());
+                let pid = utmpx.pid().to_string();
+                let (row, display) = self.build_simple_row(
+                    "init_process",
+                    "",
+                    &utmpx.tty_device(),
+                    &time_string(&utmpx),
+                    &pid,
+                    &comment,
+                    "",
+                );
+                self.push_row(&mut semantic, row, display);
+            } else if self.is_need_login && utmpx.record_type() == ct_utmpx::LOGIN_PROCESS {
+                let comment = format!("id={}", utmpx.terminal_suffix());
+                let pid = utmpx.pid().to_string();
+                let (row, display) = self.build_simple_row(
+                    "login",
+                    &t!("who.output.login"),
+                    &utmpx.tty_device(),
+                    &time_string(&utmpx),
+                    &pid,
+                    &comment,
+                    "",
+                );
+                self.push_row(&mut semantic, row, display);
+            } else if self.is_need_deadprocs && utmpx.record_type() == ct_utmpx::DEAD_PROCESS {
+                let comment = format!("id={}", utmpx.terminal_suffix());
+                let pid = utmpx.pid().to_string();
+                let e = utmpx.exit_status();
+                let exit_str = format!(
+                    "{}={} {}={}",
+                    t!("who.output.term"),
+                    e.0,
+                    t!("who.output.exit"),
+                    e.1
+                );
+                let (row, display) = self.build_simple_row(
+                    "dead_process",
+                    "",
+                    &utmpx.tty_device(),
+                    &time_string(&utmpx),
+                    &pid,
+                    &comment,
+                    &exit_str,
+                );
+                self.push_row(&mut semantic, row, display);
+            }
+        }
+
+        Ok(semantic)
     }
 }
 

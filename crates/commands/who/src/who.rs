@@ -21,6 +21,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 mod platform;
+pub use platform::{WhoRow, WhoSemantic, who_native_semantic};
 
 mod who_flags {
     pub const WHO_ALL: &str = "all";

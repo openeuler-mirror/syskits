@@ -81,6 +81,32 @@ struct IdState {
     is_user_specified: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdEntity {
+    pub id: u32,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdRow {
+    pub mode: String,
+    pub subject: Option<String>,
+    pub uid: Option<IdEntity>,
+    pub gid: Option<IdEntity>,
+    pub euid: Option<IdEntity>,
+    pub egid: Option<IdEntity>,
+    pub groups: Vec<IdEntity>,
+    pub context: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdSemantic {
+    pub rows: Vec<IdRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 #[derive(Default)]
 pub struct Id;
 impl Tool for Id {
@@ -143,6 +169,282 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
     id_handle_users(writer, users, &mut state, is_default_format, line_ending);
 
     Ok(())
+}
+
+fn id_uid_entity(uid: u32, stderr_text: &mut String, exit_code: &mut i32) -> IdEntity {
+    match ct_entries::uid2usr(uid) {
+        Ok(name) => IdEntity {
+            id: uid,
+            label: name,
+        },
+        Err(_) => {
+            *exit_code = 1;
+            stderr_text.push_str(&format!("id: cannot find name for user ID {uid}\n"));
+            IdEntity {
+                id: uid,
+                label: uid.to_string(),
+            }
+        }
+    }
+}
+
+fn id_gid_entity(gid: u32, stderr_text: &mut String, exit_code: &mut i32) -> IdEntity {
+    match ct_entries::gid2grp(gid) {
+        Ok(name) => IdEntity {
+            id: gid,
+            label: name,
+        },
+        Err(_) => {
+            *exit_code = 1;
+            stderr_text.push_str(&format!("id: cannot find name for group ID {gid}\n"));
+            IdEntity {
+                id: gid,
+                label: gid.to_string(),
+            }
+        }
+    }
+}
+
+fn id_default_classic_text(row: &IdRow) -> String {
+    let mut text = String::new();
+    if let Some(uid) = &row.uid {
+        text.push_str(&format!("uid={}({})", uid.id, uid.label));
+    }
+    if let Some(gid) = &row.gid {
+        text.push_str(&format!(" gid={}({})", gid.id, gid.label));
+    }
+    if let Some(euid) = &row.euid {
+        text.push_str(&format!(" euid={}({})", euid.id, euid.label));
+    }
+    if let Some(egid) = &row.egid {
+        text.push_str(&format!(" egid={}({})", egid.id, egid.label));
+    }
+    if !row.groups.is_empty() {
+        let groups = row
+            .groups
+            .iter()
+            .map(|group| format!("{}({})", group.id, group.label))
+            .collect::<Vec<_>>()
+            .join(",");
+        text.push_str(&format!(" groups={groups}"));
+    }
+    if let Some(context) = &row.context {
+        text.push_str(&format!(" context={context}"));
+    }
+    text
+}
+
+fn id_row_classic_text(
+    row: &IdRow,
+    state: &IdState,
+    user_count: usize,
+    line_ending: CtLineEnding,
+) -> String {
+    let mut text = match row.mode.as_str() {
+        "user" => row
+            .uid
+            .as_ref()
+            .map(|v| {
+                if state.is_nflag {
+                    v.label.clone()
+                } else {
+                    v.id.to_string()
+                }
+            })
+            .unwrap_or_default(),
+        "group" => row
+            .gid
+            .as_ref()
+            .map(|v| {
+                if state.is_nflag {
+                    v.label.clone()
+                } else {
+                    v.id.to_string()
+                }
+            })
+            .unwrap_or_default(),
+        "groups" => row
+            .groups
+            .iter()
+            .map(|group| {
+                if state.is_nflag {
+                    group.label.clone()
+                } else {
+                    group.id.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(if state.is_zflag { "\0" } else { " " }),
+        "context" => row.context.clone().unwrap_or_default(),
+        _ => id_default_classic_text(row),
+    };
+
+    if row.mode == "groups" && state.is_zflag && state.is_user_specified && user_count > 1 {
+        text.push('\0');
+    }
+    text.push_str(&format!("{line_ending}"));
+    text
+}
+
+fn id_build_rows(
+    users: &[String],
+    state: &mut IdState,
+    is_default_format: bool,
+    line_ending: CtLineEnding,
+) -> IdSemantic {
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    let subjects: Vec<Option<String>> = if users.is_empty() {
+        vec![None]
+    } else {
+        users.iter().cloned().map(Some).collect()
+    };
+
+    for subject in subjects {
+        let possible_pw = if let Some(user) = subject.as_ref() {
+            match CtPasswd::locate(user.as_str()) {
+                Ok(passwd) => Some(passwd),
+                Err(_) => {
+                    exit_code = 1;
+                    stderr_text.push_str(&format!("id: {}: no such user\n", user.quote()));
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+
+        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
+            if state.is_rflag { getuid() } else { geteuid() },
+            if state.is_rflag { getgid() } else { getegid() },
+        ));
+
+        let euid = geteuid();
+        let egid = getegid();
+        let groups = if let Some(passwd) = possible_pw.as_ref() {
+            passwd.belongs_to()
+        } else {
+            ct_entries::get_groups_gnu(Some(gid)).unwrap_or_default()
+        };
+
+        let mut row = IdRow {
+            mode: if state.is_cflag {
+                "context".into()
+            } else if state.is_uflag {
+                "user".into()
+            } else if state.is_gflag {
+                "group".into()
+            } else if state.is_gsflag {
+                "groups".into()
+            } else {
+                "default".into()
+            },
+            subject: subject.clone(),
+            uid: None,
+            gid: None,
+            euid: None,
+            egid: None,
+            groups: Vec::new(),
+            context: None,
+        };
+
+        if state.is_uflag {
+            row.uid = Some(id_uid_entity(uid, &mut stderr_text, &mut exit_code));
+        } else if state.is_gflag {
+            row.gid = Some(id_gid_entity(gid, &mut stderr_text, &mut exit_code));
+        } else if state.is_gsflag {
+            row.groups = groups
+                .iter()
+                .map(|gid| id_gid_entity(*gid, &mut stderr_text, &mut exit_code))
+                .collect();
+        } else if is_default_format {
+            row.uid = Some(id_uid_entity(uid, &mut stderr_text, &mut exit_code));
+            row.gid = Some(id_gid_entity(gid, &mut stderr_text, &mut exit_code));
+            if !state.is_user_specified && euid != uid {
+                row.euid = Some(id_uid_entity(euid, &mut stderr_text, &mut exit_code));
+            }
+            if !state.is_user_specified && egid != gid {
+                row.egid = Some(id_gid_entity(egid, &mut stderr_text, &mut exit_code));
+            }
+            row.groups = groups
+                .iter()
+                .map(|gid| id_gid_entity(*gid, &mut stderr_text, &mut exit_code))
+                .collect();
+            if state.is_selinux_supported
+                && !state.is_user_specified
+                && std::env::var_os("POSIXLY_CORRECT").is_none()
+                && let Ok(context) = SecurityContext::current(false)
+            {
+                row.context = Some(String::from_utf8_lossy(context.as_bytes()).to_string());
+            }
+        }
+
+        classic_text.push_str(&id_row_classic_text(&row, state, users.len(), line_ending));
+        rows.push(row);
+    }
+
+    IdSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    }
+}
+
+pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let matches = ct_app()
+        .after_help(t!("id.after_help"))
+        .try_get_matches_from(args)?;
+
+    let users: Vec<String> = matches
+        .get_many::<String>(id_flags::ID_ARG_USERS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let mut state = id_get_state(&matches, &users);
+    let is_default_format = id_flags_validity_checks(&mut state)?;
+    let line_ending = CtLineEnding::from_zero_flag(state.is_zflag);
+
+    if state.is_cflag {
+        if state.is_selinux_supported {
+            if let Ok(context) = SecurityContext::current(false) {
+                let context = String::from_utf8_lossy(context.as_bytes()).to_string();
+                return Ok(IdSemantic {
+                    rows: vec![IdRow {
+                        mode: "context".into(),
+                        subject: None,
+                        uid: None,
+                        gid: None,
+                        euid: None,
+                        egid: None,
+                        groups: Vec::new(),
+                        context: Some(context.clone()),
+                    }],
+                    classic_text: format!("{context}{line_ending}"),
+                    stderr_text: String::new(),
+                    exit_code: 0,
+                });
+            }
+            return Err(CtSimpleError::new(1, "can't get process context"));
+        }
+        return Err(CtSimpleError::new(
+            1,
+            "--context (-Z) works only on an SELinux-enabled kernel",
+        ));
+    }
+
+    Ok(id_build_rows(
+        &users,
+        &mut state,
+        is_default_format,
+        line_ending,
+    ))
 }
 
 fn id_handle_users<W: Write>(

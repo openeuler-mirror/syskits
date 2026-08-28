@@ -1,0 +1,13 @@
+[package]
+name = "ctdsl"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "Data pipeline DSL: lexer, parser, and AST for syskits"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+thiserror = { workspace = true }

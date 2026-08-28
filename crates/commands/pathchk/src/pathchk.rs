@@ -25,6 +25,7 @@ use std::io::{ErrorKind, Write};
 use sys_locale::get_locale;
 
 // operating mode
+#[derive(Clone, Copy)]
 enum PathchkMode {
     Default, // use filesystem to determine information and limits
     Basic,   // check basic compatibility with POSIX
@@ -37,6 +38,21 @@ pub mod pathchk_flags {
     pub const PATHCHK_POSIX_SPECIAL: &str = "posix-special";
     pub const PATHCHK_PORTABILITY: &str = "portability";
     pub const PATHCHK_PATH: &str = "path";
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathchkRow {
+    pub path: String,
+    pub ok: bool,
+    pub diagnostic_kind: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathchkSemantic {
+    pub rows: Vec<PathchkRow>,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 // a few global constants as used in the GNU implementation
@@ -106,6 +122,68 @@ pub fn pathchk_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
     pathchk_exec(writer, &flags)
 }
 
+pub fn pathchk_native_semantic(args: impl ctcore::Args) -> CTResult<PathchkSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    let flags = PathchkFlags::new(&matches)?;
+
+    let mut rows = Vec::with_capacity(flags.paths.len());
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    for path in &flags.paths {
+        let path_segments: Vec<String> = path.split('/').map(String::from).collect();
+        let mut diagnostic = Vec::new();
+        let ok = check_path(&mut diagnostic, &flags.mode, &path_segments)?;
+        let message_raw = String::from_utf8(diagnostic).expect("pathchk output should be utf-8");
+        if !ok {
+            exit_code = 1;
+            stderr_text.push_str(&message_raw);
+        }
+
+        let message =
+            (!message_raw.is_empty()).then_some(message_raw.trim_end_matches('\n').to_string());
+        let diagnostic_kind = message
+            .as_deref()
+            .map(pathchk_diagnostic_kind)
+            .map(str::to_string);
+
+        rows.push(PathchkRow {
+            path: path.clone(),
+            ok,
+            diagnostic_kind,
+            message,
+        });
+    }
+
+    Ok(PathchkSemantic {
+        rows,
+        stderr_text,
+        exit_code,
+    })
+}
+
+fn pathchk_diagnostic_kind(message: &str) -> &'static str {
+    if message.contains("empty file name") {
+        "empty_name"
+    } else if message.contains("non-portable character")
+        || message.contains("nonportable character")
+    {
+        "non_portable_character"
+    } else if message.contains("leading '-'") {
+        "leading_dash"
+    } else if message.contains("component") && message.contains("exceeded") {
+        "component_too_long"
+    } else if message.contains("file name") && message.contains("exceeded") {
+        "path_too_long"
+    } else if message.contains("File name too long") {
+        "os_path_too_long"
+    } else {
+        "path_error"
+    }
+}
+
 /// 执行路径检查的核心函数
 ///
 /// # 参数
@@ -115,6 +193,7 @@ pub fn pathchk_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
 /// # 返回
 /// * `CTResult<()>` - 执行结果
 fn pathchk_exec<W: Write>(writer: &mut W, flags: &PathchkFlags) -> CTResult<()> {
+    set_ct_exit_code(0);
     let mut is_success = true;
     for path in &flags.paths {
         let path_segments: Vec<String> = path.split('/').map(String::from).collect();
@@ -326,7 +405,13 @@ fn check_searchable<W: Write>(writer: &mut W, path: &str) -> CTResult<bool> {
                 writeln!(writer, "pathchk: {path}: File name too long")?;
                 Ok(false)
             } else {
-                writeln!(writer, "pathchk: {path}: {e}")?;
+                let message = e.to_string();
+                let message = if let Some(pos) = message.find(" (os error ") {
+                    &message[..pos]
+                } else {
+                    message.as_str()
+                };
+                writeln!(writer, "pathchk: {path}: {message}")?;
                 Ok(false)
             }
         }
@@ -348,7 +433,7 @@ fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResul
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 writer,
-                "pathchk: nonportable character '{invalid}' in file name '{path_segment}'"
+                "pathchk: non-portable character ‘{invalid}’ in file name '{path_segment}'"
             )?;
             return Ok(false);
         }
@@ -448,7 +533,7 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(
                 output_str
-                    .contains("pathchk: nonportable character '#' in file name 'special#file'")
+                    .contains("pathchk: non-portable character ‘#’ in file name 'special#file'")
             );
         }
 
@@ -527,7 +612,7 @@ mod tests {
             let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str.contains("pathchk: nonportable character '@'"));
+            assert!(output_str.contains("pathchk: non-portable character ‘@’"));
         }
 
         #[test]

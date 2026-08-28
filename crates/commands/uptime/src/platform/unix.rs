@@ -17,20 +17,49 @@ use chrono::Local;
 use ctcore::libc::getloadavg;
 use ctcore::libc::time_t;
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UptimeSource {
+    ProcUptime,
+    BootTime,
+    TickCount,
+    Unknown,
+}
+
 #[cfg(unix)]
-pub fn print_loadavg() -> String {
+pub fn uptime_source_kind(source: UptimeSource) -> &'static str {
+    match source {
+        UptimeSource::ProcUptime => "proc_uptime",
+        UptimeSource::BootTime => "boot_time",
+        UptimeSource::TickCount => "tick_count",
+        UptimeSource::Unknown => "unknown",
+    }
+}
+
+#[cfg(unix)]
+pub fn get_loadavg_values() -> Vec<f64> {
     use ctcore::libc::c_double;
 
     let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };
 
     if loads == -1 {
+        Vec::new()
+    } else {
+        avg[..usize::try_from(loads).unwrap_or(0)].to_vec()
+    }
+}
+
+#[cfg(test)]
+pub fn print_loadavg() -> String {
+    let loads = get_loadavg_values();
+    if loads.is_empty() {
         String::new()
     } else {
         let mut result = "load average: ".to_string();
-        for n in 0..loads {
-            let separator = if n == loads - 1 { "\n" } else { ", " };
-            result.push_str(&format!("{:.2}{}", avg[n as usize], separator));
+        for (index, value) in loads.iter().enumerate() {
+            let separator = if index + 1 == loads.len() { "\n" } else { ", " };
+            result.push_str(&format!("{value:.2}{separator}"));
         }
         result
     }
@@ -66,12 +95,6 @@ pub fn process_utmpx(path: Option<&str>) -> (Option<time_t>, usize, Option<std::
     (boot_time, n_users, None)
 }
 
-#[cfg(unix)]
-pub fn get_uptime(boot_time: Option<time_t>) -> i64 {
-    get_uptime_by_proc(boot_time, "/proc/uptime")
-}
-
-#[cfg(unix)]
 pub fn get_uptime_from_boot_time(boot_time: Option<time_t>) -> i64 {
     match boot_time {
         Some(t) => {
@@ -87,7 +110,21 @@ pub fn get_uptime_from_boot_time(boot_time: Option<time_t>) -> i64 {
 }
 
 #[cfg(unix)]
+pub fn get_uptime_with_source(boot_time: Option<time_t>) -> (i64, UptimeSource) {
+    get_uptime_by_proc_with_source(boot_time, "/proc/uptime")
+}
+
+#[cfg(unix)]
+#[cfg(test)]
 fn get_uptime_by_proc<P: AsRef<Path>>(boot_time: Option<time_t>, path: P) -> i64 {
+    get_uptime_by_proc_with_source(boot_time, path).0
+}
+
+#[cfg(unix)]
+fn get_uptime_by_proc_with_source<P: AsRef<Path>>(
+    boot_time: Option<time_t>,
+    path: P,
+) -> (i64, UptimeSource) {
     use std::fs::File;
     use std::io::Read;
 
@@ -99,17 +136,21 @@ fn get_uptime_by_proc<P: AsRef<Path>>(boot_time: Option<time_t>, path: P) -> i64
         .and_then(|_| proc_uptime_s.split_whitespace().next())
         .and_then(|s| s.split('.').next().unwrap_or("0").parse().ok());
 
-    proc_uptime.unwrap_or_else(|| match boot_time {
-        Some(t) => {
-            let now = Local::now().timestamp();
-            #[cfg(target_pointer_width = "64")]
-            let boot_time: i64 = t;
-            #[cfg(not(target_pointer_width = "64"))]
-            let boot_time: i64 = t.into();
-            now - boot_time
+    if let Some(value) = proc_uptime {
+        (value, UptimeSource::ProcUptime)
+    } else {
+        match boot_time {
+            Some(t) => {
+                let now = Local::now().timestamp();
+                #[cfg(target_pointer_width = "64")]
+                let boot_time: i64 = t;
+                #[cfg(not(target_pointer_width = "64"))]
+                let boot_time: i64 = t.into();
+                (now - boot_time, UptimeSource::BootTime)
+            }
+            None => (-1, UptimeSource::Unknown),
         }
-        None => -1,
-    })
+    }
 }
 
 #[cfg(test)]

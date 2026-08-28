@@ -19,11 +19,10 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
-use ctcore::ct_show_error;
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::OsString;
-use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Read, Write, stdin};
 use sys_locale::get_locale;
 
 mod line_break;
@@ -53,6 +52,13 @@ mod fmt_flags {
 }
 
 pub type FmtFileOrStdReader = BufReader<Box<dyn Read + 'static>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FmtSemantic {
+    pub output: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
 
 #[derive(PartialEq, Debug, Default)]
 pub struct FmtConfigs {
@@ -193,10 +199,11 @@ impl FmtConfigs {
 /// # 返回
 ///
 /// `UResult<()>` 表示成功或失败。
-fn fmt_process_file<W: ?Sized + Write>(
+fn fmt_process_file_core<W: ?Sized + Write>(
     file_name: &str,
     fmt_configs: &FmtConfigs,
     output_stream: &mut W,
+    stderr_text: &mut String,
 ) -> CTResult<bool> {
     let mut fp = if file_name == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>)
@@ -208,18 +215,18 @@ fn fmt_process_file<W: ?Sized + Write>(
                 // 提前拦截可以防止底层的段落解析器将读取错误误当成 EOF 吞掉。
                 if let Ok(metadata) = f.metadata() {
                     if metadata.is_dir() {
-                        ct_show_error!("{}: Is a directory", file_name);
+                        stderr_text.push_str(&format!("fmt: {file_name}: Is a directory\n"));
                         return Ok(false);
                     }
                 }
                 BufReader::new(Box::new(f) as Box<dyn Read + 'static>)
             }
             Err(e) => {
-                ct_show_error!(
-                    "cannot open {} for reading: {}",
+                stderr_text.push_str(&format!(
+                    "fmt: cannot open {} for reading: {}\n",
                     file_name.quote(),
                     io_error_message(&e)
-                );
+                ));
                 return Ok(false);
             }
         }
@@ -249,6 +256,20 @@ fn fmt_process_file<W: ?Sized + Write>(
     Ok(true)
 }
 
+#[cfg(test)]
+fn fmt_process_file<W: ?Sized + Write>(
+    file_name: &str,
+    fmt_configs: &FmtConfigs,
+    output_stream: &mut W,
+) -> CTResult<bool> {
+    let mut stderr_text = String::new();
+    let result = fmt_process_file_core(file_name, fmt_configs, output_stream, &mut stderr_text)?;
+    if !stderr_text.is_empty() {
+        eprint!("{stderr_text}");
+    }
+    Ok(result)
+}
+
 #[derive(Default)]
 pub struct Fmt;
 impl Tool for Fmt {
@@ -266,6 +287,18 @@ impl Tool for Fmt {
 }
 
 pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
+    let semantic = fmt_native_semantic(args)?;
+    print!("{}", semantic.output);
+    if !semantic.stderr_text.is_empty() {
+        eprint!("{}", semantic.stderr_text);
+    }
+    if semantic.exit_code != 0 {
+        set_ct_exit_code(semantic.exit_code);
+    }
+    Ok(())
+}
+
+pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
@@ -279,19 +312,25 @@ pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
         .unwrap_or(vec!["-".into()]);
 
     let fmt_opts = FmtConfigs::from_matches(&matches)?;
-
-    let mut ostream = BufWriter::new(stdout());
+    let mut output = BufWriter::new(Vec::new());
+    let mut stderr_text = String::new();
     let mut all_ok = true;
 
     for file_name in &files {
-        all_ok &= fmt_process_file(file_name, &fmt_opts, &mut ostream)?;
+        all_ok &= fmt_process_file_core(file_name, &fmt_opts, &mut output, &mut stderr_text)?;
     }
 
-    if !all_ok {
-        set_ct_exit_code(1);
-    }
+    let output =
+        String::from_utf8(output.into_inner().map_err(|err| {
+            CtSimpleError::new(1, format!("failed to collect fmt output: {err}"))
+        })?)
+        .expect("fmt output should be utf-8");
 
-    Ok(())
+    Ok(FmtSemantic {
+        output,
+        stderr_text,
+        exit_code: if all_ok { 0 } else { 1 },
+    })
 }
 
 fn preprocess_legacy_width_syntax(args: Vec<OsString>) -> CTResult<Vec<OsString>> {

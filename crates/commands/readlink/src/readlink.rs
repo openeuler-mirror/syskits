@@ -12,7 +12,7 @@
 //! readlink命令是Linux中用于读取符号链接（symlink）并显示其指向的文件或目录的命令。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -40,6 +40,113 @@ mod readlink_flags {
     pub const READLINK_ARG_FILES: &str = "files";
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadlinkMode {
+    Readlink,
+    Canonicalize,
+    CanonicalizeExisting,
+    CanonicalizeMissing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadlinkSemanticRow {
+    pub input: String,
+    pub resolved_path: String,
+    pub mode: ReadlinkMode,
+    pub no_newline: bool,
+    pub zero: bool,
+    pub quiet: bool,
+    pub verbose: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadlinkSemantic {
+    pub rows: Vec<ReadlinkSemanticRow>,
+    pub classic_text: String,
+}
+
+struct ReadlinkOptions {
+    files: Vec<String>,
+    mode: ReadlinkMode,
+    resolve_mode: ResolveMode,
+    missing_handling: MissingHandling,
+    quiet: bool,
+    verbose: bool,
+    line_ending: Option<CtLineEnding>,
+    no_newline: bool,
+    zero: bool,
+}
+
+impl ReadlinkOptions {
+    fn from_matches(arg_matches: &ArgMatches) -> CTResult<Self> {
+        let mut is_no_trailing_delimiter =
+            arg_matches.get_flag(readlink_flags::READLINK_NO_NEWLINE);
+        let is_use_zero = arg_matches.get_flag(readlink_flags::READLINK_ZERO);
+        let is_silent = arg_matches.get_flag(readlink_flags::READLINK_SILENT)
+            || arg_matches.get_flag(readlink_flags::READLINK_QUIET);
+
+        let mut is_verbose = arg_matches.get_flag(readlink_flags::READLINK_VERBOSE);
+
+        let mode = if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_EXISTING) {
+            ReadlinkMode::CanonicalizeExisting
+        } else if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_MISSING) {
+            ReadlinkMode::CanonicalizeMissing
+        } else if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE) {
+            ReadlinkMode::Canonicalize
+        } else {
+            ReadlinkMode::Readlink
+        };
+
+        let resolve_mode = match mode {
+            ReadlinkMode::Readlink => ResolveMode::None,
+            _ => ResolveMode::Logical,
+        };
+
+        if std::env::var_os("POSIXLY_CORRECT").is_some() && resolve_mode == ResolveMode::None {
+            is_verbose = true;
+        }
+        if is_silent {
+            is_verbose = false;
+        }
+
+        let missing_handling = match mode {
+            ReadlinkMode::CanonicalizeExisting => MissingHandling::Existing,
+            ReadlinkMode::CanonicalizeMissing => MissingHandling::Missing,
+            _ => MissingHandling::Normal,
+        };
+
+        let files: Vec<String> = arg_matches
+            .get_many::<String>(readlink_flags::READLINK_ARG_FILES)
+            .map(|value| value.map(ToString::to_string).collect())
+            .unwrap_or_default();
+        if files.is_empty() {
+            return Err(CTsageError::new(1, "missing operand"));
+        }
+
+        if is_no_trailing_delimiter && files.len() > 1 && !is_silent {
+            ct_show_error!("ignoring --no-newline with multiple arguments");
+            is_no_trailing_delimiter = false;
+        }
+
+        let line_ending = match is_no_trailing_delimiter {
+            true => None,
+            false => Some(CtLineEnding::from_zero_flag(is_use_zero)),
+        };
+
+        Ok(Self {
+            files,
+            mode,
+            resolve_mode,
+            missing_handling,
+            quiet: is_silent,
+            verbose: is_verbose,
+            line_ending,
+            no_newline: is_no_trailing_delimiter,
+            zero: is_use_zero,
+        })
+    }
+}
+
 #[derive(Default)]
 pub struct Readlink;
 impl Tool for Readlink {
@@ -60,85 +167,81 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
+    let options = ReadlinkOptions::from_matches(&arg_matches)?;
 
-    let mut is_no_trailing_delimiter = arg_matches.get_flag(readlink_flags::READLINK_NO_NEWLINE);
-    let is_use_zero = arg_matches.get_flag(readlink_flags::READLINK_ZERO);
-    let is_silent = arg_matches.get_flag(readlink_flags::READLINK_SILENT)
-        || arg_matches.get_flag(readlink_flags::READLINK_QUIET);
-
-    let mut is_verbose = arg_matches.get_flag(readlink_flags::READLINK_VERBOSE);
-
-    let resovle_mode = if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE)
-        || arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_EXISTING)
-        || arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_MISSING)
-    {
-        ResolveMode::Logical
-    } else {
-        ResolveMode::None
-    };
-
-    // 如果处于严格 POSIX 模式，并且没有使用规范化选项，则强制开启错误提示
-    if std::env::var_os("POSIXLY_CORRECT").is_some() && resovle_mode == ResolveMode::None {
-        is_verbose = true;
-    }
-    // 显式的 -q / -s 参数具有最高优先级，可以压制 verbose
-    if is_silent {
-        is_verbose = false;
-    }
-
-    let miss_handle = if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_EXISTING) {
-        MissingHandling::Existing
-    } else if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_MISSING) {
-        MissingHandling::Missing
-    } else {
-        MissingHandling::Normal
-    };
-
-    let files: Vec<String> = arg_matches
-        .get_many::<String>(readlink_flags::READLINK_ARG_FILES)
-        .map(|value| value.map(ToString::to_string).collect())
-        .unwrap_or_default();
-    if files.is_empty() {
-        return Err(CTsageError::new(1, "missing operand"));
-    }
-
-    if is_no_trailing_delimiter && files.len() > 1 && !is_silent {
-        ct_show_error!("ignoring --no-newline with multiple arguments");
-        is_no_trailing_delimiter = false;
-    }
-
-    let line_ending = match is_no_trailing_delimiter {
-        true => None,
-        false => Some(CtLineEnding::from_zero_flag(is_use_zero)),
-    };
-
-    for f in &files {
-        let path_buf = PathBuf::from(f);
-        let path_result = match resovle_mode {
+    for input in &options.files {
+        let path_buf = PathBuf::from(input);
+        let path_result = match options.resolve_mode {
             ResolveMode::None => fs::read_link(&path_buf),
-            _ => canonicalize(&path_buf, miss_handle, resovle_mode),
+            _ => canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
         };
 
         match path_result {
             Ok(path) => {
-                readlink_show(&path, line_ending).map_err_context(String::new)?;
+                readlink_show(&path, options.line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
-                if is_verbose {
-                    // verbose 模式下正常抛出带有文件上下文的错误
+                if options.verbose {
                     return Err(CtSimpleError::new(
                         1,
-                        err.map_err_context(move || f.maybe_quote().to_string())
+                        err.map_err_context(move || input.maybe_quote().to_string())
                             .to_string(),
                     ));
-                } else {
-                    // 非 verbose 模式下静默返回错误码 1
-                    return Err(1.into());
                 }
+                return Err(1.into());
             }
         }
     }
     Ok(())
+}
+
+pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let arg_matches = ct_app().try_get_matches_from(args)?;
+    let options = ReadlinkOptions::from_matches(&arg_matches)?;
+
+    let mut rows = Vec::with_capacity(options.files.len());
+    let mut classic_text = String::new();
+
+    for input in &options.files {
+        let path_buf = PathBuf::from(input);
+        let path_result = match options.resolve_mode {
+            ResolveMode::None => fs::read_link(&path_buf),
+            _ => canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
+        };
+
+        match path_result {
+            Ok(path) => {
+                let resolved_path = path.to_string_lossy().to_string();
+                classic_text.push_str(&resolved_path);
+                if let Some(line_ending) = options.line_ending {
+                    classic_text.push_str(&line_ending.to_string());
+                }
+                rows.push(ReadlinkSemanticRow {
+                    input: input.clone(),
+                    resolved_path,
+                    mode: options.mode,
+                    no_newline: options.no_newline,
+                    zero: options.zero,
+                    quiet: options.quiet,
+                    verbose: options.verbose,
+                });
+            }
+            Err(err) => {
+                if options.verbose {
+                    return Err(CtSimpleError::new(
+                        1,
+                        err.map_err_context(move || input.maybe_quote().to_string())
+                            .to_string(),
+                    ));
+                }
+                return Err(1.into());
+            }
+        }
+    }
+
+    Ok(ReadlinkSemantic { rows, classic_text })
 }
 
 pub fn ct_app() -> Command {

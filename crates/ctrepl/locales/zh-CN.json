@@ -1,0 +1,20 @@
+{
+  "repl.banner": "syskits 结构化数据 REPL（输入 'help' 或 'exit'）",
+  "repl.prompt_left": "syskits",
+  "repl.prompt_right": " ",
+  "repl.exit_hint": "exit",
+  "repl.help_intro": "可直接输入 DSL 管线，例如：",
+  "repl.help_example": "  kubectl get pods -o json | from json | select metadata.name status.phase",
+  "repl.help_builtins": "内建命令：help, exit, quit, cd, pwd, clear, history, trace on/off/status, ast <expr>, debug on/off/status",
+  "repl.debug_enabled": "调试追踪已开启",
+  "repl.debug_disabled": "调试追踪已关闭",
+  "repl.debug_status_enabled": "调试追踪当前为开启",
+  "repl.debug_status_disabled": "调试追踪当前为关闭",
+  "repl.meta_unknown": "未知元命令",
+  "repl.history_empty": "历史记录为空",
+  "repl.history_io_warning": "历史持久化不可用，当前会话仅使用内存历史",
+  "repl.precheck_error_prefix": "预检查错误:",
+  "repl.precheck_warning_prefix": "预检查警告:",
+  "repl.trace_usage": "用法: trace on|off|status",
+  "repl.ast_usage": "用法: ast <expr>"
+}

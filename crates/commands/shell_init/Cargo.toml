@@ -1,0 +1,17 @@
+[package]
+name = "ct_shell_init"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "syskits shell integration init script generator"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ctcore = { workspace = true }
+clap = { workspace = true }
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }

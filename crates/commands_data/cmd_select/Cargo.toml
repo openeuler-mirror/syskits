@@ -1,0 +1,13 @@
+[package]
+name = "cmd_select"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "DataCommand: select — project columns from Record/List<Record>"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }

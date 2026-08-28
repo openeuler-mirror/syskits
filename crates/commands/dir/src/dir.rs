@@ -10,36 +10,51 @@
  */
 
 extern crate rust_i18n;
+use std::cmp::Reverse;
 use std::ffi::OsString;
+use std::fs::{self, FileType, Metadata};
+use std::process::Command as ProcessCommand;
+use std::time::UNIX_EPOCH;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::Command;
+use clap::{ArgMatches, Command};
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
-use std::path::Path;
+use ctcore::ct_version_cmp::ct_version_cmp;
+use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
-pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
-    let command = ct_app();
-    let matches = command.get_matches_from(args);
+pub type DirSemantic = ct_ls::LsSemantic;
+pub type DirSemanticRow = ct_ls::LsSemanticRow;
 
-    let mut default_quoting_style = false;
-    let mut default_format_style = false;
+struct DirectDirInvocation {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
+}
 
-    // 我们会检查是否给出了格式化或引号样式标志。
-    // 如果没有，我们将使用 dir 默认的格式化和引用样式标志
-    if !matches.contains_id(ls_flags::LS_QUOTING_STYLE)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DirSemanticSort {
+    None,
+    Name,
+    Size,
+    Time,
+    Version,
+    Extension,
+}
+
+fn dir_default_quoting_style(matches: &ArgMatches) -> bool {
+    !matches.contains_id(ls_flags::LS_QUOTING_STYLE)
         && !matches.get_flag(ls_flags::quoting::LS_C)
         && !matches.get_flag(ls_flags::quoting::LS_ESCAPE)
         && !matches.get_flag(ls_flags::quoting::LS_LITERAL)
         && !matches.get_flag(ls_flags::LS_ZERO)
-    {
-        default_quoting_style = true;
-    }
-    if !matches.contains_id(ls_flags::LS_FORMAT)
+}
+
+fn dir_default_format_style(matches: &ArgMatches) -> bool {
+    !matches.contains_id(ls_flags::LS_FORMAT)
         && !matches.get_flag(ls_flags::format::LS_ACROSS)
         && !matches.get_flag(ls_flags::format::LS_COLUMNS)
         && !matches.get_flag(ls_flags::format::LS_COMMAS)
@@ -50,25 +65,299 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
         && !matches.get_flag(ls_flags::format::LS_ONE_LINE)
         && !matches.get_flag(ls_flags::LS_ZERO)
         && !matches.get_flag(ls_flags::LS_FULL_TIME)
-    {
-        default_format_style = true;
-    }
+}
 
-    let mut config = LsConfig::from(&matches)?;
+fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
+    let mut config = LsConfig::from(matches)?;
 
-    if default_quoting_style {
+    if dir_default_quoting_style(matches) {
         config.quoting_style = CtQuotingStyle::C {
             quotes: CtQuotes::None,
         };
     }
-    if default_format_style {
+    if dir_default_format_style(matches) {
         config.format = LsFormat::Columns;
     }
 
-    let paths_list = matches.get_many::<OsString>(ls_flags::LS_PATHS);
-    let paths_from_args: Vec<_> = paths_list
+    Ok(config)
+}
+
+fn dir_paths_from_matches(matches: &ArgMatches) -> Vec<&Path> {
+    matches
+        .get_many::<OsString>(ls_flags::LS_PATHS)
         .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .unwrap_or_else(|| vec![Path::new(".")])
+}
+
+fn dir_display_format_name(format: &LsFormat) -> &'static str {
+    match format {
+        LsFormat::Columns => "columns",
+        LsFormat::Long => "long",
+        LsFormat::OneLine => "one-line",
+        LsFormat::Across => "across",
+        LsFormat::Commas => "commas",
+    }
+}
+
+fn run_dir_direct_process(argv: &[OsString]) -> CTResult<DirectDirInvocation> {
+    let current_exe = std::env::current_exe()?;
+    let output = ProcessCommand::new(current_exe).args(argv).output()?;
+
+    Ok(DirectDirInvocation {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.status.code().unwrap_or(1),
+    })
+}
+
+fn dir_file_type_name(file_type: Option<&FileType>) -> &'static str {
+    let Some(file_type) = file_type else {
+        return "unknown";
+    };
+
+    if file_type.is_dir() {
+        "directory"
+    } else if file_type.is_file() {
+        "file"
+    } else if file_type.is_symlink() {
+        "symlink"
+    } else {
+        "other"
+    }
+}
+
+fn dir_name_is_hidden(name: &str) -> bool {
+    name.starts_with('.')
+}
+
+fn dir_is_almost_all(matches: &ArgMatches) -> bool {
+    !matches.get_flag(ls_flags::files::LS_ALL) && matches.get_flag(ls_flags::files::LS_ALMOST_ALL)
+}
+
+fn dir_semantic_sort(matches: &ArgMatches) -> DirSemanticSort {
+    if let Some(field) = matches.get_one::<String>(ls_flags::LS_SORT) {
+        match field.as_str() {
+            "none" => DirSemanticSort::None,
+            "name" => DirSemanticSort::Name,
+            "time" => DirSemanticSort::Time,
+            "version" => DirSemanticSort::Version,
+            "extension" => DirSemanticSort::Extension,
+            "size" => DirSemanticSort::Size,
+            "width" => DirSemanticSort::Name,
+            _ => DirSemanticSort::Name,
+        }
+    } else if matches.get_flag(ls_flags::sort::LS_TIME) {
+        DirSemanticSort::Time
+    } else if matches.get_flag(ls_flags::sort::LS_SIZE) {
+        DirSemanticSort::Size
+    } else if matches.get_flag(ls_flags::sort::LS_NONE) {
+        DirSemanticSort::None
+    } else if matches.get_flag(ls_flags::sort::LS_VERSION) {
+        DirSemanticSort::Version
+    } else if matches.get_flag(ls_flags::sort::LS_EXTENSION) {
+        DirSemanticSort::Extension
+    } else {
+        DirSemanticSort::Name
+    }
+}
+
+fn dir_semantic_row(
+    row_index: usize,
+    source_path: &Path,
+    path: PathBuf,
+    name: OsString,
+    command_line: bool,
+) -> DirSemanticRow {
+    let metadata = path.symlink_metadata().ok();
+    let file_type = metadata.as_ref().map(Metadata::file_type);
+    let is_dir = file_type.as_ref().is_some_and(FileType::is_dir);
+    let is_file = file_type.as_ref().is_some_and(FileType::is_file);
+    let is_symlink = file_type.as_ref().is_some_and(FileType::is_symlink);
+
+    DirSemanticRow {
+        row_index,
+        source_path: source_path.display().to_string(),
+        path: path.display().to_string(),
+        name: name.to_string_lossy().into_owned(),
+        file_type: dir_file_type_name(file_type.as_ref()).into(),
+        size: metadata.map(|md| md.len()),
+        is_dir,
+        is_file,
+        is_symlink,
+        command_line,
+    }
+}
+
+fn dir_row_mtime_nanos(row: &DirSemanticRow) -> u128 {
+    Path::new(&row.path)
+        .symlink_metadata()
+        .ok()
+        .and_then(|md| md.modified().ok())
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0)
+}
+
+fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<DirSemanticRow> {
+    let metadata = match path.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(_) => return Vec::new(),
+    };
+
+    if matches.get_flag(ls_flags::LS_DIRECTORY) || !metadata.file_type().is_dir() {
+        let name = if path == Path::new(".") {
+            OsString::from(".")
+        } else {
+            path.file_name()
+                .map(OsString::from)
+                .unwrap_or_else(|| path.as_os_str().to_os_string())
+        };
+        return vec![dir_semantic_row(1, path, path.to_path_buf(), name, true)];
+    }
+
+    let include_hidden = matches.get_flag(ls_flags::files::LS_ALL);
+    let mut rows = Vec::new();
+
+    if include_hidden {
+        rows.push(dir_semantic_row(
+            rows.len() + 1,
+            path,
+            path.to_path_buf(),
+            OsString::from("."),
+            false,
+        ));
+        rows.push(dir_semantic_row(
+            rows.len() + 1,
+            path,
+            path.join(".."),
+            OsString::from(".."),
+            false,
+        ));
+    }
+
+    if let Ok(read_dir) = fs::read_dir(path) {
+        for entry in read_dir.flatten() {
+            let name = entry.file_name();
+            let name_text = name.to_string_lossy();
+            if !include_hidden && !dir_is_almost_all(matches) && dir_name_is_hidden(&name_text) {
+                continue;
+            }
+            rows.push(dir_semantic_row(
+                rows.len() + 1,
+                path,
+                entry.path(),
+                name,
+                false,
+            ));
+        }
+    }
+
+    match dir_semantic_sort(matches) {
+        DirSemanticSort::Name => {
+            rows.sort_by(|a, b| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false));
+        }
+        DirSemanticSort::Size => {
+            rows.sort_by_key(|row| Reverse(row.size.unwrap_or(0)));
+        }
+        DirSemanticSort::Time => {
+            rows.sort_by_key(|row| Reverse(dir_row_mtime_nanos(row)));
+        }
+        DirSemanticSort::Version => {
+            rows.sort_by(|a, b| ct_version_cmp(&a.name, &b.name));
+        }
+        DirSemanticSort::Extension => {
+            rows.sort_by(|a, b| {
+                Path::new(&a.name)
+                    .extension()
+                    .cmp(&Path::new(&b.name).extension())
+                    .then(a.name.cmp(&b.name))
+            });
+        }
+        DirSemanticSort::None => {}
+    }
+
+    if matches.get_flag(ls_flags::LS_REVERSE) {
+        rows.reverse();
+    }
+
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+
+    rows
+}
+
+fn dir_collect_semantic_rows(paths: &[&Path], matches: &ArgMatches) -> Vec<DirSemanticRow> {
+    let mut rows = Vec::new();
+    for path in paths {
+        rows.extend(dir_collect_semantic_rows_for_path(path, matches));
+    }
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+    rows
+}
+
+pub fn dir_native_semantic(args: impl ctcore::Args) -> CTResult<DirSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let direct = run_dir_direct_process(&argv)?;
+    let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
+    let stderr_text = String::from_utf8_lossy(&direct.stderr).into_owned();
+
+    let command = ct_app();
+    let matches = match command.try_get_matches_from(argv) {
+        Ok(matches) => matches,
+        Err(_) => {
+            return Ok(DirSemantic {
+                command: "dir".into(),
+                display_format: "unknown".into(),
+                include_hidden: false,
+                almost_all: false,
+                directory_mode: false,
+                recursive: false,
+                paths: Vec::new(),
+                rows: Vec::new(),
+                classic_text,
+                stderr_text,
+                exit_code: direct.exit_code,
+            });
+        }
+    };
+
+    let config = dir_config_from_matches(&matches)?;
+    let paths_from_args = dir_paths_from_matches(&matches);
+    let paths = paths_from_args
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let rows = dir_collect_semantic_rows(&paths_from_args, &matches);
+
+    Ok(DirSemantic {
+        command: "dir".into(),
+        display_format: dir_display_format_name(&config.format).into(),
+        include_hidden: matches.get_flag(ls_flags::files::LS_ALL),
+        almost_all: dir_is_almost_all(&matches),
+        directory_mode: matches.get_flag(ls_flags::LS_DIRECTORY),
+        recursive: matches.get_flag(ls_flags::LS_RECURSIVE),
+        paths,
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code: direct.exit_code,
+    })
+}
+
+pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let command = ct_app();
+    let matches = command.get_matches_from(args);
+
+    let config = dir_config_from_matches(&matches)?;
+    let paths_from_args = dir_paths_from_matches(&matches);
 
     ct_ls::list(paths_from_args, &config)
 }
@@ -113,6 +402,28 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("dir")];
         assert!(tool.execute(&args).is_ok());
+    }
+
+    #[test]
+    fn test_dir_config_defaults_to_columns_and_c_quoting() {
+        let matches = ct_app().get_matches_from(["dir", "."]);
+        let config = dir_config_from_matches(&matches).expect("dir config");
+
+        assert_eq!(config.format, LsFormat::Columns);
+        assert_eq!(
+            config.quoting_style,
+            CtQuotingStyle::C {
+                quotes: CtQuotes::None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_dir_paths_default_to_current_directory() {
+        let matches = ct_app().get_matches_from(["dir"]);
+        let paths = dir_paths_from_matches(&matches);
+
+        assert_eq!(paths, vec![Path::new(".")]);
     }
 
     #[cfg(test)]

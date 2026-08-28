@@ -10,7 +10,7 @@
  */
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::{Tool, ct_error::CTResult};
@@ -21,6 +21,38 @@ use sys_locale::get_locale;
 static PRINTENV_OPT_NULL: &str = "null";
 
 static PRINTENV_ARG_VARIABLES: &str = "variables";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrintenvRow {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrintenvSemantic {
+    pub rows: Vec<PrintenvRow>,
+    pub classic_text: String,
+    pub exit_code: i32,
+}
+
+struct PrintenvOptions {
+    separator: &'static str,
+    variables: Vec<String>,
+}
+
+impl PrintenvOptions {
+    fn from_matches(args_match: &ArgMatches) -> Self {
+        let variables: Vec<String> = args_match
+            .get_many::<String>(PRINTENV_ARG_VARIABLES)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default();
+        let null = args_match.get_flag(PRINTENV_OPT_NULL);
+        Self {
+            separator: if null { "\x00" } else { "\n" },
+            variables,
+        }
+    }
+}
 
 /// 主函数用于打印环境变量。
 ///
@@ -34,52 +66,67 @@ pub fn printenv_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     // 从命令行参数中获取匹配项
     let args_match = ct_app().get_matches_from(args);
-
-    // 解析命令行参数中指定的环境变量名列表
-    let var: Vec<String> = args_match
-        .get_many::<String>(PRINTENV_ARG_VARIABLES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    // 根据命令行参数决定环境变量值之间的分隔符
-    let separator = if args_match.get_flag(PRINTENV_OPT_NULL) {
-        "\x00"
+    let options = PrintenvOptions::from_matches(&args_match);
+    let semantic = printenv_semantic_from_options(&options);
+    print!("{}", semantic.classic_text);
+    if semantic.exit_code == 0 {
+        Ok(())
     } else {
-        "\n"
-    };
-
-    // 若未指定环境变量名，则打印所有环境变量
-    if var.is_empty() {
-        for (env_var, value) in env::vars() {
-            print!("{env_var}={value}{separator}");
-        }
-        return Ok(());
+        Err(semantic.exit_code.into())
     }
-
-    // 检查并处理指定的环境变量
-    let mut error_found = false;
-
-    printenv_processing(var, separator, &mut error_found)
 }
 
-fn printenv_processing(var: Vec<String>, separator: &str, error_found: &mut bool) -> CTResult<()> {
-    for env_var in var {
-        // 忽略形如 "a=b" 的变量，但对此发出错误
-        if env_var.contains('=') {
-            *error_found = true;
+pub fn printenv_native_semantic(args: impl ctcore::Args) -> CTResult<PrintenvSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args_match = ct_app().get_matches_from(args);
+    let options = PrintenvOptions::from_matches(&args_match);
+    Ok(printenv_semantic_from_options(&options))
+}
+
+fn printenv_semantic_from_options(options: &PrintenvOptions) -> PrintenvSemantic {
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut error_found = false;
+
+    if options.variables.is_empty() {
+        for (name, value) in env::vars() {
+            classic_text.push_str(&name);
+            classic_text.push('=');
+            classic_text.push_str(&value);
+            classic_text.push_str(options.separator);
+            rows.push(PrintenvRow { name, value });
+        }
+        return PrintenvSemantic {
+            rows,
+            classic_text,
+            exit_code: 0,
+        };
+    }
+
+    for variable in &options.variables {
+        if variable.contains('=') {
+            error_found = true;
             continue;
         }
-        // 尝试获取环境变量的值并打印
-        if let Ok(var) = env::var(env_var) {
-            print!("{var}{separator}");
+
+        if let Ok(value) = env::var(variable) {
+            classic_text.push_str(&value);
+            classic_text.push_str(options.separator);
+            rows.push(PrintenvRow {
+                name: variable.clone(),
+                value,
+            });
         } else {
-            // 若环境变量不存在，则标记错误
-            *error_found = true;
+            error_found = true;
         }
     }
 
-    // 若存在错误，则返回错误码
-    if *error_found { Err(1.into()) } else { Ok(()) }
+    PrintenvSemantic {
+        rows,
+        classic_text,
+        exit_code: if error_found { 1 } else { 0 },
+    }
 }
 
 pub fn ct_app() -> Command {

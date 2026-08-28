@@ -20,6 +20,9 @@ rust-i18n = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["colors"] }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [[bin]]
 name = "dircolors"
 path = "src/main.rs"

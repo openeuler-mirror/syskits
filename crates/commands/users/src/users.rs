@@ -27,6 +27,19 @@ use ctcore::ct_utmpx::{self, CtUtmpx};
 
 static USERS_ARG_FILES: &str = "files";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsersSession {
+    pub user: String,
+    pub tty_device: String,
+    pub host: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsersSemantic {
+    pub sessions: Vec<UsersSession>,
+    pub classic_text: String,
+}
+
 fn users_get_long_usage() -> String {
     format!(
         "Output who is currently logged in according to FILE.
@@ -61,6 +74,39 @@ impl Tool for Users {
 }
 
 pub fn users_main(args: impl ctcore::Args) -> CTResult<String> {
+    let semantic = users_native_semantic(args)?;
+    Ok(semantic.classic_text)
+}
+
+fn users_sessions_from_file(path: &Path) -> Vec<UsersSession> {
+    let mut sessions = CtUtmpx::iter_all_records_from(path)
+        .filter(CtUtmpx::is_user_process)
+        .map(|ut| UsersSession {
+            user: ut.user(),
+            tty_device: ut.tty_device(),
+            host: ut.host(),
+        })
+        .collect::<Vec<_>>();
+
+    sessions.sort_by(|left, right| {
+        left.user
+            .cmp(&right.user)
+            .then_with(|| left.tty_device.cmp(&right.tty_device))
+            .then_with(|| left.host.cmp(&right.host))
+    });
+
+    sessions
+}
+
+fn users_classic_text(sessions: &[UsersSession]) -> String {
+    sessions
+        .iter()
+        .map(|session| session.user.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn users_native_semantic(args: impl ctcore::Args) -> CTResult<UsersSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
@@ -68,19 +114,12 @@ pub fn users_main(args: impl ctcore::Args) -> CTResult<String> {
         .try_get_matches_from(args)?;
 
     let filename = parse_users_files(matches);
-
-    let mut users_info = CtUtmpx::iter_all_records_from(filename)
-        .filter(CtUtmpx::is_user_process)
-        .map(|ut| ut.user())
-        .collect::<Vec<_>>();
-
-    if !users_info.is_empty() {
-        users_info.sort();
-        let users = users_info.join(" ");
-        Ok(users)
-    } else {
-        Ok(String::from(""))
-    }
+    let sessions = users_sessions_from_file(&filename);
+    let classic_text = users_classic_text(&sessions);
+    Ok(UsersSemantic {
+        sessions,
+        classic_text,
+    })
 }
 
 fn parse_users_files(matches: ArgMatches) -> PathBuf {
@@ -146,77 +185,81 @@ mod tests {
         use std::io::Write;
         use tempfile::TempDir;
 
-        #[repr(C)]
-        #[derive(Debug)]
-        struct UtmpRecord {
-            ut_type: u16,
-            ut_pid: i32,
-            ut_line: [u8; 32],
-            ut_id: [u8; 4],
-            ut_user: [u8; 32],
-            ut_host: [u8; 256],
-            ut_exit: [i32; 2],
-            ut_session: i32,
-            ut_tv: [i32; 2],
-            ut_addr_v6: [i32; 4],
-            __unused: [u8; 20], // To match the size of C struct
-        }
-
-        impl UtmpRecord {
-            fn new(username: &str, terminal: &str, hostname: &str) -> Self {
-                let mut ut_line = [0; 32];
-                ut_line[..terminal.len()].copy_from_slice(terminal.as_bytes());
-
-                let mut ut_user = [0; 32];
-                ut_user[..username.len()].copy_from_slice(username.as_bytes());
-
-                let mut ut_host = [0; 256];
-                ut_host[..hostname.len()].copy_from_slice(hostname.as_bytes());
-
-                UtmpRecord {
-                    ut_type: 7, // USER_PROCESS
-                    ut_pid: 0,
-                    ut_line,
-                    ut_id: [0; 4],
-                    ut_user,
-                    ut_host,
-                    ut_exit: [0; 2],
-                    ut_session: 0,
-                    ut_tv: [0; 2],
-                    ut_addr_v6: [0; 4],
-                    __unused: [0; 20],
-                }
+        fn copy_str_to_c_char_array<const N: usize>(dst: &mut [libc::c_char; N], src: &str) {
+            for (dst, byte) in dst.iter_mut().zip(src.bytes()) {
+                *dst = byte as libc::c_char;
             }
         }
 
-        #[test]
-        fn test_users_main_argument_parsing_file() {
-            let dir = TempDir::with_prefix("test_pr_").unwrap();
-            let file_path = dir.path().join("pr_test_file");
+        fn write_users_fixture(rows: &[(&str, &str, &str)]) -> (TempDir, String) {
+            let dir = TempDir::with_prefix("test_users_").unwrap();
+            let file_path = dir.path().join("users.utmp");
             let mut tmp_file = File::create(&file_path).unwrap();
 
-            let users = vec![
-                ("user1", "tty1", "localhost"),
-                ("user2", "tty2", "localhost"),
-                ("user3", "tty3", "localhost"),
-            ];
-            for (username, terminal, hostname) in users {
-                let record = UtmpRecord::new(username, terminal, hostname);
+            for (index, (username, terminal, hostname)) in rows.iter().enumerate() {
+                let mut record = unsafe { std::mem::zeroed::<libc::utmpx>() };
+                record.ut_type = ctcore::ct_utmpx::USER_PROCESS;
+                record.ut_pid = i32::try_from(index + 1).unwrap();
+                copy_str_to_c_char_array(&mut record.ut_line, terminal);
+                copy_str_to_c_char_array(&mut record.ut_user, username);
+                copy_str_to_c_char_array(&mut record.ut_host, hostname);
+                let id = format!("{index:04}");
+                for (dst, byte) in record.ut_id.iter_mut().zip(id.bytes()) {
+                    *dst = byte as libc::c_char;
+                }
+
                 let record_bytes: &[u8] = unsafe {
                     std::slice::from_raw_parts(
-                        &record as *const _ as *const u8,
-                        std::mem::size_of::<UtmpRecord>(),
+                        &record as *const libc::utmpx as *const u8,
+                        std::mem::size_of::<libc::utmpx>(),
                     )
                 };
                 tmp_file.write_all(record_bytes).unwrap();
             }
 
-            let file_name = file_path.to_str().unwrap();
+            (dir, file_path.to_string_lossy().into_owned())
+        }
 
-            let args = [ctcore::ct_util_name(), file_name];
+        #[test]
+        fn test_users_main_argument_parsing_file() {
+            let (_dir, file_name) = write_users_fixture(&[
+                ("user3", "tty3", "localhost"),
+                ("user1", "tty1", "localhost"),
+                ("user2", "tty2", "localhost"),
+            ]);
+
+            let args = [ctcore::ct_util_name(), file_name.as_str()];
             let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), "user1");
+            assert_eq!(result.unwrap(), "user1 user2 user3");
+        }
+
+        #[test]
+        fn test_users_native_semantic_argument_parsing_file() {
+            let (_dir, file_name) = write_users_fixture(&[
+                ("user2", "pts/2", "remote-b"),
+                ("user1", "pts/1", "remote-a"),
+            ]);
+
+            let args = [ctcore::ct_util_name(), file_name.as_str()];
+            let result = users_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(
+                result.sessions,
+                vec![
+                    UsersSession {
+                        user: "user1".into(),
+                        tty_device: "pts/1".into(),
+                        host: "remote-a".into(),
+                    },
+                    UsersSession {
+                        user: "user2".into(),
+                        tty_device: "pts/2".into(),
+                        host: "remote-b".into(),
+                    },
+                ]
+            );
+            assert_eq!(result.classic_text, "user1 user2");
         }
 
         #[test]

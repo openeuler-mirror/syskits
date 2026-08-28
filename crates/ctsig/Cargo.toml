@@ -1,0 +1,13 @@
+[package]
+name = "ctsig"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "Command signature and argument binding for syskits data pipeline"
+
+[dependencies]
+ctpipeline = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

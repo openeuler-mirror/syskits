@@ -1,0 +1,18 @@
+[package]
+name = "cmd_whoami"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Phase A native whoami command"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[dependencies]
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ct_whoami = { package = "ct_whoami", path = "../../commands/whoami" }

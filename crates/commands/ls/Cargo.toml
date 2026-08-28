@@ -36,6 +36,9 @@ ctcore = { workspace = true, features = [
 once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 hostname = { workspace = true }
+ctengine = { workspace = true, optional = true }
+ctpipeline = { workspace = true, optional = true }
+ctsig = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 exacl = { workspace = true, optional = true }
@@ -50,3 +53,4 @@ path = "src/main.rs"
 feat_selinux = ["selinux"]
 feat_acl = ["exacl"]
 default = ["feat_selinux", "feat_acl"]
+feat_typed_cmds = ["ctengine", "ctpipeline", "ctsig"]

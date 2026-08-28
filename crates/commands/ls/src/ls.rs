@@ -28,6 +28,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[allow(unused_imports)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
 #[cfg(unix)]
 use std::sync::Mutex;
 #[allow(unused_imports)]
@@ -173,6 +174,41 @@ const LS_DEFAULT_TERM_WIDTH: u16 = 80;
 const LS_POSIXLY_CORRELS_BLOCK_SIZE: u64 = 512;
 const LS_DEFAULT_BLOCK_SIZE: u64 = 1024;
 const LS_DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LsSemanticRow {
+    pub row_index: usize,
+    pub source_path: String,
+    pub path: String,
+    pub name: String,
+    pub file_type: String,
+    pub size: Option<u64>,
+    pub is_dir: bool,
+    pub is_file: bool,
+    pub is_symlink: bool,
+    pub command_line: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LsSemantic {
+    pub command: String,
+    pub display_format: String,
+    pub include_hidden: bool,
+    pub almost_all: bool,
+    pub directory_mode: bool,
+    pub recursive: bool,
+    pub paths: Vec<String>,
+    pub rows: Vec<LsSemanticRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct DirectLsInvocation {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
+}
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
@@ -683,15 +719,11 @@ fn is_color_compatible_term() -> bool {
 ///
 /// 表示是否使用颜色的布尔值。
 fn extract_color(options: &clap::ArgMatches) -> bool {
-    if !is_color_compatible_term() {
-        return false;
-    }
-
     match options.get_one::<String>(ls_flags::LS_COLOR) {
         None => options.contains_id(ls_flags::LS_COLOR),
         Some(val) => match val.as_str() {
             "" | "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => stdout().is_terminal(),
+            "auto" | "tty" | "if-tty" => is_color_compatible_term() && stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
     }
@@ -1318,6 +1350,217 @@ impl LsConfig {
             size_suffix,
         })
     }
+}
+
+fn ls_display_format_name(format: &LsFormat) -> &'static str {
+    match format {
+        LsFormat::Columns => "columns",
+        LsFormat::Long => "long",
+        LsFormat::OneLine => "one-line",
+        LsFormat::Across => "across",
+        LsFormat::Commas => "commas",
+    }
+}
+
+fn run_ls_direct_process(argv: &[OsString]) -> CTResult<DirectLsInvocation> {
+    let current_exe = std::env::current_exe()?;
+    let output = ProcessCommand::new(current_exe).args(argv).output()?;
+
+    Ok(DirectLsInvocation {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.status.code().unwrap_or(1),
+    })
+}
+
+fn ls_file_type_name(file_type: Option<&FileType>) -> &'static str {
+    let Some(file_type) = file_type else {
+        return "unknown";
+    };
+
+    if file_type.is_dir() {
+        "directory"
+    } else if file_type.is_file() {
+        "file"
+    } else if file_type.is_symlink() {
+        "symlink"
+    } else {
+        "other"
+    }
+}
+
+fn ls_name_is_hidden(name: &str) -> bool {
+    name.starts_with('.')
+}
+
+fn ls_semantic_row(
+    row_index: usize,
+    source_path: &Path,
+    path: PathBuf,
+    name: OsString,
+    command_line: bool,
+) -> LsSemanticRow {
+    let metadata = path.symlink_metadata().ok();
+    let file_type = metadata.as_ref().map(Metadata::file_type);
+    let is_dir = file_type.as_ref().is_some_and(FileType::is_dir);
+    let is_file = file_type.as_ref().is_some_and(FileType::is_file);
+    let is_symlink = file_type.as_ref().is_some_and(FileType::is_symlink);
+
+    LsSemanticRow {
+        row_index,
+        source_path: source_path.display().to_string(),
+        path: path.display().to_string(),
+        name: name.to_string_lossy().into_owned(),
+        file_type: ls_file_type_name(file_type.as_ref()).into(),
+        size: metadata.map(|md| md.len()),
+        is_dir,
+        is_file,
+        is_symlink,
+        command_line,
+    }
+}
+
+fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSemanticRow> {
+    let metadata = match path.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(_) => return Vec::new(),
+    };
+
+    if config.is_directory || !metadata.file_type().is_dir() {
+        let name = if path == Path::new(".") {
+            OsString::from(".")
+        } else {
+            path.file_name()
+                .map(OsString::from)
+                .unwrap_or_else(|| path.as_os_str().to_os_string())
+        };
+        return vec![ls_semantic_row(1, path, path.to_path_buf(), name, true)];
+    }
+
+    let mut rows = Vec::new();
+
+    if config.files == LsFiles::LsAll {
+        rows.push(ls_semantic_row(
+            rows.len() + 1,
+            path,
+            path.to_path_buf(),
+            OsString::from("."),
+            false,
+        ));
+        rows.push(ls_semantic_row(
+            rows.len() + 1,
+            path,
+            path.join(".."),
+            OsString::from(".."),
+            false,
+        ));
+    }
+
+    if let Ok(read_dir) = fs::read_dir(path) {
+        for entry in read_dir.flatten() {
+            let name = entry.file_name();
+            let name_text = name.to_string_lossy();
+            if config.files == LsFiles::LsNormal && ls_name_is_hidden(&name_text) {
+                continue;
+            }
+            rows.push(ls_semantic_row(
+                rows.len() + 1,
+                path,
+                entry.path(),
+                name,
+                false,
+            ));
+        }
+    }
+
+    if config.sort == LsSort::Name {
+        rows.sort_by(|a, b| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false));
+    } else if config.sort == LsSort::Size {
+        rows.sort_by_key(|row| Reverse(row.size.unwrap_or(0)));
+    } else if config.sort == LsSort::Extension {
+        rows.sort_by(|a, b| {
+            Path::new(&a.name)
+                .extension()
+                .cmp(&Path::new(&b.name).extension())
+                .then(a.name.cmp(&b.name))
+        });
+    }
+
+    if config.is_reverse {
+        rows.reverse();
+    }
+
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+
+    rows
+}
+
+fn ls_collect_semantic_rows(paths: &[&Path], config: &LsConfig) -> Vec<LsSemanticRow> {
+    let mut rows = Vec::new();
+    for path in paths {
+        rows.extend(ls_collect_semantic_rows_for_path(path, config));
+    }
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+    rows
+}
+
+pub fn ls_native_semantic(args: impl ctcore::Args) -> CTResult<LsSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let direct = run_ls_direct_process(&argv)?;
+    let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
+    let stderr_text = String::from_utf8_lossy(&direct.stderr).into_owned();
+
+    let command = ct_app();
+    let matches = match command.try_get_matches_from(argv) {
+        Ok(matches) => matches,
+        Err(_) => {
+            return Ok(LsSemantic {
+                command: "ls".into(),
+                display_format: "unknown".into(),
+                include_hidden: false,
+                almost_all: false,
+                directory_mode: false,
+                recursive: false,
+                paths: Vec::new(),
+                rows: Vec::new(),
+                classic_text,
+                stderr_text,
+                exit_code: direct.exit_code,
+            });
+        }
+    };
+
+    let config = LsConfig::from(&matches)?;
+    let paths_list = matches.get_many::<OsString>(ls_flags::LS_PATHS);
+    let paths_from_args: Vec<_> = paths_list
+        .map(|v| v.map(Path::new).collect())
+        .unwrap_or_else(|| vec![Path::new(".")]);
+    let paths = paths_from_args
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let rows = ls_collect_semantic_rows(&paths_from_args, &config);
+
+    Ok(LsSemantic {
+        command: "ls".into(),
+        display_format: ls_display_format_name(&config.format).into(),
+        include_hidden: config.files == LsFiles::LsAll,
+        almost_all: config.files == LsFiles::LsAlmostAll,
+        directory_mode: config.is_directory,
+        recursive: config.is_recursive,
+        paths,
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code: direct.exit_code,
+    })
 }
 
 #[derive(Default)]
@@ -2784,6 +3027,48 @@ fn get_block_size(md: &Metadata, config: &LsConfig) -> u64 {
     }
 }
 
+fn tabify_grid_output(rendered: &str, tab_size: usize) -> String {
+    let mut output = String::with_capacity(rendered.len());
+    let mut column = 0usize;
+    let mut chars = rendered.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\n' {
+            output.push(ch);
+            column = 0;
+            continue;
+        }
+
+        if ch != ' ' || tab_size == 0 {
+            output.push(ch);
+            column += UnicodeWidthStr::width(ch.encode_utf8(&mut [0; 4]));
+            continue;
+        }
+
+        let mut spaces = 1usize;
+        while chars.peek() == Some(&' ') {
+            chars.next();
+            spaces += 1;
+        }
+
+        while spaces > 0 {
+            let next_tab = ((column / tab_size) + 1) * tab_size;
+            let distance = next_tab - column;
+            if distance <= spaces && distance > 1 {
+                output.push('\t');
+                column = next_tab;
+                spaces -= distance;
+            } else {
+                output.push(' ');
+                column += 1;
+                spaces -= 1;
+            }
+        }
+    }
+
+    output
+}
+
 fn display_grid<W: Write>(
     names: impl Iterator<Item = Cell>,
     width: u16,
@@ -2826,11 +3111,15 @@ fn display_grid<W: Write>(
 
         match grid.fit_into_width(width as usize) {
             Some(out) => {
-                write!(output, "{out}")?;
+                write!(output, "{}", tabify_grid_output(&out.to_string(), 8))?;
             }
             // Width is too small for the grid, so we fit it in one column
             None => {
-                write!(output, "{}", grid.fit_into_columns(1))?;
+                write!(
+                    output,
+                    "{}",
+                    tabify_grid_output(&grid.fit_into_columns(1).to_string(), 8)
+                )?;
             }
         }
     }
@@ -3974,6 +4263,32 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
 
+    struct EnvVarGuard {
+        name: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(name: &'static str, value: &str) -> Self {
+            let previous = std::env::var_os(name);
+            unsafe {
+                std::env::set_var(name, value);
+            }
+            Self { name, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.previous {
+                    Some(value) => std::env::set_var(self.name, value),
+                    None => std::env::remove_var(self.name),
+                }
+            }
+        }
+    }
+
     #[test]
     fn test_locale_aware_filename_sorting() {
         // 直接测试字符串比较逻辑，避免环境变量并发问题
@@ -3998,6 +4313,29 @@ mod tests {
             result4,
             std::cmp::Ordering::Less | std::cmp::Ordering::Greater | std::cmp::Ordering::Equal
         ));
+    }
+
+    #[test]
+    fn color_always_ignores_incompatible_term() {
+        let _term = EnvVarGuard::set("TERM", "dumb");
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--color=always"])
+            .unwrap();
+
+        assert!(extract_color(&matches));
+    }
+
+    #[test]
+    fn tabify_grid_output_uses_tabs_only_at_tab_stops() {
+        assert_eq!(
+            tabify_grid_output(".  ..  .hidden1  .hidden2  .hidden_dir  file1.txt\n", 8),
+            ".  ..  .hidden1  .hidden2  .hidden_dir\tfile1.txt\n"
+        );
+        assert_eq!(
+            tabify_grid_output("a.txt  b.txt  subdir\n", 8),
+            "a.txt  b.txt  subdir\n"
+        );
     }
 
     #[test]

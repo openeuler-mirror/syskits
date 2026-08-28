@@ -167,6 +167,48 @@ pub fn pinky_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 }
 
+pub fn pinky_native_semantic(args: impl ctcore::Args) -> CTResult<PinkySemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app()
+        .after_help(get_long_usage())
+        .try_get_matches_from(args)?;
+
+    let flags = PinkyFlags::new(&matches);
+    let do_short_format = !matches.get_flag(pinky_options::PINKY_LONG_FORMAT);
+
+    if do_short_format {
+        flags.short_semantic().map_err(|e| e.into())
+    } else {
+        Ok(flags.long_semantic())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinkyRow {
+    pub kind: String,
+    pub user: String,
+    pub full_name: Option<String>,
+    pub tty_device: Option<String>,
+    pub mesg: Option<String>,
+    pub idle: Option<String>,
+    pub login_time: Option<String>,
+    pub host: Option<String>,
+    pub home_dir: Option<String>,
+    pub shell: Option<String>,
+    pub project_text: Option<String>,
+    pub plan_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinkySemantic {
+    pub view_kind: String,
+    pub rows: Vec<PinkyRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 struct PinkyFlags {
     is_include_idle: bool,
     is_include_heading: bool,
@@ -227,7 +269,7 @@ fn time_format_width() -> usize {
     if hard_locale_time() {
         16 // "2024-12-25 15:30" = 16 characters
     } else {
-        12 // "Dec 25 15:30" = 12 characters  
+        12 // "Dec 25 15:30" = 12 characters
     }
 }
 
@@ -440,6 +482,247 @@ impl PinkyFlags {
             }
         }
     }
+
+    fn long_profile_row(&self, username: &str) -> PinkyRow {
+        match CtPasswd::locate(username) {
+            Ok(pw) => {
+                let fullname = gecos_to_fullname(&pw).unwrap_or_default();
+                let user_dir = pw.user_dir.unwrap_or_default();
+                let user_shell = pw.user_shell.unwrap_or_default();
+                let project_text = if self.is_include_project {
+                    read_optional_file(PathBuf::from(&user_dir).join(".project"))
+                } else {
+                    None
+                };
+                let plan_text = if self.is_include_plan {
+                    read_optional_file(PathBuf::from(&user_dir).join(".plan"))
+                } else {
+                    None
+                };
+
+                PinkyRow {
+                    kind: "profile".into(),
+                    user: username.to_string(),
+                    full_name: Some(fullname),
+                    tty_device: None,
+                    mesg: None,
+                    idle: None,
+                    login_time: None,
+                    host: None,
+                    home_dir: if self.is_include_home_and_shell {
+                        Some(user_dir)
+                    } else {
+                        None
+                    },
+                    shell: if self.is_include_home_and_shell {
+                        Some(user_shell)
+                    } else {
+                        None
+                    },
+                    project_text,
+                    plan_text,
+                }
+            }
+            Err(_) => PinkyRow {
+                kind: "profile".into(),
+                user: username.to_string(),
+                full_name: None,
+                tty_device: None,
+                mesg: None,
+                idle: None,
+                login_time: None,
+                host: None,
+                home_dir: None,
+                shell: None,
+                project_text: None,
+                plan_text: None,
+            },
+        }
+    }
+
+    fn render_long_profile(&self, row: &PinkyRow) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("Login name: {:<28}In real life: ", row.user));
+
+        match &row.full_name {
+            Some(full_name) => {
+                out.push_str(&format!(" {full_name}\n"));
+                if self.is_include_home_and_shell {
+                    out.push_str(&format!(
+                        "Directory: {:<29}Shell:  {}\n",
+                        row.home_dir.as_deref().unwrap_or_default(),
+                        row.shell.as_deref().unwrap_or_default()
+                    ));
+                }
+                if self.is_include_project
+                    && let Some(project_text) = &row.project_text
+                {
+                    out.push_str("Project: ");
+                    out.push_str(project_text);
+                }
+                if self.is_include_plan
+                    && let Some(plan_text) = &row.plan_text
+                {
+                    out.push_str("Plan:\n");
+                    out.push_str(plan_text);
+                }
+                out.push('\n');
+            }
+            None => out.push_str(" ???\n"),
+        }
+
+        out
+    }
+
+    fn long_semantic(&self) -> PinkySemantic {
+        let rows = self
+            .pinky_names
+            .iter()
+            .map(|username| self.long_profile_row(username))
+            .collect::<Vec<_>>();
+        let classic_text = rows
+            .iter()
+            .map(|row| self.render_long_profile(row))
+            .collect::<String>();
+
+        PinkySemantic {
+            view_kind: "long".into(),
+            rows,
+            classic_text,
+            stderr_text: String::new(),
+            exit_code: 0,
+        }
+    }
+
+    fn short_session_row(&self, ut: &CtUtmpx) -> std::io::Result<PinkyRow> {
+        let (mesg, last_change) = self.get_tty_info(ut)?;
+        let full_name = if self.is_include_fullname {
+            Some(
+                CtPasswd::locate(ut.user().as_ref())
+                    .ok()
+                    .and_then(|pw| gecos_to_fullname(&pw))
+                    .unwrap_or_else(|| "???".to_string()),
+            )
+        } else {
+            None
+        };
+        let idle = if self.is_include_idle {
+            Some(if last_change == 0 {
+                "?????".to_string()
+            } else {
+                pinky_idle_string(last_change)
+            })
+        } else {
+            None
+        };
+        let host = if self.is_include_where {
+            let host = ut.host();
+            if host.is_empty() {
+                None
+            } else {
+                Some(ut.canon_host()?)
+            }
+        } else {
+            None
+        };
+
+        Ok(PinkyRow {
+            kind: "session".into(),
+            user: ut.user(),
+            full_name,
+            tty_device: Some(ut.tty_device()),
+            mesg: Some(mesg.to_string()),
+            idle,
+            login_time: Some(time_string(ut)),
+            host,
+            home_dir: None,
+            shell: None,
+            project_text: None,
+            plan_text: None,
+        })
+    }
+
+    fn render_short_heading(&self) -> String {
+        if !self.is_include_heading {
+            return String::new();
+        }
+
+        let mut out = String::new();
+        out.push_str(&format!("{:<8}", "Login"));
+        if self.is_include_fullname {
+            out.push_str(&format!(" {:<19}", "Name"));
+        }
+        out.push_str(&format!(" {:<9}", " TTY"));
+        if self.is_include_idle {
+            out.push_str(&format!(" {:<6}", "Idle"));
+        }
+        out.push_str(&format!(" {:<width$}", "When", width = time_format_width()));
+        if self.is_include_where {
+            out.push_str(" Where");
+        }
+        out.push('\n');
+        out
+    }
+
+    fn render_short_row(&self, row: &PinkyRow) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("{:<8}", row.user));
+        if self.is_include_fullname {
+            out.push_str(&format!(
+                " {:<19}",
+                row.full_name.as_deref().unwrap_or("???")
+            ));
+        }
+        out.push_str(&format!(
+            " {}{:<8}",
+            row.mesg.as_deref().unwrap_or("?"),
+            row.tty_device.as_deref().unwrap_or_default()
+        ));
+        if self.is_include_idle {
+            out.push_str(&format!(" {:<6}", row.idle.as_deref().unwrap_or("?????")));
+        }
+        out.push_str(&format!(
+            " {}",
+            row.login_time.as_deref().unwrap_or_default()
+        ));
+        if self.is_include_where
+            && let Some(host) = &row.host
+        {
+            out.push(' ');
+            out.push_str(host);
+        }
+        out.push('\n');
+        out
+    }
+
+    fn short_semantic(&self) -> std::io::Result<PinkySemantic> {
+        let mut rows = Vec::new();
+        let mut classic_text = self.render_short_heading();
+
+        for ut in CtUtmpx::iter_all_records() {
+            if self.should_display_user(&ut) {
+                let row = self.short_session_row(&ut)?;
+                classic_text.push_str(&self.render_short_row(&row));
+                rows.push(row);
+            }
+        }
+
+        Ok(PinkySemantic {
+            view_kind: "short".into(),
+            rows,
+            classic_text,
+            stderr_text: String::new(),
+            exit_code: 0,
+        })
+    }
+}
+
+fn read_optional_file(path: PathBuf) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let mut reader = BufReader::new(file);
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).ok()?;
+    Some(String::from_utf8_lossy(&buf).to_string())
 }
 
 fn read_to_console<F: Read>(f: F) {

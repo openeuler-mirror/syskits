@@ -77,6 +77,26 @@ fn hostid() {
     println!("{result:0>8x}");
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostidSemantic {
+    pub hostid: String,
+}
+
+pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    ct_app().try_get_matches_from(args)?;
+
+    let mut result: c_long = unsafe { gethostid() };
+    #[allow(overflowing_literals)]
+    let mask = 0xffff_ffff;
+    result &= mask;
+
+    Ok(HostidSemantic {
+        hostid: format!("{result:0>8x}"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

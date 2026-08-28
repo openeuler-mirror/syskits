@@ -1,0 +1,14 @@
+[package]
+name = "cmd_wait_until"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "DataCommand: wait-until — poll expression until success or timeout"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }
+ctdsl = { workspace = true }

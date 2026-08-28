@@ -44,6 +44,12 @@ pub enum DircolorsOutputFmt {
     Unknown,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DircolorsSemantic {
+    pub output_kind: String,
+    pub output: String,
+}
+
 pub fn dircolors_guess_syntax() -> DircolorsOutputFmt {
     match env::var("SHELL") {
         Ok(ref s) if !s.is_empty() => {
@@ -155,102 +161,116 @@ fn dircolors_generate_ls_colors(fmt: &DircolorsOutputFmt, sep: &str) -> String {
  * 一个 `CTResult<()>`，其中 `Ok(())` 表示成功，`Err(_)` 表示错误，并带有描述性消息。
  */
 pub fn dircolors_main(args: impl ctcore::Args) -> CTResult<()> {
+    let semantic = dircolors_native_semantic(args)?;
+    println!("{}", semantic.output);
+    Ok(())
+}
+
+pub fn dircolors_native_semantic(args: impl ctcore::Args) -> CTResult<DircolorsSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 使用clap库解析命令行参数。
     let args_match = ct_app().try_get_matches_from(args)?;
 
-    // 提取文件参数，如果有的话。
     let files = args_match
         .get_many::<String>(opt_flags::FILE)
         .map_or(vec![], |file_values| file_values.collect());
 
-    if let Some(value) = dircolors_parm_conflict_check(&args_match) {
-        return value;
+    if let Some(err) = dircolors_parm_conflict_check(&args_match) {
+        return Err(err);
     }
 
-    // 检查 `--print-database` 和 `--print-ls-colors` 选项之间的互斥性。
-    if let Some(value) = dircolors_print_parm_check(&args_match) {
-        return value;
+    if let Some(err) = dircolors_print_parm_check(&args_match) {
+        return Err(err);
     }
 
-    // 处理 `--print-database` 选项。
-    if let Some(value) = dircolors_print_database_check(&args_match, &files) {
-        return value;
+    if args_match.get_flag(opt_flags::PRINT_DATABASE) {
+        if !files.is_empty() {
+            return Err(CTsageError::new(
+                1,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with \
+                     --print-database (-p)",
+                    files[0].quote()
+                ),
+            ));
+        }
+
+        return Ok(DircolorsSemantic {
+            output_kind: "database".into(),
+            output: generate_dircolors_config(),
+        });
     }
 
-    // 根据提供的选项确定输出格式。
     let mut out_format = dircolors_out_format_check(&args_match);
-
-    // 如果输出格式未知，尝试猜测它。
     if out_format == DircolorsOutputFmt::Unknown {
         match dircolors_guess_syntax() {
             DircolorsOutputFmt::Unknown => {
                 return Err(CtSimpleError::new(
                     1,
-                    "no SHELL environment variable, and no shell type option given", //"未设置SHELL环境变量，且未提供shell类型选项",
+                    "no SHELL environment variable, and no shell type option given",
                 ));
             }
             fmt => out_format = fmt,
         }
     }
 
-    // 根据确定的输出格式和文件处理输入。
-    dircolors_output_format_process(files, &mut out_format).unwrap_or_else(|value| value)
+    let output = dircolors_collect_output(files, &out_format)?;
+    Ok(DircolorsSemantic {
+        output_kind: dircolors_output_kind(&out_format).into(),
+        output,
+    })
 }
 
-fn dircolors_output_format_process(
+fn dircolors_output_kind(fmt: &DircolorsOutputFmt) -> &'static str {
+    match fmt {
+        DircolorsOutputFmt::Shell => "shell",
+        DircolorsOutputFmt::CShell => "c-shell",
+        DircolorsOutputFmt::Display => "display",
+        DircolorsOutputFmt::Unknown => "unknown",
+    }
+}
+
+fn dircolors_collect_output(
     files: Vec<&String>,
-    out_format: &mut DircolorsOutputFmt,
-) -> Result<CTResult<()>, CTResult<()>> {
-    let result;
+    out_format: &DircolorsOutputFmt,
+) -> CTResult<String> {
     if files.is_empty() {
-        println!("{}", dircolors_generate_ls_colors(out_format, ":"));
-        return Err(Ok(()));
+        Ok(dircolors_generate_ls_colors(out_format, ":"))
     } else if files.len() > 1 {
-        return Err(Err(CTsageError::new(
+        return Err(CTsageError::new(
             1,
-            format!("extra operand {}", files[1].quote()), //"多余的参数
-        )));
+            format!("extra operand {}", files[1].quote()),
+        ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
-        // 当 "-" 作为文件指定时，从stdin处理输入。
-        result = dircolors_parse(fin.lines().map_while(Result::ok), out_format, files[0]);
+        dircolors_parse(fin.lines().map_while(Result::ok), out_format, files[0])
+            .map_err(|s| CtSimpleError::new(1, s))
     } else {
-        // 处理单个文件输入。
         let path = Path::new(files[0]);
         if path.is_dir() {
-            return Err(Err(CtSimpleError::new(
+            return Err(CtSimpleError::new(
                 2,
-                format!("expected file, got directory {}", path.quote()), //期望的文件，但得到的是目录
-            )));
+                format!("expected file, got directory {}", path.quote()),
+            ));
         }
         match File::open(path) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = dircolors_parse(
+                dircolors_parse(
                     fin.lines().map_while(Result::ok),
                     out_format,
                     &path.to_string_lossy(),
-                );
+                )
+                .map_err(|s| CtSimpleError::new(1, s))
             }
             Err(e) => {
-                return Err(Err(CtSimpleError::new(
+                return Err(CtSimpleError::new(
                     1,
                     format!("{}: {}", path.maybe_quote(), e),
-                )));
+                ));
             }
         }
     }
-
-    // 最后，打印结果或错误消息。
-    Ok(match result {
-        Ok(s) => {
-            println!("{s}");
-            Ok(())
-        }
-        Err(s) => Err(CtSimpleError::new(1, s)),
-    })
 }
 
 fn dircolors_out_format_check(args_match: &ArgMatches) -> DircolorsOutputFmt {
@@ -265,51 +285,32 @@ fn dircolors_out_format_check(args_match: &ArgMatches) -> DircolorsOutputFmt {
     }
 }
 
-fn dircolors_print_database_check(
+fn dircolors_print_parm_check(
     args_match: &ArgMatches,
-    files: &[&String],
-) -> Option<CTResult<()>> {
-    if args_match.get_flag(opt_flags::PRINT_DATABASE) {
-        if !files.is_empty() {
-            return Some(Err(CTsageError::new(
-                1,
-                format!(
-                    "extra operand {}\nfile operands cannot be combined with \
-                     --print-database (-p)", //"多余的参数 {}\n不能将文件参数与 `--print-database (-p)` 结合使用",
-                    files[0].quote()
-                ),
-            )));
-        }
-
-        println!("{}", generate_dircolors_config());
-        return Some(Ok(()));
-    }
-    None
-}
-
-fn dircolors_print_parm_check(args_match: &ArgMatches) -> Option<CTResult<()>> {
+) -> Option<Box<dyn ctcore::ct_error::CTError>> {
     if args_match.get_flag(opt_flags::PRINT_DATABASE)
         && args_match.get_flag(opt_flags::PRINT_LS_COLORS)
     {
-        return Some(Err(CTsageError::new(
+        return Some(CTsageError::new(
             1,
-            "options --print-database and --print-ls-colors are mutually exclusive", //"选项 `--print-database` 和 `--print-ls-colors` 互斥",
-        )));
+            "options --print-database and --print-ls-colors are mutually exclusive",
+        ));
     }
     None
 }
 
-fn dircolors_parm_conflict_check(args_match: &ArgMatches) -> Option<CTResult<()>> {
-    // 手动检查选项冲突，以匹配GNU coreutils的行为。
+fn dircolors_parm_conflict_check(
+    args_match: &ArgMatches,
+) -> Option<Box<dyn ctcore::ct_error::CTError>> {
     if (args_match.get_flag(opt_flags::C_SHELL) || args_match.get_flag(opt_flags::BOURNE_SHELL))
         && (args_match.get_flag(opt_flags::PRINT_DATABASE)
             || args_match.get_flag(opt_flags::PRINT_LS_COLORS))
     {
-        return Some(Err(CTsageError::new(
+        return Some(CTsageError::new(
             1,
             "the options to output non shell syntax,\n\
              and to select a shell syntax are mutually exclusive",
-        )));
+        ));
     }
     None
 }
@@ -905,6 +906,42 @@ mod tests {
 
             assert!(result.is_ok());
             assert!(result.unwrap().get_flag(PRINT_LS_COLORS));
+        }
+    }
+
+    mod native_semantic_tests {
+        use super::*;
+        use std::ffi::OsString;
+        use tempfile::TempDir;
+
+        #[test]
+        fn dircolors_native_semantic_shell_output_uses_fixture() {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("dircolors.conf");
+            std::fs::write(&path, "DIR 01;34\n*.txt 01;32\n").unwrap();
+            let path = path.display().to_string();
+
+            let args = [ctcore::ct_util_name(), "-b", path.as_str()];
+            let semantic = dircolors_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.output_kind, "shell");
+            assert_eq!(
+                semantic.output,
+                "LS_COLORS='di=01;34:*.txt=01;32:';\nexport LS_COLORS"
+            );
+        }
+
+        #[test]
+        fn dircolors_native_semantic_database_output_reports_mode() {
+            let args = [ctcore::ct_util_name(), "-p"];
+            let semantic = dircolors_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.output_kind, "database");
+            assert!(
+                semantic
+                    .output
+                    .starts_with("# Configuration file for dircolors")
+            );
         }
     }
 }

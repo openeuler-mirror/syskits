@@ -191,7 +191,7 @@ pub(crate) enum BlocksHumanReadable {
 ///
 /// The default variant is `Bytes(1024)`.
 // BlockSize 枚举定义了块的大小，支持固定字节数。
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BlockSize {
     /// Bytes 替代表示一个固定数量的字节。
     ///

@@ -20,7 +20,6 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_ranges::CtRange;
-use ctcore::{ct_show_error, ct_show_if_err};
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use std::ffi::OsString;
 use std::fs::File;
@@ -58,6 +57,33 @@ enum CutMode<'a> {
     Bytes(Vec<CtRange>, CutOptions<'a>),
     Characters(Vec<CtRange>, CutOptions<'a>),
     Fields(Vec<CtRange>, CutOptions<'a>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CutRow {
+    pub row_index: usize,
+    pub line: String,
+    pub byte_length: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CutSemantic {
+    pub mode: String,
+    pub range_specs: Vec<String>,
+    pub delimiter: Option<String>,
+    pub output_delimiter: Option<String>,
+    pub only_delimited: bool,
+    pub zero_terminated: bool,
+    pub no_split_multibyte: bool,
+    pub rows: Vec<CutRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct CutRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
 }
 
 impl Default for CutDelimiter<'_> {
@@ -181,13 +207,16 @@ fn parse_field_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, Stri
  * # 返回值
  * - `CTResult<()>`：成功时返回`Ok(())`，错误时返回包含错误信息的`Err`。
  */
-fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTResult<()> {
+fn cut_bytes_to_writer<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[CtRange],
+    opts: &CutOptions,
+) -> CTResult<()> {
     // 将行结束符选项转换为字节
     let newline_char = opts.line_ending.into();
     // 使用缓冲读取器包装输入读取器
     let mut buf_in = BufReader::new(reader);
-    // 创建一个用于写入标准输出的缓冲写入器
-    let mut out = cut_stdout_writer();
     // 获取输出字段分隔符，默认为制表符
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
@@ -292,8 +321,9 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRes
  * # 返回值
  * - `CTResult<()>`：操作成功返回`Ok(())`，失败则返回包含错误信息的`Err`。
  */
-fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
+fn cut_fields_explicit_out_delim_to_writer<R: Read, W: Write, M: Matcher>(
     reader: R,
+    out_writer: &mut W,
     matcher: &M,
     ranges: &[CtRange],
     only_delimited: bool,
@@ -301,7 +331,6 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     out_delim: &[u8],
 ) -> CTResult<()> {
     let mut buffer_in = BufReader::new(reader); // 创建一个缓冲读取器
-    let mut out_writer = cut_stdout_writer(); // 准备输出
 
     // 遍历读取器中的每行数据
     let result = buffer_in.for_byte_record_with_terminator(newline_char, |line| {
@@ -390,8 +419,9 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
  * # 返回值
  * - `CTResult<()>`：成功时返回`Ok(())`，错误时返回包含错误信息的`Err`。
  */
-fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
+fn cut_fields_implicit_out_delim_to_writer<R: Read, W: Write, M: Matcher>(
     reader: R,
+    out: &mut W,
     matcher: &M,
     ranges: &[CtRange],
     only_delimited: bool,
@@ -399,8 +429,6 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
 ) -> CTResult<()> {
     // 创建一个缓冲读取器以提高读取效率
     let mut buffer_in = BufReader::new(reader);
-    // 准备输出，使用cut_stdout_writer()创建一个写入器
-    let mut out = cut_stdout_writer();
 
     // 循环处理输入流中的每一行
     let result = buffer_in.for_byte_record_with_terminator(newline_char, |line| {
@@ -479,14 +507,14 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
-fn cut_fields_as_single_record<R: Read>(
+fn cut_fields_as_single_record_to_writer<R: Read, W: Write>(
     reader: R,
+    out_writer: &mut W,
     ranges: &[CtRange],
     opts: &CutOptions,
     newline_char: u8,
 ) -> CTResult<()> {
     let mut buffer_in = BufReader::new(reader);
-    let mut out_writer = cut_stdout_writer();
     let mut field_idx = 1;
     let mut print_delim = false;
 
@@ -562,7 +590,12 @@ fn cut_fields_as_single_record<R: Read>(
  * @param opts 包含切割操作的选项，如行结束符、字段选项等。
  * @return 返回一个[CTResult]，成功时为()，失败时为错误信息。
  */
-fn cut_fields<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTResult<()> {
+fn cut_fields_to_writer<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[CtRange],
+    opts: &CutOptions,
+) -> CTResult<()> {
     let newline_char = opts.line_ending.into(); // 将行结束符选项转换为具体的字符
     let field_opts = opts.field_opts.as_ref().unwrap(); // 获取字段选项
 
@@ -572,23 +605,31 @@ fn cut_fields<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRe
             // 【新增拦截】：如果分隔符恰好是换行符，启用单记录超级模式
             let delim_byte = delim[0];
             if delim.len() == 1 && delim_byte == newline_char {
-                return cut_fields_as_single_record(reader, ranges, opts, newline_char);
+                return cut_fields_as_single_record_to_writer(
+                    reader,
+                    out,
+                    ranges,
+                    opts,
+                    newline_char,
+                );
             }
 
             // 使用精确匹配器，用于按照指定字符切割
             let matcher = ExactMatcher::new(delim);
             // 根据是否指定了输出字段分隔符，选择不同的切割函数
             match opts.out_delimiter {
-                Some(out_delim) => cut_fields_explicit_out_delim(
+                Some(out_delim) => cut_fields_explicit_out_delim_to_writer(
                     reader,
+                    out,
                     &matcher,
                     ranges,
                     field_opts.only_delimited,
                     newline_char,
                     out_delim,
                 ),
-                None => cut_fields_implicit_out_delim(
+                None => cut_fields_implicit_out_delim_to_writer(
                     reader,
+                    out,
                     &matcher,
                     ranges,
                     field_opts.only_delimited,
@@ -598,8 +639,9 @@ fn cut_fields<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRe
         }
         CutDelimiter::Whitespace => {
             let matcher = WhitespaceMatcher {};
-            cut_fields_explicit_out_delim(
+            cut_fields_explicit_out_delim_to_writer(
                 reader,
+                out,
                 &matcher,
                 ranges,
                 field_opts.only_delimited,
@@ -619,8 +661,14 @@ fn cut_fields<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTRe
  * @param mut filenames 要处理的文件名的向量。可以包含"-"来表示标准输入。
  * @param mode 切割操作的模式，包含具体的切割规则。
  */
-fn cut_files(mut filenames: Vec<String>, mode: &CutMode) {
+fn cut_files_to_writer<W: Write>(
+    mut filenames: Vec<String>,
+    mode: &CutMode,
+    out: &mut W,
+) -> CutRunOutcome {
     let mut stdin_read = false; // 标记是否已从标准输入读取数据
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
 
     // 如果没有指定文件名，则默认读取标准输入
     if filenames.is_empty() {
@@ -635,11 +683,16 @@ fn cut_files(mut filenames: Vec<String>, mode: &CutMode) {
             }
 
             // 根据模式对标准输入进行切割
-            ct_show_if_err!(match mode {
-                CutMode::Bytes(ranges, opts) => cut_bytes(stdin(), ranges, opts),
-                CutMode::Characters(ranges, opts) => cut_characters(stdin(), ranges, opts),
-                CutMode::Fields(ranges, opts) => cut_fields(stdin(), ranges, opts),
-            });
+            if let Err(err) = match mode {
+                CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(stdin(), out, ranges, opts),
+                CutMode::Characters(ranges, opts) => {
+                    cut_characters_to_writer(stdin(), out, ranges, opts)
+                }
+                CutMode::Fields(ranges, opts) => cut_fields_to_writer(stdin(), out, ranges, opts),
+            } {
+                stderr_text.push_str(&format!("cut: {err}\n"));
+                exit_code = exit_code.max(err.code());
+            }
 
             stdin_read = true; // 标记已处理标准输入
         } else {
@@ -647,24 +700,34 @@ fn cut_files(mut filenames: Vec<String>, mode: &CutMode) {
 
             // 如果指定的路径是目录，则报错并跳过该文件
             if path.is_dir() {
-                ct_show_error!("{}: Is a directory", filename.maybe_quote());
-                set_ct_exit_code(1);
+                stderr_text.push_str(&format!(
+                    "cut: {}: Is a directory\n",
+                    filename.maybe_quote()
+                ));
+                exit_code = exit_code.max(1);
                 continue;
             }
 
             // 尝试打开文件，并根据模式对文件内容进行切割
-            ct_show_if_err!(
-                File::open(path)
-                    .map_err_context(|| filename.maybe_quote().to_string())
-                    .and_then(|file| {
-                        match &mode {
-                            CutMode::Bytes(ranges, opts) => cut_bytes(file, ranges, opts),
-                            CutMode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
-                            CutMode::Characters(ranges, opts) => cut_characters(file, ranges, opts),
-                        }
-                    })
-            );
+            if let Err(err) = File::open(path)
+                .map_err_context(|| filename.maybe_quote().to_string())
+                .and_then(|file| match &mode {
+                    CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(file, out, ranges, opts),
+                    CutMode::Fields(ranges, opts) => cut_fields_to_writer(file, out, ranges, opts),
+                    CutMode::Characters(ranges, opts) => {
+                        cut_characters_to_writer(file, out, ranges, opts)
+                    }
+                })
+            {
+                stderr_text.push_str(&format!("cut: {err}\n"));
+                exit_code = exit_code.max(err.code());
+            }
         }
+    }
+
+    CutRunOutcome {
+        stderr_text,
+        exit_code,
     }
 }
 
@@ -972,7 +1035,15 @@ fn cut_files_by_mode(cut_mode: Result<CutMode, String>, files: Vec<String>) -> C
     // 根据解析的切割模式处理文件。
     match cut_mode {
         Ok(mode) => {
-            cut_files(files, &mode);
+            let mut out = cut_stdout_writer();
+            let outcome = cut_files_to_writer(files, &mode, &mut out);
+            out.flush()?;
+            if !outcome.stderr_text.is_empty() {
+                eprint!("{}", outcome.stderr_text);
+            }
+            if outcome.exit_code != 0 {
+                set_ct_exit_code(outcome.exit_code);
+            }
             Ok(())
         }
         Err(e) => Err(CtSimpleError::new(1, e)),
@@ -1067,11 +1138,158 @@ fn cut_mode_parse<'a>(
     }
 }
 
+fn cut_range_specs(ranges: &[CtRange]) -> Vec<String> {
+    ranges
+        .iter()
+        .map(|range| {
+            if range.low == 1 && range.high == usize::MAX - 1 {
+                "-".to_string()
+            } else if range.low == 1 {
+                format!("-{}", range.high)
+            } else if range.high == usize::MAX - 1 {
+                format!("{}-", range.low)
+            } else if range.low == range.high {
+                range.low.to_string()
+            } else {
+                format!("{}-{}", range.low, range.high)
+            }
+        })
+        .collect()
+}
+
+fn cut_mode_name(mode: &CutMode) -> &'static str {
+    match mode {
+        CutMode::Bytes(_, _) => "bytes",
+        CutMode::Characters(_, _) => "characters",
+        CutMode::Fields(_, _) => "fields",
+    }
+}
+
+fn cut_mode_ranges<'a>(mode: &'a CutMode<'a>) -> &'a [CtRange] {
+    match mode {
+        CutMode::Bytes(ranges, _) | CutMode::Characters(ranges, _) | CutMode::Fields(ranges, _) => {
+            ranges
+        }
+    }
+}
+
+fn cut_mode_options<'a>(mode: &'a CutMode<'a>) -> &'a CutOptions<'a> {
+    match mode {
+        CutMode::Bytes(_, opts) | CutMode::Characters(_, opts) | CutMode::Fields(_, opts) => opts,
+    }
+}
+
+fn cut_mode_delimiter(mode: &CutMode) -> Option<String> {
+    let CutMode::Fields(_, opts) = mode else {
+        return None;
+    };
+    let field_opts = opts.field_opts.as_ref().expect("field opts");
+    match field_opts.delimiter {
+        CutDelimiter::Whitespace => Some("whitespace".into()),
+        CutDelimiter::Slice(bytes) => Some(String::from_utf8_lossy(bytes).into_owned()),
+    }
+}
+
+fn cut_mode_only_delimited(mode: &CutMode) -> bool {
+    match mode {
+        CutMode::Fields(_, opts) => opts
+            .field_opts
+            .as_ref()
+            .map(|field_opts| field_opts.only_delimited)
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn cut_rows_from_output(output: &[u8], terminator: u8) -> Vec<CutRow> {
+    let segments: Vec<&[u8]> = output.split(|byte| *byte == terminator).collect();
+    let segment_count = if output.ends_with(&[terminator]) && !segments.is_empty() {
+        segments.len() - 1
+    } else {
+        segments.len()
+    };
+
+    segments[..segment_count]
+        .iter()
+        .enumerate()
+        .map(|(index, segment)| CutRow {
+            row_index: index + 1,
+            line: String::from_utf8_lossy(segment).into_owned(),
+            byte_length: segment.len(),
+        })
+        .collect()
+}
+
+pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<OsString>>();
+    let delimiter_is_equal = args.contains(&OsString::from("-d="));
+    let args_match = ct_app().try_get_matches_from(args)?;
+
+    let is_complement = args_match.get_flag(opt_flags::COMPLEMENT);
+    let is_only_delimited = args_match.get_flag(opt_flags::ONLY_DELIMITED);
+    let (delimiter, out_delimiter) = cut_get_delimiters(&args_match, delimiter_is_equal)?;
+    let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::ZERO_TERMINATED));
+
+    let mode_args_count = [
+        args_match.indices_of(opt_flags::BYTES),
+        args_match.indices_of(opt_flags::CHARACTERS),
+        args_match.indices_of(opt_flags::FIELDS),
+    ]
+    .into_iter()
+    .map(|indices| indices.unwrap_or_default().count())
+    .sum();
+
+    let cut_mode = cut_mode_parse(
+        &args_match,
+        is_complement,
+        is_only_delimited,
+        delimiter,
+        out_delimiter,
+        line_ending,
+        mode_args_count,
+    );
+    let mode =
+        cut_mode_param_parse(&args_match, cut_mode).map_err(|err| CtSimpleError::new(1, err))?;
+
+    let files: Vec<String> = args_match
+        .get_many::<String>(opt_flags::FILE)
+        .unwrap_or_default()
+        .cloned()
+        .collect();
+
+    let mut output = Vec::new();
+    let outcome = cut_files_to_writer(files, &mode, &mut output);
+    let opts = cut_mode_options(&mode);
+    let terminator = opts.line_ending.into();
+
+    Ok(CutSemantic {
+        mode: cut_mode_name(&mode).into(),
+        range_specs: cut_range_specs(cut_mode_ranges(&mode)),
+        delimiter: cut_mode_delimiter(&mode),
+        output_delimiter: opts
+            .out_delimiter
+            .map(|delimiter| String::from_utf8_lossy(delimiter).into_owned()),
+        only_delimited: cut_mode_only_delimited(&mode),
+        zero_terminated: matches!(opts.line_ending, CtLineEnding::Nul),
+        no_split_multibyte: opts.no_split_multibyte,
+        rows: cut_rows_from_output(&output, terminator),
+        classic_text: String::from_utf8_lossy(&output).into_owned(),
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    })
+}
+
 /// 从输入流中按字符位置切割数据
-fn cut_characters<R: Read>(reader: R, ranges: &[CtRange], opts: &CutOptions) -> CTResult<()> {
+fn cut_characters_to_writer<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[CtRange],
+    opts: &CutOptions,
+) -> CTResult<()> {
     let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
-    let mut out = cut_stdout_writer();
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
     let result = buf_in.for_byte_record(newline_char, |line| {
@@ -1153,6 +1371,85 @@ mod tests {
         let args = vec![OsString::from("cut"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_err()); // cut命令需要必要参数，所以测试不带参数的情况应该返回错误
+    }
+
+    mod native_semantic_tests {
+        use super::*;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_cut_native_semantic_collects_rows_and_metadata() {
+            let temp_dir = TempDir::new().expect("tempdir");
+            let input = temp_dir.path().join("cut.txt");
+            std::fs::write(&input, "alpha:one:100\nbeta:two:200\ngamma::300\n")
+                .expect("write cut fixture");
+
+            let semantic = cut_native_semantic(
+                vec![
+                    OsString::from("cut"),
+                    OsString::from("-d"),
+                    OsString::from(":"),
+                    OsString::from("-f"),
+                    OsString::from("2"),
+                    input.as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect("cut semantic");
+
+            assert_eq!(semantic.mode, "fields");
+            assert_eq!(semantic.range_specs, vec!["2"]);
+            assert_eq!(semantic.delimiter.as_deref(), Some(":"));
+            assert!(!semantic.only_delimited);
+            assert!(!semantic.zero_terminated);
+            assert_eq!(semantic.classic_text, "one\ntwo\n\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(
+                semantic.rows,
+                vec![
+                    CutRow {
+                        row_index: 1,
+                        line: "one".into(),
+                        byte_length: 3,
+                    },
+                    CutRow {
+                        row_index: 2,
+                        line: "two".into(),
+                        byte_length: 3,
+                    },
+                    CutRow {
+                        row_index: 3,
+                        line: String::new(),
+                        byte_length: 0,
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn test_cut_native_semantic_preserves_directory_error() {
+            let temp_dir = TempDir::new().expect("tempdir");
+            let input_dir = temp_dir.path().join("input_dir");
+            std::fs::create_dir(&input_dir).expect("create input dir");
+
+            let semantic = cut_native_semantic(
+                vec![
+                    OsString::from("cut"),
+                    OsString::from("-d"),
+                    OsString::from(":"),
+                    OsString::from("-f"),
+                    OsString::from("2"),
+                    input_dir.as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect("cut semantic");
+
+            assert!(semantic.classic_text.is_empty());
+            assert_eq!(semantic.exit_code, 1);
+            assert!(semantic.stderr_text.contains("Is a directory"));
+        }
     }
 
     mod tests_cut_app {

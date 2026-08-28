@@ -88,6 +88,32 @@ struct DateSettings {
     set_to: Option<DateTime<FixedOffset>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateRow {
+    pub source_kind: String,
+    pub format_kind: String,
+    pub formatted: String,
+    pub unix_seconds: i64,
+    pub unix_nanos: u32,
+    pub timezone_offset: String,
+    pub timezone_name: String,
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+    pub nanosecond: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateSemantic {
+    pub rows: Vec<DateRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 /// Various ways of displaying the date
 enum DateFormat {
     Iso8601(DateIso8601Format),
@@ -132,6 +158,26 @@ enum DateRfc3339Format {
     Date,
     Seconds,
     Ns,
+}
+
+fn date_source_kind(source: &DateSource) -> &'static str {
+    match source {
+        DateSource::Now => "now",
+        DateSource::Custom(_) => "custom",
+        DateSource::File(_) => "file",
+        DateSource::Resolution => "resolution",
+        DateSource::Reference(_) => "reference",
+    }
+}
+
+fn date_format_kind(format: &DateFormat) -> &'static str {
+    match format {
+        DateFormat::Iso8601(_) => "iso-8601",
+        DateFormat::Rfc5322 => "rfc-5322",
+        DateFormat::Rfc3339(_) => "rfc-3339",
+        DateFormat::Custom(_) => "custom",
+        DateFormat::Default => "default",
+    }
 }
 // 实现是 Rust 中的 From 泛型 trait，它允许你将一个类型转换为另一个类型。在这里，我们定义了如何从字符串引用 &'a str 转换为 DateRfc3339Format。
 // impl<'a> 表示这个实现适用于所有生命周期 'a 的字符串引用。
@@ -243,6 +289,244 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     date_processing(args_match, date_format, date_source, set_to_params)
+}
+
+fn format_date_output(date: &DateTime<FixedOffset>, format_string: &str) -> CTResult<String> {
+    #[cfg(target_os = "linux")]
+    {
+        format_using_strftime(date, format_string)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        use chrono::format::StrftimeItems;
+        let format_string = &format_string.replace("%N", "%f");
+        if format_string.contains("%#z") {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid format {}", format_string.replace("%f", "%N")),
+            ));
+        }
+        Ok(date
+            .format_with_items(StrftimeItems::new(format_string))
+            .to_string()
+            .replace("%f", "%N"))
+    }
+}
+
+fn date_row_from_datetime(
+    date: &DateTime<FixedOffset>,
+    source_kind: &str,
+    format_kind: &str,
+    format_string: &str,
+) -> CTResult<DateRow> {
+    let formatted = format_date_output(date, format_string)?;
+    Ok(DateRow {
+        source_kind: source_kind.to_string(),
+        format_kind: format_kind.to_string(),
+        formatted,
+        unix_seconds: date.timestamp(),
+        unix_nanos: date.timestamp_subsec_nanos(),
+        timezone_offset: date.format("%:z").to_string(),
+        timezone_name: date.format("%Z").to_string(),
+        year: date.year(),
+        month: date.month(),
+        day: date.day(),
+        hour: date.hour(),
+        minute: date.minute(),
+        second: date.second(),
+        nanosecond: date.nanosecond(),
+    })
+}
+
+pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    #[cfg(target_os = "linux")]
+    unsafe {
+        setlocale(LC_ALL, c"".as_ptr() as *const c_char);
+    }
+
+    let args_match = ct_app().try_get_matches_from(args)?;
+
+    let mut sources_count = 0;
+    if args_match.contains_id(DATE_OPT_DATE) {
+        sources_count += 1;
+    }
+    if args_match.contains_id(DATE_OPT_FILE) {
+        sources_count += 1;
+    }
+    if args_match.contains_id(DATE_OPT_REFERENCE) {
+        sources_count += 1;
+    }
+    if args_match.contains_id(DATE_OPT_SET) {
+        sources_count += 1;
+    }
+    if args_match.get_flag(DATE_OPT_RESOLUTION) {
+        sources_count += 1;
+    }
+    if sources_count > 1 {
+        return Err(CtSimpleError::new(
+            1,
+            "multiple time sources specified".to_string(),
+        ));
+    }
+
+    if args_match.get_flag(DATE_OPT_UNIVERSAL) {
+        unsafe {
+            std::env::set_var("TZ", "UTC0");
+        }
+        #[cfg(target_os = "linux")]
+        unsafe {
+            unsafe extern "C" {
+                fn tzset();
+            }
+            tzset();
+        }
+    }
+
+    let date_format = match get_date_format(&args_match) {
+        Ok(value) => value,
+        Err(value) => return Err(value.expect_err("date format error")),
+    };
+    let date_source = get_date_source(&args_match);
+    let set_to_params = match set_date_params(&args_match) {
+        Ok(value) => value,
+        Err(value) => return Err(value.expect_err("date set error")),
+    };
+    if set_to_params.is_some() {
+        return Err(CtSimpleError::new(
+            1,
+            "setting system time is not supported in data mode",
+        ));
+    }
+
+    let date_set = DateSettings {
+        utc: args_match.get_flag(DATE_OPT_UNIVERSAL),
+        format: date_format,
+        date_source,
+        set_to: None,
+    };
+
+    #[cfg(target_os = "linux")]
+    if matches!(
+        date_set.format,
+        DateFormat::Rfc5322 | DateFormat::Iso8601(_) | DateFormat::Rfc3339(_)
+    ) {
+        unsafe {
+            std::env::set_var("LC_ALL", "C");
+            std::env::set_var("LC_TIME", "C");
+            libc::setlocale(libc::LC_ALL, c"C".as_ptr() as *const libc::c_char);
+            libc::setlocale(libc::LC_TIME, c"C".as_ptr() as *const libc::c_char);
+        }
+    }
+
+    let source_kind = date_source_kind(&date_set.date_source);
+    let format_kind = date_format_kind(&date_set.format);
+    let format_string = make_format_string(&date_set);
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    match &date_set.date_source {
+        DateSource::Custom(input) => {
+            let input_str = input.to_string_lossy().to_string();
+            let mut date = parse_date(&input_str);
+            if let Ok(dt) = &date {
+                if date_set.utc {
+                    date = Ok(dt.with_timezone(&Utc).into());
+                }
+            }
+            match date {
+                Ok(dt) => {
+                    let row =
+                        date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+                    classic_text.push_str(&row.formatted);
+                    classic_text.push('\n');
+                    rows.push(row);
+                }
+                Err((bad, _)) => {
+                    exit_code = 1;
+                    stderr_text.push_str(&format!("date: invalid date '{bad}'\n"));
+                }
+            }
+        }
+        DateSource::File(path) => {
+            let file = File::open(path)
+                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            for line in BufReader::new(file).lines().map_while(Result::ok) {
+                match parse_date(&line) {
+                    Ok(dt) => {
+                        let dt = if date_set.utc {
+                            dt.with_timezone(&Utc).into()
+                        } else {
+                            dt
+                        };
+                        let row =
+                            date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+                        classic_text.push_str(&row.formatted);
+                        classic_text.push('\n');
+                        rows.push(row);
+                    }
+                    Err((bad, _)) => {
+                        exit_code = 1;
+                        stderr_text.push_str(&format!("date: invalid date '{bad}'\n"));
+                    }
+                }
+            }
+        }
+        DateSource::Now => {
+            let dt: DateTime<FixedOffset> = if date_set.utc {
+                let now = Utc::now();
+                now.with_timezone(&now.offset().fix())
+            } else {
+                let now = Local::now();
+                now.with_timezone(now.offset())
+            };
+            let row = date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+            classic_text.push_str(&row.formatted);
+            classic_text.push('\n');
+            rows.push(row);
+        }
+        DateSource::Resolution => {
+            let (sec, nsec) = get_clock_resolution();
+            let dt = DateTime::from_timestamp(sec, nsec as u32).unwrap();
+            let dt: DateTime<FixedOffset> = if date_set.utc {
+                dt.with_timezone(&Utc).into()
+            } else {
+                dt.with_timezone(&Local).into()
+            };
+            let row = date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+            classic_text.push_str(&row.formatted);
+            classic_text.push('\n');
+            rows.push(row);
+        }
+        DateSource::Reference(path) => {
+            let metadata = std::fs::metadata(path)
+                .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
+            let time = metadata
+                .modified()
+                .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
+            let dt: DateTime<FixedOffset> = if date_set.utc {
+                let dt: DateTime<Utc> = time.into();
+                dt.with_timezone(&dt.offset().fix())
+            } else {
+                let dt: DateTime<Local> = time.into();
+                dt.with_timezone(dt.offset())
+            };
+            let row = date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+            classic_text.push_str(&row.formatted);
+            classic_text.push('\n');
+            rows.push(row);
+        }
+    }
+
+    Ok(DateSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
 }
 
 fn date_processing(

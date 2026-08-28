@@ -21,6 +21,7 @@ clap = { workspace = true }
 ctcore = { workspace = true, features = ["utmpx"] }
 [dev-dependencies]
 tempfile = { workspace = true }
+libc = { workspace = true }
 [[bin]]
 name = "users"
 path = "src/main.rs"

@@ -23,18 +23,20 @@
 // 默认行为尽量兼容 procps，同时保留 GNU coreutils 的 [FILE] 语义。
 
 extern crate rust_i18n;
-use chrono::{Local, TimeZone, Utc};
+use chrono::{Local, TimeZone};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
-use ctcore::ct_show_error;
 use std::ffi::OsString;
 use sys_locale::get_locale;
 
-use crate::platform::{get_uptime, get_uptime_from_boot_time, print_loadavg, process_utmpx};
+use crate::platform::{
+    get_loadavg_values, get_uptime_from_boot_time, get_uptime_with_source, process_utmpx,
+    uptime_source_kind,
+};
 
 mod platform;
 
@@ -45,6 +47,63 @@ const UPTIME_SECS_PER_MIN: i64 = 60;
 pub mod uptime_flags {
     pub static SINCE: &str = "since";
     pub static PRETTY: &str = "pretty";
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UptimeSemantic {
+    pub view_kind: String,
+    pub uptime_source_kind: String,
+    pub sample_time_unix: i64,
+    pub sample_time_local: String,
+    pub boot_time_unix: Option<i64>,
+    pub boot_time_local: Option<String>,
+    pub uptime_seconds: Option<i64>,
+    pub uptime_pretty: Option<String>,
+    pub user_count: usize,
+    pub load_averages: Vec<f64>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+fn uptime_effective_boot_time(sample_time_unix: i64, uptime_seconds: Option<i64>) -> Option<i64> {
+    uptime_seconds.map(|uptime| sample_time_unix - uptime)
+}
+
+fn uptime_boot_time_error(read_error: Option<&std::io::Error>) -> String {
+    read_error
+        .map(|err| format!("couldn't get boot time: {}", strip_errno(err)))
+        .unwrap_or_else(|| "couldn't get boot time".to_string())
+}
+
+fn uptime_format_timestamp_local(timestamp: i64) -> String {
+    Local
+        .timestamp_opt(timestamp, 0)
+        .unwrap()
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string()
+}
+
+fn uptime_print_time_at(sample_time_unix: i64) -> String {
+    let local_time = Local.timestamp_opt(sample_time_unix, 0).unwrap().time();
+    format!(" {}  ", local_time.format("%H:%M:%S"))
+}
+
+fn uptime_render_loadavg(load_averages: &[f64]) -> String {
+    if load_averages.is_empty() {
+        String::new()
+    } else {
+        let mut result = "load average: ".to_string();
+        for (index, value) in load_averages.iter().enumerate() {
+            let separator = if index + 1 == load_averages.len() {
+                "\n"
+            } else {
+                ", "
+            };
+            result.push_str(&format!("{value:.2}{separator}"));
+        }
+        result
+    }
 }
 
 fn uptime_print_uptime(up_secs: i64) -> String {
@@ -67,10 +126,9 @@ fn uptime_print_uptime(up_secs: i64) -> String {
     }
 }
 
+#[cfg(test)]
 fn uptime_print_time() -> String {
-    let local_time = Local::now().time();
-
-    format!(" {}  ", local_time.format("%H:%M:%S"))
+    uptime_print_time_at(Local::now().timestamp())
 }
 
 fn uptime_print_n_users(n_users: usize) -> String {
@@ -124,17 +182,43 @@ fn uptime_print_unknown_uptime() -> &'static str {
 }
 
 pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
+    let semantic = uptime_native_semantic(args)?;
+    if !semantic.classic_text.is_empty() {
+        print!("{}", semantic.classic_text);
+    }
+    if !semantic.stderr_text.is_empty() {
+        eprint!("{}", semantic.stderr_text);
+    }
+    if semantic.exit_code != 0 {
+        set_ct_exit_code(semantic.exit_code);
+    }
+    Ok(())
+}
+
+pub fn uptime_native_semantic(args: impl ctcore::Args) -> CTResult<UptimeSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let file_path = matches.get_one::<String>("file").map(String::as_str);
+    let sample_time_unix = Local::now().timestamp();
 
     let (boot_time, user_count, read_error) = process_utmpx(file_path);
-    let uptime = if file_path.is_some() {
-        get_uptime_from_boot_time(boot_time)
+    let (uptime, uptime_source) = if file_path.is_some() {
+        let uptime = get_uptime_from_boot_time(boot_time);
+        let source = if uptime >= 0 {
+            crate::platform::UptimeSource::BootTime
+        } else {
+            crate::platform::UptimeSource::Unknown
+        };
+        (uptime, source)
     } else {
-        get_uptime(boot_time)
+        get_uptime_with_source(boot_time)
     };
+    let uptime_seconds = if uptime >= 0 { Some(uptime) } else { None };
+    let boot_time_unix = uptime_effective_boot_time(sample_time_unix, uptime_seconds);
+    let boot_time_local = boot_time_unix.map(uptime_format_timestamp_local);
+    let load_averages = get_loadavg_values();
+    let uptime_pretty = uptime_seconds.map(uptime_print_pretty);
 
     if uptime < 0 && file_path.is_none() {
         Err(CtSimpleError::new(1, "could not retrieve system uptime"))
@@ -142,52 +226,100 @@ pub fn uptime_main(args: impl ctcore::Args) -> CTResult<()> {
         // -s 选项优先
         if matches.get_flag(uptime_flags::SINCE) {
             if uptime < 0 {
-                let msg = read_error
-                    .map(|err| format!("couldn't get boot time: {}", strip_errno(&err)))
-                    .unwrap_or_else(|| "couldn't get boot time".to_string());
-                return Err(CtSimpleError::new(1, msg));
+                return Err(CtSimpleError::new(
+                    1,
+                    uptime_boot_time_error(read_error.as_ref()),
+                ));
             }
-            let initial_date = Local
-                .timestamp_opt(Utc::now().timestamp() - uptime, 0)
-                .unwrap();
-            println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
-            return Ok(());
+            let classic_text = format!(
+                "{}\n",
+                uptime_format_timestamp_local(boot_time_unix.expect("boot time"))
+            );
+            return Ok(UptimeSemantic {
+                view_kind: "since".into(),
+                uptime_source_kind: uptime_source_kind(uptime_source).into(),
+                sample_time_unix,
+                sample_time_local: uptime_format_timestamp_local(sample_time_unix),
+                boot_time_unix,
+                boot_time_local,
+                uptime_seconds,
+                uptime_pretty,
+                user_count,
+                load_averages,
+                classic_text,
+                stderr_text: String::new(),
+                exit_code: 0,
+            });
         }
 
         // -p 选项
         if matches.get_flag(uptime_flags::PRETTY) {
             if uptime < 0 {
-                let msg = read_error
-                    .map(|err| format!("couldn't get boot time: {}", strip_errno(&err)))
-                    .unwrap_or_else(|| "couldn't get boot time".to_string());
-                return Err(CtSimpleError::new(1, msg));
+                return Err(CtSimpleError::new(
+                    1,
+                    uptime_boot_time_error(read_error.as_ref()),
+                ));
             }
-            println!("{}", uptime_print_pretty(uptime));
-            return Ok(());
+            let classic_text = format!(
+                "{}\n",
+                uptime_pretty
+                    .clone()
+                    .unwrap_or_else(|| "up 0 minutes".to_string())
+            );
+            return Ok(UptimeSemantic {
+                view_kind: "pretty".into(),
+                uptime_source_kind: uptime_source_kind(uptime_source).into(),
+                sample_time_unix,
+                sample_time_local: uptime_format_timestamp_local(sample_time_unix),
+                boot_time_unix,
+                boot_time_local,
+                uptime_seconds,
+                uptime_pretty,
+                user_count,
+                load_averages,
+                classic_text,
+                stderr_text: String::new(),
+                exit_code: 0,
+            });
         }
 
+        let mut stderr_text = String::new();
+        let mut exit_code = 0;
         if file_path.is_some() && uptime < 0 {
             if let Some(err) = read_error {
-                ct_show_error!("couldn't get boot time: {}", strip_errno(&err));
+                stderr_text = format!("uptime: couldn't get boot time: {}\n", strip_errno(&err));
             } else {
-                ct_show_error!("couldn't get boot time");
+                stderr_text = "uptime: couldn't get boot time\n".to_string();
             }
-            set_ct_exit_code(1);
+            exit_code = 1;
         }
 
         // 默认格式
-        let time_result = uptime_print_time();
-        let uptime_result = if uptime < 0 {
-            uptime_print_unknown_uptime().to_string()
+        let time_result = uptime_print_time_at(sample_time_unix);
+        let uptime_result = if let Some(uptime_seconds) = uptime_seconds {
+            uptime_print_uptime(uptime_seconds)
         } else {
-            uptime_print_uptime(uptime)
+            uptime_print_unknown_uptime().to_string()
         };
         let users_result = uptime_print_n_users(user_count);
-        let loadavg_result = print_loadavg();
+        let loadavg_result = uptime_render_loadavg(&load_averages);
+        let classic_text = format!("{time_result}{uptime_result}{users_result}{loadavg_result}");
 
-        print!("{time_result}{uptime_result}{users_result}{loadavg_result}");
-
-        Ok(())
+        Ok(UptimeSemantic {
+            view_kind: "default".into(),
+            uptime_source_kind: uptime_source_kind(uptime_source).into(),
+            sample_time_unix,
+            sample_time_local: uptime_format_timestamp_local(sample_time_unix),
+            boot_time_unix,
+            boot_time_local,
+            uptime_seconds,
+            uptime_pretty,
+            user_count,
+            load_averages,
+            classic_text,
+            stderr_text,
+            exit_code,
+        })
     }
 }
 

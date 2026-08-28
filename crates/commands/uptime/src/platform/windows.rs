@@ -14,6 +14,29 @@ extern "C" {
     fn GetTickCount() -> ctcore::libc::uint32_t;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UptimeSource {
+    ProcUptime,
+    BootTime,
+    TickCount,
+    Unknown,
+}
+
+#[cfg(windows)]
+pub fn uptime_source_kind(source: UptimeSource) -> &'static str {
+    match source {
+        UptimeSource::ProcUptime => "proc_uptime",
+        UptimeSource::BootTime => "boot_time",
+        UptimeSource::TickCount => "tick_count",
+        UptimeSource::Unknown => "unknown",
+    }
+}
+
+#[cfg(windows)]
+pub fn get_loadavg_values() -> Vec<f64> {
+    Vec::new()
+}
+
 #[cfg(windows)]
 pub fn print_loadavg() -> String {
     // XXX: currently this is a noop as Windows does not seem to have anything comparable to
@@ -29,4 +52,9 @@ pub fn process_utmpx(_path: Option<&str>) -> (Option<time_t>, usize, Option<std:
 #[cfg(windows)]
 pub fn get_uptime(_boot_time: Option<time_t>) -> i64 {
     unsafe { GetTickCount() as i64 }
+}
+
+#[cfg(windows)]
+pub fn get_uptime_with_source(_boot_time: Option<time_t>) -> (i64, UptimeSource) {
+    (unsafe { GetTickCount() as i64 }, UptimeSource::TickCount)
 }

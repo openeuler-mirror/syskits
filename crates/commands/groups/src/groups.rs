@@ -16,7 +16,6 @@ use ctcore::{
     ct_display::Quotable,
     ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp},
     ct_error::{CTError, CTResult},
-    ct_show,
 };
 use rust_i18n::t;
 use std::error::Error;
@@ -52,25 +51,18 @@ impl Display for GroupsError {
     }
 }
 
-/**
- * 尝试将给定的组ID转换为组名。
- *
- * 使用 `gid2grp` 函数尝试查找与给定组ID对应的组名。如果找到，则返回该组名；
- * 如果未找到，则记录错误并返回给定的组ID的字符串表示形式。
- *
- * @param gid 组ID的引用，类型为 `&u32`。
- * @return `String` 类型，表示组名或组ID的字符串表示。
- */
-fn groups_infallible_gid2grp(gid: &u32) -> String {
-    // 尝试将组ID转换为组名
-    match gid2grp(*gid) {
-        Ok(grp) => grp, // 成功时返回组名
-        Err(_) => {
-            // 当转换失败时，使用 `ct_show!` 宏记录错误信息，并设置程序的全局退出码
-            ct_show!(GroupsError::GroupNotFound(*gid));
-            gid.to_string() // 将组ID转换为字符串并返回
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupsEntry {
+    pub user: Option<String>,
+    pub groups: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupsSemantic {
+    pub entries: Vec<GroupsEntry>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 pub fn ct_app() -> Command {
@@ -87,20 +79,94 @@ pub fn ct_app() -> Command {
         )
 }
 
-#[derive(Debug)]
-struct GroupInfo {
-    user: String,
-    groups: Vec<String>,
-}
-
-impl Display for GroupInfo {
+impl Display for GroupsEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.user.is_empty() {
-            write!(f, "{}", self.groups.join(" "))
+        if let Some(user) = &self.user {
+            write!(f, "{} : {}", user, self.groups.join(" "))
         } else {
-            write!(f, "{} : {}", self.user, self.groups.join(" "))
+            write!(f, "{}", self.groups.join(" "))
         }
     }
+}
+
+fn groups_infallible_gid2grp(gid: &u32, stderr_text: &mut String, exit_code: &mut i32) -> String {
+    match gid2grp(*gid) {
+        Ok(grp) => grp,
+        Err(_) => {
+            *exit_code = 1;
+            stderr_text.push_str(&format!("groups: {}\n", GroupsError::GroupNotFound(*gid)));
+            gid.to_string()
+        }
+    }
+}
+
+fn groups_render_classic_text(entries: &[GroupsEntry]) -> String {
+    if entries.is_empty() {
+        return String::new();
+    }
+
+    let mut classic_text = entries
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    classic_text.push('\n');
+    classic_text
+}
+
+fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
+    let mut entries = Vec::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    if users.is_empty() {
+        let gids = get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?;
+        let groups = gids
+            .iter()
+            .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
+            .collect();
+        entries.push(GroupsEntry { user: None, groups });
+    } else {
+        for user in users {
+            match CtPasswd::locate(user.as_str()) {
+                Ok(passwd) => {
+                    let groups = passwd
+                        .belongs_to()
+                        .iter()
+                        .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
+                        .collect();
+                    entries.push(GroupsEntry {
+                        user: Some(user),
+                        groups,
+                    });
+                }
+                Err(_) => {
+                    exit_code = 1;
+                    stderr_text.push_str(&format!("groups: {}\n", GroupsError::UserNotFound(user)));
+                }
+            }
+        }
+    }
+
+    let classic_text = groups_render_classic_text(&entries);
+    Ok(GroupsSemantic {
+        entries,
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
+}
+
+pub fn groups_native_semantic(args: impl ctcore::Args) -> CTResult<GroupsSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    let users: Vec<String> = matches
+        .get_many::<String>(opt_flags::USERS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    groups_collect_for_users(users)
 }
 
 #[derive(Default)]
@@ -115,18 +181,24 @@ impl Tool for Groups {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        let result = groups_main(args.iter().cloned());
+        let result = groups_native_semantic(args.iter().cloned());
         match result {
-            Ok(groups) => {
-                for g in groups.iter() {
-                    println!("{g}");
+            Ok(semantic) => {
+                if !semantic.classic_text.is_empty() {
+                    print!("{}", semantic.classic_text);
+                }
+                if !semantic.stderr_text.is_empty() {
+                    eprint!("{}", semantic.stderr_text);
                 }
 
-                Ok(())
+                if semantic.exit_code == 0 {
+                    Ok(())
+                } else {
+                    Err(semantic.exit_code.into())
+                }
             }
-            _ => {
-                // 如果出现错误，则打印错误信息并返回错误
-                eprint!("{}", result.err().unwrap());
+            Err(err) => {
+                eprint!("{err}");
                 Err(125.into())
             }
         }
@@ -140,71 +212,10 @@ impl Tool for Groups {
 ///
 /// # 返回值
 /// 返回一个 `CTResult<()>`，成功时为 `Ok(())`，失败时为 `Err` 包含错误信息。
-fn groups_main(args: impl ctcore::Args) -> CTResult<Vec<GroupInfo>> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
-    // 从命令行参数中解析匹配项
-    let matches = ct_app().try_get_matches_from(args)?;
-    let mut g = Vec::new();
-    // 尝试从命令行参数中获取用户列表，如果未指定则默认为空
-    let users: Vec<String> = matches
-        .get_many::<String>(opt_flags::USERS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    // 如果未指定用户，则列出当前系统中所有用户组
-    if users.is_empty() {
-        let gids = match get_groups_gnu(None) {
-            Ok(v) => v,
-            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
-        };
-        // 将组ID转换为组名，并打印
-        let groups: Vec<String> = gids.iter().map(groups_infallible_gid2grp).collect();
-        // println!("{}", groups.join(" "));
-
-        let mut group_info = GroupInfo {
-            user: String::new(),
-            groups: Vec::new(),
-        };
-
-        group_info.groups = groups;
-
-        g.push(group_info);
-
-        return Ok(g);
-    }
-
-    let mut g = Vec::new();
-    // 处理指定用户的组信息
-    for user in users {
-        match CtPasswd::locate(user.as_str()) {
-            Ok(p) => {
-                // 获取用户所属的组，并打印
-                let groups: Vec<String> = p
-                    .belongs_to()
-                    .iter()
-                    .map(groups_infallible_gid2grp)
-                    .collect();
-                // println!("{} : {}", user, groups.join(" "));
-
-                let mut group_info = GroupInfo {
-                    user: String::new(),
-                    groups: Vec::new(),
-                };
-
-                group_info.user = user;
-                group_info.groups = groups;
-
-                g.push(group_info);
-            }
-            Err(_) => {
-                // 如果用户不存在，则显示错误信息并设置退出码
-                ct_show!(GroupsError::UserNotFound(user));
-            }
-        }
-    }
-
-    Ok(g)
+#[cfg(test)]
+fn groups_main(args: impl ctcore::Args) -> CTResult<Vec<GroupsEntry>> {
+    let semantic = groups_native_semantic(args)?;
+    Ok(semantic.entries)
 }
 
 #[cfg(test)]
@@ -232,7 +243,7 @@ mod tests {
     }
 
     mod tests_groups_main {
-        use crate::groups_main;
+        use crate::{groups_main, groups_native_semantic};
 
         use std::ffi::OsString;
 
@@ -259,6 +270,22 @@ mod tests {
             let result = groups_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_groups_native_semantic_preserves_partial_output_and_diagnostics() {
+            let args = [ctcore::ct_util_name(), "root", "no_such_user_123"];
+            let result = groups_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert_eq!(result.exit_code, 1);
+            assert_eq!(result.classic_text, "root : root\n");
+            assert_eq!(
+                result.stderr_text,
+                "groups: 'no_such_user_123': no such user\n"
+            );
+            assert_eq!(result.entries.len(), 1);
+            assert_eq!(result.entries[0].user.as_deref(), Some("root"));
+            assert_eq!(result.entries[0].groups, vec!["root".to_string()]);
         }
     }
 

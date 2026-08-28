@@ -54,6 +54,30 @@ impl EchoBase {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EchoEscapeMode {
+    Literal,
+    Interpreted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EchoSemantic {
+    pub inputs: Vec<String>,
+    pub text: String,
+    pub trailing_newline: bool,
+    pub escape_mode: EchoEscapeMode,
+    pub terminated_early: bool,
+    pub classic_text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EchoRender {
+    text: String,
+    trailing_newline: bool,
+    terminated_early: bool,
+    classic_text: String,
+}
+
 /// 解析`\xHHH`和`\0NNN`转义序列中的数值部分
 fn echo_parse_code(input: &mut Peekable<Chars>, base: EchoBase) -> Option<char> {
     // 由于八进制输入可能需要3个数字，这超过了`u8`的容量，因此这里需要使用溢出加法。
@@ -252,6 +276,72 @@ fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<St
     (no_newline, escaped, values)
 }
 
+fn echo_render_output(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<EchoRender> {
+    let mut output = Vec::new();
+    let mut terminated_early = false;
+
+    for (i, input) in free.iter().enumerate() {
+        if i > 0 {
+            write!(output, " ")?;
+        }
+        if escaped {
+            if echo_print_escaped(input, &mut output)?.is_break() {
+                terminated_early = true;
+                break;
+            }
+        } else {
+            write!(output, "{input}")?;
+        }
+    }
+
+    let text = String::from_utf8(output).expect("echo output should be utf-8");
+    let trailing_newline = !no_newline && !terminated_early;
+    let classic_text = if trailing_newline {
+        format!("{text}\n")
+    } else {
+        text.clone()
+    };
+
+    Ok(EchoRender {
+        text,
+        trailing_newline,
+        terminated_early,
+        classic_text,
+    })
+}
+
+fn echo_native_semantic_from_args_vec(
+    args_vec: &[String],
+    posix_mode: bool,
+) -> CTResult<EchoSemantic> {
+    let (no_newline, escaped, values) = echo_parse_args(args_vec, posix_mode);
+    let rendered = echo_render_output(no_newline, escaped, &values)
+        .map_err_context(|| "could not render echo output".to_string())?;
+
+    Ok(EchoSemantic {
+        inputs: values,
+        text: rendered.text,
+        trailing_newline: rendered.trailing_newline,
+        escape_mode: if escaped {
+            EchoEscapeMode::Interpreted
+        } else {
+            EchoEscapeMode::Literal
+        },
+        terminated_early: rendered.terminated_early,
+        classic_text: rendered.classic_text,
+    })
+}
+
+pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
+    let args_vec: Vec<String> = args
+        .skip(1)
+        .map(|s| s.to_string_lossy().into_owned())
+        .collect();
+    let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
+
+    echo_native_semantic_from_args_vec(&args_vec, posix_mode)
+}
+
 pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -329,30 +419,14 @@ pub fn ct_app() -> Command {
 }
 
 fn echo_execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
+    let rendered = echo_render_output(no_newline, escaped, free)?;
+    echo_write_output(&rendered.classic_text)
+}
+
+fn echo_write_output(output: &str) -> io::Result<()> {
     let stdout = io::stdout();
-    let mut output = stdout.lock();
-
-    for (i, input) in free.iter().enumerate() {
-        if i > 0 {
-            write!(output, " ")?;
-        }
-        if escaped {
-            // 如果处理转义序列，使用`echo_print_escaped`函数
-            if echo_print_escaped(input, &mut output)?.is_break() {
-                return Ok(());
-            }
-        } else {
-            // 如果不处理转义序列，直接写入
-            write!(output, "{input}")?;
-        }
-    }
-
-    // 如果未指定不输出换行符，则输出换行符
-    if !no_newline {
-        writeln!(output)?;
-    }
-
-    Ok(())
+    let mut stdout = stdout.lock();
+    stdout.write_all(output.as_bytes())
 }
 
 #[cfg(test)]
@@ -608,7 +682,10 @@ mod tests {
     }
 
     mod tests_echo_functions {
-        use crate::{echo_execute, echo_print_escaped};
+        use crate::{
+            EchoEscapeMode, echo_execute, echo_native_semantic_from_args_vec, echo_print_escaped,
+            echo_render_output,
+        };
         use std::io::Cursor;
         use std::ops::ControlFlow;
 
@@ -647,6 +724,40 @@ mod tests {
                 result.unwrap(),
                 (Ok(ControlFlow::Break(())) as Result<_, ()>).expect("REASON")
             );
+        }
+
+        #[test]
+        fn test_echo_render_output_preserves_space_before_early_termination() {
+            let rendered = echo_render_output(
+                false,
+                true,
+                &["a".to_string(), "\\c".to_string(), "tail".to_string()],
+            )
+            .expect("rendered");
+
+            assert_eq!(rendered.text, "a ");
+            assert!(!rendered.trailing_newline);
+            assert!(rendered.terminated_early);
+            assert_eq!(rendered.classic_text, "a ");
+        }
+
+        #[test]
+        fn test_echo_native_semantic_reports_default_contract() {
+            let semantic = echo_native_semantic_from_args_vec(
+                &["hello".to_string(), "world".to_string()],
+                false,
+            )
+            .expect("semantic");
+
+            assert_eq!(
+                semantic.inputs,
+                vec!["hello".to_string(), "world".to_string()]
+            );
+            assert_eq!(semantic.text, "hello world");
+            assert!(semantic.trailing_newline);
+            assert_eq!(semantic.escape_mode, EchoEscapeMode::Literal);
+            assert!(!semantic.terminated_early);
+            assert_eq!(semantic.classic_text, "hello world\n");
         }
     }
 }

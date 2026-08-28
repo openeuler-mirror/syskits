@@ -1,0 +1,14 @@
+[package]
+name = "cmd_parse"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "DataCommand: parse — parse text with template/regex into structured records"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }
+regex = { workspace = true }

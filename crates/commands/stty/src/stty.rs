@@ -33,7 +33,7 @@ use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
 use std::ffi::OsString;
-use std::io::stdin;
+use std::io::{Write, stdin};
 use std::ops::ControlFlow;
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
@@ -193,11 +193,31 @@ ioctl_write_ptr_bad!(
 );
 
 pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
+    stty_main_with_writer(args, &mut std::io::stdout().lock())
+}
+
+pub fn stty_main_with_writer<W: Write>(args: impl ctcore::Args, writer: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     let stty_opts = SttyFlags::new(&matches)?;
-    stty(&stty_opts)
+    stty(&stty_opts, writer)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SttyCoreOutput {
+    pub bytes: Vec<u8>,
+}
+
+pub fn stty_core_output(args: impl ctcore::Args) -> CTResult<SttyCoreOutput> {
+    let args_vec: Vec<OsString> = args.collect();
+    let mut bytes = Vec::new();
+    stty_main_with_writer(args_vec.into_iter(), &mut bytes)?;
+    Ok(SttyCoreOutput { bytes })
+}
+
+pub fn stty_core_output_from_args(args: Vec<OsString>) -> CTResult<SttyCoreOutput> {
+    stty_core_output(args.into_iter())
 }
 
 fn find_special_setting(name: &str) -> Option<settings::SpecialSettingEntry> {
@@ -325,7 +345,7 @@ fn validate_setting_syntax(setting: &str) -> CTResult<()> {
 /// # 返回值
 ///
 /// 返回一个`CTResult`，表示操作成功完成或包含错误信息
-fn stty(opts: &SttyFlags) -> CTResult<()> {
+fn stty<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
     // Check 参数冲突
     opts.check()?;
 
@@ -336,8 +356,8 @@ fn stty(opts: &SttyFlags) -> CTResult<()> {
     }
 
     // 通过 tcgetattr 获取终端配置
-    let mut termios =
-        tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+    let mut termios = tcgetattr(opts.file.as_fd())
+        .map_err(|e| CtSimpleError::new(1, format!("Could not get terminal attributes: {e}")))?;
 
     // 通过 stty_apply_setting 应用设置
     if let Some(settings) = &opts.settings {
@@ -357,7 +377,7 @@ fn stty(opts: &SttyFlags) -> CTResult<()> {
         }
 
         if drain_only {
-            stty_print_settings(&termios, opts)?;
+            stty_print_settings(&termios, opts, writer)?;
         } else {
             tcsetattr(
                 opts.file.as_fd(),
@@ -379,7 +399,7 @@ fn stty(opts: &SttyFlags) -> CTResult<()> {
         }
     } else {
         // 如果没有设置需要应用，则打印当前设置
-        stty_print_settings(&termios, opts)?;
+        stty_print_settings(&termios, opts, writer)?;
     }
     Ok(())
 }
@@ -404,65 +424,6 @@ fn termios_equal(lhs: &Termios, rhs: &Termios) -> bool {
         && cfgetospeed(lhs) == cfgetospeed(rhs)
 }
 
-fn get_columns() -> usize {
-    if let Ok(cols) = std::env::var("COLUMNS") {
-        if let Ok(c) = cols.parse::<usize>() {
-            return c;
-        }
-    }
-    let mut size = TermSize::default();
-    // 只有在没有 COLUMNS 环境变量时，才通过 ioctl 查询终端真实宽度
-    if unsafe { tiocgwinsz(std::io::stdout().as_raw_fd(), &mut size as *mut _) }.is_ok()
-        && size.columns > 0
-    {
-        return size.columns as usize;
-    }
-    80
-}
-
-struct LineWrapper {
-    columns: usize,
-    current_col: usize,
-}
-
-impl LineWrapper {
-    fn new() -> Self {
-        Self {
-            columns: get_columns(),
-            current_col: 0,
-        }
-    }
-
-    fn print_item(&mut self, text: &str, is_flag: bool) {
-        let suffix = if is_flag { "" } else { ";" };
-        let width_needed = text.len() + suffix.len();
-
-        match self.current_col {
-            0 => {
-                print!("{text}{suffix}");
-                self.current_col = width_needed;
-            }
-            _ if self.current_col + 1 + width_needed > self.columns => {
-                println!();
-                print!("{text}{suffix}");
-                self.current_col = width_needed;
-            }
-            _ => {
-                // 只有换行失败，接在后面时，才统一添加一个前导空格
-                print!(" {text}{suffix}");
-                self.current_col += 1 + width_needed;
-            }
-        }
-    }
-
-    fn flush(&mut self) {
-        if self.current_col > 0 {
-            println!();
-            self.current_col = 0;
-        }
-    }
-}
-
 /// 根据提供的 termios 结构和选项打印终端大小和行设置。
 ///
 /// 该函数首先通过 `cfgetospeed` 获取终端的输出速度，
@@ -476,10 +437,10 @@ impl LineWrapper {
 ///
 /// # 返回值
 /// - `CTResult<()>`: 自定义的结果类型，表示成功执行或发生错误。
-fn stty_print_terminal_size(
+fn stty_print_terminal_size<W: Write>(
     termios: &Termios,
     opts: &SttyFlags,
-    wrapper: &mut LineWrapper,
+    writer: &mut W,
 ) -> CTResult<()> {
     let speed = cfgetospeed(termios);
     let mut speed_text = "0";
@@ -491,23 +452,15 @@ fn stty_print_terminal_size(
         }
     }
 
-    let mut items = vec![format!("speed {speed_text} baud")];
+    write!(writer, "speed {speed_text} baud; ")?;
 
     if opts.is_all {
-        let mut size = TermSize::default();
-        if unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _) }.is_ok() {
-            items.push(format!("rows {}", size.rows));
-            items.push(format!("columns {}", size.columns));
-        }
+        stty_print_terminal_rows_columns(opts, writer)?;
     }
 
     let libc_termios: nix::libc::termios = termios.clone().into();
-    items.push(format!("line = {}", libc_termios.c_line));
-
-    for item in items.iter() {
-        wrapper.print_item(item, false);
-    }
-    wrapper.flush();
+    let line = libc_termios.c_line;
+    writeln!(writer, "line = {line};")?;
     Ok(())
 }
 
@@ -523,15 +476,14 @@ fn stty_print_terminal_size(
 /// # 返回值
 ///
 /// 返回一个 `CTResult`，表示操作是否成功如果成功，返回 `Ok(())`
-#[allow(dead_code)]
-fn stty_print_terminal_rows_columns(opts: &SttyFlags) -> CTResult<()> {
+fn stty_print_terminal_rows_columns<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
     let mut size = TermSize::default();
 
     // 使用系统调用 `tiocgwinsz` 获取终端尺寸信息
     // 这里使用了 `unsafe`，因为 `tiocgwinsz` 是一个低级的系统调用，需要显式地标记为不安全
     // `opts.file.as_raw_fd()` 获取文件描述符，`&mut size as *mut _` 将 `TermSize` 的引用转换为指针，以便系统调用使用
     unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _)? };
-    print!("rows {}; columns {}; ", size.rows, size.columns);
+    write!(writer, "rows {}; columns {}; ", size.rows, size.columns)?;
     Ok(())
 }
 
@@ -590,34 +542,31 @@ fn stty_control_char_to_string(cc: nix::libc::cc_t) -> CTResult<String> {
 /// # 返回值
 ///
 /// 返回一个`CTResult<()>`，表示操作是否成功
-fn stty_print_control_chars(
+fn stty_print_control_chars<W: Write>(
     termios: &Termios,
     opts: &SttyFlags,
-    wrapper: &mut LineWrapper,
+    writer: &mut W,
 ) -> CTResult<()> {
+    // 如果`opts.is_all`为`false`，则不打印任何信息直接返回
+    // 未来的工作是实现一个逻辑来比较并打印与默认值不同的设置
     if !opts.is_all {
         return Ok(());
     }
 
-    let mut items = Vec::new();
     for (text, cc_index) in CONTROL_CHARS {
-        let s = stty_control_char_to_string(termios.control_chars[*cc_index as usize])?;
-        items.push(format!("{text} = {s}"));
+        write!(
+            writer,
+            "{text} = {}; ",
+            stty_control_char_to_string(termios.control_chars[*cc_index as usize])?
+        )?;
     }
-
-    items.push(format!(
-        "min = {}",
-        termios.control_chars[SpecialCharacterIndices::VMIN as usize]
-    ));
-    items.push(format!(
-        "time = {}",
+    // 打印`VMIN`和`VTIME`特殊字符的设置
+    writeln!(
+        writer,
+        "min = {}; time = {};",
+        termios.control_chars[SpecialCharacterIndices::VMIN as usize],
         termios.control_chars[SpecialCharacterIndices::VTIME as usize]
-    ));
-
-    for item in items.iter() {
-        wrapper.print_item(item, false);
-    }
-    wrapper.flush();
+    )?;
     Ok(())
 }
 
@@ -628,18 +577,21 @@ fn stty_print_control_chars(
 ///
 /// 该函数按照特定的格式打印终端的输入标志、输出标志、控制标志和本地标志，
 /// 以及控制字符。这种格式方便用户查看和理解当前终端的配置
-fn stty_print_in_save_format(termios: &Termios) {
-    print!(
+fn stty_print_in_save_format<W: Write>(termios: &Termios, writer: &mut W) -> CTResult<()> {
+    write!(
+        writer,
         "{:x}:{:x}:{:x}:{:x}",
         termios.input_flags.bits(),
         termios.output_flags.bits(),
         termios.control_flags.bits(),
         termios.local_flags.bits()
-    );
+    )?;
+    // 遍历并打印控制字符，每个字符以十六进制格式
     for cc in termios.control_chars {
-        print!(":{cc:x}");
+        write!(writer, ":{cc:x}")?;
     }
-    println!();
+    writeln!(writer)?;
+    Ok(())
 }
 
 /// 打印终端设置
@@ -655,17 +607,23 @@ fn stty_print_in_save_format(termios: &Termios) {
 /// # 返回值
 ///
 /// 返回一个`CTResult<()>`，表示操作的结果，如果打印成功则返回`Ok(())`
-fn stty_print_settings(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
+fn stty_print_settings<W: Write>(
+    termios: &Termios,
+    opts: &SttyFlags,
+    writer: &mut W,
+) -> CTResult<()> {
+    // 根据opts.is_save决定打印格式
     if opts.is_save {
-        stty_print_in_save_format(termios);
+        // 如果是保存格式，则调用相应函数打印
+        stty_print_in_save_format(termios, writer)?;
     } else {
-        let mut wrapper = LineWrapper::new();
-        stty_print_terminal_size(termios, opts, &mut wrapper)?;
-        stty_print_control_chars(termios, opts, &mut wrapper)?;
-        stty_print_flags(termios, opts, CONTROL_SETTINGS, &mut wrapper);
-        stty_print_flags(termios, opts, INPUT_SETTINGS, &mut wrapper);
-        stty_print_flags(termios, opts, OUTPUT_SETTINGS, &mut wrapper);
-        stty_print_flags(termios, opts, LOCAL_SETTINGS, &mut wrapper);
+        // 否则，详细打印终端的尺寸、控制字符和各种设置
+        stty_print_terminal_size(termios, opts, writer)?;
+        stty_print_control_chars(termios, opts, writer)?;
+        stty_print_flags(termios, opts, CONTROL_SETTINGS, writer)?;
+        stty_print_flags(termios, opts, INPUT_SETTINGS, writer)?;
+        stty_print_flags(termios, opts, OUTPUT_SETTINGS, writer)?;
+        stty_print_flags(termios, opts, LOCAL_SETTINGS, writer)?;
     }
     Ok(())
 }
@@ -680,13 +638,15 @@ fn stty_print_settings(termios: &Termios, opts: &SttyFlags) -> CTResult<()> {
 /// - `termios`: 一个`Termios`引用，包含终端的当前设置
 /// - `opts`: 一个`SttyFlags`引用，包含命令行选项
 /// - `flags`: 一个`Settings<T>`切片，描述要检查和打印的标志
-fn stty_print_flags<T: TermiosFlag>(
+fn stty_print_flags<T: TermiosFlag, W: Write>(
     termios: &Termios,
     opts: &SttyFlags,
     flags: &[Settings<T>],
-    wrapper: &mut LineWrapper,
-) {
-    let mut printed_flags = Vec::new();
+    writer: &mut W,
+) -> CTResult<()> {
+    // 初始化一个标志变量，用于跟踪是否已经打印了设置
+    let mut printed = false;
+    // 遍历每个设置标志
     for &Settings {
         name,
         flag,
@@ -701,24 +661,23 @@ fn stty_print_flags<T: TermiosFlag>(
         let is_val = flag.is_in(termios, group);
         if group.is_some() {
             if is_val && (!is_sane || opts.is_all) {
-                printed_flags.push(name.to_string());
+                write!(writer, "{name} ")?;
+                printed = true;
             }
         } else if opts.is_all || is_val != is_sane {
-            let text = if is_val {
-                name.to_string()
-            } else {
-                format!("-{name}")
-            };
-            printed_flags.push(text);
+            if !is_val {
+                write!(writer, "-")?;
+            }
+            write!(writer, "{name} ")?;
+            printed = true;
         }
     }
 
-    if !printed_flags.is_empty() {
-        for item in printed_flags.iter() {
-            wrapper.print_item(item, true);
-        }
-        wrapper.flush();
+    // 如果打印了任何设置，则换行
+    if printed {
+        writeln!(writer)?;
     }
+    Ok(())
 }
 
 fn set_input_raw_bit(termios: &mut Termios, bit: tcflag_t, enabled: bool) {
@@ -831,6 +790,102 @@ fn apply_raw_mode(termios: &mut Termios) {
     set_local_raw_bit(termios, XCASE_RAW_BIT, false);
     termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
     termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+}
+
+/// 根据提供的字符串和设备信息应用终端设置。
+///
+/// 该函数通过解析字符串 `s` 并将相应的设置应用到 `termios` 结构中，处理各种终端设置。它首先尝试应用波特率设置，
+/// 然后是特殊设置，最后是常规标志设置。如果字符串 `s` 以 '-' 开头，则表示应移除该设置。函数返回一个 `ControlFlow`，
+/// 表示是否应用了特殊设置。
+///
+/// # 参数
+/// - `termios`: 可变引用到 `Termios` 结构，表示终端的设置。
+/// - `s`: 包含要应用设置的字符串切片。
+/// - `device`: 引用到 `Device` 结构，提供设备特定的信息。
+///
+/// # 返回值
+/// - `ControlFlow::Continue(false)`: 如果没有应用特殊设置。
+/// - `ControlFlow::Break(true)`: 如果成功应用了特殊设置。
+/// - `ControlFlow::Break(false)`: 如果成功应用了常规标志设置。
+fn stty_apply_setting(
+    termios: &mut Termios,
+    s: &str,
+    device: &Device,
+) -> CTResult<ControlFlow<bool>> {
+    if let ControlFlow::Break(applied) = stty_apply_recover_mode(termios, s) {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    // 首先处理波特率设置
+    if let ControlFlow::Break(applied) = stty_apply_baud_rate_flag(termios, s)? {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    // 处理特殊设置
+    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, s, device)? {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    // 处理常规标志设置
+    let (remove, name) = match s.strip_prefix('-') {
+        Some(s) => (true, s),
+        None => (false, s),
+    };
+
+    if let ControlFlow::Break(applied) = stty_apply_custom_flag(termios, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_combination_setting(termios, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, CONTROL_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, INPUT_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, OUTPUT_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+    if let ControlFlow::Break(applied) = stty_apply_flag(termios, LOCAL_SETTINGS, name, remove) {
+        return Ok(ControlFlow::Break(applied));
+    }
+
+    Ok(ControlFlow::Continue(()))
+}
+
+fn stty_apply_recover_mode(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+    if !input.contains(':') {
+        return ControlFlow::Continue(());
+    }
+
+    let parts: Vec<&str> = input.split(':').collect();
+    if parts.len() != 4 + termios.control_chars.len() {
+        return ControlFlow::Break(false);
+    }
+
+    let mut parsed = [0u64; 4];
+    for (idx, raw) in parts.iter().take(4).enumerate() {
+        let Ok(value) = u64::from_str_radix(raw, 16) else {
+            return ControlFlow::Break(false);
+        };
+        parsed[idx] = value;
+    }
+
+    termios.input_flags = nix::sys::termios::InputFlags::from_bits_truncate(parsed[0] as _);
+    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_truncate(parsed[1] as _);
+    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_truncate(parsed[2] as _);
+    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_truncate(parsed[3] as _);
+
+    for (idx, raw) in parts.iter().skip(4).enumerate() {
+        let Ok(value) = u8::from_str_radix(raw, 16) else {
+            return ControlFlow::Break(false);
+        };
+        termios.control_chars[idx] = value;
+    }
+
+    ControlFlow::Break(true)
 }
 
 fn stty_apply_custom_flag(termios: &mut Termios, name: &str, is_remove: bool) -> ControlFlow<bool> {
@@ -980,6 +1035,9 @@ fn stty_apply_combination_setting(
             if reversed {
                 ControlFlow::Break(false)
             } else {
+                I::IXON.apply(termios, true);
+                I::IXOFF.apply(termios, false);
+                O::ONLCR.apply(termios, true);
                 L::ECHOE.apply(termios, true);
                 L::ECHOCTL.apply(termios, true);
                 L::ECHOKE.apply(termios, true);
@@ -993,111 +1051,17 @@ fn stty_apply_combination_setting(
                 termios.control_chars[SpecialCharacterIndices::VINTR as usize] = 3;
                 termios.control_chars[SpecialCharacterIndices::VERASE as usize] = 127;
                 termios.control_chars[SpecialCharacterIndices::VKILL as usize] = 21;
+                I::IXANY.apply(termios, false);
+                O::TABDLY.apply(termios, false);
+                O::TAB3.apply(termios, true);
                 L::ECHOE.apply(termios, true);
                 L::ECHOCTL.apply(termios, true);
                 L::ECHOKE.apply(termios, true);
-                I::IXANY.apply(termios, false);
                 ControlFlow::Break(true)
             }
         }
         _ => ControlFlow::Continue(()),
     }
-}
-
-/// 根据提供的字符串和设备信息应用终端设置。
-///
-/// 该函数通过解析字符串 `s` 并将相应的设置应用到 `termios` 结构中，处理各种终端设置。它首先尝试应用波特率设置，
-/// 然后是特殊设置，最后是常规标志设置。如果字符串 `s` 以 '-' 开头，则表示应移除该设置。函数返回一个 `ControlFlow`，
-/// 表示是否应用了特殊设置。
-///
-/// # 参数
-/// - `termios`: 可变引用到 `Termios` 结构，表示终端的设置。
-/// - `s`: 包含要应用设置的字符串切片。
-/// - `device`: 引用到 `Device` 结构，提供设备特定的信息。
-///
-/// # 返回值
-/// - `ControlFlow::Continue(false)`: 如果没有应用特殊设置。
-/// - `ControlFlow::Break(true)`: 如果成功应用了特殊设置。
-/// - `ControlFlow::Break(false)`: 如果成功应用了常规标志设置。
-fn stty_apply_setting(
-    termios: &mut Termios,
-    s: &str,
-    device: &Device,
-) -> CTResult<ControlFlow<bool>> {
-    if let ControlFlow::Break(applied) = stty_apply_recover_mode(termios, s) {
-        return Ok(ControlFlow::Break(applied));
-    }
-
-    // 首先处理波特率设置
-    if let ControlFlow::Break(applied) = stty_apply_baud_rate_flag(termios, s)? {
-        return Ok(ControlFlow::Break(applied));
-    }
-
-    // 处理特殊设置
-    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, s, device)? {
-        return Ok(ControlFlow::Break(applied));
-    }
-
-    // 处理常规标志设置
-    let (remove, name) = match s.strip_prefix('-') {
-        Some(s) => (true, s),
-        None => (false, s),
-    };
-
-    if let ControlFlow::Break(applied) = stty_apply_custom_flag(termios, name, remove) {
-        return Ok(ControlFlow::Break(applied));
-    }
-    if let ControlFlow::Break(applied) = stty_apply_combination_setting(termios, name, remove) {
-        return Ok(ControlFlow::Break(applied));
-    }
-
-    if let ControlFlow::Break(applied) = stty_apply_flag(termios, CONTROL_SETTINGS, name, remove) {
-        return Ok(ControlFlow::Break(applied));
-    }
-    if let ControlFlow::Break(applied) = stty_apply_flag(termios, INPUT_SETTINGS, name, remove) {
-        return Ok(ControlFlow::Break(applied));
-    }
-    if let ControlFlow::Break(applied) = stty_apply_flag(termios, OUTPUT_SETTINGS, name, remove) {
-        return Ok(ControlFlow::Break(applied));
-    }
-    if let ControlFlow::Break(applied) = stty_apply_flag(termios, LOCAL_SETTINGS, name, remove) {
-        return Ok(ControlFlow::Break(applied));
-    }
-
-    Ok(ControlFlow::Continue(()))
-}
-
-fn stty_apply_recover_mode(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
-    if !input.contains(':') {
-        return ControlFlow::Continue(());
-    }
-
-    let parts: Vec<&str> = input.split(':').collect();
-    if parts.len() != 4 + termios.control_chars.len() {
-        return ControlFlow::Break(false);
-    }
-
-    let mut parsed = [0u64; 4];
-    for (idx, raw) in parts.iter().take(4).enumerate() {
-        let Ok(value) = u64::from_str_radix(raw, 16) else {
-            return ControlFlow::Break(false);
-        };
-        parsed[idx] = value;
-    }
-
-    termios.input_flags = nix::sys::termios::InputFlags::from_bits_truncate(parsed[0] as _);
-    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_truncate(parsed[1] as _);
-    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_truncate(parsed[2] as _);
-    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_truncate(parsed[3] as _);
-
-    for (idx, raw) in parts.iter().skip(4).enumerate() {
-        let Ok(value) = u8::from_str_radix(raw, 16) else {
-            return ControlFlow::Break(false);
-        };
-        termios.control_chars[idx] = value;
-    }
-
-    ControlFlow::Break(true)
 }
 
 /// 为终端应用特殊设置。例如：speed, rows, columns etc.
@@ -1287,6 +1251,7 @@ impl Tool for Stty {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::io::IsTerminal;
     use std::os::fd::AsRawFd;
 
     #[test]
@@ -1338,6 +1303,10 @@ mod tests {
         }
 
         false
+    }
+
+    fn should_skip_tty_tests() -> bool {
+        is_container() || !std::io::stdout().is_terminal()
     }
 
     #[cfg(test)]
@@ -1449,7 +1418,7 @@ mod tests {
 
         #[test]
         fn test_stty_flags_new_with_file_option() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_flags_new_with_file_option in container environment");
                 return;
             }
@@ -1549,7 +1518,7 @@ mod tests {
 
         #[test]
         fn test_stty_print_terminal_size() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_print_terminal_size in container environment");
                 return;
             }
@@ -1563,13 +1532,13 @@ mod tests {
                 file: device,
                 settings: None,
             };
-            let mut wrapper = LineWrapper::new();
-            assert!(stty_print_terminal_size(&termios, &opts, &mut wrapper).is_ok());
+            let mut out = Vec::new();
+            assert!(stty_print_terminal_size(&termios, &opts, &mut out).is_ok());
         }
 
         #[test]
         fn test_stty_print_control_chars() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_print_control_chars in container environment");
                 return;
             }
@@ -1582,13 +1551,13 @@ mod tests {
                 file: Device::Stdin(stdin()),
                 settings: None,
             };
-            let mut wrapper = LineWrapper::new();
-            assert!(stty_print_control_chars(&termios, &opts, &mut wrapper).is_ok());
+            let mut out = Vec::new();
+            assert!(stty_print_control_chars(&termios, &opts, &mut out).is_ok());
         }
 
         #[test]
         fn test_stty_print_in_save_format() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_print_in_save_format in container environment");
                 return;
             }
@@ -1601,7 +1570,9 @@ mod tests {
             termios.local_flags = nix::sys::termios::LocalFlags::ECHO;
 
             // 捕获输出并打印
-            stty_print_in_save_format(&termios);
+            let mut out = Vec::new();
+            assert!(stty_print_in_save_format(&termios, &mut out).is_ok());
+            assert!(!out.is_empty());
         }
     }
 
@@ -1631,7 +1602,7 @@ mod tests {
 
         #[test]
         fn test_stty_apply_special_setting_size() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_apply_special_setting_size in container environment");
                 return;
             }
@@ -1799,7 +1770,7 @@ mod tests {
 
         #[test]
         fn test_stty_main_all_flag() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_main_all_flag in container environment");
                 return;
             }
@@ -1811,7 +1782,7 @@ mod tests {
 
         #[test]
         fn test_stty_main_save_flag() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_main_save_flag in container environment");
                 return;
             }
@@ -1837,7 +1808,7 @@ mod tests {
 
         #[test]
         fn test_stty_main_multiple_settings() {
-            if is_container() {
+            if should_skip_tty_tests() {
                 println!("Skipping test_stty_main_multiple_settings in container environment");
                 return;
             }

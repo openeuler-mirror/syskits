@@ -836,6 +836,7 @@ mod tests {
     use super::*;
     use nix::sys::termios::{ControlFlags, Termios};
     use std::io::stdin;
+    use std::io::{IsTerminal, stdout};
     use std::os::fd::AsRawFd;
 
     /// 检测是否在容器环境中运行
@@ -931,7 +932,7 @@ mod tests {
 
     #[test]
     fn test_special_setting_size() {
-        if is_container() {
+        if is_container() || !stdout().is_terminal() {
             println!("Skipping test_special_setting_size in container environment");
             return;
         }

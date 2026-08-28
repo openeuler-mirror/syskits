@@ -224,13 +224,14 @@ fn scan_tool_implementations(file_path: &std::path::Path, module_name: &str) -> 
 }
 
 /// 从 impl Tool for XXX 语句中提取类型名
-fn extract_type_name(line: &str) -> Option<&str> {
+fn extract_type_name_for_trait<'a>(line: &'a str, trait_name: &str) -> Option<&'a str> {
     // 尝试更宽松的匹配模式
     let trimmed = line.trim();
 
     // 尝试直接的匹配模式
-    if let Some(pos) = trimmed.find("impl Tool for ") {
-        let after_for = &trimmed[pos + "impl Tool for ".len()..];
+    let needle = format!("impl {trait_name} for ");
+    if let Some(pos) = trimmed.find(&needle) {
+        let after_for = &trimmed[pos + needle.len()..];
         // 提取到类型名（处理可能的泛型、where 子句等）
         let end_pos = after_for
             .find('{')
@@ -241,6 +242,10 @@ fn extract_type_name(line: &str) -> Option<&str> {
     }
 
     None
+}
+
+fn extract_type_name(line: &str) -> Option<&str> {
+    extract_type_name_for_trait(line, "Tool")
 }
 
 /// 在给定的行后查找 name 方法实现并提取命令名
@@ -303,6 +308,42 @@ fn find_name_method(lines: &[&str], start_line: usize) -> Option<String> {
     }
 
     // eprintln!("Failed to find command name in name method");
+    None
+}
+
+/// 在 `impl DataCommand for ...` 块内查找 `DataSignature::new("cmd", ...)`
+fn find_data_signature_name(lines: &[&str], start_line: usize) -> Option<String> {
+    let mut brace_count = 0;
+    let mut in_impl_block = false;
+    for (i, line) in lines.iter().enumerate().skip(start_line) {
+        let trimmed = line.trim();
+
+        if i == start_line || !in_impl_block {
+            if trimmed.contains('{') {
+                in_impl_block = true;
+            }
+            if !in_impl_block {
+                continue;
+            }
+        }
+
+        brace_count += trimmed.chars().filter(|&c| c == '{').count();
+        brace_count -= trimmed.chars().filter(|&c| c == '}').count();
+
+        if let Some(pos) = trimmed.find("DataSignature::new(") {
+            let after = &trimmed[pos + "DataSignature::new(".len()..];
+            if let Some(start_q) = after.find('"') {
+                let rest = &after[start_q + 1..];
+                if let Some(end_q) = rest.find('"') {
+                    return Some(rest[..end_q].to_string());
+                }
+            }
+        }
+
+        if in_impl_block && brace_count == 0 {
+            break;
+        }
+    }
     None
 }
 
@@ -554,4 +595,369 @@ fn generate_tools_code(
     };
 
     expanded.into()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DataTools 派生宏 — 自动注册 DataCommand 实现
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// DataCommand 信息结构体
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DataCommandInfo {
+    module_name: String,
+    type_name: String,
+    cmd_name: String,
+}
+
+fn is_cmd_module_name(module_name: &str) -> bool {
+    module_name.starts_with("cmd_")
+}
+
+fn data_command_priority(cmd: &DataCommandInfo) -> u8 {
+    if is_cmd_module_name(&cmd.module_name) {
+        1
+    } else {
+        0
+    }
+}
+
+fn deduplicate_data_commands(commands: Vec<DataCommandInfo>) -> Vec<DataCommandInfo> {
+    let mut sorted = commands;
+    sorted.sort_by(|a, b| {
+        a.cmd_name
+            .cmp(&b.cmd_name)
+            .then_with(|| data_command_priority(a).cmp(&data_command_priority(b)))
+            .then_with(|| a.module_name.cmp(&b.module_name))
+            .then_with(|| a.type_name.cmp(&b.type_name))
+    });
+
+    let mut deduped = Vec::new();
+    for cmd in sorted {
+        if deduped.last().is_some_and(|last: &DataCommandInfo| {
+            last.cmd_name == cmd.cmd_name
+                && data_command_priority(last) == data_command_priority(&cmd)
+        }) {
+            continue;
+        }
+        deduped.push(cmd);
+    }
+    deduped
+}
+
+/// 扫描文件中的所有 `impl DataCommand for` 实现
+fn scan_data_command_implementations(
+    file_path: &std::path::Path,
+    module_name: &str,
+) -> Vec<DataCommandInfo> {
+    let mut commands = Vec::new();
+    let mut file_content = String::new();
+    if let Ok(mut file) = fs::File::open(file_path) {
+        if file.read_to_string(&mut file_content).is_err() {
+            return commands;
+        }
+    } else {
+        return commands;
+    }
+    let lines: Vec<&str> = file_content.lines().collect();
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.contains("impl DataCommand for ") {
+            if let Some(type_name) = extract_type_name_for_trait(trimmed, "DataCommand") {
+                let fallback = module_name
+                    .strip_prefix("cmd_")
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| module_name.to_string())
+                    .replace('_', "-");
+                if let Some(cmd_name) = find_data_signature_name(&lines, i).or(Some(fallback)) {
+                    commands.push(DataCommandInfo {
+                        module_name: module_name.to_string(),
+                        type_name: type_name.to_string(),
+                        cmd_name,
+                    });
+                }
+            }
+        }
+    }
+    commands
+}
+
+/// 扫描 `crates/commands_data/` 目录
+fn collect_data_commands(
+    root_dir: &std::path::Path,
+    log_file_option: &mut Option<fs::File>,
+    log_file_path_for_print: &std::path::Path,
+) -> Vec<DataCommandInfo> {
+    let mut commands = Vec::new();
+    let dirs_to_scan = [
+        root_dir.join("crates/commands_data"),
+        root_dir.join("crates/commands"),
+    ];
+
+    for scan_dir in dirs_to_scan {
+        if !scan_dir.exists() || !scan_dir.is_dir() {
+            continue;
+        }
+
+        let pattern = scan_dir.join("*").to_string_lossy().to_string();
+        if let Ok(entries) = glob(&pattern) {
+            for path in entries.flatten() {
+                if path.is_dir() {
+                    if let Some(module_name) = path.file_name().and_then(|n| n.to_str()) {
+                        let lib_rs = path.join("src").join("lib.rs");
+                        let mod_rs = path.join("src").join(format!("{module_name}.rs"));
+                        let scan_path = if lib_rs.exists() {
+                            Some(lib_rs)
+                        } else if mod_rs.exists() {
+                            Some(mod_rs)
+                        } else {
+                            None
+                        };
+                        if let Some(p) = scan_path {
+                            let mut found = scan_data_command_implementations(&p, module_name);
+                            commands.append(&mut found);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let commands_before_dedup = commands.len();
+    commands = deduplicate_data_commands(commands);
+    let duplicate_count = commands_before_dedup.saturating_sub(commands.len());
+    if duplicate_count > 0 {
+        current_log_or_eprintln!(
+            log_file_option,
+            log_file_path_for_print,
+            "DataTools: removed {} duplicate command name(s) with explicit priority.",
+            duplicate_count
+        );
+    }
+    current_log_or_eprintln!(
+        log_file_option,
+        log_file_path_for_print,
+        "DataTools: found {} DataCommand(s): {:?}",
+        commands.len(),
+        commands
+    );
+    commands
+}
+
+/// 生成 DataCommand 注册代码（与 Tools 宏生成的符号完全隔离）
+fn generate_data_tools_code(
+    commands: &[DataCommandInfo],
+    log_file_option: &mut Option<fs::File>,
+    log_file_path_for_print: &std::path::Path,
+) -> TokenStream {
+    if commands.is_empty() {
+        current_log_or_eprintln!(
+            log_file_option,
+            log_file_path_for_print,
+            "DataTools: no DataCommands found, generating empty stubs."
+        );
+        return quote! {
+            static ALL_DATA_COMMANDS: &[&str] = &[];
+
+            fn get_data_command(_command: &str) -> Option<Box<dyn DataCommand>> {
+                None
+            }
+
+            fn data_command_factories() -> Vec<(&'static str, DataCommandFactory)> {
+                vec![]
+            }
+        }
+        .into();
+    }
+
+    let mut match_arms = Vec::new();
+    let mut all_commands = Vec::new();
+    let mut factory_entries = Vec::new();
+    let typed_command_names: std::collections::HashSet<&str> = commands
+        .iter()
+        .filter(|cmd| !is_cmd_module_name(&cmd.module_name))
+        .map(|cmd| cmd.cmd_name.as_str())
+        .collect();
+
+    for cmd in commands {
+        let type_name = syn::Ident::new(&cmd.type_name, proc_macro2::Span::call_site());
+        let feature_name = cmd.module_name.clone();
+        let module_name =
+            quote::format_ident!("{}", cmd.module_name, span = proc_macro2::Span::call_site());
+        let cmd_name_literal = proc_macro2::Literal::string(&cmd.cmd_name);
+        let cfg_expr = if is_cmd_module_name(&cmd.module_name) {
+            if typed_command_names.contains(cmd.cmd_name.as_str()) {
+                format!("all(feature = \"{feature_name}\", not(feature = \"feat_typed_cmds\"))")
+            } else {
+                format!("feature = \"{feature_name}\"")
+            }
+        } else {
+            format!("all(feature = \"{feature_name}\", feature = \"feat_typed_cmds\")")
+        };
+        let cfg_attr =
+            syn::parse_str::<proc_macro2::TokenStream>(&format!("#[cfg({cfg_expr})]")).unwrap();
+
+        all_commands.push(quote! {
+            #cfg_attr
+            #cmd_name_literal
+        });
+        match_arms.push(quote! {
+            #cfg_attr
+            #cmd_name_literal => Some(Box::new(#module_name::#type_name::default()))
+        });
+        factory_entries.push(quote! {
+            #cfg_attr
+            (#cmd_name_literal, (|| Box::new(#module_name::#type_name::default()) as Box<dyn DataCommand>) as DataCommandFactory)
+        });
+    }
+
+    let expanded = quote! {
+
+        static ALL_DATA_COMMANDS: &[&str] = &[
+            #(#all_commands),*
+        ];
+
+        fn get_data_command(command: &str) -> Option<Box<dyn DataCommand>> {
+            match command {
+                #(#match_arms),*,
+                _ => None,
+            }
+        }
+
+        fn data_command_factories() -> Vec<(&'static str, DataCommandFactory)> {
+            vec![
+                #(#factory_entries),*
+            ]
+        }
+    };
+    expanded.into()
+}
+
+/// 派生宏：自动扫描 `crates/commands_data/` 并注册 DataCommand 实现
+///
+/// 生成（与 `Tools` 宏完全隔离）：
+/// - `ALL_DATA_COMMANDS: &[&str]`
+/// - `get_data_command(command: &str) -> Option<Box<dyn DataCommand>>`
+/// - `data_command_factories() -> Vec<(&'static str, DataCommandFactory)>`
+#[proc_macro_derive(DataTools)]
+pub fn derive_data_tools(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let _struct_name = input.ident;
+
+    let out_dir_path = match std::env::var("OUT_DIR") {
+        Ok(path) => std::path::PathBuf::from(path),
+        Err(_) => {
+            let manifest_dir =
+                std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+            let target_dir = std::path::Path::new(&manifest_dir).join("../../target");
+            if !target_dir.exists() {
+                let _ = fs::create_dir_all(&target_dir);
+            }
+            target_dir
+        }
+    };
+    let log_file_path = out_dir_path.join("data_tools_debug.log");
+    let mut log_file_option = fs::File::create(&log_file_path).ok();
+
+    let current_dir = std::env::current_dir().expect("Failed to get current directory");
+    current_log_or_eprintln!(
+        &mut log_file_option,
+        &log_file_path,
+        "DataTools macro: current_dir = {:?}",
+        current_dir
+    );
+
+    let commands = collect_data_commands(&current_dir, &mut log_file_option, &log_file_path);
+    generate_data_tools_code(&commands, &mut log_file_option, &log_file_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_type_name_for_tool_trait() {
+        let line = "impl Tool for Cat {";
+        assert_eq!(extract_type_name_for_trait(line, "Tool"), Some("Cat"));
+    }
+
+    #[test]
+    fn test_extract_type_name_for_data_command_trait() {
+        let line = "impl DataCommand for CmdFrom {";
+        assert_eq!(
+            extract_type_name_for_trait(line, "DataCommand"),
+            Some("CmdFrom")
+        );
+    }
+
+    #[test]
+    fn test_find_data_signature_name() {
+        let lines = vec![
+            "impl DataCommand for CmdFrom {",
+            "  fn signature(&self) -> DataSignature {",
+            "    DataSignature::new(\"from\", \"desc\")",
+            "  }",
+            "}",
+        ];
+        assert_eq!(
+            find_data_signature_name(&lines, 0),
+            Some("from".to_string())
+        );
+    }
+
+    #[test]
+    fn test_deduplicate_data_commands_keeps_cmd_and_typed_variants_for_same_name() {
+        let input = vec![
+            DataCommandInfo {
+                module_name: "cmd_df".to_string(),
+                type_name: "CmdDf".to_string(),
+                cmd_name: "df".to_string(),
+            },
+            DataCommandInfo {
+                module_name: "df".to_string(),
+                type_name: "Df".to_string(),
+                cmd_name: "df".to_string(),
+            },
+            DataCommandInfo {
+                module_name: "cmd_ls".to_string(),
+                type_name: "CmdLs".to_string(),
+                cmd_name: "ls".to_string(),
+            },
+        ];
+
+        let deduped = deduplicate_data_commands(input);
+        assert_eq!(deduped.len(), 3);
+        assert_eq!(deduped[0].cmd_name, "df");
+        assert_eq!(deduped[0].module_name, "df");
+        assert_eq!(deduped[1].cmd_name, "df");
+        assert_eq!(deduped[1].module_name, "cmd_df");
+        assert_eq!(deduped[2].cmd_name, "ls");
+        assert_eq!(deduped[2].module_name, "cmd_ls");
+    }
+
+    #[test]
+    fn test_deduplicate_data_commands_keeps_single_entry_per_variant() {
+        let input = vec![
+            DataCommandInfo {
+                module_name: "cmd_stat".to_string(),
+                type_name: "CmdStat".to_string(),
+                cmd_name: "stat".to_string(),
+            },
+            DataCommandInfo {
+                module_name: "stat".to_string(),
+                type_name: "Stat".to_string(),
+                cmd_name: "stat".to_string(),
+            },
+            DataCommandInfo {
+                module_name: "cmd_stat_v2".to_string(),
+                type_name: "CmdStatV2".to_string(),
+                cmd_name: "stat".to_string(),
+            },
+        ];
+
+        let deduped = deduplicate_data_commands(input);
+        assert_eq!(deduped.len(), 2);
+        assert_eq!(deduped[0].cmd_name, "stat");
+        assert_eq!(deduped[0].module_name, "stat");
+        assert_eq!(deduped[1].cmd_name, "stat");
+        assert_eq!(deduped[1].module_name, "cmd_stat");
+    }
 }

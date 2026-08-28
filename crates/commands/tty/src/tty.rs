@@ -27,6 +27,15 @@ mod tty_flags {
     pub const TTY_SILENT: &str = "silent";
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TtySemantic {
+    pub is_tty: bool,
+    pub tty_name: Option<String>,
+    pub silent: bool,
+    pub classic_text: String,
+    pub exit_code: i32,
+}
+
 pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -77,6 +86,37 @@ fn tty_handle_silent(matches: ArgMatches) -> Option<CTResult<()>> {
         });
     };
     None
+}
+
+fn tty_semantic_from_matches(matches: &ArgMatches) -> TtySemantic {
+    let silent = matches.get_flag(tty_flags::TTY_SILENT);
+    let tty_name = nix::unistd::ttyname(std::io::stdin())
+        .ok()
+        .map(|name| name.display().to_string());
+    let is_tty = tty_name.is_some();
+    let exit_code = if is_tty { 0 } else { 1 };
+    let classic_text = if silent {
+        String::new()
+    } else {
+        tty_name
+            .clone()
+            .unwrap_or_else(|| t!("tty.not_a_tty").to_string())
+    };
+
+    TtySemantic {
+        is_tty,
+        tty_name,
+        silent,
+        classic_text,
+        exit_code,
+    }
+}
+
+pub fn tty_native_semantic(args: impl ctcore::Args) -> CTResult<TtySemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    Ok(tty_semantic_from_matches(&matches))
 }
 
 pub fn ct_app() -> Command {
@@ -225,6 +265,17 @@ mod tests {
             } else {
                 assert!(result.is_err());
             }
+        }
+
+        #[test]
+        fn test_tty_native_semantic_silent_reflects_terminal_state() {
+            let args = [ctcore::ct_util_name(), "-s"];
+            let result = tty_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert!(result.silent);
+            assert_eq!(result.is_tty, std::io::stdin().is_terminal());
+            assert_eq!(result.exit_code, if result.is_tty { 0 } else { 1 });
+            assert_eq!(result.classic_text, "");
         }
     }
 

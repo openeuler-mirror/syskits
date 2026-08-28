@@ -12,7 +12,7 @@
 //dirname命令主要用于从给定的文件或目录路径中剥离出目录部分，去掉路径末尾的文件名（或最后一个组件），仅保留上级目录的路径。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -25,6 +25,43 @@ use sys_locale::get_locale;
 mod opt_flags {
     pub const ZERO: &str = "zero";
     pub const DIR: &str = "dir";
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirnameRow {
+    pub input: String,
+    pub directory_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirnameSemantic {
+    pub rows: Vec<DirnameRow>,
+    pub classic_text: String,
+}
+
+struct DirnameOptions {
+    line_ending: CtLineEnding,
+    inputs: Vec<String>,
+}
+
+impl DirnameOptions {
+    fn from_matches(args_match: &ArgMatches) -> CTResult<Self> {
+        let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::ZERO));
+        let inputs: Vec<String> = args_match
+            .get_many::<String>(opt_flags::DIR)
+            .unwrap_or_default()
+            .cloned()
+            .collect();
+
+        if inputs.is_empty() {
+            return Err(CTsageError::new(1, "missing operand"));
+        }
+
+        Ok(Self {
+            line_ending,
+            inputs,
+        })
+    }
 }
 
 #[derive(Default)]
@@ -50,21 +87,41 @@ pub fn dirname_main(args: impl ctcore::Args) -> CTResult<()> {
         .after_help(t!("dirname.after_help"))
         .try_get_matches_from(args)?;
 
-    let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::ZERO));
-
-    let dirnames: Vec<String> = args_match
-        .get_many::<String>(opt_flags::DIR)
-        .unwrap_or_default()
-        .cloned()
-        .collect();
-
-    if let Some(value) = dirname_process(line_ending, &dirnames) {
-        return value;
-    }
+    let options = DirnameOptions::from_matches(&args_match)?;
+    let semantic = dirname_semantic_from_options(&options);
+    ct_print_verbatim(&semantic.classic_text).unwrap();
 
     Ok(())
 }
 
+pub fn dirname_native_semantic(args: impl ctcore::Args) -> CTResult<DirnameSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args_match = ct_app()
+        .after_help(t!("dirname.after_help"))
+        .try_get_matches_from(args)?;
+    let options = DirnameOptions::from_matches(&args_match)?;
+    Ok(dirname_semantic_from_options(&options))
+}
+
+fn dirname_semantic_from_options(options: &DirnameOptions) -> DirnameSemantic {
+    let mut rows = Vec::with_capacity(options.inputs.len());
+    let mut classic_text = String::new();
+
+    for input in &options.inputs {
+        let directory_path = compute_dirname(input);
+        classic_text.push_str(&directory_path);
+        classic_text.push_str(&options.line_ending.to_string());
+        rows.push(DirnameRow {
+            input: input.clone(),
+            directory_path,
+        });
+    }
+
+    DirnameSemantic { rows, classic_text }
+}
+
+#[cfg(test)]
 fn dirname_process(line_ending: CtLineEnding, dirnames: &Vec<String>) -> Option<CTResult<()>> {
     if dirnames.is_empty() {
         return Some(Err(CTsageError::new(1, "missing operand")));

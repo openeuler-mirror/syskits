@@ -66,7 +66,7 @@ long_usage:
 default_format:
   fs_terse: "%n %i %l %t %s %S %b %f %a %c %d\n"
   fs_normal: "  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n"
-  file_terse: "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o %C\n"
+  file_terse: "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n"
   file_part1: "  File: %n\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n"
   file_part2_dev: "Device: %Hd,%Ld\tInode: %-10i  Links: %-5h Device type: %Hr,%Lr\n"
   file_part2_no_dev: "Device: %Hd,%Ld\tInode: %-10i  Links: %h\n"

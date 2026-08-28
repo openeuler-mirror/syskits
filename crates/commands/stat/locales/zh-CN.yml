@@ -76,7 +76,7 @@ file_type:
 default_format:
   fs_terse: "%n %i %l %t %s %S %b %f %a %c %d\n"
   fs_normal: "  文件：\"%n\"\n    ID: %-8i 文件名长度：%-7l 类型：%T\n块大小：%-10s 基本块大小：%S\n    块：总计：%-10b 空闲：%-10f 可用：%a\nInodes: 总计：%-10c 空闲：%d\n"
-  file_terse: "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o %C\n"
+  file_terse: "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n"
   file_part1: "  文件：%n\n  大小：%-10s\t块：%-10b IO 块大小：%-6o %F\n"
   file_part2_dev: "设备：%Hd,%Ld\tInode: %-10i  硬链接：%-5h 设备类型：%Hr,%Lr\n"
   file_part2_no_dev: "设备：%Hd,%Ld\tInode: %-10i  硬链接：%h\n"

@@ -10,36 +10,224 @@ edition = { workspace = true }
 description = "CTyunOS implemented as universal utils, written in Rust"
 repository = "https://atomgit.com/openeuler/syskits" 
 default-run = "syskits"
-readme = "../../../README.md" 
+readme = "../../../README.md"
 rust-version = { workspace = true }
 
 [features]
 default = ["feat_common_core"]
+# data pipeline rollback / staged release flags
+feat_data_pipeline = [
+  "cmd_from",
+  "cmd_parse",
+  "cmd_get",
+  "cmd_select",
+  "cmd_where",
+  "cmd_sort_by",
+  "cmd_group_by",
+  "cmd_agg",
+  "cmd_to",
+  "cmd_assert",
+  "cmd_wait_until",
+  "cmd_retry",
+  "cmd_date",
+  "cmd_cksum",
+  "cmd_df",
+  "cmd_du",
+  "cmd_expr",
+  "cmd_factor",
+  "cmd_hashsum",
+  "cmd_http",
+  "cmd_id",
+  "cmd_dir",
+  "cmd_dircolors",
+  "cmd_ls",
+  "cmd_pathchk",
+  "cmd_ps",
+  "cmd_seq",
+  "cmd_stat",
+  "cmd_sum",
+  "cmd_arch",
+  "cmd_groups",
+  "cmd_hostname",
+  "cmd_hostid",
+  "cmd_logname",
+  "cmd_nproc",
+  "cmd_printenv",
+  "cmd_pinky",
+  "cmd_pwd",
+  "cmd_run_external",
+  "cmd_tty",
+  "cmd_stty",
+  "cmd_uname",
+  "cmd_uptime",
+  "cmd_users",
+  "cmd_wc",
+  "cmd_who",
+  "cmd_whoami",
+  "cmd_tsort",
+  "cmd_tac",
+  "cmd_tee",
+  "cmd_paste",
+  "cmd_expand",
+  "cmd_unexpand",
+  "cmd_fold",
+  "cmd_nl",
+  "cmd_comm",
+  "cmd_join",
+  "cmd_ptx",
+  "cmd_shuf",
+  "cmd_od",
+  "cmd_tr",
+  "cmd_cut",
+  "cmd_cat",
+  "cmd_tail",
+  "cmd_head",
+  "cmd_uniq",
+  "cmd_sort",
+  "cmd_base32",
+  "cmd_base64",
+  "cmd_basenc",
+  "cmd_basename",
+  "cmd_dirname",
+  "cmd_echo",
+  "cmd_env",
+  "cmd_more",
+  "cmd_readlink",
+  "cmd_realpath",
+  "cmd_fmt",
+  "cmd_pr",
+  "cmd_printf",
+  "cmd_numfmt",
+  "cmd_vdir",
+  "ctrepl",
+]
+feat_data_workflow = ["feat_data_pipeline", "ctengine/workflow"]
+feat_data_plugin = ["feat_data_pipeline", "ctplugin"]
+feat_data_experimental = ["feat_data_pipeline"]
+feat_typed_cmds = [
+  "feat_data_pipeline",
+  "ls/feat_typed_cmds",
+  "env/feat_typed_cmds",
+  "df/feat_typed_cmds",
+  "uname/feat_typed_cmds",
+  "stat/feat_typed_cmds",
+]
+
 feat_require_selinux = ["chcon", "runcon"]
 feat_acl = ["cp/feat_acl", "ls/feat_acl"]
 feat_selinux = [
   "cp/feat_selinux",
   "ls/feat_selinux",
   "selinux",
-  "feat_require_selinux"
+  "feat_require_selinux",
 ]
 
 # 功能集
-feat_common_core = ["arch", "base32", "base64", "basename", "basenc", "cat", "cksum", 
-  "comm", "cp", "csplit", "cut", "date", "dd", "df", "dir", "dircolors", "dirname", 
-  "du", "echo", "env", "expand", "expr", "factor", "false", "fmt", "fold", "hashsum",
-  "head", "hostname", "join", "link", "ln", "ls", "mkdir", "mktemp", "more", "mv", 
-  "nl", "nproc", "numfmt", "od", "paste", "pr", "printenv", "printf", "ptx", "pwd", 
-  "readlink", "realpath", "rm", "rmdir", "seq", "shred", "shuf", "sleep", "sort", 
-  "split", "sum", "sync", "tac", "tail", "tee", "command_test", "touch", "touch", "tr", 
-  "true", "truncate", "tsort", "uname", "unexpand", "uniq", "unlink", "vdir", 
-  "wc", "whoami", "yes",]
+feat_common_core = [
+  "arch",
+  "base32",
+  "base64",
+  "basename",
+  "basenc",
+  "cat",
+  "cksum",
+  "comm",
+  "cp",
+  "csplit",
+  "cut",
+  "date",
+  "dd",
+  "df",
+  "dir",
+  "dircolors",
+  "dirname",
+  "du",
+  "echo",
+  "env",
+  "expand",
+  "expr",
+  "factor",
+  "false",
+  "fmt",
+  "fold",
+  "hashsum",
+  "head",
+  "hostname",
+  "join",
+  "link",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "more",
+  "mv",
+  "nl",
+  "nproc",
+  "numfmt",
+  "od",
+  "paste",
+  "pr",
+  "printenv",
+  "printf",
+  "ptx",
+  "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
+  "seq",
+  "shred",
+  "shuf",
+  "sleep",
+  "sort",
+  "split",
+  "sum",
+  "sync",
+  "tac",
+  "tail",
+  "tee",
+  "command_test",
+  "touch",
+  "tr",
+  "true",
+  "truncate",
+  "tsort",
+  "uname",
+  "unexpand",
+  "uniq",
+  "unlink",
+  "vdir",
+  "wc",
+  "whoami",
+  "yes",
+  "shell_init",
+]
 
-feat_common_core_unix = ["chgrp", "chmod", "chown", "chroot", "groups", "id",
-  "install", "kill", "logname", "mkfifo", "mknod", "nice", "nohup", "pathchk", 
-  "runcon", "stat", "stty", "timeout", "tty",
+feat_common_core_unix = [
+  "chgrp",
+  "chmod",
+  "chown",
+  "chroot",
+  "groups",
+  "id",
+  "install",
+  "kill",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "nice",
+  "nohup",
+  "pathchk",
+  "runcon",
+  "stat",
+  "stty",
+  "timeout",
+  "tty",
   # depend on utmpx (requiring unix utmp/utmpx support)
-  "pinky", "uptime", "users", "who",
+  "pinky",
+  "uptime",
+  "users",
+  "who",
   # depend on hostid (gethostid of libc)
   "hostid",
   # depend on cpp crate
@@ -47,23 +235,110 @@ feat_common_core_unix = ["chgrp", "chmod", "chown", "chroot", "groups", "id",
 ]
 
 feat_os_unix = [
-  "feat_selinux", 
+  "feat_selinux",
   "feat_common_core",
   "feat_common_core_unix",
 ]
 
-feat_os_windows = [
-  "feat_common_core"
-]
+feat_os_windows = ["feat_common_core"]
 
 # OS feature shortcodes
-unix = ["feat_os_unix"]
+unix = ["feat_os_unix", "feat_typed_cmds"]
 windows = ["feat_os_windows"]
 
 [dependencies]
 # Workspace-provided shared libraries
 ctcore = { workspace = true }
 tool_derive = { workspace = true }
+# M1a: data pipeline crates
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }
+cmd_from = { optional = true, package = "cmd_from", path = "../../crates/commands_data/cmd_from" }
+cmd_parse = { optional = true, package = "cmd_parse", path = "../../crates/commands_data/cmd_parse" }
+cmd_get = { optional = true, package = "cmd_get", path = "../../crates/commands_data/cmd_get" }
+cmd_select = { optional = true, package = "cmd_select", path = "../../crates/commands_data/cmd_select" }
+cmd_where = { optional = true, package = "cmd_where", path = "../../crates/commands_data/cmd_where" }
+cmd_sort_by = { optional = true, package = "cmd_sort_by", path = "../../crates/commands_data/cmd_sort_by" }
+cmd_group_by = { optional = true, package = "cmd_group_by", path = "../../crates/commands_data/cmd_group_by" }
+cmd_agg = { optional = true, package = "cmd_agg", path = "../../crates/commands_data/cmd_agg" }
+cmd_to = { optional = true, package = "cmd_to", path = "../../crates/commands_data/cmd_to" }
+cmd_assert = { optional = true, package = "cmd_assert", path = "../../crates/commands_data/cmd_assert" }
+cmd_wait_until = { optional = true, package = "cmd_wait_until", path = "../../crates/commands_data/cmd_wait_until" }
+cmd_retry = { optional = true, package = "cmd_retry", path = "../../crates/commands_data/cmd_retry" }
+cmd_date = { optional = true, package = "cmd_date", path = "../../crates/commands_data/cmd_date" }
+cmd_cksum = { optional = true, package = "cmd_cksum", path = "../../crates/commands_data/cmd_cksum" }
+cmd_df = { optional = true, package = "cmd_df", path = "../../crates/commands_data/cmd_df" }
+cmd_du = { optional = true, package = "cmd_du", path = "../../crates/commands_data/cmd_du" }
+cmd_expr = { optional = true, package = "cmd_expr", path = "../../crates/commands_data/cmd_expr" }
+cmd_factor = { optional = true, package = "cmd_factor", path = "../../crates/commands_data/cmd_factor" }
+cmd_hashsum = { optional = true, package = "cmd_hashsum", path = "../../crates/commands_data/cmd_hashsum" }
+cmd_http = { optional = true, package = "cmd_http", path = "../../crates/commands_data/cmd_http" }
+cmd_id = { optional = true, package = "cmd_id", path = "../../crates/commands_data/cmd_id" }
+cmd_dir = { optional = true, package = "cmd_dir", path = "../../crates/commands_data/cmd_dir" }
+cmd_dircolors = { optional = true, package = "cmd_dircolors", path = "../../crates/commands_data/cmd_dircolors" }
+cmd_ls = { optional = true, package = "cmd_ls", path = "../../crates/commands_data/cmd_ls" }
+cmd_pathchk = { optional = true, package = "cmd_pathchk", path = "../../crates/commands_data/cmd_pathchk" }
+cmd_ps = { optional = true, package = "cmd_ps", path = "../../crates/commands_data/cmd_ps" }
+cmd_seq = { optional = true, package = "cmd_seq", path = "../../crates/commands_data/cmd_seq" }
+cmd_stat = { optional = true, package = "cmd_stat", path = "../../crates/commands_data/cmd_stat" }
+cmd_sum = { optional = true, package = "cmd_sum", path = "../../crates/commands_data/cmd_sum" }
+cmd_arch = { optional = true, package = "cmd_arch", path = "../../crates/commands_data/cmd_arch" }
+cmd_groups = { optional = true, package = "cmd_groups", path = "../../crates/commands_data/cmd_groups" }
+cmd_hostname = { optional = true, package = "cmd_hostname", path = "../../crates/commands_data/cmd_hostname" }
+cmd_hostid = { optional = true, package = "cmd_hostid", path = "../../crates/commands_data/cmd_hostid" }
+cmd_logname = { optional = true, package = "cmd_logname", path = "../../crates/commands_data/cmd_logname" }
+cmd_nproc = { optional = true, package = "cmd_nproc", path = "../../crates/commands_data/cmd_nproc" }
+cmd_printenv = { optional = true, package = "cmd_printenv", path = "../../crates/commands_data/cmd_printenv" }
+cmd_pinky = { optional = true, package = "cmd_pinky", path = "../../crates/commands_data/cmd_pinky" }
+cmd_pwd = { optional = true, package = "cmd_pwd", path = "../../crates/commands_data/cmd_pwd" }
+cmd_run_external = { optional = true, package = "cmd_run_external", path = "../../crates/commands_data/cmd_run_external" }
+cmd_tty = { optional = true, package = "cmd_tty", path = "../../crates/commands_data/cmd_tty" }
+cmd_stty = { optional = true, package = "cmd_stty", path = "../../crates/commands_data/cmd_stty" }
+cmd_uname = { optional = true, package = "cmd_uname", path = "../../crates/commands_data/cmd_uname" }
+cmd_uptime = { optional = true, package = "cmd_uptime", path = "../../crates/commands_data/cmd_uptime" }
+cmd_users = { optional = true, package = "cmd_users", path = "../../crates/commands_data/cmd_users" }
+cmd_wc = { optional = true, package = "cmd_wc", path = "../../crates/commands_data/cmd_wc" }
+cmd_who = { optional = true, package = "cmd_who", path = "../../crates/commands_data/cmd_who" }
+cmd_whoami = { optional = true, package = "cmd_whoami", path = "../../crates/commands_data/cmd_whoami" }
+cmd_tsort = { optional = true, package = "cmd_tsort", path = "../../crates/commands_data/cmd_tsort" }
+cmd_tac = { optional = true, package = "cmd_tac", path = "../../crates/commands_data/cmd_tac" }
+cmd_tee = { optional = true, package = "cmd_tee", path = "../../crates/commands_data/cmd_tee" }
+cmd_paste = { optional = true, package = "cmd_paste", path = "../../crates/commands_data/cmd_paste" }
+cmd_expand = { optional = true, package = "cmd_expand", path = "../../crates/commands_data/cmd_expand" }
+cmd_unexpand = { optional = true, package = "cmd_unexpand", path = "../../crates/commands_data/cmd_unexpand" }
+cmd_fold = { optional = true, package = "cmd_fold", path = "../../crates/commands_data/cmd_fold" }
+cmd_nl = { optional = true, package = "cmd_nl", path = "../../crates/commands_data/cmd_nl" }
+cmd_comm = { optional = true, package = "cmd_comm", path = "../../crates/commands_data/cmd_comm" }
+cmd_join = { optional = true, package = "cmd_join", path = "../../crates/commands_data/cmd_join" }
+cmd_ptx = { optional = true, package = "cmd_ptx", path = "../../crates/commands_data/cmd_ptx" }
+cmd_shuf = { optional = true, package = "cmd_shuf", path = "../../crates/commands_data/cmd_shuf" }
+cmd_split = { optional = true, package = "cmd_split", path = "../../crates/commands_data/cmd_split" }
+cmd_od = { optional = true, package = "cmd_od", path = "../../crates/commands_data/cmd_od" }
+cmd_tr = { optional = true, package = "cmd_tr", path = "../../crates/commands_data/cmd_tr" }
+cmd_cut = { optional = true, package = "cmd_cut", path = "../../crates/commands_data/cmd_cut" }
+cmd_cat = { optional = true, package = "cmd_cat", path = "../../crates/commands_data/cmd_cat" }
+cmd_tail = { optional = true, package = "cmd_tail", path = "../../crates/commands_data/cmd_tail" }
+cmd_head = { optional = true, package = "cmd_head", path = "../../crates/commands_data/cmd_head" }
+cmd_uniq = { optional = true, package = "cmd_uniq", path = "../../crates/commands_data/cmd_uniq" }
+cmd_sort = { optional = true, package = "cmd_sort", path = "../../crates/commands_data/cmd_sort" }
+cmd_base32 = { optional = true, package = "cmd_base32", path = "../../crates/commands_data/cmd_base32" }
+cmd_base64 = { optional = true, package = "cmd_base64", path = "../../crates/commands_data/cmd_base64" }
+cmd_basenc = { optional = true, package = "cmd_basenc", path = "../../crates/commands_data/cmd_basenc" }
+cmd_basename = { optional = true, package = "cmd_basename", path = "../../crates/commands_data/cmd_basename" }
+cmd_dirname = { optional = true, package = "cmd_dirname", path = "../../crates/commands_data/cmd_dirname" }
+cmd_echo = { optional = true, package = "cmd_echo", path = "../../crates/commands_data/cmd_echo" }
+cmd_env = { optional = true, package = "cmd_env", path = "../../crates/commands_data/cmd_env" }
+cmd_more = { optional = true, package = "cmd_more", path = "../../crates/commands_data/cmd_more" }
+cmd_readlink = { optional = true, package = "cmd_readlink", path = "../../crates/commands_data/cmd_readlink" }
+cmd_realpath = { optional = true, package = "cmd_realpath", path = "../../crates/commands_data/cmd_realpath" }
+cmd_fmt = { optional = true, package = "cmd_fmt", path = "../../crates/commands_data/cmd_fmt" }
+cmd_pr = { optional = true, package = "cmd_pr", path = "../../crates/commands_data/cmd_pr" }
+cmd_printf = { optional = true, package = "cmd_printf", path = "../../crates/commands_data/cmd_printf" }
+cmd_numfmt = { optional = true, package = "cmd_numfmt", path = "../../crates/commands_data/cmd_numfmt" }
+cmd_vdir = { optional = true, package = "cmd_vdir", path = "../../crates/commands_data/cmd_vdir" }
+ctrepl = { optional = true, workspace = true }
+ctplugin = { optional = true, workspace = true }
 
 # External dependencies inherited from workspace where possible, or defined directly
 clap = { workspace = true, features = ["derive", "cargo", "wrap_help"] }
@@ -147,22 +422,22 @@ nice = { optional = true, package = "ct_nice", path = "../../crates/commands/nic
 hostid = { optional = true, package = "ct_hostid", path = "../../crates/commands/hostid" }
 rm = { optional = true, package = "ct_rm", path = "../../crates/commands/rm" }
 head = { optional = true, package = "ct_head", path = "../../crates/commands/head" }
-id = { optional = true, package = "ct_id", path = "../../crates/commands/id"}
+id = { optional = true, package = "ct_id", path = "../../crates/commands/id" }
 fold = { optional = true, package = "ct_fold", path = "../../crates/commands/fold" }
 kill = { optional = true, package = "ct_kill", path = "../../crates/commands/kill" }
-realpath = { optional = true, package = "ct_realpath", path = "../../crates/commands/realpath"}
-stty = { optional = true, package = "ct_stty", path = "../../crates/commands/stty"}
-link = { optional = true, package = "ct_link", path = "../../crates/commands/link"}
-paste = { optional = true, package = "ct_paste", path = "../../crates/commands/paste"}
-timeout = { optional = true, package = "ct_timeout", path = "../../crates/commands/timeout"}
-pathchk = { optional = true, package = "ct_pathchk", path = "../../crates/commands/pathchk"}
+realpath = { optional = true, package = "ct_realpath", path = "../../crates/commands/realpath" }
+stty = { optional = true, package = "ct_stty", path = "../../crates/commands/stty" }
+link = { optional = true, package = "ct_link", path = "../../crates/commands/link" }
+paste = { optional = true, package = "ct_paste", path = "../../crates/commands/paste" }
+timeout = { optional = true, package = "ct_timeout", path = "../../crates/commands/timeout" }
+pathchk = { optional = true, package = "ct_pathchk", path = "../../crates/commands/pathchk" }
 dd = { optional = true, package = "ct_dd", path = "../../crates/commands/dd" }
 tail = { optional = true, package = "ct_tail", path = "../../crates/commands/tail" }
-nl = { optional = true, package = "ct_nl", path = "../../crates/commands/nl"}
+nl = { optional = true, package = "ct_nl", path = "../../crates/commands/nl" }
 stat = { optional = true, package = "ct_stat", path = "../../crates/commands/stat" }
 tac = { optional = true, package = "ct_tac", path = "../../crates/commands/tac" }
 tr = { optional = true, package = "ct_tr", path = "../../crates/commands/tr" }
-factor = { optional = true, package = "ct_factor", path = "../../crates/commands/factor"}
+factor = { optional = true, package = "ct_factor", path = "../../crates/commands/factor" }
 tee = { optional = true, package = "ct_tee", path = "../../crates/commands/tee" }
 seq = { optional = true, package = "ct_seq", path = "../../crates/commands/seq" }
 install = { optional = true, package = "ct_install", path = "../../crates/commands/install" }
@@ -179,6 +454,7 @@ hashsum = { optional = true, package = "ct_hashsum", path = "../../crates/comman
 stdbuf = { optional = true, package = "ct_stdbuf", path = "../../crates/commands/stdbuf" }
 command_test = { optional = true, package = "ct_test", path = "../../crates/commands/test" }
 walkdir.workspace = true
+shell_init = { optional = true, package = "ct_shell_init", path = "../../crates/commands/shell_init" }
 
 [dev-dependencies]
 filetime = { workspace = true }

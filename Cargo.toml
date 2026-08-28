@@ -5,7 +5,13 @@ members = [
     "bin/compat_test",
     "crates/ctcore",
     "crates/tool_derive",
-    "crates/commands/*"
+    "crates/ctpipeline",
+    "crates/ctsig",
+    "crates/ctdsl",
+    "crates/ctengine",
+    "crates/ctrepl",
+    "crates/commands/*",
+    "crates/commands_data/*"
 ]
 default-members = ["bin/syskits"] # 设置 syskits 应用为默认构建目标
 
@@ -87,6 +93,8 @@ terminal_size = "0.3.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1.0"
 time = { version = "0.3" }
+reedline = "0.36"
+nu-ansi-term = "0.50"
 unicode-segmentation = "1.11.0"
 unicode-width = "0.1.11"
 walkdir = "2.5"
@@ -94,6 +102,10 @@ winapi-util = "0.1.6"
 windows-sys = { version = "0.48.0", default-features = false }
 xattr = "1.3.1"
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+conv = "0.3"
+serde_json = "1"
+serde_yaml = "0.9"
+serde = { version = "1.0", features = ["derive"] }
 
 hex = "0.4.3"
 md-5 = "0.10.6"
@@ -113,6 +125,14 @@ serial_test = "0.5"
 # 项目内部共享库 - path 属性已根据新结构更新
 ctcore = { package = "ctcore", path = "crates/ctcore" }
 tool_derive = { path = "crates/tool_derive" }
+# M1a/M1b 数据管线 crate
+ctpipeline = { path = "crates/ctpipeline" }
+ctsig = { path = "crates/ctsig" }
+ctdsl = { path = "crates/ctdsl" }
+ctengine = { path = "crates/ctengine" }
+ctrepl = { path = "crates/ctrepl" }
+ctplugin = { path = "crates/ctplugin" }
+ct_from = { path = "crates/commands_data/cmd_from" }
 anyhow = "1.0"
 
 [profile.release]
@@ -127,4 +147,3 @@ inherits = "release"
 opt-level = "z"
 panic = "abort"
 strip = true
-

@@ -1,0 +1,20 @@
+{
+  "repl.banner": "syskits structured-data REPL (type 'help' or 'exit')",
+  "repl.prompt_left": "syskits",
+  "repl.prompt_right": " ",
+  "repl.exit_hint": "exit",
+  "repl.help_intro": "Use DSL pipeline directly, for example:",
+  "repl.help_example": "  kubectl get pods -o json | from json | select metadata.name status.phase",
+  "repl.help_builtins": "Built-ins: help, exit, quit, cd, pwd, clear, history, trace on/off/status, ast <expr>, debug on/off/status",
+  "repl.debug_enabled": "debug tracing enabled",
+  "repl.debug_disabled": "debug tracing disabled",
+  "repl.debug_status_enabled": "debug tracing is enabled",
+  "repl.debug_status_disabled": "debug tracing is disabled",
+  "repl.meta_unknown": "unknown meta command",
+  "repl.history_empty": "history is empty",
+  "repl.history_io_warning": "history persistence unavailable, continuing in-memory",
+  "repl.precheck_error_prefix": "precheck error:",
+  "repl.precheck_warning_prefix": "precheck warning:",
+  "repl.trace_usage": "usage: trace on|off|status",
+  "repl.ast_usage": "usage: ast <expr>"
+}

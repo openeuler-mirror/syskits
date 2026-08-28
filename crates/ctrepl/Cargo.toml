@@ -1,0 +1,20 @@
+[package]
+name = "ctrepl"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ctdsl = { workspace = true }
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+rust-i18n = { workspace = true }
+sys-locale = { workspace = true }
+reedline = { workspace = true }
+nu-ansi-term = { workspace = true }
+crossterm = { workspace = true }

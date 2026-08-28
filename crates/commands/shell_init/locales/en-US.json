@@ -1,0 +1,6 @@
+{
+    "shell_init.about": "Generate shell initialization scripts for syskits integration",
+    "shell_init.usage": "shell-init <SHELL> [OPTIONS]",
+    "shell_init.shell_help": "Target shell (bash, zsh, or fish)",
+    "shell_init.no_completion_help": "Skip shell completion script injection"
+}

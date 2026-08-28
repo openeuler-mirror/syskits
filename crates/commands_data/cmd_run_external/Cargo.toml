@@ -1,0 +1,13 @@
+[package]
+name = "cmd_run_external"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+description = "Explicit external command execution (run-external) for syskits data pipeline"
+
+[dependencies]
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ctengine = { workspace = true }

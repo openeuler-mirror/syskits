@@ -116,6 +116,30 @@ impl<'a> WcSettings<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WcRowKind {
+    Path,
+    Stdin,
+    Total,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WcRow {
+    pub row_kind: WcRowKind,
+    pub input: Option<String>,
+    pub lines: Option<usize>,
+    pub words: Option<usize>,
+    pub chars: Option<usize>,
+    pub bytes: Option<usize>,
+    pub max_line_length: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WcSemantic {
+    pub rows: Vec<WcRow>,
+    pub classic_text: String,
+}
+
 mod wc_flags {
     pub static WC_BYTES: &str = "bytes";
     pub static WC_CHAR: &str = "chars";
@@ -388,6 +412,215 @@ pub fn wc_main(args: impl ctcore::Args) -> CTResult<()> {
     let inputs = WcInputs::new(&matches)?;
     let settings = WcSettings::new(&matches);
     wc(&inputs, &settings)
+}
+
+pub fn wc_native_semantic(args: impl ctcore::Args) -> CTResult<WcSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let matches = ct_app().try_get_matches_from(args)?;
+    let inputs = WcInputs::new(&matches)?;
+    let classic_settings = WcSettings::new(&matches);
+    let native_settings = wc_native_settings(&matches);
+    let scan_settings = wc_scan_settings(&matches);
+
+    build_wc_semantic(&inputs, &scan_settings, &native_settings, &classic_settings)
+}
+
+fn has_explicit_count_flags(matches: &ArgMatches) -> bool {
+    matches.get_flag(wc_flags::WC_BYTES)
+        || matches.get_flag(wc_flags::WC_CHAR)
+        || matches.get_flag(wc_flags::WC_LINES)
+        || matches.get_flag(wc_flags::WC_WORDS)
+        || matches.get_flag(wc_flags::WC_MAX_LINE_LENGTH)
+}
+
+fn wc_native_settings<'a>(matches: &'a ArgMatches) -> WcSettings<'a> {
+    let mut settings = WcSettings::new(matches);
+    if !has_explicit_count_flags(matches) {
+        settings.is_show_bytes = true;
+        settings.is_show_chars = true;
+        settings.is_show_lines = true;
+        settings.is_show_words = true;
+        settings.is_show_max_line_length = true;
+    }
+    settings
+}
+
+fn wc_scan_settings<'a>(matches: &'a ArgMatches) -> WcSettings<'a> {
+    let mut settings = WcSettings::new(matches);
+    settings.is_show_bytes = true;
+    settings.is_show_chars = true;
+    settings.is_show_lines = true;
+    settings.is_show_words = true;
+    settings.is_show_max_line_length = true;
+    settings
+}
+
+fn build_wc_semantic(
+    inputs: &WcInputs<'_>,
+    scan_settings: &WcSettings<'_>,
+    native_settings: &WcSettings<'_>,
+    classic_settings: &WcSettings<'_>,
+) -> CTResult<WcSemantic> {
+    let mut rows = Vec::new();
+    let mut classic_lines = Vec::new();
+    let mut total_word_count = WcWordCount::default();
+    let mut num_inputs: usize = 0;
+    let mut bytes_overflowed = false;
+    let mut chars_overflowed = false;
+    let mut lines_overflowed = false;
+    let mut words_overflowed = false;
+
+    let (classic_number_width, classic_rows_visible) =
+        if classic_settings.total_when == WcTotalWhen::Only {
+            (1, false)
+        } else {
+            (compute_number_width(inputs, classic_settings), true)
+        };
+
+    let native_rows_visible = native_settings.total_when != WcTotalWhen::Only;
+
+    for maybe_input in inputs.try_iter(scan_settings)? {
+        num_inputs += 1;
+        let input = maybe_input?;
+
+        let word_count = match word_count_from_input(&input, scan_settings) {
+            CountResult::Success(word_count) => word_count,
+            CountResult::Interrupted(_, err) | CountResult::Failure(err) => {
+                return Err(err.map_err_context(|| input.path_display()));
+            }
+        };
+
+        let (bytes, bytes_overflow) =
+            saturating_add_with_overflow(total_word_count.bytes, word_count.bytes);
+        total_word_count.bytes = bytes;
+        bytes_overflowed |= bytes_overflow;
+
+        let (chars, chars_overflow) =
+            saturating_add_with_overflow(total_word_count.chars, word_count.chars);
+        total_word_count.chars = chars;
+        chars_overflowed |= chars_overflow;
+
+        let (lines, lines_overflow) =
+            saturating_add_with_overflow(total_word_count.lines, word_count.lines);
+        total_word_count.lines = lines;
+        lines_overflowed |= lines_overflow;
+
+        let (words, words_overflow) =
+            saturating_add_with_overflow(total_word_count.words, word_count.words);
+        total_word_count.words = words;
+        words_overflowed |= words_overflow;
+
+        total_word_count.max_line_length =
+            max(total_word_count.max_line_length, word_count.max_line_length);
+
+        if native_rows_visible {
+            rows.push(wc_row_from_count(
+                &word_count,
+                row_kind_from_input(&input),
+                input.to_title().map(Cow::into_owned),
+                native_settings,
+            ));
+        }
+
+        if classic_rows_visible {
+            let maybe_title = input.to_title();
+            let line = match render_stats_line(
+                classic_settings,
+                &word_count,
+                maybe_title.as_deref(),
+                classic_number_width,
+            ) {
+                Ok(line) => line,
+                Err(err) => {
+                    let title = maybe_title.as_deref().unwrap_or("<stdin>");
+                    let err: Box<dyn CTError> =
+                        err.map_err_context(|| format!("failed to print result for {title}"));
+                    return Err(err);
+                }
+            };
+            classic_lines.push(line);
+        }
+    }
+
+    let total_row_visible = classic_settings.total_when.is_total_row_visible(num_inputs);
+    if total_row_visible {
+        rows.push(wc_row_from_count(
+            &total_word_count,
+            WcRowKind::Total,
+            Some("total".into()),
+            native_settings,
+        ));
+
+        let total_text = t!("wc.total_row");
+        let title = classic_rows_visible.then_some(total_text.as_str());
+        let total_line = match render_stats_line(
+            classic_settings,
+            &total_word_count,
+            title,
+            classic_number_width,
+        ) {
+            Ok(line) => line,
+            Err(err) => {
+                let err: Box<dyn CTError> = err.map_err_context(|| "failed to print total".into());
+                return Err(err);
+            }
+        };
+        classic_lines.push(total_line);
+    }
+
+    if bytes_overflowed {
+        return Err(total_overflow_error("total bytes"));
+    }
+    if chars_overflowed {
+        return Err(total_overflow_error("total chars"));
+    }
+    if lines_overflowed {
+        return Err(total_overflow_error("total lines"));
+    }
+    if words_overflowed {
+        return Err(total_overflow_error("total words"));
+    }
+
+    Ok(WcSemantic {
+        rows,
+        classic_text: classic_lines.join("\n"),
+    })
+}
+
+fn row_kind_from_input(input: &WcInput<'_>) -> WcRowKind {
+    match input {
+        WcInput::Path(_) => WcRowKind::Path,
+        WcInput::Stdin(_) => WcRowKind::Stdin,
+    }
+}
+
+fn wc_row_from_count(
+    result: &WcWordCount,
+    row_kind: WcRowKind,
+    input: Option<String>,
+    settings: &WcSettings<'_>,
+) -> WcRow {
+    WcRow {
+        row_kind,
+        input,
+        lines: settings.is_show_lines.then_some(result.lines),
+        words: settings.is_show_words.then_some(result.words),
+        chars: settings.is_show_chars.then_some(result.chars),
+        bytes: settings.is_show_bytes.then_some(result.bytes),
+        max_line_length: settings
+            .is_show_max_line_length
+            .then_some(result.max_line_length),
+    }
+}
+
+fn total_overflow_error(label: &str) -> Box<dyn CTError> {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        "Value too large for defined data type",
+    )
+    .map_err_context(|| label.to_string())
 }
 
 pub fn ct_app() -> Command {
@@ -954,7 +1187,28 @@ fn print_stats(
     number_width: usize,
 ) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
+    write_stats(&mut stdout, settings, result, title, number_width)
+}
 
+fn render_stats_line(
+    settings: &WcSettings,
+    result: &WcWordCount,
+    title: Option<&str>,
+    number_width: usize,
+) -> io::Result<String> {
+    let mut buffer = Vec::new();
+    write_stats(&mut buffer, settings, result, title, number_width)?;
+    let line = String::from_utf8(buffer).expect("wc output is valid utf-8");
+    Ok(line.trim_end_matches('\n').to_string())
+}
+
+fn write_stats<W: Write>(
+    writer: &mut W,
+    settings: &WcSettings,
+    result: &WcWordCount,
+    title: Option<&str>,
+    number_width: usize,
+) -> io::Result<()> {
     let maybe_cols = &[
         (settings.is_show_lines, result.lines),
         (settings.is_show_words, result.words),
@@ -965,14 +1219,14 @@ fn print_stats(
 
     let mut space = "";
     for (_, num) in maybe_cols.iter().filter(|(show, _)| *show) {
-        write!(stdout, "{space}{num:number_width$}")?;
+        write!(writer, "{space}{num:number_width$}")?;
         space = " ";
     }
 
     if let Some(title) = title {
-        writeln!(stdout, "{space}{title}")
+        writeln!(writer, "{space}{title}")
     } else {
-        writeln!(stdout)
+        writeln!(writer)
     }
 }
 

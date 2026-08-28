@@ -43,11 +43,10 @@ mkdir -p %{buildroot}/%{syskit_app_bin}
 %dir %{syskit_app_bin}
 
 %post
-# Define the file list variable
-file_list="arch base32 base64 basename basenc cat chcon chgrp chmod chown chroot cksum comm cp csplit split \
-du yes whoami who wc vdir dir ls sort mkdir mkfifo mknod mktemp mv nice nohup nproc date df dircolors pwd \
-groups hostname numfmt readlink rmdir sleep sum sync touch true truncate expand expr false pr printenv printf \
-tsort tty uname unexpand uniq unlink uptime users cut fmt logname echo env dirname"
+# Build link list dynamically from installed syskits binary.
+# Keep `data` as a standard polymorphic entry even though it is not a legacy tool.
+file_list="$(/usr/bin/syskits --list 2>/dev/null || true)"
+file_list="$file_list data"
 
 # Create symbolic links during post installation
 for file in $file_list; do

@@ -41,39 +41,60 @@ struct NprocInfo {
     cores_num: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NprocQuery {
+    Available,
+    All,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NprocSemantic {
+    pub query: NprocQuery,
+    pub selected: usize,
+    pub available: usize,
+    pub all: usize,
+    pub ignore: usize,
+    pub thread_limit: Option<usize>,
+}
+
 impl Display for NprocInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.cores_num)
     }
 }
 
-fn nproc_main(args: impl ctcore::Args) -> CTResult<NprocInfo> {
+pub fn nproc_semantic(args: impl ctcore::Args) -> CTResult<NprocSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app().try_get_matches_from(args)?;
 
-    // 解析 --ignore 参数，如果报错，直接将底层构造好的错误 (带退出码 1) 抛上去
-    let ignore_num = nproc_parse_ignore_num(&args_match)?;
+    let ignore = nproc_parse_ignore_num(&args_match)?;
+    let query = nproc_query_from_matches(&args_match);
+    let thread_limit = nproc_parse_limit_thread();
+    let available = nproc_available();
+    let all = nproc_all();
+    let selected_base = match query {
+        NprocQuery::Available => available,
+        NprocQuery::All => all,
+    };
+    let selected =
+        nproc_cores_num_process(ignore, nproc_effective_limit(thread_limit), selected_base)?;
 
-    // 解析环境变量 OMP_THREAD_LIMIT 以限制线程数量
-    let limit_thread = nproc_parse_limit_thread();
+    Ok(NprocSemantic {
+        query,
+        selected,
+        available,
+        all,
+        ignore,
+        thread_limit,
+    })
+}
 
-    // 根据命令行参数确定要计算的核心数量
-    let cores_num = nproc_parse_cores_num(args_match);
-
-    // 应用限制和忽略的核心数量
-    let cores_num = nproc_cores_num_process(ignore_num, limit_thread, cores_num);
-
-    match cores_num {
-        Ok(cores_num) => {
-            let nproc_info = NprocInfo { cores_num };
-            Ok(nproc_info)
-        }
-        _ => Err(CtSimpleError::new(
-            1,
-            "Failed to get the number of cores".to_string(),
-        )),
-    }
+fn nproc_main(args: impl ctcore::Args) -> CTResult<NprocInfo> {
+    let semantic = nproc_semantic(args)?;
+    Ok(NprocInfo {
+        cores_num: semantic.selected,
+    })
 }
 
 fn nproc_cores_num_process(
@@ -91,39 +112,47 @@ fn nproc_cores_num_process(
     Ok(cores_num)
 }
 
-fn nproc_parse_cores_num(args_match: ArgMatches) -> usize {
+fn nproc_query_from_matches(args_match: &ArgMatches) -> NprocQuery {
     if args_match.get_flag(OPT_ALL) {
-        nproc_all()
+        NprocQuery::All
     } else {
-        // 尝试使用环境变量 OMP_NUM_THREADS 强制设置线程数
-        match env::var("OMP_NUM_THREADS") {
-            // 解析并处理 OMP_NUM_THREADS，特殊处理 "x,y,z" 格式的情况
-            Ok(thread_str) => {
-                let thread: Vec<&str> = thread_str.split_terminator(',').collect();
-                match &thread[..] {
-                    [] => available_parallelism(),
-                    [s, ..] => match s.parse() {
-                        Ok(0) | Err(_) => available_parallelism(),
-                        Ok(n) => n,
-                    },
-                }
-            }
-            // OMP_NUM_THREADS 环境变量不存在，退回到默认的核心检测
-            Err(_) => available_parallelism(),
-        }
+        NprocQuery::Available
     }
 }
 
-fn nproc_parse_limit_thread() -> usize {
-    match env::var("OMP_THREAD_LIMIT") {
-        // 使用 OpenMP 变量限制线程数；解析失败时取最大值，OMP_THREAD_LIMIT=0 时也取最大值
-        Ok(thread_str) => match thread_str.parse() {
-            Ok(0) | Err(_) => usize::MAX,
-            Ok(n) => n,
-        },
-        // OMP_THREAD_LIMIT 环境变量不存在，取最大值
-        Err(_) => usize::MAX,
+fn nproc_available() -> usize {
+    // 尝试使用环境变量 OMP_NUM_THREADS 强制设置线程数
+    match env::var("OMP_NUM_THREADS") {
+        // 解析并处理 OMP_NUM_THREADS，特殊处理 "x,y,z" 格式的情况
+        Ok(thread_str) => {
+            let thread: Vec<&str> = thread_str.split_terminator(',').collect();
+            match &thread[..] {
+                [] => available_parallelism(),
+                [s, ..] => match s.parse() {
+                    Ok(0) | Err(_) => available_parallelism(),
+                    Ok(n) => n,
+                },
+            }
+        }
+        // OMP_NUM_THREADS 环境变量不存在，退回到默认的核心检测
+        Err(_) => available_parallelism(),
     }
+}
+
+fn nproc_parse_limit_thread() -> Option<usize> {
+    match env::var("OMP_THREAD_LIMIT") {
+        // 使用 OpenMP 变量限制线程数；解析失败时视为未设置，OMP_THREAD_LIMIT=0 时也视为未设置
+        Ok(thread_str) => match thread_str.parse() {
+            Ok(0) | Err(_) => None,
+            Ok(n) => Some(n),
+        },
+        // OMP_THREAD_LIMIT 环境变量不存在，视为未设置
+        Err(_) => None,
+    }
+}
+
+fn nproc_effective_limit(thread_limit: Option<usize>) -> usize {
+    thread_limit.unwrap_or(usize::MAX)
 }
 
 fn nproc_parse_ignore_num(args_match: &ArgMatches) -> CTResult<usize> {
@@ -301,7 +330,7 @@ mod tests {
     }
 
     mod tests_nproc_main {
-        use crate::nproc_main;
+        use crate::{NprocQuery, nproc_main, nproc_semantic};
 
         use std::ffi::OsString;
 
@@ -337,6 +366,30 @@ mod tests {
             let result = nproc_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_nproc_semantic_default_query_is_available() {
+            let args = [ctcore::ct_util_name()];
+
+            let result = nproc_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert_eq!(result.query, NprocQuery::Available);
+            assert_eq!(result.ignore, 0);
+            assert!(result.selected >= 1);
+            assert!(result.available >= 1);
+            assert!(result.all >= 1);
+        }
+
+        #[test]
+        fn test_nproc_semantic_all_query_tracks_flag() {
+            let args = [ctcore::ct_util_name(), "--all"];
+
+            let result = nproc_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert_eq!(result.query, NprocQuery::All);
+            assert!(result.selected >= 1);
+            assert!(result.all >= 1);
         }
     }
 

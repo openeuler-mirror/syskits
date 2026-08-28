@@ -79,6 +79,78 @@ enum CheckOrderOption {
     Default,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommRow {
+    pub kind: String,
+    pub line: Option<String>,
+    pub from_file1: bool,
+    pub from_file2: bool,
+    pub count_file1_only: Option<usize>,
+    pub count_file2_only: Option<usize>,
+    pub count_both: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommSemantic {
+    pub rows: Vec<CommRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct CommRunOutcome {
+    rows: Vec<CommRow>,
+    stderr_text: String,
+    exit_code: i32,
+}
+
+enum CommRuntimeIssue {
+    Warn(String),
+    Fail(String),
+}
+
+fn trim_line_ending(line: &[u8], line_ending: CtLineEnding) -> &[u8] {
+    line.strip_suffix(&[u8::from(line_ending)]).unwrap_or(line)
+}
+
+fn comm_line_value(line: &[u8], line_ending: CtLineEnding) -> String {
+    String::from_utf8_lossy(trim_line_ending(line, line_ending)).into_owned()
+}
+
+fn comm_row(
+    kind: &str,
+    line: &[u8],
+    line_ending: CtLineEnding,
+    from_file1: bool,
+    from_file2: bool,
+) -> CommRow {
+    CommRow {
+        kind: kind.into(),
+        line: Some(comm_line_value(line, line_ending)),
+        from_file1,
+        from_file2,
+        count_file1_only: None,
+        count_file2_only: None,
+        count_both: None,
+    }
+}
+
+fn comm_total_row(total_col_1: usize, total_col_2: usize, total_col_3: usize) -> CommRow {
+    CommRow {
+        kind: "total".into(),
+        line: None,
+        from_file1: false,
+        from_file2: false,
+        count_file1_only: Some(total_col_1),
+        count_file2_only: Some(total_col_2),
+        count_both: Some(total_col_3),
+    }
+}
+
+fn comm_error_line(message: &str) -> String {
+    format!("comm: {message}\n")
+}
+
 fn check_order(
     prev: &[u8],
     current: &[u8],
@@ -86,7 +158,7 @@ fn check_order(
     check_opt: &CheckOrderOption,
     issued_warning: &mut [bool; 2],
     seen_unpairable: bool,
-) -> CTResult<()> {
+) -> Option<CommRuntimeIssue> {
     if *check_opt != CheckOrderOption::Disabled
         && (*check_opt == CheckOrderOption::Enabled || seen_unpairable)
         && !issued_warning[file_idx - 1]
@@ -99,14 +171,28 @@ fn check_order(
         if order == Ordering::Greater {
             let msg = t!("comm.messages.not_sorted", file_num = file_idx);
             if *check_opt == CheckOrderOption::Enabled {
-                return Err(ctcore::ct_error::CtSimpleError::new(1, msg.to_string()));
+                return Some(CommRuntimeIssue::Fail(msg.to_string()));
             } else {
-                ctcore::ct_show_error!("{}", msg);
                 issued_warning[file_idx - 1] = true;
+                return Some(CommRuntimeIssue::Warn(msg.to_string()));
             }
         }
     }
-    Ok(())
+    None
+}
+
+fn handle_check_order_issue(stderr_text: &mut String, issue: Option<CommRuntimeIssue>) -> bool {
+    match issue {
+        Some(CommRuntimeIssue::Warn(message)) => {
+            stderr_text.push_str(&comm_error_line(&message));
+            false
+        }
+        Some(CommRuntimeIssue::Fail(message)) => {
+            stderr_text.push_str(&comm_error_line(&message));
+            true
+        }
+        None => false,
+    }
 }
 
 /**
@@ -116,11 +202,12 @@ fn check_order(
  * @param b 第二个命令行读取器的引用，用于读取第二组数据。
  * @param opts 包含各种选项的参数匹配器，用于定制比较和输出的行为。
  */
-fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CTResult<()> {
-    // 引入 Write 特征以使用 write! 宏，避免与其他的 trait 冲突
-    use std::io::Write as _;
-    let mut stdout = std::io::stdout().lock();
-
+fn comm_with_writer<W: std::io::Write>(
+    a: &mut CommLineReader,
+    b: &mut CommLineReader,
+    opts: &ArgMatches,
+    out: &mut W,
+) -> CTResult<CommRunOutcome> {
     // 根据选项获取分隔符
     let delim = comm_get_del_im(opts)?;
 
@@ -169,6 +256,8 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
     let mut total_col_1 = 0;
     let mut total_col_2 = 0;
     let mut total_col_3 = 0;
+    let mut rows = Vec::new();
+    let mut stderr_text = String::new();
 
     // 循环读取并比较两组数据，直到两组都读取完毕
     while na > 0 || nb > 0 {
@@ -185,75 +274,114 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_1) {
                 // 安全写入并转换错误
-                write!(stdout, "{}", String::from_utf8_lossy(ra))
+                write!(out, "{}", String::from_utf8_lossy(ra))
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                rows.push(comm_row("left", ra, a.line_ending, true, false));
             }
             ra.clear();
             na = a
                 .read_line(ra)
                 .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             if na > 0 {
-                check_order(
-                    &prev_ra,
-                    ra,
-                    1,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+                if handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_ra,
+                        ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                ) {
+                    return Ok(CommRunOutcome {
+                        rows,
+                        stderr_text,
+                        exit_code: 1,
+                    });
+                }
                 prev_prev_ra.clear();
                 prev_prev_ra.extend_from_slice(&prev_ra);
                 prev_ra.clear();
                 prev_ra.extend_from_slice(ra);
-            } else if !prev_prev_ra.is_empty() {
-                check_order(
-                    &prev_prev_ra,
-                    &prev_ra,
-                    1,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+            } else if !prev_prev_ra.is_empty()
+                && handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_prev_ra,
+                        &prev_ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                )
+            {
+                return Ok(CommRunOutcome {
+                    rows,
+                    stderr_text,
+                    exit_code: 1,
+                });
             }
             total_col_1 += 1;
         } else if ord == Ordering::Greater {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
-                write!(stdout, "{delim_col_2}{}", String::from_utf8_lossy(rb))
+                write!(out, "{delim_col_2}{}", String::from_utf8_lossy(rb))
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                rows.push(comm_row("right", rb, b.line_ending, false, true));
             }
             rb.clear();
             nb = b
                 .read_line(rb)
                 .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             if nb > 0 {
-                check_order(
-                    &prev_rb,
-                    rb,
-                    2,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+                if handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_rb,
+                        rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                ) {
+                    return Ok(CommRunOutcome {
+                        rows,
+                        stderr_text,
+                        exit_code: 1,
+                    });
+                }
                 prev_prev_rb.clear();
                 prev_prev_rb.extend_from_slice(&prev_rb);
                 prev_rb.clear();
                 prev_rb.extend_from_slice(rb);
-            } else if !prev_prev_rb.is_empty() {
-                check_order(
-                    &prev_prev_rb,
-                    &prev_rb,
-                    2,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+            } else if !prev_prev_rb.is_empty()
+                && handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_prev_rb,
+                        &prev_rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                )
+            {
+                return Ok(CommRunOutcome {
+                    rows,
+                    stderr_text,
+                    exit_code: 1,
+                });
             }
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
-                write!(stdout, "{delim_col_3}{}", String::from_utf8_lossy(ra))
+                write!(out, "{delim_col_3}{}", String::from_utf8_lossy(ra))
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                rows.push(comm_row("both", ra, a.line_ending, true, true));
             }
             ra.clear();
             rb.clear();
@@ -261,53 +389,89 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
                 .read_line(ra)
                 .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             if na > 0 {
-                check_order(
-                    &prev_ra,
-                    ra,
-                    1,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+                if handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_ra,
+                        ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                ) {
+                    return Ok(CommRunOutcome {
+                        rows,
+                        stderr_text,
+                        exit_code: 1,
+                    });
+                }
                 prev_prev_ra.clear();
                 prev_prev_ra.extend_from_slice(&prev_ra);
                 prev_ra.clear();
                 prev_ra.extend_from_slice(ra);
-            } else if !prev_prev_ra.is_empty() {
-                check_order(
-                    &prev_prev_ra,
-                    &prev_ra,
-                    1,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+            } else if !prev_prev_ra.is_empty()
+                && handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_prev_ra,
+                        &prev_ra,
+                        1,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                )
+            {
+                return Ok(CommRunOutcome {
+                    rows,
+                    stderr_text,
+                    exit_code: 1,
+                });
             }
             nb = b
                 .read_line(rb)
                 .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
             if nb > 0 {
-                check_order(
-                    &prev_rb,
-                    rb,
-                    2,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+                if handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_rb,
+                        rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                ) {
+                    return Ok(CommRunOutcome {
+                        rows,
+                        stderr_text,
+                        exit_code: 1,
+                    });
+                }
                 prev_prev_rb.clear();
                 prev_prev_rb.extend_from_slice(&prev_rb);
                 prev_rb.clear();
                 prev_rb.extend_from_slice(rb);
-            } else if !prev_prev_rb.is_empty() {
-                check_order(
-                    &prev_prev_rb,
-                    &prev_rb,
-                    2,
-                    &check_opt,
-                    &mut issued_warning,
-                    seen_unpairable,
-                )?;
+            } else if !prev_prev_rb.is_empty()
+                && handle_check_order_issue(
+                    &mut stderr_text,
+                    check_order(
+                        &prev_prev_rb,
+                        &prev_rb,
+                        2,
+                        &check_opt,
+                        &mut issued_warning,
+                        seen_unpairable,
+                    ),
+                )
+            {
+                return Ok(CommRunOutcome {
+                    rows,
+                    stderr_text,
+                    exit_code: 1,
+                });
             }
             total_col_3 += 1;
         }
@@ -319,20 +483,29 @@ fn comm(a: &mut CommLineReader, b: &mut CommLineReader, opts: &ArgMatches) -> CT
         let total_str = t!("comm.messages.total");
         let col_sep = comm_get_del_im(opts)?;
         write!(
-            stdout,
+            out,
             "{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}"
         )
         .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        rows.push(comm_total_row(total_col_1, total_col_2, total_col_3));
     }
 
     if issued_warning[0] || issued_warning[1] {
-        return Err(ctcore::ct_error::CtSimpleError::new(
-            1,
-            t!("comm.messages.input_not_sorted").to_string(),
+        stderr_text.push_str(&comm_error_line(
+            &t!("comm.messages.input_not_sorted").to_string(),
         ));
+        return Ok(CommRunOutcome {
+            rows,
+            stderr_text,
+            exit_code: 1,
+        });
     }
 
-    Ok(())
+    Ok(CommRunOutcome {
+        rows,
+        stderr_text,
+        exit_code: 0,
+    })
 }
 
 fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
@@ -393,8 +566,43 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let mut f1 = open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?;
     let mut f2 = open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?;
 
-    comm(&mut f1, &mut f2, &matches)?;
+    let mut stdout = std::io::stdout().lock();
+    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut stdout)?;
+    if !outcome.stderr_text.is_empty() {
+        eprint!("{}", outcome.stderr_text);
+    }
+    if outcome.exit_code != 0 {
+        return Err(ctcore::ct_error::CtSimpleError::new(outcome.exit_code, ""));
+    }
     Ok(0)
+}
+
+pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
+    let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
+    let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
+
+    if tmp_file1 == "-" && tmp_file2 == "-" {
+        return Err(ctcore::ct_error::CtSimpleError::new(
+            1,
+            t!("comm.messages.both_stdin"),
+        ));
+    }
+
+    let mut f1 = open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?;
+    let mut f2 = open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?;
+    let mut output = Vec::new();
+    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output)?;
+
+    Ok(CommSemantic {
+        rows: outcome.rows,
+        classic_text: String::from_utf8_lossy(&output).into_owned(),
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    })
 }
 
 pub fn ct_app() -> Command {

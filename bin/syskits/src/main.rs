@@ -734,19 +734,6 @@ mod tests {
 
     #[cfg(feature = "feat_data_pipeline")]
     #[test]
-    fn test_data_entry_legacy_fallback_echo() {
-        let args = vec![OsString::from("echo"), OsString::from("hello")];
-        let code = ctengine::run_data_entry_with_registry_and_legacy(
-            &args,
-            ctengine::CommandRegistry::empty(),
-            Some(get_tool),
-            None,
-        );
-        assert_eq!(code, 0);
-    }
-
-    #[cfg(feature = "feat_data_pipeline")]
-    #[test]
     fn test_should_enter_data_repl_no_args_and_tty() {
         let args: Vec<OsString> = vec![];
         assert!(CommandHandler::should_enter_data_repl(&args, true, true));

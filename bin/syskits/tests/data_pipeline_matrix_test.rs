@@ -443,6 +443,22 @@ fn data_tilde_prefix_forces_external_for_direct_only_command() {
     assert_same_process_output(&out, &expected);
 }
 
+#[cfg(feature = "feat_shell_init")]
+#[test]
+fn data_direct_only_command_prefers_internal_tool_before_external_path() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell-init", "--help"])
+        .output()
+        .expect("run direct syskits shell-init --help");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "shell-init", "--help"])
+        .output()
+        .expect("run syskits data shell-init --help classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
 #[test]
 fn shell_entry_accepts_gnu_flags_like_data_entry() {
     let expected_uname = Command::new(env!("CARGO_BIN_EXE_syskits"))

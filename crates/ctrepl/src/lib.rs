@@ -22,7 +22,10 @@ mod tests {
         ControlAction, REPL_HISTORY_LINES_LIMIT, cd_target_from_input, handle_control_command,
         push_history_line,
     };
-    use crate::eval::{filter_precheck_diags_for_repl, has_precheck_error, parse_pipeline_expr};
+    use crate::eval::{
+        filter_precheck_diags_for_repl, filter_precheck_diags_for_repl_with_known_command,
+        has_precheck_error, parse_pipeline_expr,
+    };
     use crate::prompt::{
         ReplPrompt, build_completion_candidates, format_prompt_path, line_is_incomplete,
     };
@@ -247,7 +250,7 @@ mod tests {
             "from".to_string(),
             ctsig::DataSignature::new("from", "desc"),
         );
-        let out = filter_precheck_diags_for_repl(&expr, diags, &sigs);
+        let out = filter_precheck_diags_for_repl(&expr, diags, &sigs, None);
         assert_eq!(out.len(), 1);
     }
 
@@ -261,7 +264,23 @@ mod tests {
             span: None,
         }];
         let sigs = HashMap::new();
-        let out = filter_precheck_diags_for_repl(&expr, diags, &sigs);
+        let out = filter_precheck_diags_for_repl(&expr, diags, &sigs, None);
         assert_eq!(out.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_precheck_diags_suppresses_unknown_for_legacy_command() {
+        let expr = ctdsl::parse("chroot --help").expect("parse");
+        let diags = vec![ctdsl::PrecheckDiagnostic {
+            level: ctdsl::PrecheckLevel::Warning,
+            message: "precheck: unknown command `chroot`; skip type-chain check".to_string(),
+            stage_index: 0,
+            span: None,
+        }];
+        let sigs = HashMap::new();
+        let out = filter_precheck_diags_for_repl_with_known_command(&expr, diags, &sigs, |name| {
+            name == "chroot"
+        });
+        assert!(out.is_empty());
     }
 }

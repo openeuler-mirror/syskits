@@ -18,9 +18,11 @@
 //! syskits data "from /etc/os-release | get NAME"
 //! ```
 
-use ctpipeline::{CtPipelineData, CtValue};
+use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtValue};
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::IsTerminal;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::context::{CommandRegistry, DataEngineContext};
@@ -94,13 +96,13 @@ pub fn run_data_entry_with_registry_and_legacy(
                                 &mut data,
                                 started.elapsed().as_millis() as u64,
                             );
-                            let output_exit_code = pipeline_exit_code(&data);
+                            let output_exit_code = PipelineExitTracker::from_data(&data);
                             match try_print_pipeline_data_with_profile_and_signal(
                                 data,
                                 &profile,
                                 Some(&ctx.signal),
                             ) {
-                                Ok(()) => return output_exit_code,
+                                Ok(()) => return output_exit_code.exit_code(),
                                 Err(e) => {
                                     eprintln!("syskits data: error: {e}");
                                     return ExitPolicy::from_diagnostic(&e);
@@ -146,10 +148,10 @@ pub fn run_data_entry_with_registry_and_legacy(
             ctx.emit_trace_if_enabled();
             let mut data = data;
             inject_engine_success_metadata(&mut data, started.elapsed().as_millis() as u64);
-            let output_exit_code = pipeline_exit_code(&data);
+            let output_exit_code = PipelineExitTracker::from_data(&data);
             match try_print_pipeline_data_with_profile_and_signal(data, &profile, Some(&ctx.signal))
             {
-                Ok(()) => output_exit_code,
+                Ok(()) => output_exit_code.exit_code(),
                 Err(e) => {
                     eprintln!("syskits data: error: {e}");
                     ExitPolicy::from_diagnostic(&e)
@@ -165,12 +167,40 @@ pub fn run_data_entry_with_registry_and_legacy(
     }
 }
 
-fn pipeline_exit_code(data: &CtPipelineData) -> i32 {
-    match data {
-        CtPipelineData::Empty => exit_code::SUCCESS,
-        CtPipelineData::Value(_, meta) => meta.exit_code,
-        CtPipelineData::ListStream(stream) => stream.metadata.exit_code,
-        CtPipelineData::ByteStream(stream) => stream.metadata.exit_code,
+struct PipelineExitTracker {
+    fallback: i32,
+    custom: Option<Arc<Mutex<BTreeMap<String, CtValue>>>>,
+}
+
+impl PipelineExitTracker {
+    fn from_data(data: &CtPipelineData) -> Self {
+        match data {
+            CtPipelineData::Empty => Self {
+                fallback: exit_code::SUCCESS,
+                custom: None,
+            },
+            CtPipelineData::Value(_, meta) => Self::from_metadata(meta),
+            CtPipelineData::ListStream(stream) => Self::from_metadata(&stream.metadata),
+            CtPipelineData::ByteStream(stream) => Self::from_metadata(&stream.metadata),
+        }
+    }
+
+    fn from_metadata(meta: &CtPipelineMetadata) -> Self {
+        Self {
+            fallback: meta.exit_code,
+            custom: Some(meta.custom.clone()),
+        }
+    }
+
+    fn exit_code(&self) -> i32 {
+        self.custom
+            .as_ref()
+            .and_then(|custom| custom.lock().ok())
+            .and_then(|guard| match guard.get("external.exit_code") {
+                Some(CtValue::Int(code)) => i32::try_from(*code).ok(),
+                _ => None,
+            })
+            .unwrap_or(self.fallback)
     }
 }
 

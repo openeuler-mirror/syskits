@@ -14,15 +14,14 @@
 //! 设计：
 //! - 通过 resolver 查找 legacy `Tool`
 //! - 不再 in-process 执行 legacy `Tool`
-//! - 未注册的 data 命令统一交给 external fallback，避免全局 stdin/stdout FD 劫持
+//! - 已注册的 legacy `Tool` 通过当前 syskits 可执行文件子进程执行，避免全局 stdin/stdout FD 劫持
+//! - 未注册的 data 命令统一交给 PATH external fallback
 
 use crate::error::CtDiagnosticError;
+use crate::external::{ExternalCallSpec, ExternalExitPolicy};
 use ctcore::Tool;
-use ctdsl::ast::Call;
-#[cfg(test)]
-use ctdsl::ast::{Arg, Lit};
+use ctdsl::ast::{Arg, Call, Lit};
 use ctpipeline::CtPipelineData;
-#[cfg(test)]
 use std::ffi::OsString;
 
 /// legacy 工具查找函数类型
@@ -40,9 +39,35 @@ impl LegacyToolAdapter {
     }
 
     pub fn can_resolve(&self, name: &str) -> bool {
-        let _ = name;
-        let _ = self.resolver;
-        false
+        (self.resolver)(name).is_some()
+    }
+
+    /// Build a child-process invocation of the current syskits binary.
+    ///
+    /// This preserves "prefer syskits internal commands before PATH" without
+    /// reintroducing in-process stdout/stdin file descriptor interception.
+    pub fn external_call_spec(&self, call: &Call) -> Result<ExternalCallSpec, CtDiagnosticError> {
+        if !self.can_resolve(&call.name) {
+            return Err(CtDiagnosticError::simple(format!(
+                "legacy tool `{}` is not registered",
+                call.name
+            )));
+        }
+
+        let exe = std::env::current_exe().map_err(|e| {
+            CtDiagnosticError::simple(format!(
+                "failed to resolve current syskits executable for `{}`: {}",
+                call.name, e
+            ))
+        })?;
+        let exe = exe.to_string_lossy().into_owned();
+        let args = build_legacy_args(call)
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let mut spec = ExternalCallSpec::quick(&exe, &args);
+        spec.exit_policy = ExternalExitPolicy::AllowNonZero;
+        Ok(spec)
     }
 
     /// Legacy in-process execution is intentionally disabled.
@@ -66,7 +91,6 @@ impl std::fmt::Debug for LegacyToolAdapter {
     }
 }
 
-#[cfg(test)]
 fn build_legacy_args(call: &Call) -> Vec<OsString> {
     let mut args = Vec::with_capacity(call.args.len() + 1);
     args.push(OsString::from(call.name.clone()));
@@ -105,7 +129,6 @@ fn build_legacy_args(call: &Call) -> Vec<OsString> {
     args
 }
 
-#[cfg(test)]
 fn lit_to_os(lit: &Lit) -> OsString {
     match lit {
         Lit::Int(n) => OsString::from(n.to_string()),

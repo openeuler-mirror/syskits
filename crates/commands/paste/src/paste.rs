@@ -47,12 +47,35 @@ struct PasteFlags {
     line_ending: CtLineEnding,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasteMode {
+    Parallel,
+    Serial,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PasteRow {
+    pub row_index: usize,
+    pub line: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PasteSemantic {
+    pub mode: PasteMode,
+    pub rows: Vec<PasteRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 /// 表示粘贴操作的上下文
 struct PasteContext<W: Write> {
     files: Vec<InputSource>,
     delimiters: Vec<char>,
     line_ending: CtLineEnding,
     output: Vec<u8>,
+    rows: Vec<PasteRow>,
+    emitted_rows: usize,
     writer: W,
 }
 
@@ -115,8 +138,26 @@ impl<W: Write> PasteContext<W> {
             delimiters: paste_unescape(&flags.delimiters).chars().collect(),
             line_ending: flags.line_ending,
             output: Vec::new(),
+            rows: Vec::new(),
+            emitted_rows: 0,
             writer,
         })
+    }
+
+    fn write_row_bytes(&mut self, row: &[u8]) -> CTResult<()> {
+        let rendered = String::from_utf8_lossy(row).into_owned();
+        self.emitted_rows += 1;
+        self.rows.push(PasteRow {
+            row_index: self.emitted_rows,
+            line: rendered.clone(),
+        });
+        self.writer
+            .write_all(rendered.as_bytes())
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        self.writer
+            .write_all(&[self.line_ending as u8])
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        Ok(())
     }
 
     fn process_line(&mut self, file: &mut InputSource) -> CTResult<bool> {
@@ -169,14 +210,9 @@ impl<W: Write> PasteContext<W> {
 
     fn write_output(&mut self, delim_length: usize) -> CTResult<()> {
         if !self.output.is_empty() {
-            self.output.truncate(self.output.len() - delim_length);
-            write!(
-                self.writer,
-                "{}{}",
-                String::from_utf8_lossy(&self.output),
-                self.line_ending
-            )
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            let row_end = self.output.len().saturating_sub(delim_length);
+            let row = self.output[..row_end].to_vec();
+            self.write_row_bytes(&row)?;
         }
         Ok(())
     }
@@ -243,17 +279,16 @@ impl<W: Write> PasteContext<W> {
             }
 
             if has_content {
-                write!(
-                    self.writer,
-                    "{}{}",
-                    String::from_utf8_lossy(&self.output),
-                    self.line_ending
-                )
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                let row = self.output.clone();
+                self.write_row_bytes(&row)?;
             }
             delim_count = 0;
         }
         Ok(())
+    }
+
+    fn into_rows(self) -> Vec<PasteRow> {
+        self.rows
     }
 }
 
@@ -276,12 +311,42 @@ pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult
 }
 
 fn paste_exec<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<()> {
+    paste_exec_collect(writer, flags).map(|_| ())
+}
+
+fn paste_exec_collect<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<Vec<PasteRow>> {
     let mut context = PasteContext::new(&flags, writer)?;
     if flags.is_serial {
-        context.paste_serial()
+        context.paste_serial()?;
     } else {
-        context.paste_parallel()
+        context.paste_parallel()?;
     }
+    Ok(context.into_rows())
+}
+
+pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    let flags = PasteFlags::new(&matches)?;
+    flags.validate_delimiters()?;
+
+    let mode = if flags.is_serial {
+        PasteMode::Serial
+    } else {
+        PasteMode::Parallel
+    };
+
+    let mut classic_output = Vec::new();
+    let rows = paste_exec_collect(&mut classic_output, flags)?;
+
+    Ok(PasteSemantic {
+        mode,
+        rows,
+        classic_text: String::from_utf8(classic_output).expect("paste output should be utf-8"),
+        stderr_text: String::new(),
+        exit_code: 0,
+    })
 }
 
 pub fn ct_app() -> Command {

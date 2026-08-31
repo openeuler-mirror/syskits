@@ -110,6 +110,93 @@ mod sum_flags {
     pub static SUM_SYSTEM_V_COMPATIBLE: &str = "sysv";
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SumRow {
+    pub algorithm: String,
+    pub checksum: u16,
+    pub blocks: usize,
+    pub file: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SumSemantic {
+    pub rows: Vec<SumRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+fn render_sum_row_classic(row: &SumRow) -> String {
+    let (width, checksum) = if row.algorithm == "sysv" {
+        (1usize, row.checksum.to_string())
+    } else {
+        (5usize, format!("{:05}", row.checksum))
+    };
+
+    match &row.file {
+        Some(file) => format!("{checksum} {:width$} {file}", row.blocks, width = width),
+        None => format!("{checksum} {:width$}", row.blocks, width = width),
+    }
+}
+
+pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    let files: Vec<String> = if let Some(v) = matches.get_many::<String>(sum_flags::SUM_FILE) {
+        v.cloned().collect()
+    } else {
+        vec!["-".to_owned()]
+    };
+
+    let is_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
+    let is_print_names = files.len() > 1 || files[0] != "-";
+    let algorithm = if is_sysv { "sysv" } else { "bsd" }.to_string();
+
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    for file in &files {
+        let reader = match sum_open(file) {
+            Ok(file_reader) => file_reader,
+            Err(error) => {
+                exit_code = error.code();
+                stderr_text.push_str(&format!("sum: {error}\n"));
+                continue;
+            }
+        };
+
+        let (blocks, checksum) = if is_sysv {
+            sum_sysv(reader)
+        } else {
+            sum_bsd(reader)
+        };
+
+        let row = SumRow {
+            algorithm: algorithm.clone(),
+            checksum,
+            blocks,
+            file: if is_print_names {
+                Some(file.clone())
+            } else {
+                None
+            },
+        };
+        classic_text.push_str(&render_sum_row_classic(&row));
+        classic_text.push('\n');
+        rows.push(row);
+    }
+
+    Ok(SumSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
+}
+
 #[derive(Default)]
 pub struct Sum;
 impl Tool for Sum {
@@ -799,6 +886,53 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--sysv", filename];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+    }
+
+    #[cfg(test)]
+    mod native_semantic_tests {
+        use super::*;
+        use std::fs;
+        use tempfile::TempDir;
+
+        #[test]
+        fn sum_native_semantic_renders_rows_for_files() {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("sample.txt");
+            fs::write(&path, "abc").unwrap();
+            let path = path.display().to_string();
+
+            let args = [ctcore::ct_util_name(), path.as_str()];
+            let semantic = sum_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(
+                semantic.rows,
+                vec![SumRow {
+                    algorithm: "bsd".into(),
+                    checksum: 16556,
+                    blocks: 1,
+                    file: Some(path.clone()),
+                }]
+            );
+            assert_eq!(semantic.classic_text, format!("16556     1 {path}\n"));
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
+        fn sum_native_semantic_preserves_partial_output_and_last_error_code() {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("sample.txt");
+            fs::write(&path, "abc").unwrap();
+            let path = path.display().to_string();
+
+            let args = [ctcore::ct_util_name(), path.as_str(), "."];
+            let semantic = sum_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.classic_text, format!("16556     1 {path}\n"));
+            assert_eq!(semantic.stderr_text, "sum: .: Is a directory\n");
+            assert_eq!(semantic.exit_code, 2);
         }
     }
 }

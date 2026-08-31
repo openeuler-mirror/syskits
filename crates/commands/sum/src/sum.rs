@@ -26,7 +26,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{Read, stdin};
+use std::io::Read;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -86,7 +86,7 @@ fn sum_sysv(mut r: Box<dyn Read>) -> (usize, u16) {
 
 fn sum_open(name: &str) -> CTResult<Box<dyn Read>> {
     match name {
-        "-" => Ok(Box::new(stdin()) as Box<dyn Read>),
+        "-" => Ok(ctcore::ct_io::stdin_reader_box()),
         _ => {
             let path = &Path::new(name);
             if path.is_dir() {

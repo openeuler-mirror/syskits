@@ -446,7 +446,7 @@ pub fn tail_native_semantic(args: impl ctcore::Args) -> CTResult<TailSemantic> {
                 } else {
                     let header = header_printer.render_input(input);
                     let mut output = Vec::new();
-                    let mut reader = BufReader::new(stdin());
+                    let mut reader = BufReader::new(ctcore::ct_io::stdin_reader_box());
                     tail_unbounded_to_writer(&mut reader, &options, &mut output)?;
                     if let Some(header) = header {
                         classic_output.extend_from_slice(header.as_bytes());
@@ -793,7 +793,7 @@ fn handle_pipe_stdin(
         return Ok(());
     }
 
-    let mut reader = BufReader::new(stdin());
+    let mut reader = BufReader::new(ctcore::ct_io::stdin_reader_box());
     tail_unbounded(&mut reader, options, buffer)?;
     observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
     Ok(())

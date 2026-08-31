@@ -20,7 +20,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::{Args, ct_show_error};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Write, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 /// 行号格式化工具的标志和选项
@@ -587,7 +587,7 @@ where
 
     for file in &files {
         if file == "-" {
-            let mut buffer = BufReader::new(stdin());
+            let mut buffer = BufReader::new(ctcore::ct_io::stdin_reader_box());
             match nl(writer, &mut buffer, &mut flags) {
                 Ok(_) => {}
                 Err(e) => {
@@ -647,7 +647,7 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
 
     for file in &files {
         if file == "-" {
-            let mut buffer = BufReader::new(stdin());
+            let mut buffer = BufReader::new(ctcore::ct_io::stdin_reader_box());
             if let Err(err) =
                 nl_process_reader(&mut writer, &mut buffer, &mut flags, |row| rows.push(row))
             {

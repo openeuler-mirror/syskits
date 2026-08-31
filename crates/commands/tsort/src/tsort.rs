@@ -21,7 +21,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, Read, stdin};
+use std::io::{BufReader, Read};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -169,20 +169,19 @@ fn tsort_error_semantic(stderr_text: String, had_cycle: bool) -> TsortSemantic {
 }
 
 fn tsort_read_input(input_file: &str) -> Result<String, String> {
-    let mut stdin_buf;
-    let mut file_buf;
-    let mut buf_reader = BufReader::new(if input_file == "-" {
-        stdin_buf = stdin();
-        &mut stdin_buf as &mut dyn Read
+    let input: Box<dyn Read> = if input_file == "-" {
+        ctcore::ct_io::stdin_reader_box()
     } else {
         let path = Path::new(input_file);
         if path.is_dir() {
             return Err(format!("tsort: {input_file}: read error: Is a directory\n"));
         }
-        file_buf = File::open(path)
-            .map_err(|err| format!("tsort: {input_file}: {}\n", strip_errno(&err)))?;
-        &mut file_buf as &mut dyn Read
-    });
+        Box::new(
+            File::open(path)
+                .map_err(|err| format!("tsort: {input_file}: {}\n", strip_errno(&err)))?,
+        ) as Box<dyn Read>
+    };
+    let mut buf_reader = BufReader::new(input);
 
     let mut input_buffer = String::new();
     buf_reader

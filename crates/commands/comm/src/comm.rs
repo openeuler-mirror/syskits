@@ -19,7 +19,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Stdin, stdin};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -38,12 +38,9 @@ mod opt_flags {
     pub const TOTAL: &str = "total";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
 }
-#[derive(Debug)]
 enum CommInput {
-    Stdin(Stdin),
-    FileIn(BufReader<File>),
+    Reader(BufReader<Box<dyn Read>>),
 }
-#[derive(Debug)]
 struct CommLineReader {
     line_ending: CtLineEnding,
     input: CommInput,
@@ -61,8 +58,7 @@ impl CommLineReader {
         let comm_line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
-            CommInput::Stdin(r) => r.lock().read_until(comm_line_ending, buf),
-            CommInput::FileIn(r) => r.read_until(comm_line_ending, buf),
+            CommInput::Reader(r) => r.read_until(comm_line_ending, buf),
         };
 
         if !buf.ends_with(&[comm_line_ending]) {
@@ -537,11 +533,14 @@ fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
 
 fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineReader> {
     match file_name {
-        "-" => Ok(CommLineReader::new(CommInput::Stdin(stdin()), line_ending)),
+        "-" => Ok(CommLineReader::new(
+            CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
+            line_ending,
+        )),
         _ => {
             let f = File::open(Path::new(file_name))?;
             Ok(CommLineReader::new(
-                CommInput::FileIn(BufReader::new(f)),
+                CommInput::Reader(BufReader::new(Box::new(f))),
                 line_ending,
             ))
         }

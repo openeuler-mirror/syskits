@@ -16,7 +16,7 @@ use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::num::IntErrorKind;
 
 use clap::builder::ValueParser;
@@ -991,7 +991,7 @@ fn uniq_open_input_file(in_file_name: Option<&OsStr>) -> CTResult<Box<dyn BufRea
                 .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
             Box::new(BufReader::new(infile))
         }
-        _ => Box::new(stdin().lock()),
+        _ => Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box())),
     })
 }
 

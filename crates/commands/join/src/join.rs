@@ -687,7 +687,7 @@ impl<'a> JoinState<'a> {
     fn new(
         file_num: FileNum,
         name: &'a str,
-        stdin: &'a Stdin,
+        _stdin: &'a Stdin,
         key: usize,
         line_ending: CtLineEnding,
         print_unpaired: bool,
@@ -695,7 +695,7 @@ impl<'a> JoinState<'a> {
         // 根据文件名创建适当的读取器
         let file_buf = if name == "-" {
             // 如果是标准输入，使用 stdin
-            Box::new(stdin.lock()) as Box<dyn BufRead>
+            Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box())) as Box<dyn BufRead>
         } else {
             // 否则打开文件并创建缓冲读取器
             let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;

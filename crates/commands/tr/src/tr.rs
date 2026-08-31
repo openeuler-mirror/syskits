@@ -329,7 +329,7 @@ pub fn tr_native_semantic(args: impl ctcore::Args) -> CTResult<TrSemantic> {
     let flags = TrFlags::new(&matches)?;
 
     let mut stdin_bytes = Vec::new();
-    stdin().read_to_end(&mut stdin_bytes)?;
+    ctcore::ct_io::stdin_reader_box().read_to_end(&mut stdin_bytes)?;
 
     let direct = run_tr_direct_process(&argv, &stdin_bytes)?;
     let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();

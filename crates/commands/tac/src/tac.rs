@@ -290,7 +290,7 @@ fn tac_buffer<W: Write>(
 /// 返回 `CTResult<Vec<u8>>`，包含读取的数据或错误信息
 fn read_from_stdin() -> CTResult<Vec<u8>> {
     let mut buffer = Vec::new();
-    stdin()
+    ctcore::ct_io::stdin_reader_box()
         .read_to_end(&mut buffer)
         .map_err(|e| TacError::ReadError("stdin".to_string(), e))?;
     Ok(buffer)
@@ -359,6 +359,10 @@ impl AsRef<[u8]> for FileData {
 /// 返回 `CTResult<FileData>`，包含文件数据或错误信息
 fn get_file_data(filename: &str) -> CTResult<FileData> {
     if filename == "-" {
+        if ctcore::ct_io::injected_stdin_bytes().is_some() {
+            let buffer = read_from_stdin()?;
+            return Ok(FileData::Buffer(buffer));
+        }
         // 处理标准输入
         if let Some(mmap) = tac_try_mmap_stdin() {
             Ok(FileData::Mapped(mmap))

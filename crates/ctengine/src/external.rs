@@ -1388,6 +1388,7 @@ struct ExternalStream {
     stderr_buf: Option<std::io::Cursor<Vec<u8>>>,
     stdin_handle: Option<std::thread::JoinHandle<()>>,
     meta_custom: Option<MetadataCustom>,
+    process_reaped: bool,
 }
 
 fn insert_external_metadata_custom<I, K>(custom: &MetadataCustom, entries: I)
@@ -1425,9 +1426,15 @@ impl Read for ExternalStream {
                         .child
                         .lock()
                         .map_err(|_| std::io::Error::other("external process lock poisoned"))?;
-                    child
+                    let status = child
                         .try_wait()
-                        .map_err(|e| std::io::Error::other(e.to_string()))?
+                        .map_err(|e| std::io::Error::other(e.to_string()))?;
+                    if status.is_some() {
+                        self.process_reaped = true;
+                        self.process_done
+                            .store(true, std::sync::atomic::Ordering::Release);
+                    }
+                    status
                 };
                 if let Some(status) = maybe_status {
                     break status;
@@ -1436,14 +1443,15 @@ impl Read for ExternalStream {
                 if self
                     .timeout_abort
                     .load(std::sync::atomic::Ordering::Acquire)
-                    && let Ok(mut child) = self.child.lock()
                 {
+                    let mut child = self
+                        .child
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     terminate_process_tree(&mut child);
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
-            self.process_done
-                .store(true, std::sync::atomic::Ordering::Release);
 
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
             let timed_out = self
@@ -1517,10 +1525,15 @@ impl Drop for ExternalStream {
     fn drop(&mut self) {
         self.process_done
             .store(true, std::sync::atomic::Ordering::Release);
-        if let Ok(mut child) = self.child.lock() {
-            terminate_process_tree(&mut child);
-            let _ = child.wait();
+        if self.process_reaped {
+            return;
         }
+        let mut child = self
+            .child
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        terminate_process_tree(&mut child);
+        let _ = child.wait();
     }
 }
 
@@ -1659,9 +1672,13 @@ impl ExternalExecutor {
                     return;
                 }
                 timeout_abort_clone.store(true, std::sync::atomic::Ordering::Release);
-                if let Ok(mut child) = child_for_timeout.lock() {
-                    terminate_process_tree(&mut child);
+                let mut child = child_for_timeout
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if process_done_clone.load(std::sync::atomic::Ordering::Acquire) {
+                    return;
                 }
+                terminate_process_tree(&mut child);
             });
         }
 
@@ -1724,6 +1741,7 @@ impl ExternalExecutor {
             stderr_buf: None,
             stdin_handle,
             meta_custom: Some(meta.custom.clone()),
+            process_reaped: false,
         };
 
         ExternalOutputDecoder::decode(external_stream, spec.stdout_mode, meta)

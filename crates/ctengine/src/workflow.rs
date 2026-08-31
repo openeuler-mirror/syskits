@@ -118,7 +118,7 @@ pub fn run_workflow(
                 }
             };
 
-            match execute_stage(stage, stage_input, &vars, ctx) {
+            match execute_stage(stage, stage_input, &vars, ctx, &started) {
                 Ok(mut res) => {
                     if let Some(timeout_ms) = stage.timeout_ms {
                         if timeout_exceeded(&started, timeout_ms) {
@@ -326,23 +326,9 @@ fn materialize_pipeline_data_with_timeout(
                 meta,
             )))
         }
-        CtPipelineData::ByteStream(mut stream) => {
+        CtPipelineData::ByteStream(stream) => {
             let meta = stream.metadata.clone();
-            let mut buf = Vec::new();
-            use std::io::Read;
-            let mut chunk = [0_u8; 8192];
-            loop {
-                if timeout_exceeded(started, timeout_ms) {
-                    return Err(materialize_timeout_error(started, timeout_ms));
-                }
-                let n = stream.read(&mut chunk).map_err(|e| {
-                    CtDiagnosticError::simple(format!("read stage output failed: {e}"))
-                })?;
-                if n == 0 {
-                    break;
-                }
-                buf.extend_from_slice(&chunk[..n]);
-            }
+            let buf = read_bytestream_with_timeout(stream, started, timeout_ms)?;
             if timeout_exceeded(started, timeout_ms) {
                 return Err(materialize_timeout_error(started, timeout_ms));
             }
@@ -352,6 +338,82 @@ fn materialize_pipeline_data_with_timeout(
             )))
         }
         other => Ok(other),
+    }
+}
+
+enum ByteStreamReadOutcome {
+    Chunk(Vec<u8>),
+    Eof,
+    ReadError(std::io::ErrorKind, String),
+}
+
+fn remaining_timeout(started: &Instant, timeout_ms: u64) -> Option<Duration> {
+    Duration::from_millis(timeout_ms).checked_sub(started.elapsed())
+}
+
+fn remaining_timeout_ms(started: &Instant, timeout_ms: u64) -> Option<u64> {
+    let remaining = remaining_timeout(started, timeout_ms)?;
+    if remaining.is_zero() {
+        return None;
+    }
+    Some(remaining.as_millis().max(1).min(u64::MAX as u128) as u64)
+}
+
+fn read_bytestream_with_timeout(
+    mut stream: ctpipeline::CtByteStream,
+    started: &Instant,
+    timeout_ms: u64,
+) -> Result<Vec<u8>, CtDiagnosticError> {
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let mut chunk = [0_u8; 8192];
+        loop {
+            match stream.read(&mut chunk) {
+                Ok(0) => {
+                    let _ = tx.send(ByteStreamReadOutcome::Eof);
+                    break;
+                }
+                Ok(n) => {
+                    if tx
+                        .send(ByteStreamReadOutcome::Chunk(chunk[..n].to_vec()))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(ByteStreamReadOutcome::ReadError(e.kind(), e.to_string()));
+                    break;
+                }
+            }
+        }
+    });
+
+    let mut buf = Vec::new();
+    loop {
+        let remaining = remaining_timeout(started, timeout_ms)
+            .ok_or_else(|| materialize_timeout_error(started, timeout_ms))?;
+        match rx.recv_timeout(remaining) {
+            Ok(ByteStreamReadOutcome::Chunk(chunk)) => buf.extend_from_slice(&chunk),
+            Ok(ByteStreamReadOutcome::Eof) => return Ok(buf),
+            Ok(ByteStreamReadOutcome::ReadError(std::io::ErrorKind::TimedOut, _)) => {
+                return Err(materialize_timeout_error(started, timeout_ms));
+            }
+            Ok(ByteStreamReadOutcome::ReadError(_, message)) => {
+                return Err(CtDiagnosticError::simple(format!(
+                    "read stage output failed: {message}"
+                )));
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                return Err(materialize_timeout_error(started, timeout_ms));
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(CtDiagnosticError::simple(
+                    "read stage output failed: reader thread disconnected",
+                ));
+            }
+        }
     }
 }
 
@@ -431,13 +493,14 @@ fn execute_stage(
     input: CtPipelineData,
     vars: &crate::workflow_vars::WorkflowVars,
     ctx: &crate::context::DataEngineContext,
+    started: &Instant,
 ) -> Result<CtPipelineData, CtDiagnosticError> {
     let mut actual_input = input;
 
     // 1. evaluate if_cond
     if let Some(cond_expr) = &stage.if_cond {
         let cond_str = vars.expand_in_expr(cond_expr);
-        let ast = ctdsl::parse(&cond_str).map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+        let ast = parse_stage_expr(&cond_str, started, stage.timeout_ms)?;
 
         // We must clone input to pass to the condition check
         let cond_input = clone_in_memory(&actual_input)?;
@@ -455,8 +518,7 @@ fn execute_stage(
             // execute else_expr if present, otherwise return empty
             if let Some(else_expr) = &stage.else_expr {
                 let else_str = vars.expand_in_expr(else_expr);
-                let ast = ctdsl::parse(&else_str)
-                    .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+                let ast = parse_stage_expr(&else_str, started, stage.timeout_ms)?;
                 return crate::interpreter::eval_pipeline(&ast, actual_input, ctx);
             } else {
                 return Ok(CtPipelineData::Empty);
@@ -474,8 +536,7 @@ fn execute_stage(
             for item in items {
                 if let Some(expr) = &stage.expr {
                     let expr_str = vars.expand_in_expr(expr);
-                    let ast = ctdsl::parse(&expr_str)
-                        .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+                    let ast = parse_stage_expr(&expr_str, started, stage.timeout_ms)?;
                     let res = crate::interpreter::eval_pipeline(
                         &ast,
                         CtPipelineData::Value(item, meta.clone()),
@@ -498,11 +559,49 @@ fn execute_stage(
     // 3. Normal execution
     if let Some(expr) = &stage.expr {
         let expr_str = vars.expand_in_expr(expr);
-        let ast = ctdsl::parse(&expr_str).map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+        let ast = parse_stage_expr(&expr_str, started, stage.timeout_ms)?;
         crate::interpreter::eval_pipeline(&ast, actual_input, ctx)
     } else {
         Ok(actual_input)
     }
+}
+
+fn parse_stage_expr(
+    expr: &str,
+    started: &Instant,
+    timeout_ms: Option<u64>,
+) -> Result<ctdsl::Expr, CtDiagnosticError> {
+    let mut ast = ctdsl::parse(expr).map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+    if let Some(timeout_ms) = timeout_ms {
+        let remaining = remaining_timeout_ms(started, timeout_ms)
+            .ok_or_else(|| materialize_timeout_error(started, timeout_ms))?;
+        apply_timeout_to_run_external(&mut ast, remaining);
+    }
+    Ok(ast)
+}
+
+fn apply_timeout_to_run_external(ast: &mut ctdsl::Expr, timeout_ms: u64) {
+    let ctdsl::Expr::Pipeline(calls) = ast;
+    for call in calls {
+        if call.name != "run-external" || call_has_timeout_ms(call) {
+            continue;
+        }
+        call.args.push(ctdsl::Arg::LongFlagValue {
+            name: "timeout-ms".to_string(),
+            value: ctdsl::Lit::Int(timeout_ms.min(i64::MAX as u64) as i64),
+            value_span: call.span.clone(),
+            span: call.span.clone(),
+        });
+    }
+}
+
+fn call_has_timeout_ms(call: &ctdsl::Call) -> bool {
+    call.args.iter().any(|arg| match arg {
+        ctdsl::Arg::LongFlag { name, .. } | ctdsl::Arg::LongFlagValue { name, .. } => {
+            name == "timeout-ms"
+        }
+        _ => false,
+    })
 }
 
 #[cfg(test)]
@@ -677,14 +776,19 @@ mod tests {
     #[test]
     fn test_workflow_l2_if_else() {
         use crate::command::DataCommand;
+        use ctpipeline::CtType;
         use ctpipeline::metadata::CtPipelineMetadata;
         use ctpipeline::value::CtValue;
-        use ctsig::DataSignature;
+        use ctsig::{CtPositionalArg, DataSignature};
 
         struct DummyCond;
         impl DataCommand for DummyCond {
             fn signature(&self) -> DataSignature {
-                DataSignature::new("cond", "cond")
+                DataSignature::new("cond", "cond").positional(CtPositionalArg::required(
+                    "value",
+                    "condition selector",
+                    CtType::String,
+                ))
             }
             fn run(
                 &self,
@@ -710,7 +814,11 @@ mod tests {
         struct DummyAction;
         impl DataCommand for DummyAction {
             fn signature(&self) -> DataSignature {
-                DataSignature::new("act", "act")
+                DataSignature::new("act", "act").positional(CtPositionalArg::required(
+                    "value",
+                    "action value",
+                    CtType::String,
+                ))
             }
             fn run(
                 &self,
@@ -784,9 +892,10 @@ mod tests {
     #[test]
     fn test_workflow_l2_var_and_foreach() {
         use crate::command::DataCommand;
+        use ctpipeline::CtType;
         use ctpipeline::metadata::CtPipelineMetadata;
         use ctpipeline::value::CtValue;
-        use ctsig::DataSignature;
+        use ctsig::{CtPositionalArg, DataSignature};
 
         struct SetFactor;
         impl DataCommand for SetFactor {
@@ -827,7 +936,11 @@ mod tests {
         struct DummyMult;
         impl DataCommand for DummyMult {
             fn signature(&self) -> DataSignature {
-                DataSignature::new("mult", "mult")
+                DataSignature::new("mult", "mult").positional(CtPositionalArg::required(
+                    "factor",
+                    "multiplication factor",
+                    CtType::Int,
+                ))
             }
             fn run(
                 &self,
@@ -1550,6 +1663,79 @@ mod tests {
         assert!(
             elapsed < Duration::from_millis(400),
             "timeout should stop materialization early, elapsed={elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_timeout_interrupts_blocking_bytestream_read() {
+        use crate::command::DataCommand;
+        use ctpipeline::metadata::CtPipelineMetadata;
+        use ctsig::DataSignature;
+        use std::io::{self, Read};
+
+        struct SlowEofReader {
+            slept: bool,
+        }
+
+        impl Read for SlowEofReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                if !self.slept {
+                    self.slept = true;
+                    std::thread::sleep(Duration::from_millis(300));
+                }
+                Ok(0)
+            }
+        }
+
+        struct SlowByteStream;
+        impl DataCommand for SlowByteStream {
+            fn signature(&self) -> DataSignature {
+                DataSignature::new("slow-bytes", "slow bytes")
+            }
+            fn run(
+                &self,
+                _call: &ctsig::DataCall,
+                _i: CtPipelineData,
+                _c: &crate::context::DataEngineContext,
+            ) -> Result<CtPipelineData, CtDiagnosticError> {
+                Ok(CtPipelineData::ByteStream(ctpipeline::CtByteStream::new(
+                    SlowEofReader { slept: false },
+                    CtPipelineMetadata::default(),
+                )))
+            }
+        }
+
+        let reg = CommandRegistry::from_factories(&[("slow-bytes", || Box::new(SlowByteStream))]);
+        let ctx = crate::context::DataEngineContext::new(reg, None, None);
+        let script = WorkflowScript {
+            stages: vec![WorkflowStage {
+                name: "timeout_bytes".into(),
+                expr: Some("slow-bytes".into()),
+                if_cond: None,
+                else_expr: None,
+                foreach: None,
+                var: None,
+                timeout_ms: Some(30),
+                retry: None,
+                on_failure: OnFailure::Fail,
+                checkpoint: false,
+            }],
+        };
+
+        let started = Instant::now();
+        let err = run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap_err();
+        let elapsed = started.elapsed();
+
+        match err {
+            WorkflowError::RunStage { err, .. } => {
+                assert!(err.to_string().contains("timed out"));
+                assert_eq!(err.code, 124);
+            }
+            _ => panic!("Expected RunStage timeout"),
+        }
+        assert!(
+            elapsed < Duration::from_millis(150),
+            "timeout should not wait for blocking read to finish, elapsed={elapsed:?}"
         );
     }
 

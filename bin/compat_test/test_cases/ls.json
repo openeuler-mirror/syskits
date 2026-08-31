@@ -621,7 +621,16 @@
                     "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
-                }
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "ls -c -l test_ctime | awk 'NR==1{ok=($0~/^total /)} NR==2{ok=ok&&$NF==1} NR==3{ok=ok&&$NF==2} END{exit (ok&&NR==3)?0:1}'",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": [
                 "rm -rf test_ctime"
@@ -2243,7 +2252,7 @@
             "description": "测试 TIME_STYLE 环境变量 ",
             "setup_commands": [
                 "mkdir -p test_env_time_style_std",
-                "touch test_env_time_style_std/file"
+                "touch -m -t 202001020304.05 test_env_time_style_std/file"
             ],
             "args": [
                 "-l",

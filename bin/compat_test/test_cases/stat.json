@@ -124,7 +124,28 @@
                     "exit_code": 0,
                     "stdout": ".*File:.*\"/\".*ID:.*Namelen:.*Type:.*Block size:.*Blocks:.*Total:.*Free:.*Available:.*Files:.*Free nodes:.*",
                     "stderr": ""
-                }
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "stat -f / | grep 'File: \"/\"'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "stat -f / | grep 'Block size:'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "stat -f / | grep 'Blocks: Total:'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "stat -f / | grep 'Inodes: Total:'",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": []
         },
@@ -413,7 +434,28 @@
                     "exit_code": 0,
                     "stdout": ".*File:.*\"/\".*ID:.*Namelen:.*Type:.*Block size:.*Blocks:.*Total:.*Free:.*Available:.*Files:.*Free nodes:.*",
                     "stderr": ""
-                }
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "stat --cached=always -f / | grep 'File: \"/\"'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "stat --cached=always -f / | grep 'Block size:'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "stat --cached=always -f / | grep 'Blocks: Total:'",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "stat --cached=always -f / | grep 'Inodes: Total:'",
+                        "expected_exit": 0
+                    }
+                ]
             },
             "cleanup_commands": []
         },

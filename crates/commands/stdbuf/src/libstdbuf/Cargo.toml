@@ -15,6 +15,8 @@ repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/com
 [lib]
 name = "libstdbuf"
 path = "src/libstdbuf.rs"
+test = false
+doctest = false
 crate-type = [
     "cdylib",
     "rlib",

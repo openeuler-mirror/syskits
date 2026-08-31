@@ -2851,7 +2851,7 @@ mod tests {
 
             match result {
                 Err(output) => {
-                    assert!(!output.usage());
+                    assert_eq!(output.code(), 0);
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);
@@ -2866,7 +2866,7 @@ mod tests {
 
             match result {
                 Err(output) => {
-                    assert!(!output.usage());
+                    assert_eq!(output.code(), 0);
                 }
                 Ok(output) => {
                     assert_eq!(output, 0);

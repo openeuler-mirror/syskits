@@ -722,6 +722,21 @@ mod tests {
 
         #[test]
         fn test_options_by_env() {
+            struct TmpdirGuard(Option<std::ffi::OsString>);
+            impl Drop for TmpdirGuard {
+                fn drop(&mut self) {
+                    unsafe {
+                        if let Some(v) = &self.0 {
+                            std::env::set_var("TMPDIR", v);
+                        } else {
+                            std::env::remove_var("TMPDIR");
+                        }
+                    }
+                }
+            }
+
+            let _guard = TmpdirGuard(std::env::var_os("TMPDIR"));
+
             // test_options_from_with_t
             {
                 let matches = get_matches_from(&[ctcore::ct_util_name(), "-t", "test.XXXXXX"]);
@@ -777,12 +792,9 @@ mod tests {
 
             // fn test_exec_with_environment_tmpdir()
             {
-                if ctcore::ct_process::geteuid() != 0 {
-                    println!("Skipping test_options_by_env: requires root privileges");
-                    return;
-                }
-                unsafe { std::env::set_var("TMPDIR", "/custom/tmpdir") };
-                let tmpdir = PathBuf::from("/custom/tmpdir");
+                let sandbox = tempfile::tempdir().expect("Failed to create sandbox tempdir");
+                let tmpdir = sandbox.path().join("custom_tmpdir");
+                unsafe { std::env::set_var("TMPDIR", &tmpdir) };
                 fs::create_dir_all(&tmpdir).expect("Failed to create custom tmpdir");
                 let prefix = "testfile";
                 let suffix = ".tmp";
@@ -793,7 +805,6 @@ mod tests {
                 assert!(result.is_file());
                 assert!(result.starts_with(&tmpdir));
                 fs::remove_file(&result).expect("Failed to clean up temp file");
-                // fs::remove_dir_all(tmpdir).expect("Failed to clean up custom tmpdir");
                 unsafe { std::env::remove_var("TMPDIR") };
             }
         }

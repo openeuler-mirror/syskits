@@ -1,0 +1,1017 @@
+#![cfg(feature = "feat_data_pipeline")]
+
+use std::ffi::OsString;
+use std::fs;
+use std::io::{ErrorKind, Write};
+use std::process::{Command, Output, Stdio};
+
+use ctengine::error::CtDiagnosticError;
+use ctengine::execution::{OutputFormat, OutputProfile};
+use ctengine::interpreter::try_print_pipeline_data_with_profile;
+use ctengine::{CommandRegistry, DataCommand, DataCommandFactory, DataEngineContext, exit_code};
+use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
+use ctsig::DataSignature;
+use tempfile::TempDir;
+
+fn from_factory() -> Box<dyn DataCommand> {
+    Box::new(cmd_from::CmdFrom)
+}
+
+fn to_factory() -> Box<dyn DataCommand> {
+    Box::new(cmd_to::CmdTo)
+}
+
+fn timeout_factory() -> Box<dyn DataCommand> {
+    Box::new(TimeoutCmd)
+}
+
+fn make_registry() -> CommandRegistry {
+    let factories: Vec<(&'static str, DataCommandFactory)> = vec![
+        ("from", from_factory as DataCommandFactory),
+        ("to", to_factory as DataCommandFactory),
+        ("timeout-cmd", timeout_factory as DataCommandFactory),
+    ];
+    CommandRegistry::from_factories(&factories)
+}
+
+#[derive(Default)]
+struct TimeoutCmd;
+
+impl DataCommand for TimeoutCmd {
+    fn signature(&self) -> DataSignature {
+        DataSignature::new("timeout-cmd", "always returns timeout")
+            .input(CtType::Any)
+            .output(CtType::Nothing)
+    }
+
+    fn run(
+        &self,
+        _call: &ctsig::DataCall,
+        _input: CtPipelineData,
+        _ctx: &DataEngineContext,
+    ) -> Result<CtPipelineData, CtDiagnosticError> {
+        Err(CtDiagnosticError::simple("timeout for matrix test").with_code(exit_code::TIMEOUT))
+    }
+}
+
+fn sample_list_record_data() -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::List(vec![
+            CtValue::Record(vec![
+                ("name".to_string(), CtValue::String("a.txt".to_string())),
+                ("size".to_string(), CtValue::Size(42)),
+            ]),
+            CtValue::Record(vec![
+                ("name".to_string(), CtValue::String("b.txt".to_string())),
+                ("size".to_string(), CtValue::Size(1024)),
+            ]),
+        ]),
+        CtPipelineMetadata::default(),
+    )
+}
+
+fn write_pr_fixture() -> (TempDir, String) {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("pr.txt");
+    fs::write(&path, "alpha\nbeta\n").expect("write pr fixture");
+    (temp_dir, path.display().to_string())
+}
+
+fn write_ptx_fixture() -> (TempDir, String) {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("ptx.txt");
+    fs::write(&path, "alpha beta gamma\n").expect("write ptx fixture");
+    (temp_dir, path.display().to_string())
+}
+
+fn write_expand_fixture() -> (TempDir, String) {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("expand.txt");
+    fs::write(&path, "a\tb\n\tc\n").expect("write expand fixture");
+    (temp_dir, path.display().to_string())
+}
+
+fn assert_same_process_output(actual: &Output, expected: &Output) {
+    assert_eq!(actual.status.code(), expected.status.code());
+    assert_eq!(actual.stdout, expected.stdout);
+    assert_eq!(actual.stderr, expected.stderr);
+}
+
+fn run_syskits_with_stdin(args: &[&str], stdin: &[u8]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn syskits");
+
+    let mut child_stdin = child.stdin.take().expect("stdin handle");
+    if let Err(err) = child_stdin.write_all(stdin)
+        && err.kind() != ErrorKind::BrokenPipe
+    {
+        panic!("write stdin: {err}");
+    }
+    drop(child_stdin);
+
+    child.wait_with_output().expect("wait for syskits")
+}
+
+#[test]
+fn test_output_profile_matrix_single_axis_formats() {
+    let tty_modes = [false, true];
+    let formats = [
+        OutputFormat::Classic,
+        OutputFormat::Auto,
+        OutputFormat::Text,
+        OutputFormat::Table,
+        OutputFormat::Json,
+        OutputFormat::Raw,
+    ];
+
+    for stdout_is_tty in tty_modes {
+        for format in formats {
+            let profile = OutputProfile {
+                format,
+                stdout_is_tty,
+                use_pager: false,
+            };
+            let out = try_print_pipeline_data_with_profile(sample_list_record_data(), &profile);
+            assert!(out.is_ok(), "matrix failed for profile: {profile:?}");
+        }
+    }
+}
+
+#[test]
+fn test_run_data_entry_status_matrix_success_failure_timeout() {
+    let cases = [
+        (
+            r#"from json "{\"name\":\"CTyunOS\"}" | to json"#,
+            exit_code::SUCCESS,
+        ),
+        ("__syskits_no_such_cmd_xyz__", exit_code::RUNTIME_ERROR),
+        ("| bad", exit_code::USAGE_ERROR),
+        ("timeout-cmd", exit_code::TIMEOUT),
+    ];
+
+    for (expr, expected) in cases {
+        let args = vec![OsString::from(expr)];
+        let code = ctengine::run_data_entry_with_registry(&args, make_registry());
+        assert_eq!(code, expected, "unexpected exit code for expr `{expr}`");
+    }
+}
+
+#[test]
+fn data_base32_json_default_is_information_rich() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write base32 fixture");
+    let path = path.display().to_string();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "base32", &path])
+        .output()
+        .expect("run syskits data base32");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"mode\":\"encode\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"wrap\":76"), "stdout: {stdout:?}");
+    assert!(
+        stdout.contains("\"ignore_garbage\":false"),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains("\"input\":\"file\""), "stdout: {stdout:?}");
+    assert!(
+        stdout.contains("\"output_text\":\"MFRGG===\""),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains(&path), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_base32_classic_format_matches_direct_base32() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write base32 sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["base32", &path])
+        .output()
+        .expect("run direct syskits base32");
+    assert_eq!(expected.status.code(), Some(0));
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "base32", &path])
+        .output()
+        .expect("run syskits data base32 classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_base32_classic_error_path_matches_direct_base32() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("invalid.txt");
+    fs::write(&path, "%%%").expect("write invalid base32 sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["base32", "--decode", &path])
+        .output()
+        .expect("run direct syskits base32 invalid decode");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "base32", "--decode", &path])
+        .output()
+        .expect("run syskits data base32 classic invalid decode");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_base32_classic_binary_decode_matches_direct_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("binary.b32");
+    fs::write(&path, "74======\n").expect("write binary base32 sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["base32", "--decode", &path])
+        .output()
+        .expect("run direct syskits base32 binary decode");
+    assert_eq!(expected.status.code(), Some(0));
+    assert_eq!(expected.stdout, vec![0xff]);
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "base32", "--decode", &path])
+        .output()
+        .expect("run syskits data base32 classic binary decode");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_base64_json_default_is_information_rich() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write base64 fixture");
+    let path = path.display().to_string();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "base64", &path])
+        .output()
+        .expect("run syskits data base64");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"mode\":\"encode\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"wrap\":76"), "stdout: {stdout:?}");
+    assert!(
+        stdout.contains("\"ignore_garbage\":false"),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains("\"input\":\"file\""), "stdout: {stdout:?}");
+    assert!(
+        stdout.contains("\"output_text\":\"YWJj\""),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains(&path), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_base64_classic_format_matches_direct_base64() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write base64 sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["base64", &path])
+        .output()
+        .expect("run direct syskits base64");
+    assert_eq!(expected.status.code(), Some(0));
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "base64", &path])
+        .output()
+        .expect("run syskits data base64 classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_base64_classic_error_path_matches_direct_base64() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("invalid.txt");
+    fs::write(&path, "%%%").expect("write invalid base64 sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["base64", "--decode", &path])
+        .output()
+        .expect("run direct syskits base64 invalid decode");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "base64", "--decode", &path])
+        .output()
+        .expect("run syskits data base64 classic invalid decode");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_base64_classic_binary_decode_matches_direct_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("binary.b64");
+    fs::write(&path, "/w==\n").expect("write binary base64 sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["base64", "--decode", &path])
+        .output()
+        .expect("run direct syskits base64 binary decode");
+    assert_eq!(expected.status.code(), Some(0));
+    assert_eq!(expected.stdout, vec![0xff]);
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "base64", "--decode", &path])
+        .output()
+        .expect("run syskits data base64 classic binary decode");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_basenc_json_default_is_information_rich() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write basenc fixture");
+    let path = path.display().to_string();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "basenc", "--base64", &path])
+        .output()
+        .expect("run syskits data basenc");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\"encoding\":\"base64\""),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains("\"type\":\"text\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"mode\":\"encode\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"wrap\":76"), "stdout: {stdout:?}");
+    assert!(
+        stdout.contains("\"ignore_garbage\":false"),
+        "stdout: {stdout:?}"
+    );
+    assert!(
+        stdout.contains("\"output_text\":\"YWJj\""),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains(&path), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_basenc_classic_format_matches_direct_basenc() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write basenc sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["basenc", "--base64", &path])
+        .output()
+        .expect("run direct syskits basenc");
+    assert_eq!(expected.status.code(), Some(0));
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "basenc", "--base64", &path])
+        .output()
+        .expect("run syskits data basenc classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_basenc_classic_error_path_matches_direct_basenc() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("invalid.txt");
+    fs::write(&path, "%%%").expect("write invalid basenc sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["basenc", "--decode", "--base64", &path])
+        .output()
+        .expect("run direct syskits basenc invalid decode");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=classic",
+            "basenc",
+            "--decode",
+            "--base64",
+            &path,
+        ])
+        .output()
+        .expect("run syskits data basenc classic invalid decode");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_basenc_classic_binary_decode_matches_direct_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("binary.b64");
+    fs::write(&path, "/w==\n").expect("write binary basenc sample");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["basenc", "--decode", "--base64", &path])
+        .output()
+        .expect("run direct syskits basenc binary decode");
+    assert_eq!(expected.status.code(), Some(0));
+    assert_eq!(expected.stdout, vec![0xff]);
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=classic",
+            "basenc",
+            "--decode",
+            "--base64",
+            &path,
+        ])
+        .output()
+        .expect("run syskits data basenc classic binary decode");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_expand_json_default_is_information_rich() {
+    let (_temp_dir, path) = write_expand_fixture();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "expand", "-t", "4", &path])
+        .output()
+        .expect("run syskits data expand");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\"tabstop_mode\":\"none\""),
+        "stdout: {stdout:?}"
+    );
+    assert!(stdout.contains("\"tabstops\":[4]"), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"row_index\":1"), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"line\":\"a   b\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"had_tabs\":true"), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_expand_classic_format_matches_direct_expand() {
+    let (_temp_dir, path) = write_expand_fixture();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["expand", "-t", "4", &path])
+        .output()
+        .expect("run direct syskits expand");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "expand", "-t", "4", &path])
+        .output()
+        .expect("run syskits data expand classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_expand_classic_error_path_matches_direct_expand() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let dir = temp_dir.path().join("input-dir");
+    fs::create_dir(&dir).expect("create expand directory fixture");
+    let dir = dir.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["expand", &dir])
+        .output()
+        .expect("run direct syskits expand directory");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "expand", &dir])
+        .output()
+        .expect("run syskits data expand classic directory");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_cksum_classic_flagged_file_matches_direct_cksum() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("sample.txt");
+    fs::write(&path, "abc").expect("write cksum fixture");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["cksum", "--algorithm", "crc", &path])
+        .output()
+        .expect("run direct syskits cksum");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=classic",
+            "cksum",
+            "--algorithm",
+            "crc",
+            &path,
+        ])
+        .output()
+        .expect("run syskits data cksum classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_cksum_classic_error_path_matches_direct_cksum() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let missing = temp_dir.path().join("missing.txt");
+    let missing = missing.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["cksum", &missing])
+        .output()
+        .expect("run direct syskits cksum missing file");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "cksum", &missing])
+        .output()
+        .expect("run syskits data cksum classic missing file");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_fold_classic_flagged_file_matches_direct_fold() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("fold.txt");
+    fs::write(&path, "abcdef\n").expect("write fold fixture");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["fold", "-w", "3", &path])
+        .output()
+        .expect("run direct syskits fold");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "fold", "-w", "3", &path])
+        .output()
+        .expect("run syskits data fold classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_comm_classic_flagged_files_matches_direct_comm() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let left = temp_dir.path().join("left.txt");
+    let right = temp_dir.path().join("right.txt");
+    fs::write(&left, "alpha\nbeta\n").expect("write comm left fixture");
+    fs::write(&right, "alpha\ngamma\n").expect("write comm right fixture");
+    let left = left.display().to_string();
+    let right = right.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["comm", "-1", &left, &right])
+        .output()
+        .expect("run direct syskits comm");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "comm", "-1", &left, &right])
+        .output()
+        .expect("run syskits data comm classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_paste_classic_flagged_files_matches_direct_paste() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let left = temp_dir.path().join("left.txt");
+    let right = temp_dir.path().join("right.txt");
+    fs::write(&left, "alpha\nbeta\n").expect("write paste left fixture");
+    fs::write(&right, "1\n2\n").expect("write paste right fixture");
+    let left = left.display().to_string();
+    let right = right.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["paste", "-d", "x", &left, &right])
+        .output()
+        .expect("run direct syskits paste");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "paste", "-d", "x", &left, &right])
+        .output()
+        .expect("run syskits data paste classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_cat_classic_flagged_file_matches_direct_cat() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("cat.txt");
+    fs::write(&path, "alpha\nbeta\n").expect("write cat fixture");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["cat", "-n", &path])
+        .output()
+        .expect("run direct syskits cat");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "cat", "-n", &path])
+        .output()
+        .expect("run syskits data cat classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_tee_classic_flagged_file_matches_direct_tee() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let direct_path = temp_dir.path().join("direct.txt");
+    let data_path = temp_dir.path().join("data.txt");
+    fs::write(&direct_path, "before\n").expect("write tee direct fixture");
+    fs::write(&data_path, "before\n").expect("write tee data fixture");
+    let direct_path = direct_path.display().to_string();
+    let data_path = data_path.display().to_string();
+    let stdin = b"after\n";
+
+    let expected = run_syskits_with_stdin(&["tee", "-a", &direct_path], stdin);
+    let out = run_syskits_with_stdin(&["data", "format=classic", "tee", "-a", &data_path], stdin);
+
+    assert_same_process_output(&out, &expected);
+    assert_eq!(
+        fs::read_to_string(&data_path).expect("read data tee target"),
+        fs::read_to_string(&direct_path).expect("read direct tee target")
+    );
+}
+
+#[test]
+fn data_more_classic_flagged_file_matches_direct_more() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let path = temp_dir.path().join("more.txt");
+    fs::write(&path, "alpha\nbeta\n").expect("write more fixture");
+    let path = path.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["more", "-5", &path])
+        .output()
+        .expect("run direct syskits more");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "more", "-5", &path])
+        .output()
+        .expect("run syskits data more classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_wc_classic_error_path_matches_direct_wc() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let missing = temp_dir.path().join("missing.txt");
+    let missing = missing.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["wc", &missing])
+        .output()
+        .expect("run direct syskits wc missing file");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "wc", &missing])
+        .output()
+        .expect("run syskits data wc classic missing file");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_pr_json_default_is_information_rich() {
+    let (_temp_dir, path) = write_pr_fixture();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "pr", "-t", &path])
+        .output()
+        .expect("run syskits data pr");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"page\":1"), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"kind\":\"body\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"line_index\":1"), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"text\":\"alpha\""), "stdout: {stdout:?}");
+    assert!(stdout.contains(&path), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_pr_classic_format_matches_direct_pr() {
+    let (_temp_dir, path) = write_pr_fixture();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t", &path])
+        .output()
+        .expect("run direct syskits pr");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "pr", "-t", &path])
+        .output()
+        .expect("run syskits data pr classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_pr_classic_pipeline_input_matches_direct_pr() {
+    let stdin = b"alpha\nbeta\n";
+
+    let expected = run_syskits_with_stdin(&["pr", "-t"], stdin);
+    let out = run_syskits_with_stdin(&["data", "format=classic", "from text | pr -t"], stdin);
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_pr_classic_error_path_matches_direct_pr() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let missing = temp_dir.path().join("missing.txt");
+    let missing = missing.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t", &missing])
+        .output()
+        .expect("run direct syskits pr missing file");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "pr", "-t", &missing])
+        .output()
+        .expect("run syskits data pr classic missing file");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_pr_classic_invalid_flag_matches_direct_pr() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "--definitely-invalid"])
+        .output()
+        .expect("run direct syskits pr invalid flag");
+    assert_eq!(
+        expected.status.code(),
+        Some(1),
+        "direct stdout: {:?}, stderr: {:?}",
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr)
+    );
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "pr", "--definitely-invalid"])
+        .output()
+        .expect("run syskits data pr classic invalid flag");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_ptx_json_default_is_information_rich() {
+    let (_temp_dir, path) = write_ptx_fixture();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "ptx", "-w", "30", &path])
+        .output()
+        .expect("run syskits data ptx");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"keyword\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"before\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"after\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"reference\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"file\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"line_index\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"rendered_text\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"alpha\""), "stdout: {stdout:?}");
+    assert!(stdout.contains(&path), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_ptx_json_traditional_output_file_does_not_create_file() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("ptx.txt");
+    let output = temp_dir.path().join("ptx.out");
+    fs::write(&input, "alpha beta gamma\n").expect("write ptx traditional fixture");
+    let input = input.display().to_string();
+    let output = output.display().to_string();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "ptx", "-G", &input, &output])
+        .output()
+        .expect("run syskits data ptx traditional");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !std::path::Path::new(&output).exists(),
+        "data/json ptx must not create traditional output file"
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"keyword\""), "stdout: {stdout:?}");
+    assert!(stdout.contains("\"alpha\""), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_ptx_json_zero_length_regex_error_preserves_diagnostics_without_output_file() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("ptx.txt");
+    let output = temp_dir.path().join("ptx.out");
+    fs::write(&input, "alpha beta gamma\n").expect("write ptx zero-length regex fixture");
+    let input = input.display().to_string();
+    let output = output.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["ptx", "-S", "^", &input])
+        .output()
+        .expect("run direct syskits ptx zero-length regex");
+
+    assert_ne!(expected.status.code(), Some(0));
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=json",
+            "ptx",
+            "-G",
+            "-S",
+            "\"^\"",
+            &input,
+            &output,
+        ])
+        .output()
+        .expect("run syskits data ptx zero-length regex");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stderr, expected.stderr);
+    assert!(
+        !std::path::Path::new(&output).exists(),
+        "data/json ptx must not create traditional output file on errors"
+    );
+}
+
+#[test]
+fn data_ptx_classic_format_matches_direct_ptx() {
+    let (_temp_dir, path) = write_ptx_fixture();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["ptx", "-w", "30", &path])
+        .output()
+        .expect("run direct syskits ptx");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "ptx", "-w", "30", &path])
+        .output()
+        .expect("run syskits data ptx classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_ptx_classic_stdin_matches_direct_ptx() {
+    let stdin = b"alpha beta gamma\n";
+
+    let expected = run_syskits_with_stdin(&["ptx", "-w", "30"], stdin);
+    let out = run_syskits_with_stdin(&["data", "format=classic", "ptx", "-w", "30"], stdin);
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_ptx_classic_pipeline_input_matches_direct_ptx() {
+    let stdin = b"alpha beta gamma\n";
+
+    let expected = run_syskits_with_stdin(&["ptx", "-w", "30"], stdin);
+    let out = run_syskits_with_stdin(&["data", "format=classic", "from text | ptx -w 30"], stdin);
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_ptx_classic_error_path_matches_direct_ptx() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let missing = temp_dir.path().join("missing.txt");
+    let missing = missing.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["ptx", "-w", "30", &missing])
+        .output()
+        .expect("run direct syskits ptx missing file");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "ptx", "-w", "30", &missing])
+        .output()
+        .expect("run syskits data ptx classic missing file");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_ptx_classic_invalid_flag_with_stdin_matches_direct_ptx() {
+    let stdin = vec![b'a'; 200 * 1024];
+
+    let expected = run_syskits_with_stdin(&["ptx", "--definitely-invalid"], &stdin);
+    let out = run_syskits_with_stdin(
+        &["data", "format=classic", "ptx", "--definitely-invalid"],
+        &stdin,
+    );
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}

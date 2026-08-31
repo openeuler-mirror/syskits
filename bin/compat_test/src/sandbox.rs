@@ -698,6 +698,8 @@ impl IsolatedSandbox {
         let _ = fcntl(master_fd, FcntlArg::F_SETFL(flags));
 
         let slave_fd = pty.slave.into_raw_fd();
+        let stdin_fd = dup(slave_fd)
+            .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {e}")))?;
         let stdout_fd = dup(slave_fd)
             .map_err(|e| TestError::ExecutionError(format!("Failed to dup pty slave: {e}")))?;
         let stderr_fd = dup(slave_fd)
@@ -707,7 +709,7 @@ impl IsolatedSandbox {
         let mut command = Command::new(cmd);
         unsafe {
             command
-                .stdin(Stdio::piped())
+                .stdin(Stdio::from_raw_fd(stdin_fd))
                 .stdout(Stdio::from_raw_fd(stdout_fd))
                 .stderr(Stdio::from_raw_fd(stderr_fd));
         }
@@ -741,21 +743,41 @@ impl IsolatedSandbox {
             }
         };
 
-        if let Some(mut stdin) = child.stdin.take() {
-            if let Some(content) = stdin_content {
-                if !content.is_empty() {
-                    if let Err(e) = stdin.write_all(content) {
-                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {e}"));
+        if let Some(content) = stdin_content
+            && !content.is_empty()
+        {
+            unsafe {
+                let mut written = 0;
+                while written < content.len() {
+                    let rc = libc::write(
+                        master_fd,
+                        content[written..].as_ptr() as *const libc::c_void,
+                        content.len() - written,
+                    );
+                    if rc < 0 {
+                        let err = std::io::Error::last_os_error();
+                        if err.kind() == std::io::ErrorKind::WouldBlock {
+                            thread::sleep(Duration::from_millis(10));
+                            continue;
+                        }
+                        let stderr =
+                            encode_if_hex(&format!("Failed to write to pty master: {err}"));
                         return Ok(CommandResult {
                             stdout: String::new(),
                             stderr,
                             exit_code: 1,
                         });
                     }
+                    written += rc as usize;
                 }
             }
-            // Always close stdin so the child can observe EOF.
-            drop(stdin);
+        }
+
+        // Always send exactly one EOT byte so PTY stdin can observe EOF
+        // even when no stdin payload is provided.
+        unsafe {
+            let eof = b"\x04";
+            libc::write(master_fd, eof.as_ptr() as *const libc::c_void, 1);
         }
 
         // Close the slave fd in the parent to allow EOF on master when the child exits.
@@ -966,6 +988,16 @@ mod tests {
         let result = sandbox.execute_command("cat", &[], Some("test input"), true, None)?;
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "test input");
+        assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_tty_without_stdin_sends_eof() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let result = sandbox.execute_command_tty("cat", &[], None, true, Some(2))?;
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "");
         assert_eq!(result.stderr, "");
         Ok(())
     }

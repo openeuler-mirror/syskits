@@ -170,6 +170,9 @@
                     "stdout": "*file.txt",
                     "stderr": ""
                 },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
                 "verifications": [
                     {
                         "command": "ls -i /test_dir_ls_inode/file.txt | grep -E '^[0-9]+ file.txt'",

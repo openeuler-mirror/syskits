@@ -54,18 +54,47 @@ use sys_locale::get_locale;
 
 mod rand_read_adapter;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ShufMode {
     Default(String),
     Echo(Vec<String>),
     InputRange(RangeInclusive<usize>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ShufSettings {
     head_count: usize,
     output: Option<String>,
     random_source: Option<String>,
     is_repeat: bool,
     sep: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShufRow {
+    pub row_index: usize,
+    pub item_kind: String,
+    pub output_text: String,
+    pub line: Option<String>,
+    pub number: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShufSemantic {
+    pub input_kind: String,
+    pub head_count: Option<usize>,
+    pub repeat: bool,
+    pub zero_terminated: bool,
+    pub separator_text: String,
+    pub output_file: Option<String>,
+    pub random_source: Option<String>,
+    pub input_file: Option<String>,
+    pub range_start: Option<usize>,
+    pub range_end: Option<usize>,
+    pub rows: Vec<ShufRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 mod shuf_options {
@@ -98,6 +127,39 @@ impl Tool for Shuf {
 pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let (mode, settings) = shuf_parse_invocation(args)?;
+
+    if settings.head_count == 0 {
+        // Do not attempt to read the random source or the input file.
+        // However, we must touch the output file, if given:
+        if let Some(s) = &settings.output {
+            File::create(&s[..])
+                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+        }
+        return Ok(());
+    }
+
+    match mode {
+        ShufMode::Echo(args) => {
+            let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
+            shuf_find_seps(&mut evec, settings.sep);
+            shuf_exec(&mut evec, &settings)?;
+        }
+        ShufMode::InputRange(mut range) => {
+            shuf_exec(&mut range, &settings)?;
+        }
+        ShufMode::Default(filename) => {
+            let fdata = shuf_read_input_file(&filename)?;
+            let mut fdata = vec![&fdata[..]];
+            shuf_find_seps(&mut fdata, settings.sep);
+            shuf_exec(&mut fdata, &settings)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSettings)> {
     let matches = ct_app().try_get_matches_from(args)?;
 
     let mode = if matches.get_flag(shuf_options::SHUF_ECHO) {
@@ -130,35 +192,7 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     let settings = ShufSettings::new(&matches)?;
-
-    if settings.head_count == 0 {
-        // Do not attempt to read the random source or the input file.
-        // However, we must touch the output file, if given:
-        if let Some(s) = settings.output {
-            File::create(&s[..])
-                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
-        }
-        return Ok(());
-    }
-
-    match mode {
-        ShufMode::Echo(args) => {
-            let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
-            shuf_find_seps(&mut evec, settings.sep);
-            shuf_exec(&mut evec, settings)?;
-        }
-        ShufMode::InputRange(mut range) => {
-            shuf_exec(&mut range, settings)?;
-        }
-        ShufMode::Default(filename) => {
-            let fdata = shuf_read_input_file(&filename)?;
-            let mut fdata = vec![&fdata[..]];
-            shuf_find_seps(&mut fdata, settings.sep);
-            shuf_exec(&mut fdata, settings)?;
-        }
-    }
-
-    Ok(())
+    Ok((mode, settings))
 }
 
 pub fn ct_app() -> Command {
@@ -532,44 +566,39 @@ impl ShufWritable for usize {
 /// - 输入为空时返回错误
 /// - 打开输出文件失败时返回错误
 /// - 写入数据失败时返回错误
-fn shuf_exec<T: Shufable>(input: &mut T, settings: ShufSettings) -> CTResult<()> {
+fn shuf_exec_to_writer<T: Shufable, W: Write>(
+    input: &mut T,
+    settings: &ShufSettings,
+    writer: &mut W,
+) -> CTResult<()> {
     // 检查输入是否为空
     if input.is_empty() {
         if settings.is_repeat {
             return Err(CtSimpleError::new(1, "no lines to repeat"));
         }
-        create_output_writer(&settings)?;
         return Ok(());
     }
 
-    // 创建输出写入器
-    let writer = create_output_writer(&settings)?;
-    let mut buf_writer = BufWriter::new(writer);
-
     // 创建随机数生成器
-    let mut rng = create_random_source(&settings)?;
+    let mut rng = create_random_source(settings)?;
 
     // 根据是否重复选择不同的处理逻辑
     if settings.is_repeat {
         // 重复模式：直接随机选择
-        process_repeat_mode(
-            input,
-            &mut rng,
-            &mut buf_writer,
-            settings.head_count,
-            settings.sep,
-        )?;
+        process_repeat_mode(input, &mut rng, writer, settings.head_count, settings.sep)?;
     } else {
         // 不重复模式：使用部分打乱
-        process_nonrepeat_mode(
-            input,
-            &mut rng,
-            &mut buf_writer,
-            settings.head_count,
-            settings.sep,
-        )?;
+        process_nonrepeat_mode(input, &mut rng, writer, settings.head_count, settings.sep)?;
     }
 
+    Ok(())
+}
+
+fn shuf_exec<T: Shufable>(input: &mut T, settings: &ShufSettings) -> CTResult<()> {
+    let writer = create_output_writer(settings)?;
+    let mut buf_writer = BufWriter::new(writer);
+    shuf_exec_to_writer(input, settings, &mut buf_writer)?;
+    buf_writer.flush()?;
     Ok(())
 }
 
@@ -768,6 +797,131 @@ impl ShufSettings {
             },
         })
     }
+}
+
+fn shuf_input_kind(mode: &ShufMode) -> &'static str {
+    match mode {
+        ShufMode::Default(_) => "file",
+        ShufMode::Echo(_) => "echo",
+        ShufMode::InputRange(_) => "input_range",
+    }
+}
+
+fn shuf_head_count_value(settings: &ShufSettings) -> Option<usize> {
+    if settings.head_count == usize::MAX {
+        None
+    } else {
+        Some(settings.head_count)
+    }
+}
+
+fn shuf_range_bounds(mode: &ShufMode) -> (Option<usize>, Option<usize>) {
+    match mode {
+        ShufMode::InputRange(range) => (Some(*range.start()), Some(*range.end())),
+        _ => (None, None),
+    }
+}
+
+fn shuf_rows_from_output(output: &[u8], sep: u8, mode: &ShufMode) -> Vec<ShufRow> {
+    if output.is_empty() {
+        return Vec::new();
+    }
+
+    let mut items = output.split(|byte| *byte == sep).collect::<Vec<_>>();
+    if output.last().copied() == Some(sep) {
+        let _ = items.pop();
+    }
+
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let output_text = String::from_utf8_lossy(item).into_owned();
+            let (item_kind, line, number) = match mode {
+                ShufMode::InputRange(_) => {
+                    ("number".into(), None, output_text.parse::<usize>().ok())
+                }
+                _ => ("line".into(), Some(output_text.clone()), None),
+            };
+
+            ShufRow {
+                row_index: index + 1,
+                item_kind,
+                output_text,
+                line,
+                number,
+            }
+        })
+        .collect()
+}
+
+pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let (mode, settings) = shuf_parse_invocation(args)?;
+
+    let output_file = settings.output.clone();
+    let mut buffered_output = Vec::new();
+
+    if settings.head_count == 0 {
+        if let Some(path) = &output_file {
+            File::create(path)
+                .map_err_context(|| format!("failed to open {} for writing", path.quote()))?;
+        }
+    } else {
+        match &mode {
+            ShufMode::Echo(args) => {
+                let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
+                shuf_find_seps(&mut evec, settings.sep);
+                if output_file.is_none() {
+                    shuf_exec_to_writer(&mut evec, &settings, &mut buffered_output)?;
+                } else {
+                    shuf_exec(&mut evec, &settings)?;
+                }
+            }
+            ShufMode::InputRange(range) => {
+                let mut range = range.clone();
+                if output_file.is_none() {
+                    shuf_exec_to_writer(&mut range, &settings, &mut buffered_output)?;
+                } else {
+                    shuf_exec(&mut range, &settings)?;
+                }
+            }
+            ShufMode::Default(filename) => {
+                let fdata = shuf_read_input_file(filename)?;
+                let mut fdata = vec![&fdata[..]];
+                shuf_find_seps(&mut fdata, settings.sep);
+                if output_file.is_none() {
+                    shuf_exec_to_writer(&mut fdata, &settings, &mut buffered_output)?;
+                } else {
+                    shuf_exec(&mut fdata, &settings)?;
+                }
+            }
+        }
+    }
+
+    let classic_text = String::from_utf8_lossy(&buffered_output).into_owned();
+    let (range_start, range_end) = shuf_range_bounds(&mode);
+
+    Ok(ShufSemantic {
+        input_kind: shuf_input_kind(&mode).into(),
+        head_count: shuf_head_count_value(&settings),
+        repeat: settings.is_repeat,
+        zero_terminated: settings.sep == 0,
+        separator_text: String::from_utf8_lossy(&[settings.sep]).into_owned(),
+        output_file,
+        random_source: settings.random_source.clone(),
+        input_file: match &mode {
+            ShufMode::Default(filename) => Some(filename.clone()),
+            _ => None,
+        },
+        range_start,
+        range_end,
+        rows: shuf_rows_from_output(&buffered_output, settings.sep, &mode),
+        classic_text,
+        stderr_text: String::new(),
+        exit_code: 0,
+    })
 }
 
 #[cfg(test)]
@@ -969,7 +1123,7 @@ mod tests {
                 b"4".as_ref(),
                 b"5".as_ref(),
             ];
-            assert!(shuf_exec(&mut input, settings).is_ok());
+            assert!(shuf_exec(&mut input, &settings).is_ok());
         }
 
         #[test]
@@ -983,7 +1137,7 @@ mod tests {
             };
 
             let mut input = vec![b"1".as_ref(), b"2".as_ref(), b"3".as_ref()];
-            assert!(shuf_exec(&mut input, settings).is_ok());
+            assert!(shuf_exec(&mut input, &settings).is_ok());
         }
 
         #[test]
@@ -997,7 +1151,96 @@ mod tests {
             };
 
             let mut input: Vec<&[u8]> = vec![];
-            assert!(shuf_exec(&mut input, settings).is_err());
+            assert!(shuf_exec(&mut input, &settings).is_err());
+        }
+    }
+
+    mod semantic_tests {
+        use super::*;
+
+        fn write_semantic_fixture() -> (tempfile::TempDir, String, String) {
+            let temp = tempdir().expect("tempdir");
+            let input = temp.path().join("input.txt");
+            let random = temp.path().join("random.bin");
+            std::fs::write(&input, "alpha\nbeta\ngamma\n").expect("write shuf semantic input");
+            std::fs::write(&random, vec![0_u8; 4096]).expect("write shuf semantic random");
+            (
+                temp,
+                input.display().to_string(),
+                random.display().to_string(),
+            )
+        }
+
+        #[test]
+        fn test_shuf_native_semantic_default_rows() {
+            let (_temp, input, random) = write_semantic_fixture();
+
+            let semantic = shuf_native_semantic(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("-n"),
+                    OsString::from("3"),
+                    OsString::from("--random-source"),
+                    OsString::from(&random),
+                    OsString::from(&input),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.input_kind, "file");
+            assert_eq!(semantic.head_count, Some(3));
+            assert!(!semantic.repeat);
+            assert!(!semantic.zero_terminated);
+            assert_eq!(semantic.separator_text, "\n");
+            assert_eq!(semantic.input_file.as_deref(), Some(input.as_str()));
+            assert_eq!(semantic.random_source.as_deref(), Some(random.as_str()));
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.rows.len(), 3);
+
+            let lines = semantic
+                .rows
+                .iter()
+                .map(|row| row.line.clone().expect("line row"))
+                .collect::<HashSet<_>>();
+
+            assert_eq!(
+                lines,
+                HashSet::from([
+                    String::from("alpha"),
+                    String::from("beta"),
+                    String::from("gamma"),
+                ])
+            );
+            assert_eq!(semantic.classic_text.lines().count(), 3);
+        }
+
+        #[test]
+        fn test_shuf_native_semantic_missing_file_error() {
+            let temp = tempdir().expect("tempdir");
+            let random = temp.path().join("random.bin");
+            let missing = temp.path().join("missing.txt");
+            std::fs::write(&random, vec![0_u8; 4096]).expect("write shuf random");
+
+            let err = shuf_native_semantic(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("--random-source"),
+                    OsString::from(random.display().to_string()),
+                    OsString::from(missing.display().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect_err("missing file should error");
+
+            assert_eq!(err.code(), 1);
+            let message = err.to_string();
+            assert!(message.contains("failed to open"), "message: {message}");
+            assert!(
+                message.contains(&missing.display().to_string()),
+                "message: {message}"
+            );
         }
     }
 

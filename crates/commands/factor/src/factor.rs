@@ -92,6 +92,28 @@ enum ParsedNumber {
 
 impl ParsedNumber {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FactorPower {
+    pub prime: String,
+    pub exponent: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FactorRow {
+    pub number: String,
+    pub factors: Vec<String>,
+    pub factor_powers: Vec<FactorPower>,
+    pub print_exponents: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FactorSemantic {
+    pub rows: Vec<FactorRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 fn parse_number_token(token: &str) -> Option<ParsedNumber> {
     let trimmed = token.trim();
     if trimmed.is_empty() {
@@ -113,6 +135,214 @@ fn parse_number_token(token: &str) -> Option<ParsedNumber> {
     }
 
     Some(ParsedNumber::Big(value))
+}
+
+fn factor_option_error(args: &[OsString]) -> Option<String> {
+    let mut options_done = false;
+    for arg in args.iter().skip(1) {
+        let arg_str = arg.to_string_lossy();
+        if options_done {
+            continue;
+        }
+
+        if arg_str == "--" {
+            options_done = true;
+            continue;
+        }
+
+        if arg_str.starts_with("--") {
+            if arg_str == "--exponents" || arg_str == "--help" || arg_str == "--version" {
+                continue;
+            }
+            return Some(format!(
+                "factor: unrecognized option '{arg_str}'\nTry 'factor --help' for more information.\n"
+            ));
+        }
+
+        if arg_str.starts_with('-') && arg_str != "-" {
+            if arg_str == "-h" || arg_str == "-V" {
+                continue;
+            }
+            let invalid = arg_str.chars().nth(1).unwrap_or('-');
+            return Some(format!(
+                "factor: invalid option -- '{invalid}'\nTry 'factor --help' for more information.\n"
+            ));
+        }
+    }
+
+    None
+}
+
+fn factor_row_from_powers(
+    number: String,
+    factor_powers: Vec<FactorPower>,
+    print_exponents: bool,
+) -> FactorRow {
+    let factors = factor_powers
+        .iter()
+        .flat_map(|power| {
+            std::iter::repeat_n(
+                power.prime.clone(),
+                usize::try_from(power.exponent).unwrap(),
+            )
+        })
+        .collect();
+
+    FactorRow {
+        number,
+        factors,
+        factor_powers,
+        print_exponents,
+    }
+}
+
+fn factor_row_from_token(token: &str, print_exponents: bool) -> Result<FactorRow, String> {
+    let display_token = token.trim();
+    let parsed = parse_number_token(display_token).ok_or_else(|| {
+        format!(
+            "factor: {} is not a valid positive integer\n",
+            display_token.quote()
+        )
+    })?;
+
+    Ok(match parsed {
+        ParsedNumber::Small(value) => {
+            let factor_powers = factor(value)
+                .prime_powers()
+                .into_iter()
+                .map(|(prime, exponent)| FactorPower {
+                    prime: prime.to_string(),
+                    exponent: u32::from(exponent),
+                })
+                .collect();
+            factor_row_from_powers(value.to_string(), factor_powers, print_exponents)
+        }
+        ParsedNumber::Big(value) => {
+            let number = value.to_string();
+            let factor_powers = if value.is_zero() || value.is_one() {
+                Vec::new()
+            } else {
+                factorize_biguint(&value)
+                    .into_iter()
+                    .map(|(prime, exponent)| FactorPower {
+                        prime: prime.to_string(),
+                        exponent: u32::try_from(exponent).expect("exponent fits in u32"),
+                    })
+                    .collect()
+            };
+            factor_row_from_powers(number, factor_powers, print_exponents)
+        }
+    })
+}
+
+fn render_factor_row_classic(row: &FactorRow) -> String {
+    let mut output = String::new();
+    output.push_str(&row.number);
+    output.push(':');
+    if row.print_exponents {
+        for power in &row.factor_powers {
+            output.push(' ');
+            output.push_str(&power.prime);
+            if power.exponent > 1 {
+                output.push('^');
+                output.push_str(&power.exponent.to_string());
+            }
+        }
+    } else {
+        for factor in &row.factors {
+            output.push(' ');
+            output.push_str(factor);
+        }
+    }
+    output
+}
+
+fn factor_semantic_from_tokens<'a>(
+    tokens: impl IntoIterator<Item = &'a str>,
+    print_exponents: bool,
+) -> FactorSemantic {
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    for token in tokens {
+        match factor_row_from_token(token, print_exponents) {
+            Ok(row) => {
+                classic_text.push_str(&render_factor_row_classic(&row));
+                classic_text.push('\n');
+                rows.push(row);
+            }
+            Err(message) => {
+                exit_code = 1;
+                stderr_text.push_str(&message);
+            }
+        }
+    }
+
+    FactorSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    }
+}
+
+pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let args_vec: Vec<OsString> = args.into_iter().collect();
+    if let Some(stderr_text) = factor_option_error(&args_vec) {
+        return Ok(FactorSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text,
+            exit_code: 1,
+        });
+    }
+
+    let matches = ct_app().try_get_matches_from(&args_vec)?;
+    let settings = FactorFlags::new(&matches);
+
+    if settings.numbers.is_empty() {
+        let stdin = stdin();
+        let mut semantic = FactorSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        };
+
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(line) => {
+                    let line_semantic = factor_semantic_from_tokens(
+                        line.split_whitespace(),
+                        settings.print_exponents,
+                    );
+                    semantic.rows.extend(line_semantic.rows);
+                    semantic.classic_text.push_str(&line_semantic.classic_text);
+                    semantic.stderr_text.push_str(&line_semantic.stderr_text);
+                    semantic.exit_code = semantic.exit_code.max(line_semantic.exit_code);
+                }
+                Err(err) => {
+                    semantic.exit_code = 1;
+                    semantic
+                        .stderr_text
+                        .push_str(&format!("factor: error reading input: {err}\n"));
+                    break;
+                }
+            }
+        }
+
+        return Ok(semantic);
+    }
+
+    Ok(factor_semantic_from_tokens(
+        settings.numbers.iter().map(String::as_str),
+        settings.print_exponents,
+    ))
 }
 
 fn format_big_factors(factors: &BTreeMap<BigUint, usize>, print_exponents: bool) -> String {

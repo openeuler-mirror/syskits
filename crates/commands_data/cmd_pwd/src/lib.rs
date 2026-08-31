@@ -1,7 +1,7 @@
 use ct_pwd::PwdMode;
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 
 #[derive(Default)]
 pub struct CmdPwd;
@@ -79,8 +79,14 @@ impl PwdIntent {
 impl DataCommand for CmdPwd {
     fn signature(&self) -> DataSignature {
         DataSignature::new("pwd", "structured current working directory")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible pwd arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::Record)
+            .allow_unknown_args(true)
     }
 
     fn run(

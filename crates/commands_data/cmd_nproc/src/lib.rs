@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -71,8 +71,14 @@ fn query_name(query: ct_nproc::NprocQuery) -> &'static str {
 impl DataCommand for CmdNproc {
     fn signature(&self) -> DataSignature {
         DataSignature::new("nproc", "structured processing-unit information")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible nproc arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::Record)
+            .allow_unknown_args(true)
     }
 
     fn run(

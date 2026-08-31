@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -129,8 +129,14 @@ fn int_or_nothing_u128(value: Option<u128>) -> CtValue {
 impl DataCommand for CmdDf {
     fn signature(&self) -> DataSignature {
         DataSignature::new("df", "structured file system usage")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible df arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

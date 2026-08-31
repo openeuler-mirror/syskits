@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -55,8 +55,14 @@ fn row_to_value(row: &ct_env::EnvRow) -> CtValue {
 impl DataCommand for CmdEnv {
     fn signature(&self) -> DataSignature {
         DataSignature::new("env", "structured environment snapshot")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible env arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

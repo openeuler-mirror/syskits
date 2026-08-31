@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -29,8 +29,72 @@ impl UnameCore {
 
 impl UnameIntent {
     fn from_call(call: &DataCall) -> Result<Self, CtDiagnosticError> {
-        let mut argv = Vec::with_capacity(call.positionals.len() + 1);
+        let mut argv = Vec::with_capacity(call.positionals.len() + call.flags.len() + 1);
         argv.push(OsString::from("uname"));
+
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_ALL,
+            "a",
+            "--all",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_KERNEL_NAME,
+            "s",
+            "--kernel-name",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_NODE_NAME,
+            "n",
+            "--nodename",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_KERNEL_RELEASE,
+            "r",
+            "--kernel-release",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_KERNEL_VERSION,
+            "v",
+            "--kernel-version",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_MACHINE,
+            "m",
+            "--machine",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_PROCESSOR,
+            "p",
+            "--processor",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_HARDWARE_PLATFORM,
+            "i",
+            "--hardware-platform",
+        );
+        push_switch(
+            &mut argv,
+            call,
+            ct_uname::uname_flags::UNAME_OS,
+            "o",
+            "--operating-system",
+        );
 
         for arg in &call.positionals {
             let CtValue::String(arg) = &arg.value else {
@@ -53,6 +117,18 @@ impl UnameIntent {
             classic_flags,
             native_flags,
         })
+    }
+}
+
+fn push_switch(
+    argv: &mut Vec<OsString>,
+    call: &DataCall,
+    long: &'static str,
+    short: &str,
+    cli_long: &'static str,
+) {
+    if call.flags.contains_key(long) || call.flags.contains_key(short) {
+        argv.push(OsString::from(cli_long));
     }
 }
 
@@ -175,8 +251,59 @@ fn classic_text_from_output(output: &ct_uname::UNameOutput) -> String {
 impl DataCommand for CmdUname {
     fn signature(&self) -> DataSignature {
         DataSignature::new("uname", "structured system information")
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_ALL,
+                Some('a'),
+                "print all system information",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_KERNEL_NAME,
+                Some('s'),
+                "print kernel name",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_NODE_NAME,
+                Some('n'),
+                "print network node hostname",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_KERNEL_RELEASE,
+                Some('r'),
+                "print kernel release",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_KERNEL_VERSION,
+                Some('v'),
+                "print kernel version",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_MACHINE,
+                Some('m'),
+                "print machine hardware name",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_PROCESSOR,
+                Some('p'),
+                "print processor type",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_HARDWARE_PLATFORM,
+                Some('i'),
+                "print hardware platform",
+            ))
+            .flag(CtFlag::switch(
+                ct_uname::uname_flags::UNAME_OS,
+                Some('o'),
+                "print operating system",
+            ))
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible uname arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::Record)
+            .allow_unknown_args(true)
     }
 
     fn run(
@@ -206,7 +333,7 @@ impl DataCommand for CmdUname {
 mod tests {
     use super::{UnameIntent, classic_text_from_output, rich_default_flags, uname_output_to_value};
     use ctpipeline::CtValue;
-    use ctsig::DataCall;
+    use ctsig::{BoundArg, DataCall};
 
     #[test]
     fn rich_default_flags_enable_all_output_fields() {
@@ -224,6 +351,31 @@ mod tests {
 
         assert!(intent.native_flags.is_all);
         assert!(!intent.classic_flags.is_all);
+    }
+
+    #[test]
+    fn from_call_uses_explicit_short_flags() {
+        let mut call = DataCall::named("uname");
+        call.flags.insert("m".into(), None);
+
+        let intent = UnameIntent::from_call(&call).expect("intent");
+
+        assert!(intent.classic_flags.is_machine);
+        assert!(intent.native_flags.is_machine);
+        assert!(!intent.native_flags.is_all);
+    }
+
+    #[test]
+    fn from_call_forwards_unknown_positionals_to_clap() {
+        let call = DataCall {
+            positionals: vec![BoundArg::new(CtValue::String("--sysname".into()), None)],
+            ..DataCall::named("uname")
+        };
+
+        let intent = UnameIntent::from_call(&call).expect("intent");
+
+        assert!(intent.classic_flags.is_kernel_name);
+        assert!(intent.native_flags.is_kernel_name);
     }
 
     #[test]

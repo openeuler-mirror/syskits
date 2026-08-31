@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -75,8 +75,14 @@ impl DataCommand for CmdReadlink {
             "readlink",
             "structured symlink and canonicalized path resolution",
         )
+        .rest(CtPositionalArg::optional(
+            "arg",
+            "GNU-compatible readlink arguments",
+            CtType::Any,
+        ))
         .input(CtType::Nothing)
         .output(CtType::List)
+        .allow_unknown_args(true)
     }
 
     fn run(

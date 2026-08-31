@@ -396,6 +396,18 @@ fn decode_auto(
     let probe_bytes = &probe_buf[..probe_n];
 
     if probe_bytes.contains(&0u8) {
+        if has_utf16_bom(probe_bytes) {
+            if should_defer_partial_probe_decode(&mut reader)? {
+                let chained = std::io::Cursor::new(probe_bytes.to_vec()).chain(reader);
+                return decode_raw_reader(chained, meta);
+            }
+            let full = read_probe_with_remainder_capped(probe_bytes, &mut reader)?;
+            if full.len() > AUTO_DECODE_MAX_BYTES {
+                let complete = std::io::Cursor::new(full).chain(reader);
+                return decode_raw_reader(complete, meta);
+            }
+            return decode_utf16_bom_or_raw(full, meta);
+        }
         // Binary: chain probe + remainder and pass as raw byte stream.
         let chained = std::io::Cursor::new(probe_bytes.to_vec()).chain(reader);
         return decode_raw_reader(chained, meta);
@@ -541,6 +553,9 @@ fn decode_auto_full_bytes(
     meta: ctpipeline::metadata::CtPipelineMetadata,
 ) -> Result<CtPipelineData, crate::error::CtDiagnosticError> {
     if full_bytes.contains(&0u8) {
+        if has_utf16_bom(&full_bytes) {
+            return decode_utf16_bom_or_raw(full_bytes, meta);
+        }
         return decode_raw_bytes(full_bytes, meta);
     }
     let text = match std::str::from_utf8(&full_bytes) {
@@ -571,6 +586,9 @@ fn decode_auto_json_candidate(
     mut meta: ctpipeline::metadata::CtPipelineMetadata,
 ) -> Result<CtPipelineData, crate::error::CtDiagnosticError> {
     if full_bytes.contains(&0u8) {
+        if has_utf16_bom(&full_bytes) {
+            return decode_utf16_bom_or_raw(full_bytes, meta);
+        }
         return decode_raw_bytes(full_bytes, meta);
     }
     let text = match std::str::from_utf8(&full_bytes) {
@@ -632,6 +650,45 @@ fn read_capped_stderr(mut reader: impl Read) -> std::io::Result<Vec<u8>> {
         }
     }
     Ok(retained)
+}
+
+fn has_utf16_bom(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff])
+}
+
+fn decode_utf16_bom_or_raw(
+    bytes: Vec<u8>,
+    meta: ctpipeline::metadata::CtPipelineMetadata,
+) -> Result<CtPipelineData, crate::error::CtDiagnosticError> {
+    match utf16_bom_to_string(&bytes) {
+        Some(text) => decode_text_lines_from_str(&text, meta),
+        None => decode_raw_bytes(bytes, meta),
+    }
+}
+
+fn utf16_bom_to_string(bytes: &[u8]) -> Option<String> {
+    let little_endian = if bytes.starts_with(&[0xff, 0xfe]) {
+        true
+    } else if bytes.starts_with(&[0xfe, 0xff]) {
+        false
+    } else {
+        return None;
+    };
+    let payload = bytes.get(2..)?;
+    if payload.len() % 2 != 0 {
+        return None;
+    }
+
+    let words = payload.chunks_exact(2).map(|chunk| {
+        if little_endian {
+            u16::from_le_bytes([chunk[0], chunk[1]])
+        } else {
+            u16::from_be_bytes([chunk[0], chunk[1]])
+        }
+    });
+    std::char::decode_utf16(words)
+        .collect::<Result<String, _>>()
+        .ok()
 }
 
 fn decode_csv(
@@ -1180,6 +1237,24 @@ mod decoder_tests {
         } else {
             panic!("Expected ByteStream");
         }
+    }
+
+    #[test]
+    fn test_decode_auto_utf16le_bom_decodes_as_text_lines() {
+        let meta = CtPipelineMetadata::default();
+        let cursor = Cursor::new(vec![0xff, 0xfe, b'a', 0, b'\n', 0, b'b', 0, b'\n', 0]);
+        let data = ExternalOutputDecoder::decode(cursor, ExternalStdoutMode::Auto, meta).unwrap();
+        let CtPipelineData::ListStream(stream) = data else {
+            panic!("Expected ListStream");
+        };
+        let values: Vec<_> = stream.collect();
+        assert_eq!(
+            values,
+            vec![
+                ctpipeline::value::CtValue::String("a".into()),
+                ctpipeline::value::CtValue::String("b".into())
+            ]
+        );
     }
 
     #[test]

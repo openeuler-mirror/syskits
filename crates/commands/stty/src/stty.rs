@@ -644,7 +644,6 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
     flags: &[Settings<T>],
     writer: &mut W,
 ) -> CTResult<()> {
-    // 初始化一个标志变量，用于跟踪是否已经打印了设置
     let mut printed = false;
     // 遍历每个设置标志
     for &Settings {
@@ -659,17 +658,23 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
             continue;
         }
         let is_val = flag.is_in(termios, group);
-        if group.is_some() {
-            if is_val && (!is_sane || opts.is_all) {
-                write!(writer, "{name} ")?;
-                printed = true;
+        let mut print_flag = |writer: &mut W, enabled: bool| -> std::io::Result<()> {
+            if printed {
+                write!(writer, " ")?;
             }
-        } else if opts.is_all || is_val != is_sane {
-            if !is_val {
+            if !enabled {
                 write!(writer, "-")?;
             }
-            write!(writer, "{name} ")?;
+            write!(writer, "{name}")?;
             printed = true;
+            Ok(())
+        };
+        if group.is_some() {
+            if is_val && (!is_sane || opts.is_all) {
+                print_flag(writer, true)?;
+            }
+        } else if opts.is_all || is_val != is_sane {
+            print_flag(writer, is_val)?;
         }
     }
 

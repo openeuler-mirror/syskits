@@ -1247,7 +1247,8 @@ fn show_error_if_needed(err: &CpError) {
     match err {
         // 当使用--no-clobber选项时，即使复制不完全也不显示错误消息
         CpError::NotAllFilesCopied => {
-            // 需要返回一个错误码，但不在此处显示错误信息
+            // GNU coreutils 9.4: --no-clobber skip is silent but exits non-zero.
+            set_ct_exit_code(EXIT_ERR);
         }
         // 如果文件复制被跳过（例如，因为使用了交互式模式且用户拒绝了覆盖），则记录此情况
         CpError::Skipped => {
@@ -2358,7 +2359,7 @@ fn cp_handle_copy_mode(
     sour_metadata: Metadata,
     symlinked_files: &mut HashSet<CtFileInformation>,
     source_in_command_line: bool,
-) -> CopyResult<()> {
+) -> CopyResult<Option<CopyDebug>> {
     // 获取源文件类型
     let sour_file_type = sour_metadata.file_type();
 
@@ -2372,7 +2373,7 @@ fn cp_handle_copy_mode(
     let sour_is_fifo = false;
 
     // 根据复制模式执行相应的复制逻辑
-    match cp_opts.copy_mode {
+    let copy_debug = match cp_opts.copy_mode {
         CpCopyMode::Link => {
             // 处理目标路径已存在的情况，包括备份和强制覆盖
             if dest_path.exists() {
@@ -2399,6 +2400,7 @@ fn cp_handle_copy_mode(
                 fs::hard_link(sour_path, dest_path)
             }
             .context(cp_str)?;
+            None
         }
         CpCopyMode::Copy => {
             // 执行通用的文件复制逻辑
@@ -2410,7 +2412,7 @@ fn cp_handle_copy_mode(
                 sour_is_symlink,
                 sour_is_fifo,
                 symlinked_files,
-            )?;
+            )?
         }
         CpCopyMode::SymLink => {
             // 改用 cp_file_or_link_exists，确保哪怕是断链也能被识别并在 -f 时被正确删除
@@ -2420,18 +2422,17 @@ fn cp_handle_copy_mode(
                 fs::remove_file(dest_path).ok();
             }
             cp_symlink_file(sour_path, dest_path, cp_str, symlinked_files)?;
+            None
         }
-        CpCopyMode::Update => {
-            copy_helper(
-                sour_path,
-                dest_path,
-                cp_opts,
-                cp_str,
-                sour_is_symlink,
-                sour_is_fifo,
-                symlinked_files,
-            )?;
-        }
+        CpCopyMode::Update => copy_helper(
+            sour_path,
+            dest_path,
+            cp_opts,
+            cp_str,
+            sour_is_symlink,
+            sour_is_fifo,
+            symlinked_files,
+        )?,
         CpCopyMode::AttrOnly => {
             // 确保文件打开时不截断，且正确处理错误
             // 如果目标文件不存在（前面逻辑意外删除），创建空文件以兼容 GNU 行为
@@ -2452,10 +2453,11 @@ fn cp_handle_copy_mode(
                         dest_path.quote()
                     ))?;
             }
+            None
         }
     };
 
-    Ok(())
+    Ok(copy_debug)
 }
 
 /// Calculates the permissions for the destination file in a copy operation.
@@ -2672,7 +2674,7 @@ fn copy_file(
         cp_calculate_dest_permissions(dest_path, &source_metadata, cp_opts, &context)?;
 
     // 根据复制模式和其他选项处理实际复制过程。
-    cp_handle_copy_mode(
+    let copy_debug = cp_handle_copy_mode(
         sour_path,
         dest_path,
         cp_opts,
@@ -2743,6 +2745,12 @@ fn copy_file(
         }
     }
 
+    if cp_opts.debug {
+        if let Some(copy_debug) = copy_debug.as_ref() {
+            cp_show_debug(copy_debug);
+        }
+    }
+
     Ok(())
 }
 
@@ -2804,7 +2812,7 @@ fn copy_helper(
     is_sour_symlink: bool,
     is_sour_fifo: bool,
     symlinked_files: &mut HashSet<CtFileInformation>,
-) -> CopyResult<()> {
+) -> CopyResult<Option<CopyDebug>> {
     // 如果设置了创建父目录选项，则创建目标路径的父目录
     if cp_opts.parents {
         let parent = dest_path.parent().unwrap_or(dest_path);
@@ -2817,15 +2825,18 @@ fn copy_helper(
     }
 
     // 特殊处理源路径为"/dev/null"的情况，直接创建一个空的目标文件
-    if sour_path.as_os_str() == "/dev/null" {
+    let copy_debug = if sour_path.as_os_str() == "/dev/null" {
         File::create(dest_path).context(dest_path.display().to_string())?;
+        None
     } else if is_sour_fifo && cp_opts.recursive && !cp_opts.copy_contents {
         // 如果源路径是FIFO且设置了递归复制但不复制内容，则特殊处理FIFO文件
         #[cfg(unix)]
         copy_fifo(dest_path, cp_opts.overwrite)?;
+        None
     } else if is_sour_symlink {
         // 如果源路径是符号链接，则复制符号链接
         copy_link(sour_path, dest_path, symlinked_files)?;
+        None
     } else {
         // 默认情况下，进行文件或目录的实际复制操作
         let copy_debug = copy_on_write(
@@ -2837,14 +2848,10 @@ fn copy_helper(
             #[cfg(target_os = "linux")]
             is_sour_fifo,
         )?;
+        Some(copy_debug)
+    };
 
-        // 如果未仅设置复制属性且启用了调试模式，则显示复制的详细信息
-        if !cp_opts.attributes_only && cp_opts.debug {
-            cp_show_debug(&copy_debug);
-        }
-    }
-
-    Ok(())
+    Ok(copy_debug)
 }
 
 // 通过创建新的FIFO来"复制"FIFO。这是由于Rust内置的fs::copy尚不支持处理FIFO（参见rust-lang/rust/issues/79390）。
@@ -3291,6 +3298,40 @@ mod tests {
                 Err(CpError::NotAllFilesCopied) => {}
                 other => panic!("expected NotAllFilesCopied, got {other:?}"),
             }
+            assert_eq!(get_ct_exit_code(), EXIT_ERR);
+            set_ct_exit_code(0);
+        }
+
+        #[test]
+        fn test_cp_no_clobber_existing_dest_sets_failure_exit_code() {
+            use crate::EXIT_ERR;
+            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+
+            let dir = Builder::new()
+                .prefix("cp_no_clobber_existing_dest")
+                .tempdir()
+                .unwrap();
+            let source = dir.path().join("source");
+            let dest = dir.path().join("dest");
+            fs::write(&source, b"new").unwrap();
+            fs::write(&dest, b"old").unwrap();
+            set_ct_exit_code(0);
+
+            let args = [
+                ctcore::ct_util_name().to_string(),
+                "-n".to_string(),
+                source.display().to_string(),
+                dest.display().to_string(),
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let opts = CpOptions::cp_from_matches(&matches).unwrap();
+
+            match cp_copy(std::slice::from_ref(&source), &dest, &opts) {
+                Err(CpError::NotAllFilesCopied) => {}
+                other => panic!("expected NotAllFilesCopied, got {other:?}"),
+            }
+
+            assert_eq!(fs::read(&dest).unwrap(), b"old");
             assert_eq!(get_ct_exit_code(), EXIT_ERR);
             set_ct_exit_code(0);
         }

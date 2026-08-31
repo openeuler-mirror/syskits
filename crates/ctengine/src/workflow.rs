@@ -76,6 +76,7 @@ pub fn run_workflow(
 
     let mut current_data = input;
     let mut vars = crate::workflow_vars::WorkflowVars::new();
+    let checkpoint_run_id = new_checkpoint_run_id();
 
     let mut stage_idx = 0;
     while stage_idx < script.stages.len() {
@@ -118,7 +119,7 @@ pub fn run_workflow(
                 }
             };
 
-            match execute_stage(stage, stage_input, &vars, ctx, &started) {
+            match execute_stage(stage, stage_input, &mut vars, ctx, &started) {
                 Ok(mut res) => {
                     if let Some(timeout_ms) = stage.timeout_ms {
                         if timeout_exceeded(&started, timeout_ms) {
@@ -138,7 +139,9 @@ pub fn run_workflow(
 
                     if stage.checkpoint {
                         res = res.collect_values();
-                        if let Err(e) = persist_checkpoint(stage, stage_idx, &res) {
+                        if let Err(e) =
+                            persist_checkpoint(stage, stage_idx, &res, &checkpoint_run_id)
+                        {
                             stage_err = Some(e);
                             continue;
                         }
@@ -421,6 +424,7 @@ fn persist_checkpoint(
     stage: &WorkflowStage,
     stage_idx: usize,
     data: &CtPipelineData,
+    run_id: &str,
 ) -> Result<(), CtDiagnosticError> {
     let collected = match data {
         CtPipelineData::Empty => ctpipeline::CtValue::Nothing,
@@ -440,7 +444,7 @@ fn persist_checkpoint(
     });
     let bytes = serde_json::to_vec_pretty(&payload)
         .map_err(|e| CtDiagnosticError::simple(format!("checkpoint encode failed: {e}")))?;
-    let path = checkpoint_file_path(&stage.name, stage_idx);
+    let path = checkpoint_file_path(&stage.name, stage_idx, run_id);
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
@@ -461,12 +465,21 @@ fn persist_checkpoint(
     Ok(())
 }
 
-fn checkpoint_file_path(stage_name: &str, stage_idx: usize) -> std::path::PathBuf {
+fn new_checkpoint_run_id() -> String {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{}-{}", std::process::id(), timestamp)
+}
+
+fn checkpoint_file_path(stage_name: &str, stage_idx: usize, run_id: &str) -> std::path::PathBuf {
     let dir = std::env::var("SYSKITS_WORKFLOW_CHECKPOINT_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"));
     dir.join(format!(
-        "syskits-checkpoint-{}-{}.json",
+        "syskits-checkpoint-{}-{}-{}.json",
+        run_id,
         stage_idx,
         sanitize_stage_name(stage_name)
     ))
@@ -491,7 +504,7 @@ fn sanitize_stage_name(stage_name: &str) -> String {
 fn execute_stage(
     stage: &WorkflowStage,
     input: CtPipelineData,
-    vars: &crate::workflow_vars::WorkflowVars,
+    vars: &mut crate::workflow_vars::WorkflowVars,
     ctx: &crate::context::DataEngineContext,
     started: &Instant,
 ) -> Result<CtPipelineData, CtDiagnosticError> {
@@ -527,30 +540,36 @@ fn execute_stage(
     }
 
     // 2. foreach
-    if let Some(_foreach_var) = &stage.foreach {
+    if let Some(foreach_var) = &stage.foreach {
         // Implement loop iteration conceptually
         // For simplicity in L2, if foreach is present, we expect input to be a list
         actual_input = actual_input.collect_values();
         if let CtPipelineData::Value(ctpipeline::value::CtValue::List(items), meta) = actual_input {
-            let mut results = Vec::new();
-            for item in items {
-                if let Some(expr) = &stage.expr {
-                    let expr_str = vars.expand_in_expr(expr);
-                    let ast = parse_stage_expr(&expr_str, started, stage.timeout_ms)?;
-                    let res = crate::interpreter::eval_pipeline(
-                        &ast,
-                        CtPipelineData::Value(item, meta.clone()),
-                        ctx,
-                    )?;
-                    if let CtPipelineData::Value(v, _) = res.collect_values() {
-                        results.push(v);
+            let previous_value = vars.get(foreach_var).cloned();
+            let result = (|| {
+                let mut results = Vec::new();
+                for item in items {
+                    vars.set(foreach_var.clone(), item.clone());
+                    if let Some(expr) = &stage.expr {
+                        let expr_str = vars.expand_in_expr(expr);
+                        let ast = parse_stage_expr(&expr_str, started, stage.timeout_ms)?;
+                        let res = crate::interpreter::eval_pipeline(
+                            &ast,
+                            CtPipelineData::Value(item, meta.clone()),
+                            ctx,
+                        )?;
+                        if let CtPipelineData::Value(v, _) = res.collect_values() {
+                            results.push(v);
+                        }
                     }
                 }
-            }
-            return Ok(CtPipelineData::Value(
-                ctpipeline::value::CtValue::List(results),
-                meta,
-            ));
+                Ok(CtPipelineData::Value(
+                    ctpipeline::value::CtValue::List(results),
+                    meta,
+                ))
+            })();
+            restore_workflow_var(vars, foreach_var, previous_value);
+            return result;
         } else {
             return Err(CtDiagnosticError::simple("foreach requires a List input"));
         }
@@ -563,6 +582,18 @@ fn execute_stage(
         crate::interpreter::eval_pipeline(&ast, actual_input, ctx)
     } else {
         Ok(actual_input)
+    }
+}
+
+fn restore_workflow_var(
+    vars: &mut crate::workflow_vars::WorkflowVars,
+    name: &str,
+    previous_value: Option<ctpipeline::value::CtValue>,
+) {
+    if let Some(value) = previous_value {
+        vars.set(name.to_string(), value);
+    } else {
+        vars.remove(name);
     }
 }
 
@@ -607,10 +638,183 @@ fn call_has_timeout_ms(call: &ctdsl::Call) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::DataCommand;
     use crate::context::CommandRegistry;
+    use ctpipeline::CtType;
+    use ctpipeline::metadata::CtPipelineMetadata;
+    use ctpipeline::value::CtValue;
+    use ctsig::{CtPositionalArg, DataCall, DataSignature};
 
     fn get_test_ctx() -> crate::context::DataEngineContext {
         crate::context::DataEngineContext::new(CommandRegistry::empty(), None, None)
+    }
+
+    struct WorkflowListInts;
+    impl DataCommand for WorkflowListInts {
+        fn signature(&self) -> DataSignature {
+            DataSignature::new("wf-list-ints", "list ints")
+        }
+
+        fn run(
+            &self,
+            _call: &DataCall,
+            _input: CtPipelineData,
+            _ctx: &crate::context::DataEngineContext,
+        ) -> Result<CtPipelineData, CtDiagnosticError> {
+            Ok(CtPipelineData::Value(
+                CtValue::List(vec![CtValue::Int(1), CtValue::Int(2)]),
+                CtPipelineMetadata::default(),
+            ))
+        }
+    }
+
+    struct WorkflowEmitInt;
+    impl DataCommand for WorkflowEmitInt {
+        fn signature(&self) -> DataSignature {
+            DataSignature::new("wf-emit-int", "emit int").positional(CtPositionalArg::required(
+                "value",
+                "value",
+                CtType::Int,
+            ))
+        }
+
+        fn run(
+            &self,
+            call: &DataCall,
+            _input: CtPipelineData,
+            _ctx: &crate::context::DataEngineContext,
+        ) -> Result<CtPipelineData, CtDiagnosticError> {
+            let value = call.positionals[0]
+                .value
+                .as_int()
+                .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+            Ok(CtPipelineData::Value(
+                CtValue::Int(value),
+                CtPipelineMetadata::default(),
+            ))
+        }
+    }
+
+    struct WorkflowConstNinetyNine;
+    impl DataCommand for WorkflowConstNinetyNine {
+        fn signature(&self) -> DataSignature {
+            DataSignature::new("wf-const-99", "const 99")
+        }
+
+        fn run(
+            &self,
+            _call: &DataCall,
+            _input: CtPipelineData,
+            _ctx: &crate::context::DataEngineContext,
+        ) -> Result<CtPipelineData, CtDiagnosticError> {
+            Ok(CtPipelineData::Value(
+                CtValue::Int(99),
+                CtPipelineMetadata::default(),
+            ))
+        }
+    }
+
+    struct WorkflowAppendInt;
+    impl DataCommand for WorkflowAppendInt {
+        fn signature(&self) -> DataSignature {
+            DataSignature::new("wf-append-int", "append int").positional(CtPositionalArg::required(
+                "value",
+                "value",
+                CtType::Int,
+            ))
+        }
+
+        fn run(
+            &self,
+            call: &DataCall,
+            input: CtPipelineData,
+            _ctx: &crate::context::DataEngineContext,
+        ) -> Result<CtPipelineData, CtDiagnosticError> {
+            let value = call.positionals[0]
+                .value
+                .as_int()
+                .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+            match input {
+                CtPipelineData::Value(CtValue::List(mut items), meta) => {
+                    items.push(CtValue::Int(value));
+                    Ok(CtPipelineData::Value(CtValue::List(items), meta))
+                }
+                _ => Err(CtDiagnosticError::simple("expected list input")),
+            }
+        }
+    }
+
+    struct WorkflowEchoString;
+    impl DataCommand for WorkflowEchoString {
+        fn signature(&self) -> DataSignature {
+            DataSignature::new("wf-echo-string", "echo string")
+                .positional(CtPositionalArg::required("value", "value", CtType::String))
+        }
+
+        fn run(
+            &self,
+            call: &DataCall,
+            _input: CtPipelineData,
+            _ctx: &crate::context::DataEngineContext,
+        ) -> Result<CtPipelineData, CtDiagnosticError> {
+            let value = call.positionals[0]
+                .value
+                .as_str()
+                .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
+            Ok(CtPipelineData::Value(
+                CtValue::String(value.to_string()),
+                CtPipelineMetadata::default(),
+            ))
+        }
+    }
+
+    fn workflow_var_test_ctx() -> crate::context::DataEngineContext {
+        let registry = CommandRegistry::from_factories(&[
+            ("wf-list-ints", || Box::new(WorkflowListInts)),
+            ("wf-emit-int", || Box::new(WorkflowEmitInt)),
+            ("wf-const-99", || Box::new(WorkflowConstNinetyNine)),
+            ("wf-append-int", || Box::new(WorkflowAppendInt)),
+            ("wf-echo-string", || Box::new(WorkflowEchoString)),
+        ]);
+        crate::context::DataEngineContext::new(registry, None, None)
+    }
+
+    fn unique_stage_name(prefix: &str) -> String {
+        format!(
+            "{}_{}_{}",
+            prefix,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        )
+    }
+
+    fn matching_checkpoint_paths(stage_name: &str) -> Vec<std::path::PathBuf> {
+        let suffix = format!("-{}.json", sanitize_stage_name(stage_name));
+        let Ok(entries) = std::fs::read_dir("/tmp") else {
+            return Vec::new();
+        };
+        let mut paths: Vec<_> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        name.starts_with("syskits-checkpoint-") && name.ends_with(&suffix)
+                    })
+            })
+            .collect();
+        paths.sort();
+        paths
+    }
+
+    fn remove_matching_checkpoints(stage_name: &str) {
+        for path in matching_checkpoint_paths(stage_name) {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     #[test]
@@ -1019,6 +1223,161 @@ mod tests {
             }
             _ => panic!("Expected list output"),
         }
+    }
+
+    #[test]
+    fn test_workflow_foreach_expands_current_item_variable() {
+        let ctx = workflow_var_test_ctx();
+        let script = WorkflowScript {
+            stages: vec![
+                WorkflowStage {
+                    name: "list".into(),
+                    expr: Some("wf-list-ints".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "foreach".into(),
+                    expr: Some("wf-emit-int $item".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: Some("item".into()),
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+            ],
+        };
+
+        let res = run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap();
+        assert!(matches!(
+            res.collect_values(),
+            CtPipelineData::Value(CtValue::List(items), _)
+                if items == vec![CtValue::Int(1), CtValue::Int(2)]
+        ));
+    }
+
+    #[test]
+    fn test_workflow_foreach_restores_existing_variable() {
+        let ctx = workflow_var_test_ctx();
+        let script = WorkflowScript {
+            stages: vec![
+                WorkflowStage {
+                    name: "seed".into(),
+                    expr: Some("wf-const-99".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: Some("item".into()),
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "list".into(),
+                    expr: Some("wf-list-ints".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "foreach".into(),
+                    expr: Some("wf-emit-int $item".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: Some("item".into()),
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "append-restored".into(),
+                    expr: Some("wf-append-int $item".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+            ],
+        };
+
+        let res = run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap();
+        assert!(matches!(
+            res.collect_values(),
+            CtPipelineData::Value(CtValue::List(items), _)
+                if items == vec![CtValue::Int(1), CtValue::Int(2), CtValue::Int(99)]
+        ));
+    }
+
+    #[test]
+    fn test_workflow_foreach_removes_new_variable_after_loop() {
+        let ctx = workflow_var_test_ctx();
+        let script = WorkflowScript {
+            stages: vec![
+                WorkflowStage {
+                    name: "list".into(),
+                    expr: Some("wf-list-ints".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "foreach".into(),
+                    expr: Some("wf-emit-int $item".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: Some("item".into()),
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "after".into(),
+                    expr: Some("wf-echo-string $item".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: Default::default(),
+                    checkpoint: false,
+                },
+            ],
+        };
+
+        let res = run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap();
+        assert!(matches!(
+            res,
+            CtPipelineData::Value(CtValue::String(value), _) if value == "$item"
+        ));
     }
 
     #[test]
@@ -1768,16 +2127,8 @@ mod tests {
             CommandRegistry::from_factories(&[("checkpoint-cmd", || Box::new(CheckpointCmd))]);
         let ctx = crate::context::DataEngineContext::new(reg, None, None);
 
-        let stage_name = format!(
-            "checkpoint_stage_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        );
-        let ckpt_path = checkpoint_file_path(&stage_name, 0);
-        let _ = std::fs::remove_file(&ckpt_path);
+        let stage_name = unique_stage_name("checkpoint_stage");
+        remove_matching_checkpoints(&stage_name);
 
         let script = WorkflowScript {
             stages: vec![WorkflowStage {
@@ -1795,18 +2146,51 @@ mod tests {
         };
 
         let _ = run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap();
-        assert!(
-            ckpt_path.exists(),
-            "checkpoint file should exist: {}",
-            ckpt_path.display()
-        );
+        let paths = matching_checkpoint_paths(&stage_name);
+        assert_eq!(paths.len(), 1, "checkpoint file should exist: {paths:?}");
 
-        let raw = std::fs::read_to_string(&ckpt_path).unwrap();
+        let raw = std::fs::read_to_string(&paths[0]).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed["stage"], stage_name);
         assert_eq!(parsed["stage_index"], 0);
         assert_eq!(parsed["data"], 7);
 
-        let _ = std::fs::remove_file(&ckpt_path);
+        remove_matching_checkpoints(&stage_name);
+    }
+
+    #[test]
+    fn test_workflow_checkpoint_paths_include_run_identity() {
+        let ctx = workflow_var_test_ctx();
+        let stage_name = unique_stage_name("checkpoint_same_stage");
+        remove_matching_checkpoints(&stage_name);
+
+        let script = WorkflowScript {
+            stages: vec![WorkflowStage {
+                name: stage_name.clone(),
+                expr: Some("wf-const-99".into()),
+                if_cond: None,
+                else_expr: None,
+                foreach: None,
+                var: None,
+                timeout_ms: None,
+                retry: None,
+                on_failure: OnFailure::Fail,
+                checkpoint: true,
+            }],
+        };
+
+        run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        run_workflow(&script, CtPipelineData::Empty, &ctx).unwrap();
+
+        let paths = matching_checkpoint_paths(&stage_name);
+        assert_eq!(
+            paths.len(),
+            2,
+            "two workflow runs of the same checkpoint stage should not overwrite each other: {paths:?}"
+        );
+        assert_ne!(paths[0], paths[1]);
+
+        remove_matching_checkpoints(&stage_name);
     }
 }

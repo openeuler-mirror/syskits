@@ -16,6 +16,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_encoding::CtEncodeError;
 use ctcore::ct_encoding::Data;
 use ctcore::ct_encoding::Format;
+use ctcore::ct_encoding::wrap_write;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
@@ -32,6 +33,12 @@ use clap::Command;
 use clap::crate_version;
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BaseCoreOutput {
+    pub bytes: Vec<u8>,
+    pub text: String,
+}
 
 // Config.
 pub struct BaseConfig {
@@ -196,6 +203,281 @@ pub fn handle_base_input<R: Read, W: Write>(
     }
 }
 
+pub fn handle_base_input_to_writer<R: Read, W: Write>(
+    ct_input: &mut R,
+    ct_format: Format,
+    ct_line_wrap: Option<usize>,
+    ct_ignore_garbage: bool,
+    ct_decode: bool,
+    writer: &mut W,
+) -> CTResult<()> {
+    handle_base_input(
+        ct_input,
+        writer,
+        ct_format,
+        ct_line_wrap,
+        ct_ignore_garbage,
+        ct_decode,
+    )
+}
+
+pub fn handle_base_input_core<R: Read>(
+    ct_input: &mut R,
+    ct_format: Format,
+    ct_line_wrap: Option<usize>,
+    ct_ignore_garbage: bool,
+    ct_decode: bool,
+) -> CTResult<BaseCoreOutput> {
+    if ct_decode {
+        let mut input_data = Data::new(ct_input, ct_format).ignore_garbage(ct_ignore_garbage);
+        let mut bytes = Vec::new();
+        match input_data.decode(&mut bytes) {
+            Ok(_) => Ok(BaseCoreOutput {
+                text: String::from_utf8_lossy(&bytes).into_owned(),
+                bytes,
+            }),
+            Err(_) => Err(CtSimpleError::new(1, "error: invalid input")),
+        }
+    } else {
+        let mut raw = Vec::new();
+        ct_input
+            .read_to_end(&mut raw)
+            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+
+        match ctcore::ct_encoding::encode(ct_format, &raw) {
+            Ok(text) => {
+                let mut bytes = Vec::new();
+                wrap_write(&mut bytes, ct_line_wrap.unwrap_or(76), &text)
+                    .map_err_context(|| "error: invalid input".to_string())?;
+                Ok(BaseCoreOutput { text, bytes })
+            }
+            Err(CtEncodeError::InvalidInput) => Err(CtSimpleError::new(1, "error: invalid input")),
+            Err(_) => Err(CtSimpleError::new(
+                1,
+                "invalid input (length must be multiple of 4 characters)",
+            )),
+        }
+    }
+}
+
+const STREAM_READ_BUF_SIZE: usize = 64 * 1024;
+
+pub fn handle_base_input_streaming_to_writer<R: Read, W: Write>(
+    ct_input: &mut R,
+    ct_format: Format,
+    ct_line_wrap: Option<usize>,
+    ct_ignore_garbage: bool,
+    ct_decode: bool,
+    writer: &mut W,
+) -> CTResult<()> {
+    if matches!(ct_format, Format::Base58) {
+        return handle_base_input(
+            ct_input,
+            writer,
+            ct_format,
+            ct_line_wrap,
+            ct_ignore_garbage,
+            ct_decode,
+        );
+    }
+
+    if ct_decode {
+        stream_decode_to_writer(ct_input, ct_format, ct_ignore_garbage, writer)
+    } else {
+        stream_encode_to_writer(ct_input, ct_format, ct_line_wrap.unwrap_or(76), writer)
+    }
+}
+
+fn stream_encode_to_writer<R: Read, W: Write>(
+    ct_input: &mut R,
+    ct_format: Format,
+    ct_line_wrap: usize,
+    writer: &mut W,
+) -> CTResult<()> {
+    let block = encode_block_size(ct_format);
+    let mut buf = [0u8; STREAM_READ_BUF_SIZE];
+    let mut pending = Vec::new();
+    let mut line_col = 0usize;
+
+    loop {
+        let n = ct_input
+            .read(&mut buf)
+            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+        if n == 0 {
+            break;
+        }
+
+        pending.extend_from_slice(&buf[..n]);
+        let ready_len = pending.len() / block * block;
+        if ready_len == 0 {
+            continue;
+        }
+
+        let encoded = ctcore::ct_encoding::encode(ct_format, &pending[..ready_len]).map_err(
+            |err| match err {
+                CtEncodeError::InvalidInput => CtSimpleError::new(1, "error: invalid input"),
+                _ => CtSimpleError::new(
+                    1,
+                    "error: invalid input (length must be multiple of 4 characters)",
+                ),
+            },
+        )?;
+        write_encoded_chunk(writer, encoded.as_bytes(), ct_line_wrap, &mut line_col)?;
+        pending.drain(..ready_len);
+    }
+
+    if !pending.is_empty() {
+        let encoded =
+            ctcore::ct_encoding::encode(ct_format, &pending).map_err(|err| match err {
+                CtEncodeError::InvalidInput => CtSimpleError::new(1, "error: invalid input"),
+                _ => CtSimpleError::new(
+                    1,
+                    "error: invalid input (length must be multiple of 4 characters)",
+                ),
+            })?;
+        write_encoded_chunk(writer, encoded.as_bytes(), ct_line_wrap, &mut line_col)?;
+    }
+
+    if ct_line_wrap > 0 && line_col > 0 {
+        write_or_simple_error(writer, b"\n", false)?;
+    }
+
+    Ok(())
+}
+
+fn stream_decode_to_writer<R: Read, W: Write>(
+    ct_input: &mut R,
+    ct_format: Format,
+    ct_ignore_garbage: bool,
+    writer: &mut W,
+) -> CTResult<()> {
+    let block = decode_block_size(ct_format);
+    let alphabet = decode_alphabet(ct_format);
+    let mut buf = [0u8; STREAM_READ_BUF_SIZE];
+    let mut pending = Vec::new();
+
+    loop {
+        let n = ct_input
+            .read(&mut buf)
+            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+        if n == 0 {
+            break;
+        }
+
+        normalize_decode_input(&mut pending, &buf[..n], ct_ignore_garbage, alphabet);
+
+        let ready_blocks = pending.len() / block;
+        let decode_now = ready_blocks.saturating_sub(1) * block;
+        if decode_now == 0 {
+            continue;
+        }
+
+        let decoded = ctcore::ct_encoding::decode(ct_format, &pending[..decode_now])
+            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+        write_or_simple_error(writer, &decoded, true)?;
+        pending.drain(..decode_now);
+    }
+
+    if !pending.is_empty() {
+        let decoded = ctcore::ct_encoding::decode(ct_format, &pending)
+            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+        write_or_simple_error(writer, &decoded, true)?;
+    }
+
+    Ok(())
+}
+
+fn encode_block_size(format: Format) -> usize {
+    match format {
+        Format::Base64 | Format::Base64Url => 3,
+        Format::Base32 | Format::Base32Hex => 5,
+        Format::Base16 | Format::Base2Lsbf | Format::Base2Msbf => 1,
+        // Base58 falls back to the whole-buffer path above.
+        Format::Base58 => 1,
+        Format::Z85 => 4,
+    }
+}
+
+fn decode_block_size(format: Format) -> usize {
+    match format {
+        Format::Base64 | Format::Base64Url => 4,
+        Format::Base32 | Format::Base32Hex => 8,
+        Format::Base16 => 2,
+        Format::Base2Lsbf | Format::Base2Msbf => 8,
+        // Base58 falls back to the whole-buffer path above.
+        Format::Base58 => 1,
+        Format::Z85 => 5,
+    }
+}
+
+fn decode_alphabet(format: Format) -> &'static [u8] {
+    match format {
+        Format::Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
+        Format::Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
+        Format::Base64Url => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
+        Format::Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
+        Format::Base16 => b"0123456789ABCDEF",
+        Format::Base2Lsbf | Format::Base2Msbf => b"01",
+        Format::Base58 => b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",
+        Format::Z85 => {
+            b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
+        }
+    }
+}
+
+fn normalize_decode_input(
+    pending: &mut Vec<u8>,
+    chunk: &[u8],
+    ignore_garbage: bool,
+    alphabet: &[u8],
+) {
+    if ignore_garbage {
+        pending.extend(chunk.iter().copied().filter(|b| alphabet.contains(b)));
+    } else {
+        pending.extend(chunk.iter().copied().filter(|b| *b != b'\r' && *b != b'\n'));
+    }
+}
+
+fn write_encoded_chunk<W: Write>(
+    writer: &mut W,
+    chunk: &[u8],
+    wrap: usize,
+    line_col: &mut usize,
+) -> CTResult<()> {
+    if wrap == 0 {
+        return write_or_simple_error(writer, chunk, false);
+    }
+
+    let mut start = 0usize;
+    while start < chunk.len() {
+        let room = wrap - *line_col;
+        let take = room.min(chunk.len() - start);
+        write_or_simple_error(writer, &chunk[start..start + take], false)?;
+        *line_col += take;
+        start += take;
+        if *line_col == wrap {
+            write_or_simple_error(writer, b"\n", false)?;
+            *line_col = 0;
+        }
+    }
+
+    Ok(())
+}
+
+fn write_or_simple_error<W: Write>(
+    writer: &mut W,
+    bytes: &[u8],
+    decode_path: bool,
+) -> CTResult<()> {
+    if writer.write_all(bytes).is_err() {
+        if decode_path {
+            return Err(CtSimpleError::new(1, "error: cannot write non-utf8 data"));
+        }
+        return Err(CtSimpleError::new(1, "error: invalid input"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -206,7 +488,7 @@ mod test {
     use std::fs;
     use std::fs::File;
     use std::io::stdin;
-    use std::io::{self, Write};
+    use std::io::{self, Cursor, Write};
 
     // Add the missing constants
     const BASE32_ABOUT: &str = "base32 encode or decode data";
@@ -401,6 +683,45 @@ mod test {
             Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_stream_encode_base58_matches_whole_buffer_encoding() {
+        let input = b"hello base58";
+        let mut reader = Cursor::new(input);
+        let mut output = Vec::new();
+
+        handle_base_input_streaming_to_writer(
+            &mut reader,
+            Format::Base58,
+            Some(76),
+            false,
+            false,
+            &mut output,
+        )
+        .expect("base58 streaming encode should succeed");
+
+        let expected = ctcore::ct_encoding::encode(Format::Base58, input).unwrap();
+        assert_eq!(String::from_utf8(output).unwrap().trim_end(), expected);
+    }
+
+    #[test]
+    fn test_stream_decode_base58_matches_whole_buffer_decoding() {
+        let encoded = ctcore::ct_encoding::encode(Format::Base58, b"hello base58").unwrap();
+        let mut reader = Cursor::new(encoded.into_bytes());
+        let mut output = Vec::new();
+
+        handle_base_input_streaming_to_writer(
+            &mut reader,
+            Format::Base58,
+            Some(76),
+            false,
+            true,
+            &mut output,
+        )
+        .expect("base58 streaming decode should succeed");
+
+        assert_eq!(output, b"hello base58");
     }
 
     #[test]
@@ -1832,5 +2153,93 @@ mod test {
             Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
+    }
+
+    fn core_output_bytes(
+        input: &[u8],
+        format: Format,
+        wrap: Option<usize>,
+        ignore_garbage: bool,
+        decode: bool,
+    ) -> Result<Vec<u8>, String> {
+        let mut reader = Cursor::new(input.to_vec());
+        base_common::handle_base_input_core(&mut reader, format, wrap, ignore_garbage, decode)
+            .map(|out| out.bytes)
+            .map_err(|e| e.to_string())
+    }
+
+    fn streaming_output_bytes(
+        input: &[u8],
+        format: Format,
+        wrap: Option<usize>,
+        ignore_garbage: bool,
+        decode: bool,
+    ) -> Result<Vec<u8>, String> {
+        let mut reader = Cursor::new(input.to_vec());
+        let mut out = Vec::new();
+        base_common::handle_base_input_streaming_to_writer(
+            &mut reader,
+            format,
+            wrap,
+            ignore_garbage,
+            decode,
+            &mut out,
+        )
+        .map(|_| out)
+        .map_err(|e| e.to_string())
+    }
+
+    fn assert_streaming_matches_core(
+        input: &[u8],
+        format: Format,
+        wrap: Option<usize>,
+        ignore_garbage: bool,
+        decode: bool,
+    ) {
+        let core = core_output_bytes(input, format, wrap, ignore_garbage, decode);
+        let streaming = streaming_output_bytes(input, format, wrap, ignore_garbage, decode);
+        assert_eq!(streaming, core);
+    }
+
+    #[test]
+    fn test_streaming_encode_matches_core_base64_default_wrap() {
+        let mut input = Vec::with_capacity(STREAM_READ_BUF_SIZE + 137);
+        for i in 0..(STREAM_READ_BUF_SIZE + 137) {
+            input.push((i % 251) as u8);
+        }
+
+        assert_streaming_matches_core(&input, Format::Base64, None, false, false);
+    }
+
+    #[test]
+    fn test_streaming_decode_matches_core_base64_ignore_garbage() {
+        let raw = b"streaming parity for base64 decode with ignore garbage".repeat(256);
+        let encoded = ctcore::ct_encoding::encode(Format::Base64, &raw).unwrap();
+
+        let mut noisy = String::with_capacity(encoded.len() + encoded.len() / 8);
+        for (idx, ch) in encoded.chars().enumerate() {
+            noisy.push(ch);
+            if idx % 11 == 0 {
+                noisy.push(' ');
+                noisy.push('\n');
+                noisy.push('#');
+            }
+        }
+
+        assert_streaming_matches_core(noisy.as_bytes(), Format::Base64, None, true, true);
+    }
+
+    #[test]
+    fn test_streaming_decode_matches_core_base16_ignore_garbage() {
+        let raw = vec![0xde, 0xad, 0xbe, 0xef, 0x12, 0x34, 0xab, 0xcd];
+        let encoded = ctcore::ct_encoding::encode(Format::Base16, &raw).unwrap();
+
+        let noisy = format!(
+            "{}--{}  \n{}",
+            &encoded[0..4],
+            &encoded[4..8],
+            &encoded[8..]
+        );
+        assert_streaming_matches_core(noisy.as_bytes(), Format::Base16, None, true, true);
     }
 }

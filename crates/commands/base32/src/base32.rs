@@ -13,6 +13,7 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::ffi::OsString;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use std::io::Cursor;
 use std::io::Read;
 use std::io::stdin;
 
@@ -22,10 +23,35 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
-use ctcore::{Tool, ct_encoding::Format, ct_error::CTResult};
+use ctcore::{
+    Tool,
+    ct_encoding::Format,
+    ct_error::{CTError, CTResult, FromIo},
+};
 use sys_locale::get_locale;
 
 pub mod base_common;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Base32SemanticRow {
+    pub mode: String,
+    pub wrap: usize,
+    pub ignore_garbage: bool,
+    pub input: String,
+    pub file: Option<String>,
+    pub line: usize,
+    pub output_text: String,
+    pub byte_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Base32Semantic {
+    pub rows: Vec<Base32SemanticRow>,
+    pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
 
 #[derive(Default)]
 pub struct Base32;
@@ -64,6 +90,158 @@ pub fn base32_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) ->
         config_info.base_ignore_garbage,
         config_info.base_decode,
     )
+}
+
+fn base32_render_error_text(err: &dyn CTError) -> String {
+    let mut stderr = format!("base32: {err}\n");
+    if err.usage() {
+        stderr.push_str("Try 'base32 --help' for more information.\n");
+    }
+    stderr
+}
+
+fn base32_rows_from_output(
+    config: &base_common::BaseConfig,
+    output: &[u8],
+) -> Vec<Base32SemanticRow> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+    let mut line = 1;
+
+    for (index, byte) in output.iter().enumerate() {
+        if *byte == b'\n' {
+            rows.push(Base32SemanticRow {
+                mode: if config.base_decode {
+                    "decode".into()
+                } else {
+                    "encode".into()
+                },
+                wrap: config.base_wrap_cols.unwrap_or(76),
+                ignore_garbage: config.base_ignore_garbage,
+                input: if config.base_to_read.is_some() {
+                    "file".into()
+                } else {
+                    "stdin".into()
+                },
+                file: config.base_to_read.clone(),
+                line,
+                output_text: String::from_utf8_lossy(&output[start..index]).into_owned(),
+                byte_len: index - start,
+            });
+            start = index + 1;
+            line += 1;
+        }
+    }
+
+    if start < output.len() {
+        rows.push(Base32SemanticRow {
+            mode: if config.base_decode {
+                "decode".into()
+            } else {
+                "encode".into()
+            },
+            wrap: config.base_wrap_cols.unwrap_or(76),
+            ignore_garbage: config.base_ignore_garbage,
+            input: if config.base_to_read.is_some() {
+                "file".into()
+            } else {
+                "stdin".into()
+            },
+            file: config.base_to_read.clone(),
+            line,
+            output_text: String::from_utf8_lossy(&output[start..]).into_owned(),
+            byte_len: output.len() - start,
+        });
+    }
+
+    rows
+}
+
+fn base32_semantic_from_output(
+    config: &base_common::BaseConfig,
+    output: Vec<u8>,
+    stderr_text: String,
+    exit_code: i32,
+) -> Base32Semantic {
+    let classic_text = String::from_utf8_lossy(&output).into_owned();
+    Base32Semantic {
+        rows: base32_rows_from_output(config, &output),
+        classic_text,
+        classic_bytes: output,
+        stderr_text,
+        exit_code,
+    }
+}
+
+pub fn base32_native_semantic(args: impl ctcore::Args) -> CTResult<Base32Semantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let base32_about = t!("base32.about");
+    let base32_usage = t!("base32.usage");
+
+    let config = match base_common::base_parsing_command_args(args, base32_about, base32_usage) {
+        Ok(config) => config,
+        Err(err) => {
+            return Ok(Base32Semantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                classic_bytes: Vec::new(),
+                stderr_text: base32_render_error_text(err.as_ref()),
+                exit_code: err.code(),
+            });
+        }
+    };
+
+    let stdin_info = stdin();
+    let mut input_info = match base_common::get_base_input(&config, &stdin_info) {
+        Ok(input) => input,
+        Err(err) => {
+            return Ok(Base32Semantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                classic_bytes: Vec::new(),
+                stderr_text: base32_render_error_text(err.as_ref()),
+                exit_code: err.code(),
+            });
+        }
+    };
+
+    let mut input_bytes = Vec::new();
+    if let Err(err) = input_info
+        .read_to_end(&mut input_bytes)
+        .map_err_context(|| config.base_to_read.clone().unwrap_or_else(|| "-".into()))
+    {
+        return Ok(Base32Semantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            classic_bytes: Vec::new(),
+            stderr_text: base32_render_error_text(err.as_ref()),
+            exit_code: err.code(),
+        });
+    }
+
+    let mut output = Vec::new();
+    match base_common::handle_base_input(
+        &mut Cursor::new(&input_bytes),
+        &mut output,
+        Format::Base32,
+        config.base_wrap_cols,
+        config.base_ignore_garbage,
+        config.base_decode,
+    ) {
+        Ok(()) => Ok(base32_semantic_from_output(
+            &config,
+            output,
+            String::new(),
+            0,
+        )),
+        Err(err) => Ok(base32_semantic_from_output(
+            &config,
+            output,
+            base32_render_error_text(err.as_ref()),
+            err.code(),
+        )),
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -757,5 +935,53 @@ mod test {
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
         }
+    }
+
+    #[test]
+    fn test_base32_native_semantic_encode_row() {
+        let filename = "test_base32_native_semantic_encode_row.txt";
+        create_file_with_content(filename, "abc").expect("create base32 semantic fixture");
+
+        let semantic = base32_native_semantic(
+            [ctcore::ct_util_name(), filename]
+                .iter()
+                .map(OsString::from),
+        )
+        .expect("semantic");
+
+        delete_file(filename).expect("delete base32 semantic fixture");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "MFRGG===\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].mode, "encode");
+        assert_eq!(semantic.rows[0].input, "file");
+        assert_eq!(semantic.rows[0].file.as_deref(), Some(filename));
+        assert_eq!(semantic.rows[0].line, 1);
+        assert_eq!(semantic.rows[0].output_text, "MFRGG===");
+        assert_eq!(semantic.rows[0].byte_len, 8);
+        assert_eq!(semantic.rows[0].wrap, 76);
+        assert!(!semantic.rows[0].ignore_garbage);
+    }
+
+    #[test]
+    fn test_base32_native_semantic_invalid_decode_reports_error_metadata() {
+        let filename = "test_base32_native_semantic_invalid_decode.txt";
+        create_file_with_content(filename, "%%%").expect("create invalid base32 fixture");
+
+        let semantic = base32_native_semantic(
+            [ctcore::ct_util_name(), "--decode", filename]
+                .iter()
+                .map(OsString::from),
+        )
+        .expect("semantic");
+
+        delete_file(filename).expect("delete invalid base32 fixture");
+
+        assert_eq!(semantic.exit_code, 1);
+        assert_eq!(semantic.classic_text, "");
+        assert_eq!(semantic.rows, Vec::<Base32SemanticRow>::new());
+        assert_eq!(semantic.stderr_text, "base32: invalid input\n");
     }
 }

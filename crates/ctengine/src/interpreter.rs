@@ -686,11 +686,7 @@ pub fn lit_to_ct_value(lit: &Lit) -> CtValue {
 }
 
 fn lit_to_unknown_argv_ct_value(lit: &Lit) -> CtValue {
-    match lit {
-        Lit::Int(n) if *n < 0 => CtValue::String(n.to_string()),
-        Lit::Float(f) if f.is_sign_negative() => CtValue::String(f.to_string()),
-        _ => lit_to_ct_value(lit),
-    }
+    CtValue::String(lit.to_string())
 }
 
 fn interrupted_error() -> CtDiagnosticError {
@@ -1541,6 +1537,30 @@ mod tests {
                 .map(|arg| &arg.value)
                 .collect::<Vec<_>>(),
             vec![&CtValue::String("-5".into())]
+        );
+    }
+
+    #[test]
+    fn test_build_data_call_unknown_gnu_positionals_stringify_literals() {
+        let call = parse_single_call("seq 1 3 true 2.5");
+        let sig = DataSignature::new("seq", "seq")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible args",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true);
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        let values: Vec<&CtValue> = data_call.positionals.iter().map(|arg| &arg.value).collect();
+        assert_eq!(
+            values,
+            vec![
+                &CtValue::String("1".into()),
+                &CtValue::String("3".into()),
+                &CtValue::String("true".into()),
+                &CtValue::String("2.5".into()),
+            ]
         );
     }
 

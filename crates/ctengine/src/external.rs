@@ -131,7 +131,6 @@ impl ExternalInputEncoder {
             ExternalStdinMode::TextLines => match input {
                 CtPipelineData::ByteStream(mut stream) => {
                     std::io::copy(&mut stream, &mut writer)?;
-                    writer.write_all(b"\n")?;
                 }
                 CtPipelineData::Value(val, _) => {
                     writer.write_all(val.to_text().as_bytes())?;
@@ -234,6 +233,18 @@ mod tests {
 
         let mut buf = Vec::new();
         ExternalInputEncoder::encode(data, ExternalStdinMode::Raw, &mut buf).unwrap();
+        assert_eq!(buf, b"byte content");
+    }
+
+    #[test]
+    fn test_encode_text_lines_bytestream_preserves_bytes() {
+        let meta = CtPipelineMetadata::default();
+        let cursor = Cursor::new(b"byte content".to_vec());
+        let bs = CtByteStream::new(cursor, meta);
+        let data = CtPipelineData::ByteStream(bs);
+
+        let mut buf = Vec::new();
+        ExternalInputEncoder::encode(data, ExternalStdinMode::TextLines, &mut buf).unwrap();
         assert_eq!(buf, b"byte content");
     }
 }

@@ -100,14 +100,14 @@ pub fn argv_uses_stdin(argv: &[OsString], value_flags: &[&str]) -> bool {
             continue;
         }
         if arg.starts_with('-') && arg.len() > 1 {
-            if value_flags.contains(&arg.as_ref()) {
+            if let Some(consumes_next) = short_option_value_consumption(&arg, value_flags) {
                 if argv
                     .get(index + 1)
                     .is_some_and(|value| value.to_string_lossy() == "-")
                 {
                     return true;
                 }
-                index += 2;
+                index += if consumes_next { 2 } else { 1 };
             } else {
                 index += 1;
             }
@@ -151,6 +151,23 @@ pub fn argv_has_stdin_operand(argv: &[OsString], value_flags: &[&str]) -> bool {
     }
 
     false
+}
+
+fn short_option_value_consumption(arg: &str, value_flags: &[&str]) -> Option<bool> {
+    if !arg.starts_with('-') || arg.starts_with("--") || arg == "-" {
+        return None;
+    }
+
+    let mut chars = arg[1..].char_indices().peekable();
+    while let Some((offset, ch)) = chars.next() {
+        let flag = format!("-{ch}");
+        if value_flags.contains(&flag.as_str()) {
+            let has_inline_value = chars.peek().is_some();
+            let is_exact_flag = offset == 0 && !has_inline_value;
+            return Some(is_exact_flag || !has_inline_value);
+        }
+    }
+    None
 }
 
 fn write_values_as_lines(
@@ -292,6 +309,13 @@ mod tests {
         ];
 
         assert!(!argv_uses_stdin(&argv, &["--algorithm"]));
+    }
+
+    #[test]
+    fn argv_uses_stdin_understands_clustered_short_value_flags() {
+        let argv = vec!["fold".into(), "-aw".into(), "3".into()];
+
+        assert!(argv_uses_stdin(&argv, &["-w", "--width"]));
     }
 
     #[test]

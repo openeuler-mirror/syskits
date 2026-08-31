@@ -46,8 +46,6 @@ pub(crate) mod error_exit_status {
     pub const RUNCON_NOT_FOUND: i32 = 127;
     /// 无法执行命令
     pub const RUNCON_COULD_NOT_EXECUTE: i32 = 126;
-    /// 其他错误
-    pub const RUNCON_ANOTHER_ERROR: i32 = libc::EXIT_FAILURE;
 }
 
 /// runcon 命令的基础错误类型
@@ -179,13 +177,7 @@ pub(crate) struct RunconError {
 impl RunconError {
     /// 使用默认错误码创建错误
     pub(crate) fn new(e: DefaultError) -> Self {
-        let code = match e {
-            DefaultError::SELinuxNotEnabled
-            | DefaultError::CommandLine(_)
-            | DefaultError::MissingCommand => error_exit_status::RUNCON_CANCELED,
-            _ => error_exit_status::RUNCON_ANOTHER_ERROR,
-        };
-        Self::with_code(code, e)
+        Self::with_code(error_exit_status::RUNCON_CANCELED, e)
     }
 
     /// 使用指定错误码创建错误

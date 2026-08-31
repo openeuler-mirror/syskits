@@ -2497,12 +2497,19 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
 
 fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut W) {
     if config.sort == LsSort::Time {
-        entries.sort_by_key(|k| {
-            Reverse(
-                k.get_metadata(out)
-                    .and_then(|md| get_system_time(md, config))
-                    .unwrap_or(UNIX_EPOCH),
-            )
+        entries.sort_by(|a, b| {
+            let a_time = a
+                .get_metadata(out)
+                .and_then(|md| get_system_time(md, config))
+                .unwrap_or(UNIX_EPOCH);
+            let b_time = b
+                .get_metadata(out)
+                .and_then(|md| get_system_time(md, config))
+                .unwrap_or(UNIX_EPOCH);
+
+            b_time.cmp(&a_time).then_with(|| {
+                strcoll_compare(a.display_name.as_bytes(), b.display_name.as_bytes(), false)
+            })
         })
     } else if config.sort == LsSort::Size {
         entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)))
@@ -4336,6 +4343,60 @@ mod tests {
             tabify_grid_output("a.txt  b.txt  subdir\n", 8),
             "a.txt  b.txt  subdir\n"
         );
+    }
+
+    #[test]
+    fn time_sort_breaks_equal_mtime_by_name() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!(
+            "syskits-ls-time-sort-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let names = ["c.txt", "b.txt", "a.txt", "subdir"];
+        for name in names {
+            let path = temp_dir.join(name);
+            if name == "subdir" {
+                fs::create_dir(&path).unwrap();
+            } else {
+                std::fs::File::create(&path).unwrap();
+            }
+
+            let same_time = filetime::FileTime::from_unix_time(1_600_000_000, 0);
+            filetime::set_file_times(path, same_time, same_time).unwrap();
+        }
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-t"])
+            .unwrap();
+        let config = LsConfig::from(&matches).unwrap();
+        let mut entries = names
+            .into_iter()
+            .map(|name| {
+                PathData::new(
+                    temp_dir.join(name),
+                    None,
+                    Some(OsString::from(name)),
+                    &config,
+                    false,
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut out = Vec::new();
+
+        sort_entries(&mut entries, &config, &mut out);
+
+        let sorted_names = entries
+            .iter()
+            .map(|entry| entry.display_name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(sorted_names, ["a.txt", "b.txt", "c.txt", "subdir"]);
+
+        fs::remove_dir_all(temp_dir).unwrap();
     }
 
     #[test]

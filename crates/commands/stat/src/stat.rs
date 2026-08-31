@@ -918,8 +918,7 @@ impl Stater {
         match result {
             Ok(meta) => {
                 let tokens = self.select_tokens(&meta);
-                self.print_file_info(&meta, tokens, file, display_name);
-                0
+                self.print_file_info(&meta, tokens, file, display_name)
             }
             Err(e) => {
                 // 提取错误描述，不包含错误代码
@@ -1003,7 +1002,9 @@ impl Stater {
         tokens: &[StatToken],
         file: &OsStr,
         display_name: &str,
-    ) {
+    ) -> i32 {
+        let mut status = 0;
+
         for token in tokens {
             match token {
                 StatToken::Char(c) => print!("{c}"),
@@ -1018,11 +1019,20 @@ impl Stater {
                     modifier,
                     format,
                 } => {
-                    let output = self.get_file_output(meta, *format, file, display_name, *modifier);
+                    let (output, output_status) = self.get_file_output_with_status(
+                        meta,
+                        *format,
+                        file,
+                        display_name,
+                        *modifier,
+                    );
+                    status |= output_status;
                     print_it(&output, *flag, *width, *precision);
                 }
             }
         }
+
+        status
     }
 
     fn get_filesystem_output(
@@ -1068,32 +1078,36 @@ impl Stater {
         display_name: &str,
         modifier: Option<char>,
     ) -> StatOutputType {
-        let file_type = meta.file_type();
-        let mut context_str = "".to_string();
-        let substitute_string = "?".to_string();
+        self.get_file_output_without_diagnostics(meta, format, file, display_name, modifier)
+    }
 
-        if !file.is_empty() {
-            context_str = match selinux::SecurityContext::of_path(file, false, false) {
-                Err(_r) => {
-                    ct_show_warning!("failed to get security context of: {}", file.quote());
-                    substitute_string
-                }
-
-                Ok(None) => substitute_string,
-                Ok(Some(context)) => {
-                    let context = context.as_bytes();
-                    let context_strip_suffix = context.strip_suffix(&[0]).unwrap_or(context);
-                    String::from_utf8(context_strip_suffix.to_vec()).unwrap_or_else(|e| {
-                        ct_show_warning!(
-                            "getting security context of: {}: {}",
-                            file.quote(),
-                            e.to_string()
-                        );
-                        String::from_utf8_lossy(context_strip_suffix).into_owned()
-                    })
-                }
-            }
+    fn get_file_output_with_status(
+        &self,
+        meta: &fs::Metadata,
+        format: char,
+        file: &OsStr,
+        display_name: &str,
+        modifier: Option<char>,
+    ) -> (StatOutputType, i32) {
+        if format == 'C' {
+            return self.get_file_context_output(file, true);
         }
+
+        (
+            self.get_file_output_without_diagnostics(meta, format, file, display_name, modifier),
+            0,
+        )
+    }
+
+    fn get_file_output_without_diagnostics(
+        &self,
+        meta: &fs::Metadata,
+        format: char,
+        file: &OsStr,
+        display_name: &str,
+        modifier: Option<char>,
+    ) -> StatOutputType {
+        let file_type = meta.file_type();
 
         match format {
             // access rights in octal
@@ -1108,7 +1122,7 @@ impl Stater {
             'B' => StatOutputType::Unsigned(512),
 
             //SELinux security context string
-            'C' => StatOutputType::Str(context_str),
+            'C' => self.get_file_context_output(file, false).0,
             // device number - handle modifier for major/minor separation
             'd' => {
                 match modifier {
@@ -1252,6 +1266,54 @@ impl Stater {
         }
     }
 
+    fn get_file_context_output(
+        &self,
+        file: &OsStr,
+        emit_diagnostic: bool,
+    ) -> (StatOutputType, i32) {
+        if file.is_empty() {
+            return (StatOutputType::Str(String::new()), 0);
+        }
+
+        match selinux::SecurityContext::of_path(file, false, false) {
+            Err(err) => {
+                if emit_diagnostic {
+                    ct_show_error!(
+                        "failed to get security context of {}: {}",
+                        file.quote(),
+                        security_context_error_description(&err)
+                    );
+                }
+                (StatOutputType::Str("?".to_string()), 1)
+            }
+            Ok(None) => {
+                if emit_diagnostic {
+                    ct_show_error!(
+                        "failed to get security context of {}: No data available",
+                        file.quote()
+                    );
+                }
+                (StatOutputType::Str("?".to_string()), 1)
+            }
+            Ok(Some(context)) => {
+                let context = context.as_bytes();
+                let context_strip_suffix = context.strip_suffix(&[0]).unwrap_or(context);
+                let context_str =
+                    String::from_utf8(context_strip_suffix.to_vec()).unwrap_or_else(|e| {
+                        if emit_diagnostic {
+                            ct_show_warning!(
+                                "getting security context of {}: {}",
+                                file.quote(),
+                                e.to_string()
+                            );
+                        }
+                        String::from_utf8_lossy(context_strip_suffix).into_owned()
+                    });
+                (StatOutputType::Str(context_str), 0)
+            }
+        }
+    }
+
     fn default_format(show_fs: bool, terse: bool, show_dev_type: bool) -> String {
         if show_fs {
             if terse {
@@ -1275,6 +1337,15 @@ impl Stater {
                 t!("default_format.file_part4"),
             )
         }
+    }
+}
+
+fn security_context_error_description(err: &impl std::fmt::Display) -> String {
+    let text = err.to_string();
+    if let Some(pos) = text.find("(os error ") {
+        text[..pos].trim().trim_end_matches('.').to_string()
+    } else {
+        text.trim_end_matches('.').to_string()
     }
 }
 
@@ -2676,6 +2747,32 @@ mod test_stat_all {
             false,
         );
         assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_handle_file_stat_returns_failure_for_unreadable_context() {
+        let temp_dir = tempdir().unwrap();
+        let temp_file = temp_dir.path().join("test.txt");
+        File::create(&temp_file).unwrap();
+
+        if matches!(
+            selinux::SecurityContext::of_path(temp_file.as_os_str(), false, false),
+            Ok(Some(_))
+        ) {
+            return;
+        }
+
+        let file_path = temp_file.to_str().unwrap();
+        let matches = create_test_matches(vec![file_path], false, Some("%C"), false);
+        let stater = Stater::new(&matches).unwrap();
+
+        let result = stater.handle_file_stat(
+            &OsString::from(temp_file.as_os_str()),
+            temp_file.to_string_lossy().as_ref(),
+            false,
+        );
+
+        assert_eq!(result, 1);
     }
 
     #[test]

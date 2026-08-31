@@ -629,6 +629,7 @@ fn mv_handle_two_paths(
         // 如果目标存在且源是目录
     } else if target_exists && source_is_directory {
         if mv_options.overwrite == MvOverwriteMode::NoClobber {
+            set_ct_exit_code(1);
             return Ok(());
         }
 
@@ -1016,6 +1017,7 @@ fn mv_rename_with_hardlink_tracking(
             // 检查目标文件系统是否已存在该文件（需要覆盖）
             if to_path.exists() {
                 if options.overwrite == MvOverwriteMode::NoClobber {
+                    set_ct_exit_code(1);
                     return Ok(());
                 }
 
@@ -1142,6 +1144,7 @@ fn mv_rename(
     // 如果目标路径已存在，根据更新和覆盖选项进行处理
     if to_path.exists() {
         if options.overwrite == MvOverwriteMode::NoClobber {
+            set_ct_exit_code(1);
             return Ok(());
         }
 
@@ -2004,11 +2007,14 @@ mod tests {
 
     #[test]
     fn test_mv_no_clobber_existing_file_silently_skips() {
+        use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+
         let temp = tempdir().unwrap();
         let source = temp.path().join("source.txt");
         let target = temp.path().join("target.txt");
         fs::write(&source, b"new").unwrap();
         fs::write(&target, b"old").unwrap();
+        set_ct_exit_code(0);
 
         let mut opts = temp_mv_opts();
         opts.overwrite = MvOverwriteMode::NoClobber;
@@ -2017,6 +2023,8 @@ mod tests {
 
         assert_eq!(fs::read(&source).unwrap(), b"new");
         assert_eq!(fs::read(&target).unwrap(), b"old");
+        assert_eq!(get_ct_exit_code(), 1);
+        set_ct_exit_code(0);
     }
 
     #[test]

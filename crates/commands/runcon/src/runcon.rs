@@ -93,7 +93,7 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
         if let DefaultError::MissingCommand = r {
             return CTsageError::new(125, format!("{r}"));
         }
-        CTsageError::new(error_exit_status::RUNCON_ANOTHER_ERROR, format!("{r}"))
+        CTsageError::new(error_exit_status::RUNCON_CANCELED, format!("{r}"))
     })?;
 
     // 根据运行模式执行相应操作
@@ -285,6 +285,7 @@ impl RunconSettings {
         {
             // 自定义上下文模式
             let compute_transition_context = matches.get_flag(runcon_options::RUNCON_COMPUTE);
+            let command = args.next().ok_or(DefaultError::MissingCommand)?;
             let mode = RunconCommandLineMode::CustomContext {
                 is_compute_transition_context: compute_transition_context,
                 user: matches
@@ -299,7 +300,7 @@ impl RunconSettings {
                 range: matches
                     .get_one::<OsString>(runcon_options::RUNCON_RANGE)
                     .map(Into::into),
-                command: args.next(),
+                command: Some(command),
             };
 
             Ok(Self {
@@ -723,6 +724,20 @@ mod tests {
             let args = vec![
                 OsString::from("runcon"),
                 OsString::from("system_u:system_r:httpd_t"),
+            ]
+            .into_iter();
+
+            let result = RunconSettings::new(config, args);
+            assert!(matches!(result, Err(DefaultError::MissingCommand)));
+        }
+
+        #[test]
+        fn test_parse_custom_context_missing_command() {
+            let config = ct_app();
+            let args = vec![
+                OsString::from("runcon"),
+                OsString::from("-u"),
+                OsString::from("system_u"),
             ]
             .into_iter();
 

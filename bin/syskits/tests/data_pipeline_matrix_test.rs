@@ -147,6 +147,25 @@ fn assert_data_classic_matches_direct_with_data_args(
     assert_eq!(out.stderr, expected.stderr, "stderr mismatch for {label}");
 }
 
+fn split_chunks(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
+    let mut chunks = fs::read_dir(dir)
+        .expect("read split output dir")
+        .filter_map(|entry| {
+            let entry = entry.expect("read split dir entry");
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            if !file_name.starts_with("chunk_") {
+                return None;
+            }
+            Some((
+                file_name,
+                fs::read(entry.path()).expect("read split output file"),
+            ))
+        })
+        .collect::<Vec<_>>();
+    chunks.sort_by(|left, right| left.0.cmp(&right.0));
+    chunks
+}
+
 #[test]
 fn test_output_profile_matrix_single_axis_formats() {
     let tty_modes = [false, true];
@@ -272,6 +291,46 @@ fn data_phase_b_gnu_flags_match_direct_classic_output() {
     assert_data_classic_matches_direct(&["vdir", "-d", "-a", &dir]);
     assert_data_classic_matches_direct(&["who", "-q"]);
     assert_data_classic_matches_direct(&["whoami", "--help"]);
+}
+
+#[test]
+fn data_split_classic_help_matches_direct_split() {
+    assert_data_classic_matches_direct(&["split", "--help"]);
+}
+
+#[test]
+fn data_split_classic_flagged_files_match_direct_split() {
+    let direct_dir = TempDir::new().expect("direct tempdir");
+    let data_dir = TempDir::new().expect("data tempdir");
+    fs::write(direct_dir.path().join("input.txt"), "a\nb\nc\n").expect("write direct split input");
+    fs::write(data_dir.path().join("input.txt"), "a\nb\nc\n").expect("write data split input");
+
+    let direct = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(direct_dir.path())
+        .args(["split", "-l", "1", "input.txt", "chunk_"])
+        .output()
+        .expect("run direct split");
+    let data = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(data_dir.path())
+        .args([
+            "data",
+            "format=classic",
+            "split",
+            "-l",
+            "\"1\"",
+            "input.txt",
+            "chunk_",
+        ])
+        .output()
+        .expect("run data split classic");
+
+    assert_eq!(data.status.code(), direct.status.code());
+    assert_eq!(data.stdout, direct.stdout);
+    assert_eq!(data.stderr, direct.stderr);
+    assert_eq!(
+        split_chunks(data_dir.path()),
+        split_chunks(direct_dir.path())
+    );
 }
 
 #[test]

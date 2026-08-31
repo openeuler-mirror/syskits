@@ -129,6 +129,30 @@ pub fn ct_app() -> Command {
 }
 
 pub fn expr_main(args: impl ctcore::Args) -> CTResult<String> {
+    let output = expr_native_output(args)?;
+    let mut stdout = std::io::stdout();
+    stdout.write_all(&output.bytes)?;
+    stdout.write_all(b"\n")?;
+
+    if !output.truthy {
+        return Err(1.into());
+    }
+
+    Ok(String::from_utf8_lossy(&output.bytes).into_owned())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExprSemantic {
+    pub text: String,
+    pub truthy: bool,
+}
+
+struct ExprNativeOutput {
+    bytes: Vec<u8>,
+    truthy: bool,
+}
+
+fn expr_native_output(args: impl ctcore::Args) -> CTResult<ExprNativeOutput> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args: Vec<OsString> = args.into_iter().collect();
@@ -163,17 +187,18 @@ pub fn expr_main(args: impl ctcore::Args) -> CTResult<String> {
 
     let result = SyntaxTreeAstNode::parse_bytes(&token_bytes)?.eval()?;
     let output_bytes = result.clone().eval_as_bytes();
+    Ok(ExprNativeOutput {
+        bytes: output_bytes,
+        truthy: is_syntax_tree_truthy(&result),
+    })
+}
 
-    let mut stdout = std::io::stdout();
-    stdout.write_all(&output_bytes)?;
-    stdout.write_all(b"\n")?;
-
-    // 如果结果为假，则返回错误
-    if !is_syntax_tree_truthy(&result) {
-        return Err(1.into());
-    }
-
-    Ok(String::from_utf8_lossy(&output_bytes).into_owned())
+pub fn expr_native_semantic(args: impl ctcore::Args) -> CTResult<ExprSemantic> {
+    let output = expr_native_output(args)?;
+    Ok(ExprSemantic {
+        text: String::from_utf8_lossy(&output.bytes).into_owned(),
+        truthy: output.truthy,
+    })
 }
 
 #[derive(Default)]

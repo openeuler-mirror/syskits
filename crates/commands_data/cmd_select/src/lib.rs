@@ -22,6 +22,11 @@ impl DataCommand for CmdSelect {
                 "column names to keep",
                 CtType::String,
             ))
+            .rest(CtPositionalArg::optional(
+                "columns",
+                "additional column names to keep",
+                CtType::String,
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -124,6 +129,13 @@ mod tests {
             panic!("expected Record");
         }
     }
+
+    #[test]
+    fn test_select_signature_allows_multiple_columns() {
+        let sig = CmdSelect.signature();
+        assert!(sig.rest_positional_arg().is_some());
+    }
+
     #[test]
     fn test_select_multiple() {
         let r = CmdSelect

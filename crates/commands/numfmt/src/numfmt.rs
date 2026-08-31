@@ -25,7 +25,10 @@ use sys_locale::get_locale;
 
 use crate::errors::*;
 use crate::flags::*;
-use crate::format::{numfmt_format_and_print, numfmt_format_and_print_abort};
+use crate::format::{
+    numfmt_format_and_print, numfmt_format_and_print_abort, numfmt_format_line,
+    numfmt_format_line_abort,
+};
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -64,6 +67,338 @@ pub mod numfmt_flags {
     pub const NUMFMT_TO_UNIT: &str = "to-unit";
     pub const NUMFMT_TO_UNIT_DEFAULT: &str = "1";
     pub const NUMFMT_ZERO_TERMINATED: &str = "zero-terminated";
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NumfmtRow {
+    pub index: usize,
+    pub source: String,
+    pub input: String,
+    pub output: String,
+    pub status: String,
+    pub error: Option<String>,
+    pub transform_from: String,
+    pub transform_to: String,
+    pub invalid_mode: String,
+    pub zero_terminated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NumfmtSemantic {
+    pub rows: Vec<NumfmtRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+fn numfmt_unit_name(unit: &NumfmtUnit) -> &'static str {
+    match unit {
+        NumfmtUnit::Auto => "auto",
+        NumfmtUnit::Si => "si",
+        NumfmtUnit::Iec(false) => "iec",
+        NumfmtUnit::Iec(true) => "iec-i",
+        NumfmtUnit::None => "none",
+    }
+}
+
+#[cfg(test)]
+mod native_semantic_tests {
+    use super::numfmt_native_semantic;
+    use std::ffi::OsString;
+
+    #[test]
+    fn numfmt_native_semantic_renders_rows_for_command_line_numbers() {
+        let args = ["numfmt", "--to=si", "1000"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1.0K\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].input, "1000");
+        assert_eq!(semantic.rows[0].output, "1.0K");
+        assert_eq!(semantic.rows[0].status, "formatted");
+        assert_eq!(semantic.rows[0].transform_to, "si");
+    }
+
+    #[test]
+    fn numfmt_native_semantic_warn_mode_keeps_passthrough_rows() {
+        let args = ["numfmt", "--invalid=warn", "hello"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "hello\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].status, "passthrough");
+        assert_eq!(
+            semantic.rows[0].error.as_deref(),
+            Some("invalid number: 'hello'")
+        );
+        assert_eq!(semantic.stderr_text, "numfmt: invalid number: 'hello'\n");
+    }
+}
+
+fn numfmt_invalid_mode_name(mode: &NumfmtInvalidModes) -> &'static str {
+    match mode {
+        NumfmtInvalidModes::Abort => "abort",
+        NumfmtInvalidModes::Fail => "fail",
+        NumfmtInvalidModes::Warn => "warn",
+        NumfmtInvalidModes::Ignore => "ignore",
+    }
+}
+
+fn numfmt_prefixed_stderr(message: &str) -> String {
+    format!("numfmt: {message}\n")
+}
+
+fn trim_numfmt_line_ending(rendered: &str, zero_terminated: bool) -> String {
+    if zero_terminated {
+        rendered.strip_suffix('\0').unwrap_or(rendered).to_string()
+    } else {
+        rendered.strip_suffix('\n').unwrap_or(rendered).to_string()
+    }
+}
+
+fn numfmt_passthrough_text(
+    input_line: &str,
+    zero_terminated: bool,
+    has_line_ending: bool,
+) -> String {
+    if zero_terminated {
+        format!("{input_line}\0")
+    } else if has_line_ending {
+        format!("{input_line}\n")
+    } else {
+        input_line.to_string()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn numfmt_push_row(
+    semantic: &mut NumfmtSemantic,
+    options: &NumfmtConfigs,
+    index: usize,
+    source: &str,
+    input: &str,
+    rendered: String,
+    status: &str,
+    error: Option<String>,
+) {
+    semantic.classic_text.push_str(&rendered);
+    semantic.rows.push(NumfmtRow {
+        index,
+        source: source.to_string(),
+        input: input.to_string(),
+        output: trim_numfmt_line_ending(&rendered, options.zero_terminated),
+        status: status.to_string(),
+        error,
+        transform_from: numfmt_unit_name(&options.transform.from).to_string(),
+        transform_to: numfmt_unit_name(&options.transform.to).to_string(),
+        invalid_mode: numfmt_invalid_mode_name(&options.invalid).to_string(),
+        zero_terminated: options.zero_terminated,
+    });
+}
+
+fn numfmt_process_semantic_line(
+    semantic: &mut NumfmtSemantic,
+    options: &NumfmtConfigs,
+    index: usize,
+    source: &str,
+    input_line: &str,
+    has_line_ending: bool,
+) -> CTResult<bool> {
+    if options.invalid == NumfmtInvalidModes::Abort {
+        match numfmt_format_line_abort(input_line, options) {
+            Ok(rendered) => {
+                numfmt_push_row(
+                    semantic,
+                    options,
+                    index,
+                    source,
+                    input_line,
+                    rendered,
+                    "formatted",
+                    None,
+                );
+                return Ok(true);
+            }
+            Err(error) => {
+                let error_message = error.error.clone();
+                semantic.classic_text.push_str(&error.partial_output);
+                semantic
+                    .stderr_text
+                    .push_str(&numfmt_prefixed_stderr(&error_message));
+                semantic.exit_code = semantic.exit_code.max(2);
+                semantic.rows.push(NumfmtRow {
+                    index,
+                    source: source.to_string(),
+                    input: input_line.to_string(),
+                    output: trim_numfmt_line_ending(&error.partial_output, options.zero_terminated),
+                    status: "partial-error".to_string(),
+                    error: Some(error_message),
+                    transform_from: numfmt_unit_name(&options.transform.from).to_string(),
+                    transform_to: numfmt_unit_name(&options.transform.to).to_string(),
+                    invalid_mode: numfmt_invalid_mode_name(&options.invalid).to_string(),
+                    zero_terminated: options.zero_terminated,
+                });
+                return Ok(false);
+            }
+        }
+    }
+
+    match numfmt_format_line(input_line, options) {
+        Ok(rendered) => {
+            numfmt_push_row(
+                semantic,
+                options,
+                index,
+                source,
+                input_line,
+                rendered,
+                "formatted",
+                None,
+            );
+        }
+        Err(error_message) => {
+            match options.invalid {
+                NumfmtInvalidModes::Fail => {
+                    semantic
+                        .stderr_text
+                        .push_str(&numfmt_prefixed_stderr(&error_message));
+                    semantic.exit_code = semantic.exit_code.max(2);
+                }
+                NumfmtInvalidModes::Warn => {
+                    semantic
+                        .stderr_text
+                        .push_str(&numfmt_prefixed_stderr(&error_message));
+                }
+                NumfmtInvalidModes::Ignore | NumfmtInvalidModes::Abort => {}
+            }
+
+            let rendered =
+                numfmt_passthrough_text(input_line, options.zero_terminated, has_line_ending);
+            numfmt_push_row(
+                semantic,
+                options,
+                index,
+                source,
+                input_line,
+                rendered,
+                "passthrough",
+                Some(error_message),
+            );
+        }
+    }
+
+    Ok(true)
+}
+
+fn numfmt_collect_args_semantic<'a>(
+    args: impl Iterator<Item = &'a str>,
+    numfmt_configs: &NumfmtConfigs,
+    semantic: &mut NumfmtSemantic,
+) -> CTResult<()> {
+    for (index, value) in args.enumerate() {
+        if !numfmt_process_semantic_line(semantic, numfmt_configs, index + 1, "arg", value, true)? {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn numfmt_collect_buffer_semantic<R>(
+    input: R,
+    numfmt_configs: &NumfmtConfigs,
+    semantic: &mut NumfmtSemantic,
+) -> CTResult<()>
+where
+    R: BufRead,
+{
+    if numfmt_configs.zero_terminated {
+        for (index, line_result) in input.split(0).enumerate() {
+            match line_result {
+                Ok(bytes) => {
+                    let line = String::from_utf8_lossy(&bytes).to_string();
+                    if index < numfmt_configs.header {
+                        numfmt_push_row(
+                            semantic,
+                            numfmt_configs,
+                            index + 1,
+                            "stdin",
+                            &line,
+                            format!("{line}\0"),
+                            "header",
+                            None,
+                        );
+                    } else if !numfmt_process_semantic_line(
+                        semantic,
+                        numfmt_configs,
+                        index + 1,
+                        "stdin",
+                        &line,
+                        true,
+                    )? {
+                        break;
+                    }
+                }
+                Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
+            }
+        }
+    } else {
+        let mut input = input;
+        let mut line = String::new();
+        let mut index = 0usize;
+
+        loop {
+            line.clear();
+            let bytes = input
+                .read_line(&mut line)
+                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
+            if bytes == 0 {
+                break;
+            }
+
+            let has_newline = line.ends_with('\n');
+            if has_newline {
+                line.pop();
+                if line.ends_with('\r') {
+                    line.pop();
+                }
+            }
+
+            if index < numfmt_configs.header {
+                let rendered = if has_newline {
+                    format!("{line}\n")
+                } else {
+                    line.clone()
+                };
+                numfmt_push_row(
+                    semantic,
+                    numfmt_configs,
+                    index + 1,
+                    "stdin",
+                    &line,
+                    rendered,
+                    "header",
+                    None,
+                );
+            } else if !numfmt_process_semantic_line(
+                semantic,
+                numfmt_configs,
+                index + 1,
+                "stdin",
+                &line,
+                has_newline,
+            )? {
+                break;
+            }
+            index += 1;
+        }
+    }
+
+    Ok(())
 }
 
 fn numfmt_handle_args<'a>(
@@ -535,6 +870,71 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     } else {
         Ok(())
     }
+}
+
+pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let normalized_args = normalize_numfmt_args(args);
+    let matches = match ct_app().try_get_matches_from(normalized_args) {
+        Ok(matches) => matches,
+        Err(err) if err.kind() == ErrorKind::UnknownArgument => {
+            return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
+                "unrecognized option\nTry 'numfmt --help' for more information.".to_string(),
+            )));
+        }
+        Err(err) => return Err(err.into()),
+    };
+    let options = numfmt_parse_options(&matches).map_err(NumfmtError::NumfmtIllegalArgument)?;
+    let debug = matches.get_flag(numfmt_flags::NUMFMT_DEBUG);
+    let grouping = matches.get_flag(numfmt_flags::NUMFMT_GROUPING) || options.format.is_grouping;
+    let has_command_line_numbers = matches
+        .get_many::<String>(numfmt_flags::NUMFMT_NUMBER)
+        .is_some();
+
+    let mut semantic = NumfmtSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
+    };
+
+    if debug && has_command_line_numbers && options.header > 0 {
+        semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
+            "--header ignored with command-line input",
+        ));
+    }
+
+    if debug && !has_conversion_option(&matches, &options, grouping) {
+        semantic
+            .stderr_text
+            .push_str(&numfmt_prefixed_stderr("no conversion option specified"));
+    }
+
+    if debug && grouping && is_c_locale() {
+        semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
+            "grouping has no effect in this locale",
+        ));
+    }
+
+    match matches.get_many::<String>(numfmt_flags::NUMFMT_NUMBER) {
+        Some(values) => {
+            numfmt_collect_args_semantic(values.map(|s| s.as_str()), &options, &mut semantic)?
+        }
+        None => {
+            let stdin = std::io::stdin();
+            let mut locked_stdin = stdin.lock();
+            numfmt_collect_buffer_semantic(&mut locked_stdin, &options, &mut semantic)?
+        }
+    };
+
+    if debug && options.invalid == NumfmtInvalidModes::Fail && semantic.exit_code == 2 {
+        semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
+            "failed to convert some of the input numbers",
+        ));
+    }
+
+    Ok(semantic)
 }
 
 pub fn ct_app() -> Command {

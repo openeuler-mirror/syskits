@@ -49,6 +49,12 @@ pub struct NumfmtWhitespaceSplitter<'a> {
     pub s: Option<&'a str>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NumfmtAbortRenderError {
+    pub partial_output: String,
+    pub error: String,
+}
+
 impl<'a> Iterator for NumfmtWhitespaceSplitter<'a> {
     type Item = (&'a str, &'a str);
 
@@ -483,7 +489,7 @@ fn get_padded_number(
     }
 }
 
-fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result<()> {
+fn numfmt_format_line_delimited(s: &str, options: &NumfmtConfigs) -> Result<String> {
     let delimiter = options.delimiter.as_ref().unwrap();
 
     let mut out = String::new();
@@ -518,11 +524,16 @@ fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result
         out.push('\n');
     }
 
-    print!("{out}");
+    Ok(out)
+}
+
+#[cfg(test)]
+fn numfmt_format_and_print_delimited(s: &str, options: &NumfmtConfigs) -> Result<()> {
+    let _ = numfmt_format_line_delimited(s, options)?;
     Ok(())
 }
 
-fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
+fn numfmt_format_line_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<String> {
     let mut out = String::new();
 
     for (n, (prefix, field)) in (1..).zip(NumfmtWhitespaceSplitter { s: Some(s) }) {
@@ -573,48 +584,75 @@ fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -
         out.push('\n');
     }
 
-    print!("{out}");
+    Ok(out)
+}
+
+#[cfg(test)]
+fn numfmt_format_and_print_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
+    let _ = numfmt_format_line_whitespace(s, numfmt_configs)?;
     Ok(())
 }
 
-fn numfmt_format_and_print_delimited_abort(s: &str, options: &NumfmtConfigs) -> Result<()> {
+fn numfmt_format_line_delimited_abort(
+    s: &str,
+    options: &NumfmtConfigs,
+) -> std::result::Result<String, NumfmtAbortRenderError> {
     let delimiter = options.delimiter.as_ref().unwrap();
+    let mut out = String::new();
 
     if delimiter.is_empty() {
         if ctcore::ct_ranges::contain(&options.fields, 1) {
-            print!("{}", numfmt_format_string(s.trim_start(), options, None)?);
+            match numfmt_format_string(s.trim_start(), options, None) {
+                Ok(rendered) => out.push_str(&rendered),
+                Err(error) => {
+                    return Err(NumfmtAbortRenderError {
+                        partial_output: out,
+                        error,
+                    });
+                }
+            }
         } else {
-            print!("{s}");
+            out.push_str(s);
         }
     } else {
         for (n, field) in (1..).zip(s.split(delimiter)) {
             let is_field_selected = ctcore::ct_ranges::contain(&options.fields, n);
 
             if n > 1 {
-                print!("{delimiter}");
+                out.push_str(delimiter);
             }
 
             if is_field_selected {
-                print!(
-                    "{}",
-                    numfmt_format_string(field.trim_start(), options, None)?
-                );
+                match numfmt_format_string(field.trim_start(), options, None) {
+                    Ok(rendered) => out.push_str(&rendered),
+                    Err(error) => {
+                        return Err(NumfmtAbortRenderError {
+                            partial_output: out,
+                            error,
+                        });
+                    }
+                }
             } else {
-                print!("{field}");
+                out.push_str(field);
             }
         }
     }
 
     if options.zero_terminated {
-        print!("\0");
+        out.push('\0');
     } else {
-        println!();
+        out.push('\n');
     }
 
-    Ok(())
+    Ok(out)
 }
 
-fn numfmt_format_and_print_whitespace_abort(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
+fn numfmt_format_line_whitespace_abort(
+    s: &str,
+    numfmt_configs: &NumfmtConfigs,
+) -> std::result::Result<String, NumfmtAbortRenderError> {
+    let mut out = String::new();
+
     for (n, (prefix, field)) in (1..).zip(NumfmtWhitespaceSplitter { s: Some(s) }) {
         let is_field_selected = ctcore::ct_ranges::contain(&numfmt_configs.fields, n);
 
@@ -622,7 +660,7 @@ fn numfmt_format_and_print_whitespace_abort(s: &str, numfmt_configs: &NumfmtConf
             let is_empty_prefix = prefix.is_empty();
 
             let prefix_str = if n > 1 {
-                print!(" ");
+                out.push(' ');
                 &prefix[1..]
             } else {
                 prefix
@@ -634,31 +672,56 @@ fn numfmt_format_and_print_whitespace_abort(s: &str, numfmt_configs: &NumfmtConf
                 None
             };
 
-            print!(
-                "{}",
-                numfmt_format_string(field, numfmt_configs, implicit_padding)?
-            );
+            match numfmt_format_string(field, numfmt_configs, implicit_padding) {
+                Ok(rendered) => out.push_str(&rendered),
+                Err(error) => {
+                    return Err(NumfmtAbortRenderError {
+                        partial_output: out,
+                        error,
+                    });
+                }
+            }
         } else if numfmt_configs.zero_terminated {
             for ch in prefix.chars() {
                 if ch.is_whitespace() {
-                    print!(" ");
+                    out.push(' ');
                 } else {
-                    print!("{ch}");
+                    out.push(ch);
                 }
             }
-            print!("{field}");
+            out.push_str(field);
         } else {
-            print!("{prefix}{field}");
+            out.push_str(prefix);
+            out.push_str(field);
         }
     }
 
     if numfmt_configs.zero_terminated {
-        print!("\0");
+        out.push('\0');
     } else {
-        println!();
+        out.push('\n');
     }
 
-    Ok(())
+    Ok(out)
+}
+
+pub fn numfmt_format_line(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<String> {
+    if numfmt_configs.delimiter.is_some() {
+        numfmt_format_line_delimited(s, numfmt_configs)
+    } else {
+        numfmt_format_line_whitespace(s, numfmt_configs)
+    }
+}
+
+pub fn numfmt_format_line_abort(
+    s: &str,
+    numfmt_configs: &NumfmtConfigs,
+) -> std::result::Result<String, NumfmtAbortRenderError> {
+    if numfmt_configs.delimiter.is_some() {
+        numfmt_format_line_delimited_abort(s, numfmt_configs)
+    } else {
+        numfmt_format_line_whitespace_abort(s, numfmt_configs)
+    }
 }
 
 /// 根据所选选项格式化一行文本。
@@ -666,18 +729,20 @@ fn numfmt_format_and_print_whitespace_abort(s: &str, numfmt_configs: &NumfmtConf
 /// 给定一行文本 "s"，将该行文本拆分成若干字段，对选定的数字字段进行转换和format，
 /// 并将结果打印到stdout。未被选中转换的字段将原封不动地通过。
 pub fn numfmt_format_and_print(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
-    if numfmt_configs.delimiter.is_some() {
-        numfmt_format_and_print_delimited(s, numfmt_configs)
-    } else {
-        numfmt_format_and_print_whitespace(s, numfmt_configs)
-    }
+    print!("{}", numfmt_format_line(s, numfmt_configs)?);
+    Ok(())
 }
 
 pub fn numfmt_format_and_print_abort(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
-    if numfmt_configs.delimiter.is_some() {
-        numfmt_format_and_print_delimited_abort(s, numfmt_configs)
-    } else {
-        numfmt_format_and_print_whitespace_abort(s, numfmt_configs)
+    match numfmt_format_line_abort(s, numfmt_configs) {
+        Ok(rendered) => {
+            print!("{rendered}");
+            Ok(())
+        }
+        Err(error) => {
+            print!("{}", error.partial_output);
+            Err(error.error)
+        }
     }
 }
 

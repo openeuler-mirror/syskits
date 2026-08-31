@@ -2193,6 +2193,44 @@ mod tests {
         use serial_test::serial;
         use std::cmp::Ordering;
         use std::env;
+        use std::ffi::OsString;
+
+        struct EnvVarGuard {
+            saved: Vec<(&'static str, Option<OsString>)>,
+        }
+
+        impl EnvVarGuard {
+            fn set(vars: &[(&'static str, Option<&str>)]) -> Self {
+                let saved = vars
+                    .iter()
+                    .map(|(key, _)| (*key, env::var_os(key)))
+                    .collect::<Vec<_>>();
+
+                for (key, value) in vars {
+                    unsafe {
+                        match value {
+                            Some(value) => env::set_var(key, value),
+                            None => env::remove_var(key),
+                        }
+                    }
+                }
+
+                Self { saved }
+            }
+        }
+
+        impl Drop for EnvVarGuard {
+            fn drop(&mut self) {
+                for (key, value) in self.saved.drain(..) {
+                    unsafe {
+                        match value {
+                            Some(value) => env::set_var(key, value),
+                            None => env::remove_var(key),
+                        }
+                    }
+                }
+            }
+        }
 
         #[test]
         #[serial]
@@ -2240,39 +2278,26 @@ mod tests {
         #[serial]
         fn test_compare_ignore_case_with_locale() {
             let input = JoinInput::new(Sep::Whitespaces, true, CheckOrder::Disabled);
+            let _guard =
+                EnvVarGuard::set(&[("LC_ALL", None), ("LC_COLLATE", Some("en_US.UTF-8"))]);
 
             // 测试忽略大小写的比较
-            unsafe {
-                env::set_var("LC_COLLATE", "en_US.UTF-8");
-            }
-
             let result = input.compare(Some(b"ABC"), Some(b"abc"));
             assert_eq!(result, Ordering::Equal);
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_COLLATE");
-            }
         }
 
         #[test]
         #[serial]
         fn test_hard_locale_collate_integration() {
+            let _guard = EnvVarGuard::set(&[("LC_ALL", None), ("LC_COLLATE", Some("C"))]);
+
             // 测试hard_locale_collate函数的使用
-            unsafe {
-                env::set_var("LC_COLLATE", "C");
-            }
             assert!(!hard_locale_collate());
 
             unsafe {
                 env::set_var("LC_COLLATE", "zh_CN.UTF-8");
             }
             assert!(hard_locale_collate());
-
-            // 清理环境变量
-            unsafe {
-                env::remove_var("LC_COLLATE");
-            }
         }
 
         #[test]

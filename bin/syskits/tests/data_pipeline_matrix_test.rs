@@ -117,6 +117,36 @@ fn run_syskits_with_stdin(args: &[&str], stdin: &[u8]) -> Output {
     child.wait_with_output().expect("wait for syskits")
 }
 
+fn assert_data_classic_matches_direct(args: &[&str]) {
+    assert_data_classic_matches_direct_with_data_args(args[0], args, args);
+}
+
+fn assert_data_classic_matches_direct_with_data_args(
+    label: &str,
+    direct_args: &[&str],
+    data_command_args: &[&str],
+) {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(direct_args)
+        .output()
+        .expect("run direct syskits command");
+
+    let mut data_args = vec!["data", "format=classic"];
+    data_args.extend_from_slice(data_command_args);
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(data_args)
+        .output()
+        .expect("run syskits data classic command");
+
+    assert_eq!(
+        out.status.code(),
+        expected.status.code(),
+        "exit code mismatch for {label}"
+    );
+    assert_eq!(out.stdout, expected.stdout, "stdout mismatch for {label}");
+    assert_eq!(out.stderr, expected.stderr, "stderr mismatch for {label}");
+}
+
 #[test]
 fn test_output_profile_matrix_single_axis_formats() {
     let tty_modes = [false, true];
@@ -162,6 +192,47 @@ fn test_run_data_entry_status_matrix_success_failure_timeout() {
 }
 
 #[test]
+fn data_phase_a_gnu_flags_match_direct_classic_output() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("sample.txt");
+    let link = temp_dir.path().join("sample.link");
+    fs::write(&file, "alpha\n").expect("write phase-a fixture");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&file, &link).expect("create phase-a symlink");
+    #[cfg(not(unix))]
+    fs::write(&link, "alpha\n").expect("write phase-a link fallback");
+
+    let dir = temp_dir.path().display().to_string();
+    let file = file.display().to_string();
+    let link = link.display().to_string();
+
+    assert_data_classic_matches_direct(&["basename", "-s", ".txt", &file]);
+    assert_data_classic_matches_direct_with_data_args(
+        "date",
+        &["date", "-u", "+%Y"],
+        &["date", "-u", "\"+%Y\""],
+    );
+    assert_data_classic_matches_direct(&["df", "-a", "/"]);
+    assert_data_classic_matches_direct_with_data_args(
+        "env",
+        &["env", "-0", "-i", "FOO=bar"],
+        &["env", "-0", "-i", "\"FOO=bar\""],
+    );
+    assert_data_classic_matches_direct(&["ls", "-a", &dir]);
+    assert_data_classic_matches_direct(&["nproc", "--all"]);
+    assert_data_classic_matches_direct_with_data_args(
+        "printenv",
+        &["printenv", "-0", "PATH"],
+        &["printenv", "-0", "\"PATH\""],
+    );
+    assert_data_classic_matches_direct(&["pwd", "-P"]);
+    assert_data_classic_matches_direct(&["readlink", "-f", &link]);
+    assert_data_classic_matches_direct(&["realpath", "--relative-to", &dir, &file]);
+    assert_data_classic_matches_direct(&["tty", "-s"]);
+    assert_data_classic_matches_direct(&["uptime", "-s"]);
+}
+
+#[test]
 fn data_base32_json_default_is_information_rich() {
     let temp_dir = TempDir::new().expect("tempdir");
     let path = temp_dir.path().join("sample.txt");
@@ -192,6 +263,86 @@ fn data_base32_json_default_is_information_rich() {
         "stdout: {stdout:?}"
     );
     assert!(stdout.contains(&path), "stdout: {stdout:?}");
+}
+
+#[test]
+fn data_uname_classic_all_flag_matches_direct_uname() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["uname", "-a"])
+        .output()
+        .expect("run direct syskits uname -a");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "uname", "-a"])
+        .output()
+        .expect("run syskits data uname -a classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn data_arch_classic_invalid_flag_matches_direct_arch() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["arch", "-a"])
+        .output()
+        .expect("run direct syskits arch -a");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "arch", "-a"])
+        .output()
+        .expect("run syskits data arch -a classic");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
+fn shell_entry_accepts_gnu_flags_like_data_entry() {
+    let expected_uname = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["uname", "-a"])
+        .output()
+        .expect("run direct syskits uname -a");
+    let shell_uname = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "uname", "-a"])
+        .output()
+        .expect("run syskits shell uname -a classic");
+
+    assert_eq!(shell_uname.status.code(), expected_uname.status.code());
+    assert_eq!(shell_uname.stdout, expected_uname.stdout);
+    assert_eq!(shell_uname.stderr, expected_uname.stderr);
+
+    let expected_arch = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["arch", "-a"])
+        .output()
+        .expect("run direct syskits arch -a");
+    let shell_arch = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "arch", "-a"])
+        .output()
+        .expect("run syskits shell arch -a classic");
+
+    assert_eq!(shell_arch.status.code(), expected_arch.status.code());
+    assert_eq!(shell_arch.stdout, expected_arch.stdout);
+    assert_eq!(shell_arch.stderr, expected_arch.stderr);
+}
+
+#[test]
+fn data_uname_json_machine_flag_uses_explicit_flags() {
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "uname", "-m"])
+        .output()
+        .expect("run syskits data uname -m");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"machine\""), "stdout: {stdout:?}");
+    assert!(!stdout.contains("\"kernel_release\""), "stdout: {stdout:?}");
 }
 
 #[test]

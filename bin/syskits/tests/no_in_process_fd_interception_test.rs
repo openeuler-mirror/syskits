@@ -47,12 +47,73 @@ fn forbidden_code_patterns() -> Vec<String> {
     .collect()
 }
 
+fn forbidden_stdin_fd_rewrite_patterns() -> Vec<String> {
+    [
+        &[
+            119, 105, 116, 104, 95, 115, 116, 100, 105, 110, 95, 119, 114, 105, 116, 101, 114,
+        ][..],
+        &[
+            110, 105, 120, 58, 58, 117, 110, 105, 115, 116, 100, 58, 58, 100, 117, 112, 50,
+        ][..],
+        &[108, 105, 98, 99, 58, 58, 100, 117, 112, 50][..],
+        &[100, 117, 112, 50, 40, 115, 116, 100, 105, 110][..],
+        &[83, 84, 68, 73, 78, 95, 70, 73, 76, 69, 78, 79][..],
+    ]
+    .into_iter()
+    .map(|bytes| String::from_utf8(bytes.to_vec()).expect("forbidden pattern is utf-8"))
+    .collect()
+}
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .expect("bin/syskits should be two levels below repo root")
         .to_path_buf()
+}
+
+#[test]
+fn data_pipeline_does_not_rewrite_current_process_stdin_fd() {
+    let root = repo_root();
+    let mut files = Vec::new();
+    collect_rs_files(&root.join("crates").join("ctengine"), &mut files);
+    files.push(root.join("crates/ctcore/src/lib/ct_mods/ct_io.rs"));
+    collect_rs_files(&root.join("crates").join("commands_data"), &mut files);
+
+    let this_test = Path::new(file!());
+    let forbidden_patterns = forbidden_stdin_fd_rewrite_patterns();
+    let allowed_files = [
+        Path::new("crates/commands/nohup/src/nohup.rs"),
+        Path::new("crates/commands/wc/src/wc.rs"),
+    ];
+    let mut violations = Vec::new();
+
+    for path in files {
+        if path.ends_with(this_test) {
+            continue;
+        }
+        let relative = path.strip_prefix(&root).unwrap_or(&path);
+        if allowed_files.contains(&relative) {
+            continue;
+        }
+
+        let text = fs::read_to_string(&path).expect("read source file");
+        for pattern in &forbidden_patterns {
+            if text.contains(pattern) {
+                violations.push(format!(
+                    "{} contains forbidden current-process stdin FD rewrite pattern `{}`",
+                    relative.display(),
+                    pattern
+                ));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "data pipeline must not rewrite the current process stdin fd:\n{}",
+        violations.join("\n")
+    );
 }
 
 fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) {

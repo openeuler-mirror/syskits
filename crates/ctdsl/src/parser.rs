@@ -31,6 +31,7 @@ use ctpipeline::CtSpan;
 
 use crate::ast::{Arg, Call, CompOp, Expr, Lit};
 use crate::error::ParseError;
+use crate::lexer::Lexer;
 use crate::token::{SpannedToken, Token};
 
 /// 递归下降语法分析器
@@ -195,10 +196,12 @@ impl Parser {
             Token::LongFlagValue(name, value) => (name.clone(), value.clone()),
             _ => unreachable!(),
         };
+        let value_span = st.span.clone();
+        let value = parse_lit_fragment(&value, &value_span)?;
         Ok(Arg::LongFlagValue {
             name: flag_name,
-            value: Lit::Ident(value),
-            value_span: st.span.clone(),
+            value,
+            value_span,
             span: st.span.clone(),
         })
     }
@@ -253,22 +256,7 @@ impl Parser {
     fn parse_lit(&mut self) -> Result<(Lit, CtSpan), ParseError> {
         let st = self.advance();
         let span = st.span.clone();
-        let lit = match &st.token {
-            Token::IntLit(n) => Lit::Int(*n),
-            Token::FloatLit(f) => Lit::Float(*f),
-            Token::StrLit(s) => Lit::String(s.clone()),
-            Token::BoolLit(b) => Lit::Bool(*b),
-            Token::SizeLit(b) => Lit::Size(*b),
-            Token::DurationLit(ns) => Lit::Duration(*ns),
-            Token::DateTimeLit(ns) => Lit::DateTime(*ns),
-            Token::Ident(s) => Lit::Ident(s.clone()),
-            other => {
-                return Err(ParseError::syntax(
-                    format!("expected literal, got `{other}`"),
-                    st.span.clone(),
-                ));
-            }
-        };
+        let lit = token_to_lit(&st.token, &span)?;
         Ok((lit, span))
     }
 
@@ -312,6 +300,43 @@ impl Parser {
             )),
         }
     }
+}
+
+fn parse_lit_fragment(value: &str, span: &CtSpan) -> Result<Lit, ParseError> {
+    let tokens = Lexer::new(value).tokenize()?;
+    let first = tokens
+        .first()
+        .ok_or_else(|| ParseError::syntax("expected literal", span.clone()))?;
+    if !matches!(tokens.get(1).map(|st| &st.token), Some(Token::Eof)) {
+        return Err(ParseError::syntax(
+            format!("expected literal, got `{value}`"),
+            span.clone(),
+        ));
+    }
+    match token_to_lit(&first.token, span) {
+        Ok(lit) => Ok(lit),
+        Err(_) => Ok(Lit::Ident(value.to_string())),
+    }
+}
+
+fn token_to_lit(token: &Token, span: &CtSpan) -> Result<Lit, ParseError> {
+    let lit = match token {
+        Token::IntLit(n) => Lit::Int(*n),
+        Token::FloatLit(f) => Lit::Float(*f),
+        Token::StrLit(s) => Lit::String(s.clone()),
+        Token::BoolLit(b) => Lit::Bool(*b),
+        Token::SizeLit(b) => Lit::Size(*b),
+        Token::DurationLit(ns) => Lit::Duration(*ns),
+        Token::DateTimeLit(ns) => Lit::DateTime(*ns),
+        Token::Ident(s) => Lit::Ident(s.clone()),
+        other => {
+            return Err(ParseError::syntax(
+                format!("expected literal, got `{other}`"),
+                span.clone(),
+            ));
+        }
+    };
+    Ok(lit)
 }
 
 #[cfg(test)]
@@ -435,6 +460,59 @@ mod tests {
                 value: Lit::Ident(value),
                 ..
             } if name == "to" && value == "si"
+        ));
+    }
+
+    #[test]
+    fn test_parse_long_flag_equals_typed_values() {
+        let expr =
+            parse(r#"run-external echo --timeout-ms=1500 --dry-run=true --ratio=1.5 --label="x""#);
+        let args = &expr.stages()[0].args;
+        assert!(matches!(
+            &args[1],
+            Arg::LongFlagValue {
+                name,
+                value: Lit::Int(1500),
+                ..
+            } if name == "timeout-ms"
+        ));
+        assert!(matches!(
+            &args[2],
+            Arg::LongFlagValue {
+                name,
+                value: Lit::Bool(true),
+                ..
+            } if name == "dry-run"
+        ));
+        assert!(matches!(
+            &args[3],
+            Arg::LongFlagValue {
+                name,
+                value: Lit::Float(value),
+                ..
+            } if name == "ratio" && (*value - 1.5).abs() < f64::EPSILON
+        ));
+        assert!(matches!(
+            &args[4],
+            Arg::LongFlagValue {
+                name,
+                value: Lit::String(value),
+                ..
+            } if name == "label" && value == "x"
+        ));
+    }
+
+    #[test]
+    fn test_parse_long_flag_equals_dash_prefixed_value_as_ident() {
+        let expr = parse("sort --key=-n");
+        let args = &expr.stages()[0].args;
+        assert!(matches!(
+            &args[0],
+            Arg::LongFlagValue {
+                name,
+                value: Lit::Ident(value),
+                ..
+            } if name == "key" && value == "-n"
         ));
     }
 

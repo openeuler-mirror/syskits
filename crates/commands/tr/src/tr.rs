@@ -29,6 +29,9 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::OsString;
+use std::io::Read;
+use std::process::{Command as ProcessCommand, Stdio};
+use std::thread;
 
 // 1. 定义配置标志常量
 pub mod tr_flags {
@@ -47,6 +50,134 @@ struct TrFlags {
     is_squeeze_flag: bool,
     is_truncate_set1_flag: bool,
     sets: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrRow {
+    pub row_index: usize,
+    pub line: String,
+    pub byte_len: usize,
+    pub terminated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrSemantic {
+    pub operation: String,
+    pub complement: bool,
+    pub delete: bool,
+    pub squeeze: bool,
+    pub truncate_set1: bool,
+    pub set1: Option<String>,
+    pub set2: Option<String>,
+    pub rows: Vec<TrRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct DirectTrInvocation {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
+}
+
+fn tr_operation_name(flags: &TrFlags) -> &'static str {
+    match (
+        flags.is_delete_flag,
+        flags.is_squeeze_flag,
+        flags.sets.len() >= 2,
+    ) {
+        (true, true, _) => "delete_squeeze",
+        (true, false, _) => "delete",
+        (false, true, true) => "translate_squeeze",
+        (false, true, false) => "squeeze",
+        _ => "translate",
+    }
+}
+
+fn tr_rows_from_output(output: &[u8]) -> Vec<TrRow> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+
+    for (index, byte) in output.iter().enumerate() {
+        if *byte == b'\n' {
+            let chunk = &output[start..=index];
+            rows.push(TrRow {
+                row_index: rows.len() + 1,
+                line: String::from_utf8_lossy(chunk).into_owned(),
+                byte_len: chunk.len(),
+                terminated: true,
+            });
+            start = index + 1;
+        }
+    }
+
+    if start < output.len() {
+        let chunk = &output[start..];
+        rows.push(TrRow {
+            row_index: rows.len() + 1,
+            line: String::from_utf8_lossy(chunk).into_owned(),
+            byte_len: chunk.len(),
+            terminated: false,
+        });
+    }
+
+    rows
+}
+
+fn thread_panic_to_io_error(_: Box<dyn std::any::Any + Send + 'static>) -> std::io::Error {
+    std::io::Error::other("tr semantic helper thread panicked")
+}
+
+fn run_tr_direct_process(argv: &[OsString], stdin_bytes: &[u8]) -> CTResult<DirectTrInvocation> {
+    let current_exe = std::env::current_exe()?;
+    let mut child = ProcessCommand::new(current_exe)
+        .args(argv)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let mut child_stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| std::io::Error::other("failed to open tr child stdin"))?;
+    let mut child_stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("failed to open tr child stdout"))?;
+    let mut child_stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| std::io::Error::other("failed to open tr child stderr"))?;
+
+    let stdin_payload = stdin_bytes.to_vec();
+    let stdin_task = thread::spawn(move || -> std::io::Result<()> {
+        child_stdin.write_all(&stdin_payload)?;
+        child_stdin.flush()?;
+        Ok(())
+    });
+    let stdout_task = thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut output = Vec::new();
+        child_stdout.read_to_end(&mut output)?;
+        Ok(output)
+    });
+    let stderr_task = thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut output = Vec::new();
+        child_stderr.read_to_end(&mut output)?;
+        Ok(output)
+    });
+
+    let status = child.wait()?;
+    stdin_task.join().map_err(thread_panic_to_io_error)??;
+    let stdout = stdout_task.join().map_err(thread_panic_to_io_error)??;
+    let stderr = stderr_task.join().map_err(thread_panic_to_io_error)??;
+
+    Ok(DirectTrInvocation {
+        stdout,
+        stderr,
+        exit_code: status.code().unwrap_or(1),
+    })
 }
 
 impl TrFlags {
@@ -187,6 +318,35 @@ pub fn tr_main<R: BufRead, W: Write>(
 
     // 3. 使用配置执行主要逻辑
     tr_process(reader, writer, flags)
+}
+
+pub fn tr_native_semantic(args: impl ctcore::Args) -> CTResult<TrSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let matches = ct_app().try_get_matches_from(argv.clone())?;
+    let flags = TrFlags::new(&matches)?;
+
+    let mut stdin_bytes = Vec::new();
+    stdin().read_to_end(&mut stdin_bytes)?;
+
+    let direct = run_tr_direct_process(&argv, &stdin_bytes)?;
+    let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
+
+    Ok(TrSemantic {
+        operation: tr_operation_name(&flags).into(),
+        complement: flags.is_complement_flag,
+        delete: flags.is_delete_flag,
+        squeeze: flags.is_squeeze_flag,
+        truncate_set1: flags.is_truncate_set1_flag,
+        set1: flags.sets.first().cloned(),
+        set2: flags.sets.get(1).cloned(),
+        rows: tr_rows_from_output(&direct.stdout),
+        classic_text,
+        stderr_text: String::from_utf8_lossy(&direct.stderr).into_owned(),
+        exit_code: direct.exit_code,
+    })
 }
 
 struct StrictWriter<W: Write> {
@@ -396,6 +556,45 @@ mod tests {
         // Test execute method - help command should return an error but not crash
         let args = vec![OsString::from("tr"), OsString::from("--help")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[test]
+    fn tr_rows_from_output_tracks_termination() {
+        let rows = tr_rows_from_output(b"ALPHA\nBETA");
+
+        assert_eq!(
+            rows,
+            vec![
+                TrRow {
+                    row_index: 1,
+                    line: "ALPHA\n".into(),
+                    byte_len: 6,
+                    terminated: true,
+                },
+                TrRow {
+                    row_index: 2,
+                    line: "BETA".into(),
+                    byte_len: 4,
+                    terminated: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn tr_operation_name_reports_translate_and_delete() {
+        let translate = TrFlags {
+            sets: vec!["a-z".into(), "A-Z".into()],
+            ..Default::default()
+        };
+        assert_eq!(tr_operation_name(&translate), "translate");
+
+        let delete = TrFlags {
+            is_delete_flag: true,
+            sets: vec!["a".into()],
+            ..Default::default()
+        };
+        assert_eq!(tr_operation_name(&delete), "delete");
     }
 
     /// 测试命令行参数解析相关功能

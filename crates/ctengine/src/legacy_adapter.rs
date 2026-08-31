@@ -155,6 +155,7 @@ mod tests {
     fn call_with_args(args: Vec<Arg>) -> Call {
         Call {
             name: "echo".to_string(),
+            force_external: false,
             args,
             span: inline_span(0, 4),
         }

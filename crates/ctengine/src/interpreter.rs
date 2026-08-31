@@ -213,7 +213,7 @@ fn eval_merged_where_select(
 }
 
 fn parse_where_condition_from_call(call: &Call) -> Option<WhereCondition> {
-    if call.name != "where" {
+    if call.force_external || call.name != "where" {
         return None;
     }
     if call.args.len() != 1 {
@@ -230,7 +230,7 @@ fn parse_where_condition_from_call(call: &Call) -> Option<WhereCondition> {
 }
 
 fn parse_select_columns_from_call(call: &Call) -> Option<Vec<String>> {
-    if call.name != "select" {
+    if call.force_external || call.name != "select" {
         return None;
     }
     let mut cols = Vec::new();
@@ -247,12 +247,17 @@ fn parse_select_columns_from_call(call: &Call) -> Option<Vec<String>> {
 }
 
 fn project_record(fields: Vec<(String, CtValue)>, cols: &[String]) -> Vec<(String, CtValue)> {
+    let mut field_index = HashMap::with_capacity(fields.len());
+    for (idx, (key, _)) in fields.iter().enumerate() {
+        field_index.entry(key.as_str()).or_insert(idx);
+    }
+
     cols.iter()
         .filter_map(|col| {
-            fields
-                .iter()
-                .find(|(k, _)| k == col)
-                .map(|(k, v)| (k.clone(), v.clone()))
+            field_index.get(col.as_str()).map(|idx| {
+                let (key, value) = &fields[*idx];
+                (key.clone(), value.clone())
+            })
         })
         .collect()
 }
@@ -269,15 +274,15 @@ fn eval_call(
     input: CtPipelineData,
     ctx: &DataEngineContext,
 ) -> Result<CtPipelineData, CtDiagnosticError> {
-    if let Some(external_name) = call.name.strip_prefix('~') {
-        if external_name.is_empty() {
+    if call.force_external {
+        if call.name.is_empty() {
             return Err(CtDiagnosticError::with_span(
                 "external command prefix `~` requires a command name",
                 call.span.clone(),
             ));
         }
         let ext_args = external_args_from_call(call);
-        let mut spec = crate::external::ExternalCallSpec::quick(external_name, &ext_args);
+        let mut spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
         spec.exit_policy = crate::external::ExternalExitPolicy::AllowNonZero;
         return crate::external::ExternalExecutor::run(spec, input, ctx);
     }
@@ -1174,11 +1179,16 @@ fn estimate_rows(data: &CtPipelineData) -> usize {
 }
 
 fn format_call(call: &Call) -> String {
+    let display_name = if call.force_external {
+        format!("~{}", call.name)
+    } else {
+        call.name.clone()
+    };
     if call.args.is_empty() {
-        return call.name.clone();
+        return display_name;
     }
     let mut parts = Vec::with_capacity(call.args.len() + 1);
-    parts.push(call.name.clone());
+    parts.push(display_name);
     for arg in &call.args {
         match arg {
             Arg::Positional { value, .. } => parts.push(value.to_string()),
@@ -1466,6 +1476,59 @@ mod tests {
         assert!(matches!(trace.stages[0].status, TraceStatus::Error(_)));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_eval_forced_external_skips_registry_and_allows_nonzero() {
+        struct RegistryFalse;
+        impl DataCommand for RegistryFalse {
+            fn signature(&self) -> DataSignature {
+                DataSignature::new("false", "false")
+            }
+
+            fn run(
+                &self,
+                _call: &DataCall,
+                _input: CtPipelineData,
+                _ctx: &DataEngineContext,
+            ) -> Result<CtPipelineData, CtDiagnosticError> {
+                Err(CtDiagnosticError::simple(
+                    "registry false should be skipped",
+                ))
+            }
+        }
+
+        let expr = ctdsl::parse("~false").unwrap();
+        let registry = CommandRegistry::from_factories(&[("false", || Box::new(RegistryFalse))]);
+        let ctx = DataEngineContext::new(registry, None, None);
+
+        let out = eval_pipeline(&expr, CtPipelineData::Empty, &ctx).unwrap();
+        let CtPipelineData::ByteStream(mut stream) = out else {
+            panic!("expected forced external to return ByteStream");
+        };
+        let mut bytes = Vec::new();
+        stream
+            .read_to_end(&mut bytes)
+            .expect("forced external should allow non-zero status");
+        assert!(bytes.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_eval_unknown_command_external_fallback_still_fails_on_nonzero() {
+        let expr = ctdsl::parse("false").unwrap();
+        let ctx = DataEngineContext::new(CommandRegistry::empty(), None, None);
+
+        let out = eval_pipeline(&expr, CtPipelineData::Empty, &ctx).unwrap();
+        let CtPipelineData::ByteStream(mut stream) = out else {
+            panic!("expected external fallback to return ByteStream");
+        };
+        let mut bytes = Vec::new();
+        let err = stream
+            .read_to_end(&mut bytes)
+            .expect_err("ordinary external fallback should reject non-zero status");
+        assert!(err.to_string().contains("failed with exit code"));
+    }
+
     fn parse_single_call(src: &str) -> Call {
         let expr = ctdsl::parse(src).unwrap();
         expr.stages()[0].clone()
@@ -1698,6 +1761,31 @@ mod tests {
             }
             _ => panic!("expected list output"),
         }
+    }
+
+    #[test]
+    fn test_project_record_preserves_order_duplicates_missing_and_first_wins() {
+        let fields = vec![
+            ("a".to_string(), CtValue::Int(1)),
+            ("b".to_string(), CtValue::Int(2)),
+            ("a".to_string(), CtValue::Int(99)),
+            ("c".to_string(), CtValue::Int(3)),
+        ];
+        let cols = vec![
+            "c".to_string(),
+            "missing".to_string(),
+            "a".to_string(),
+            "a".to_string(),
+        ];
+
+        assert_eq!(
+            project_record(fields, &cols),
+            vec![
+                ("c".to_string(), CtValue::Int(3)),
+                ("a".to_string(), CtValue::Int(1)),
+                ("a".to_string(), CtValue::Int(1)),
+            ]
+        );
     }
 
     #[test]

@@ -72,6 +72,19 @@ pub fn precheck_expr(
     let mut current = CtType::Any;
 
     for (idx, stage) in expr.stages().iter().enumerate() {
+        if stage.force_external {
+            diags.push(PrecheckDiagnostic::warning(
+                idx,
+                Some(stage.span.clone()),
+                format!(
+                    "precheck: external command `{}`; skip type-chain check",
+                    stage.name
+                ),
+            ));
+            current = CtType::Any;
+            continue;
+        }
+
         let Some(sig) = signatures.get(&stage.name) else {
             diags.push(PrecheckDiagnostic::warning(
                 idx,
@@ -195,6 +208,21 @@ mod tests {
                 .any(|d| matches!(d.level, PrecheckLevel::Error) && d.stage_index == 2),
             "unknown stage should invalidate upstream inferred type to avoid false hard errors"
         );
+    }
+
+    #[test]
+    fn test_precheck_forced_external_skips_matching_internal_signature() {
+        let expr = parse("~select name").expect("parse should pass");
+        let mut table = HashMap::new();
+        table.insert(
+            "select".to_string(),
+            sig("select", Some(CtType::Record), Some(CtType::Record)),
+        );
+
+        let diags = precheck_expr(&expr, &table);
+        assert_eq!(diags.len(), 1);
+        assert!(matches!(diags[0].level, PrecheckLevel::Warning));
+        assert!(diags[0].message.contains("external command `select`"));
     }
 
     #[test]

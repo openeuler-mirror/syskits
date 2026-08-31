@@ -20,7 +20,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::{Args, ct_show_error};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, stdin, stdout};
+use std::io::{BufRead, BufReader, Write, stdin, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 /// 行号格式化工具的标志和选项
@@ -75,6 +75,24 @@ pub struct NlFlags {
     files: Vec<String>,
     // 状态控制
     stats: NlStats,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NlRow {
+    pub kind: String,
+    pub section: String,
+    pub numbered: bool,
+    pub line_number: Option<i64>,
+    pub rendered_number: Option<String>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NlSemantic {
+    pub rows: Vec<NlRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 impl Default for NlFlags {
@@ -372,6 +390,152 @@ enum NlSectionDelimiter {
 }
 
 impl NlSectionDelimiter {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Header => "header",
+            Self::Body => "body",
+            Self::Footer => "footer",
+        }
+    }
+}
+
+fn nl_process_reader<R, W, F>(
+    writer: &mut W,
+    reader: &mut BufReader<R>,
+    flags: &mut NlFlags,
+    mut on_row: F,
+) -> CTResult<()>
+where
+    R: std::io::Read,
+    W: std::io::Write,
+    F: FnMut(NlRow),
+{
+    let mut current_numbering_style = &flags.body_numbering;
+    let mut current_section = String::from("body");
+    let mut buf = Vec::new();
+
+    loop {
+        buf.clear();
+        let n = reader
+            .read_until(b'\n', &mut buf)
+            .map_err_context(|| "could not read line".to_string())?;
+
+        if n == 0 {
+            break;
+        }
+
+        let mut line_len = buf.len();
+        if line_len > 0 && buf[line_len - 1] == b'\n' {
+            line_len -= 1;
+            if line_len > 0 && buf[line_len - 1] == b'\r' {
+                line_len -= 1;
+            }
+        }
+        let is_empty = line_len == 0;
+
+        if is_empty {
+            flags.stats.consecutive_empty_lines += 1;
+        } else {
+            flags.stats.consecutive_empty_lines = 0;
+        };
+
+        let lossy_line = String::from_utf8_lossy(&buf[..line_len]);
+
+        let new_numbering_style =
+            match NlSectionDelimiter::parse(&lossy_line, &flags.section_delimiter) {
+                Some(section) => {
+                    current_section = section.as_str().to_string();
+                    Some(section)
+                }
+                None => None,
+            };
+
+        if let Some(new_style) = new_numbering_style {
+            current_numbering_style = match new_style {
+                NlSectionDelimiter::Header => &flags.header_numbering,
+                NlSectionDelimiter::Body => &flags.body_numbering,
+                NlSectionDelimiter::Footer => &flags.footer_numbering,
+            };
+            if flags.is_renumber {
+                flags.stats.line_number = Some(flags.starting_line_number);
+            }
+            writeln!(writer)?;
+            on_row(NlRow {
+                kind: "section_break".into(),
+                section: current_section.clone(),
+                numbered: false,
+                line_number: None,
+                rendered_number: None,
+                text: String::new(),
+            });
+            continue;
+        }
+
+        let is_line_numbered = match current_numbering_style {
+            NlNumberingStyle::All => {
+                if is_empty {
+                    if flags.join_blank_lines > 0 {
+                        flags.stats.consecutive_empty_lines % flags.join_blank_lines == 0
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
+            }
+            NlNumberingStyle::NonEmpty => !is_empty,
+            NlNumberingStyle::None => false,
+            NlNumberingStyle::Regex(re) => re.is_match(&lossy_line),
+        };
+
+        if is_line_numbered {
+            let Some(line_number) = flags.stats.line_number else {
+                return Err(CtSimpleError::new(1, "line number overflow"));
+            };
+            let rendered_number = flags.number_format.format(line_number, flags.number_width);
+
+            write!(writer, "{}{}", rendered_number, flags.number_separator)?;
+            writer.write_all(&buf)?;
+            if buf.last() != Some(&b'\n') {
+                writeln!(writer)?;
+            }
+
+            on_row(NlRow {
+                kind: "line".into(),
+                section: current_section.clone(),
+                numbered: true,
+                line_number: Some(line_number),
+                rendered_number: Some(rendered_number),
+                text: lossy_line.into_owned(),
+            });
+
+            match line_number.checked_add(flags.line_increment) {
+                Some(new_line_number) => flags.stats.line_number = Some(new_line_number),
+                None => flags.stats.line_number = None,
+            }
+        } else {
+            let spaces = " ".repeat(flags.number_width + flags.number_separator.len());
+            write!(writer, "{spaces}")?;
+            writer.write_all(&buf)?;
+            if buf.last() != Some(&b'\n') {
+                writeln!(writer)?;
+            }
+
+            on_row(NlRow {
+                kind: "line".into(),
+                section: current_section.clone(),
+                numbered: false,
+                line_number: None,
+                rendered_number: None,
+                text: lossy_line.into_owned(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+impl NlSectionDelimiter {
     /// 解析分节符
     ///
     /// # 参数
@@ -468,6 +632,75 @@ where
     Ok(())
 }
 
+pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let processed_args = standardize_nl_args(args);
+    let matches = ct_app().try_get_matches_from(processed_args)?;
+    let mut flags = NlFlags::new(matches)?;
+    let files = flags.files.clone();
+
+    let mut writer = std::io::BufWriter::new(Vec::new());
+    let mut rows = Vec::new();
+    let mut stderr_text = String::new();
+    let mut had_errors = false;
+
+    for file in &files {
+        if file == "-" {
+            let mut buffer = BufReader::new(stdin());
+            if let Err(err) =
+                nl_process_reader(&mut writer, &mut buffer, &mut flags, |row| rows.push(row))
+            {
+                stderr_text.push_str(&format!("nl: {err}\n"));
+                had_errors = true;
+            }
+        } else {
+            let path = Path::new(file.as_str());
+            if path.is_dir() {
+                stderr_text.push_str(&format!("nl: {}: Is a directory\n", path.display()));
+                had_errors = true;
+            } else {
+                match File::open(path) {
+                    Ok(reader) => {
+                        let mut buffer = BufReader::new(reader);
+                        if let Err(err) =
+                            nl_process_reader(&mut writer, &mut buffer, &mut flags, |row| {
+                                rows.push(row)
+                            })
+                        {
+                            stderr_text.push_str(&format!("nl: {err}\n"));
+                            had_errors = true;
+                        }
+                    }
+                    Err(err) => {
+                        if err.kind() == std::io::ErrorKind::NotFound {
+                            stderr_text
+                                .push_str(&format!("nl: {file}: No such file or directory\n"));
+                        } else {
+                            stderr_text.push_str(&format!("nl: {file}: {err}\n"));
+                        }
+                        had_errors = true;
+                    }
+                }
+            }
+        }
+    }
+
+    writer
+        .flush()
+        .map_err_context(|| "could not flush output".to_string())?;
+    let output = writer
+        .into_inner()
+        .map_err(|err| CtSimpleError::new(1, format!("could not collect output: {err}")))?;
+
+    Ok(NlSemantic {
+        rows,
+        classic_text: String::from_utf8_lossy(&output).into_owned(),
+        stderr_text,
+        exit_code: if had_errors { 1 } else { 0 },
+    })
+}
+
 /// 主要的行号格式化处理函数
 ///
 /// # 参数
@@ -482,108 +715,7 @@ where
     R: std::io::Read,
     W: std::io::Write,
 {
-    let mut current_numbering_style = &flags.body_numbering;
-    let mut buf = Vec::new();
-
-    loop {
-        buf.clear();
-        // 使用 read_until 直接读取字节流，不再使用带 UTF-8 洁癖的 lines() 迭代器
-        let n = reader
-            .read_until(b'\n', &mut buf)
-            .map_err_context(|| "could not read line".to_string())?;
-
-        if n == 0 {
-            break; // EOF
-        }
-
-        // 计算剥离了 \r 和 \n 的有效数据长度，用于逻辑判断
-        let mut line_len = buf.len();
-        if line_len > 0 && buf[line_len - 1] == b'\n' {
-            line_len -= 1;
-            if line_len > 0 && buf[line_len - 1] == b'\r' {
-                line_len -= 1;
-            }
-        }
-        let is_empty = line_len == 0;
-
-        if is_empty {
-            flags.stats.consecutive_empty_lines += 1;
-        } else {
-            flags.stats.consecutive_empty_lines = 0;
-        };
-
-        // 将字节流进行容错转换，以便进行字符串比较和正则匹配
-        let lossy_line = String::from_utf8_lossy(&buf[..line_len]);
-
-        let new_numbering_style =
-            match NlSectionDelimiter::parse(&lossy_line, &flags.section_delimiter) {
-                Some(NlSectionDelimiter::Header) => Some(&flags.header_numbering),
-                Some(NlSectionDelimiter::Body) => Some(&flags.body_numbering),
-                Some(NlSectionDelimiter::Footer) => Some(&flags.footer_numbering),
-                None => None,
-            };
-
-        if let Some(new_style) = new_numbering_style {
-            current_numbering_style = new_style;
-            if flags.is_renumber {
-                flags.stats.line_number = Some(flags.starting_line_number);
-            }
-            writeln!(writer)?;
-            continue;
-        }
-
-        let is_line_numbered = match current_numbering_style {
-            NlNumberingStyle::All => {
-                if is_empty {
-                    if flags.join_blank_lines > 0 {
-                        flags.stats.consecutive_empty_lines % flags.join_blank_lines == 0
-                    } else {
-                        true
-                    }
-                } else {
-                    true
-                }
-            }
-            NlNumberingStyle::NonEmpty => !is_empty,
-            NlNumberingStyle::None => false,
-            NlNumberingStyle::Regex(re) => re.is_match(&lossy_line),
-        };
-
-        if is_line_numbered {
-            let Some(line_number) = flags.stats.line_number else {
-                return Err(CtSimpleError::new(1, "line number overflow"));
-            };
-
-            // 写入行号和分隔符
-            write!(
-                writer,
-                "{}{}",
-                flags.number_format.format(line_number, flags.number_width),
-                flags.number_separator
-            )?;
-
-            // 直接原封不动地写入原始字节流（包含潜在的非 UTF-8 字符和换行符）
-            writer.write_all(&buf)?;
-
-            // 如果最后一行没有换行符，补上一个
-            if buf.last() != Some(&b'\n') {
-                writeln!(writer)?;
-            }
-
-            match line_number.checked_add(flags.line_increment) {
-                Some(new_line_number) => flags.stats.line_number = Some(new_line_number),
-                None => flags.stats.line_number = None,
-            }
-        } else {
-            let spaces = " ".repeat(flags.number_width + 1);
-            write!(writer, "{spaces}")?;
-            writer.write_all(&buf)?;
-            if buf.last() != Some(&b'\n') {
-                writeln!(writer)?;
-            }
-        }
-    }
-    Ok(())
+    nl_process_reader(writer, reader, flags, |_| {})
 }
 
 /// 命令行应用程序配置函数

@@ -39,6 +39,10 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
+fn tty_stdin_needs_eof(stdin_content: Option<&[u8]>) -> bool {
+    stdin_content.is_some_and(|content| !content.is_empty())
+}
+
 /// 信号处理器
 /// 用于处理测试过程中的信号（如 SIGTERM、SIGINT 等）
 pub struct SignalHandler {
@@ -743,6 +747,8 @@ impl IsolatedSandbox {
             }
         };
 
+        let mut output = Vec::new();
+
         if let Some(content) = stdin_content
             && !content.is_empty()
         {
@@ -771,13 +777,50 @@ impl IsolatedSandbox {
                     written += rc as usize;
                 }
             }
+
+            let echo_deadline = std::time::Instant::now() + Duration::from_millis(20);
+            loop {
+                let mut buf = [0u8; 4096];
+                let rc = unsafe {
+                    libc::read(master_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+                };
+                if rc > 0 {
+                    output.extend_from_slice(&buf[..rc as usize]);
+                    continue;
+                }
+                if rc == 0 {
+                    break;
+                }
+
+                let err = Errno::last();
+                if err == Errno::EAGAIN {
+                    if std::time::Instant::now() >= echo_deadline {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                if err == Errno::EIO {
+                    break;
+                }
+
+                let stderr = encode_if_hex(&format!(
+                    "Failed to read from pty: {}",
+                    std::io::Error::last_os_error()
+                ));
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr,
+                    exit_code: 1,
+                });
+            }
         }
 
-        // Always send exactly one EOT byte so PTY stdin can observe EOF
-        // even when no stdin payload is provided.
-        unsafe {
-            let eof = b"\x04";
-            libc::write(master_fd, eof.as_ptr() as *const libc::c_void, 1);
+        if tty_stdin_needs_eof(stdin_content) {
+            unsafe {
+                let eof = b"\x04";
+                libc::write(master_fd, eof.as_ptr() as *const libc::c_void, 1);
+            }
         }
 
         // Close the slave fd in the parent to allow EOF on master when the child exits.
@@ -785,7 +828,6 @@ impl IsolatedSandbox {
             libc::close(slave_fd);
         }
 
-        let mut output = Vec::new();
         let start = std::time::Instant::now();
         let mut child_exited = false;
         let mut child_status = None;
@@ -993,13 +1035,10 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_command_tty_without_stdin_sends_eof() -> Result<()> {
-        let mut sandbox = IsolatedSandbox::new(false)?;
-        let result = sandbox.execute_command_tty("cat", &[], None, true, Some(2))?;
-        assert_eq!(result.exit_code, 0);
-        assert_eq!(result.stdout, "");
-        assert_eq!(result.stderr, "");
-        Ok(())
+    fn test_tty_eof_is_only_sent_for_non_empty_stdin() {
+        assert!(!tty_stdin_needs_eof(None));
+        assert!(!tty_stdin_needs_eof(Some(b"")));
+        assert!(tty_stdin_needs_eof(Some(b"data")));
     }
 
     #[test]

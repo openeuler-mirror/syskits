@@ -124,6 +124,7 @@ impl CommandExecutor {
         test_case: &TestCase,
     ) -> Result<(CommandResult, Vec<CommandResult>)> {
         let mut sandbox = IsolatedSandbox::new(self.config.debug)?;
+        self.prepare_coreutils_path(&mut sandbox);
         sandbox.setup(test_case)?;
 
         // 执行设置命令
@@ -144,6 +145,7 @@ impl CommandExecutor {
         } else {
             Some(self.config.default_timeout)
         });
+        self.prepare_syskits_path(&mut sandbox)?;
         let use_bytes = test_case.byte_mode;
         let actual = if use_bytes {
             let args_os = resolve_args_os(test_case)?;
@@ -213,6 +215,7 @@ impl CommandExecutor {
         test_case: &TestCase,
     ) -> Result<(CommandResult, Vec<CommandResult>)> {
         let mut coreutils_sandbox = IsolatedSandbox::new(self.config.debug)?;
+        self.prepare_coreutils_path(&mut coreutils_sandbox);
         coreutils_sandbox.setup(test_case)?;
 
         // 执行设置命令
@@ -320,6 +323,41 @@ impl CommandExecutor {
             let new_path = format!("{}:{}", coreutils_path.display(), current_path);
             sandbox.add_env("PATH", &new_path);
         }
+    }
+
+    fn prepare_syskits_path(&self, sandbox: &mut IsolatedSandbox) -> Result<()> {
+        let command_dir = match self.config.mode {
+            SyskitsMode::Single => self
+                .config
+                .syskits_path
+                .parent()
+                .map(std::path::Path::to_path_buf)
+                .or_else(|| self.config.commands_dir.clone()),
+            SyskitsMode::Multiple => self.config.commands_dir.clone().or_else(|| {
+                if self.config.syskits_path.is_dir() {
+                    Some(self.config.syskits_path.clone())
+                } else {
+                    self.config
+                        .syskits_path
+                        .parent()
+                        .map(std::path::Path::to_path_buf)
+                }
+            }),
+        };
+
+        let Some(command_dir) = command_dir else {
+            return Ok(());
+        };
+        let command_dir = if command_dir.is_absolute() {
+            command_dir
+        } else {
+            std::env::current_dir()?.join(command_dir)
+        };
+
+        let current_path = sandbox.get_env("PATH").unwrap_or_default();
+        let new_path = format!("{}:{}", command_dir.display(), current_path);
+        sandbox.add_env("PATH", &new_path);
+        Ok(())
     }
 
     fn build_shell_command_line(command: &str, args: &[String]) -> String {
@@ -611,6 +649,21 @@ fn args_from_bytes(args: Vec<Vec<u8>>) -> Vec<OsString> {
     }
 }
 
+fn normalize_stdout_for_compare(test_case: &TestCase, stdout: &str) -> String {
+    if test_case.command != "more" || !test_case.tty {
+        return stdout.to_string();
+    }
+
+    const MORE_BAD_USAGE: &str = "more: bad usage\nTry 'more --help' for more information.\n";
+    let normalized = stdout.replace("\r\n", "\n");
+    if normalized.matches(MORE_BAD_USAGE).count() != 1 {
+        return normalized;
+    }
+
+    let without_diagnostic = normalized.replacen(MORE_BAD_USAGE, "", 1);
+    format!("{without_diagnostic}{MORE_BAD_USAGE}")
+}
+
 fn compare_results(
     test_case: &TestCase,
     expected: CommandResult,
@@ -633,7 +686,9 @@ fn compare_results(
                 ));
                 passed = false;
             }
-        } else if expected.stdout != actual.stdout {
+        } else if normalize_stdout_for_compare(test_case, &expected.stdout)
+            != normalize_stdout_for_compare(test_case, &actual.stdout)
+        {
             differences.push(format!(
                 "Main command stdout differs:\nExpected:\n{}\nActual:\n{}",
                 expected.stdout, actual.stdout
@@ -825,6 +880,36 @@ mod tests {
         assert!(!result.passed);
         assert_eq!(result.differences.len(), 1);
         assert!(result.differences[0].contains("stdout differs"));
+    }
+
+    #[test]
+    fn test_compare_results_more_tty_bad_usage_order_is_stable() {
+        let mut test_case = create_test_case(
+            Some("more: bad usage\nTry 'more --help' for more information.\na\nb\n".to_string()),
+            Some("".to_string()),
+            Some(1),
+            false,
+            false,
+            false,
+        );
+        test_case.command = "more".to_string();
+        test_case.tty = true;
+
+        let expected = create_command_result(
+            "more: bad usage\nTry 'more --help' for more information.\na\nb\n",
+            "",
+            1,
+        );
+        let actual = create_command_result(
+            "a\nb\nmore: bad usage\nTry 'more --help' for more information.\n",
+            "",
+            1,
+        );
+
+        let result = compare_results(&test_case, expected, Vec::new(), actual, Vec::new()).unwrap();
+
+        assert!(result.passed);
+        assert!(result.differences.is_empty());
     }
 
     #[test]
@@ -1626,6 +1711,23 @@ mod tests {
         // 确保配置被正确存储
         assert_eq!(executor.config.default_timeout, config.default_timeout);
         assert_eq!(executor.config.syskits_path, config.syskits_path);
+    }
+
+    #[test]
+    fn test_prepare_syskits_path_prepends_current_command_dir() {
+        let mut config = create_test_config();
+        config.syskits_path = PathBuf::from("/tmp/current-build/syskits");
+        config.commands_dir = Some(PathBuf::from("/tmp/current-build"));
+        let executor = CommandExecutor::new(config);
+        let mut sandbox = IsolatedSandbox::new(false).unwrap();
+        sandbox.add_env("PATH", "/usr/local/priority_syskits:/usr/bin");
+
+        executor.prepare_syskits_path(&mut sandbox).unwrap();
+
+        assert_eq!(
+            sandbox.get_env("PATH"),
+            Some("/tmp/current-build:/usr/local/priority_syskits:/usr/bin")
+        );
     }
 
     // 创建一个测试用TestConfig

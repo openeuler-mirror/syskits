@@ -19,7 +19,7 @@ mod platform;
 pub mod text;
 
 pub use args::ct_app;
-use args::{TailFilterMode, TailOptions, TailSignum, tail_parse_args};
+use args::{TailFilterMode, TailFollowMode, TailOptions, TailSignum, tail_parse_args};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use chunks::TailReverseChunks;
 use clap::Command;
@@ -33,11 +33,39 @@ use same_file::Handle;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{File, FileType, Metadata};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::io::{
+    self, BufRead, BufReader, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write, stdin, stdout,
+};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt as _};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TailRow {
+    pub source_name: String,
+    pub source_index: usize,
+    pub row_index: usize,
+    pub source_row_index: usize,
+    pub content: String,
+    pub byte_len: usize,
+    pub terminated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TailSemantic {
+    pub mode: String,
+    pub signum: String,
+    pub count: u64,
+    pub delimiter_byte: Option<u8>,
+    pub delimiter_kind: String,
+    pub verbose: bool,
+    pub follow_mode: Option<String>,
+    pub rows: Vec<TailRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
 
 #[derive(Default)]
 pub struct Tail;
@@ -76,6 +104,379 @@ pub fn tail_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     tail_exec(&options)
+}
+
+fn tail_signum_name(signum: &TailSignum) -> &'static str {
+    match signum {
+        TailSignum::Negative(_) => "negative",
+        TailSignum::Positive(_) => "positive",
+        TailSignum::PlusZero => "plus_zero",
+        TailSignum::MinusZero => "minus_zero",
+    }
+}
+
+fn tail_signum_count(signum: &TailSignum) -> u64 {
+    match signum {
+        TailSignum::Negative(count) | TailSignum::Positive(count) => *count,
+        TailSignum::PlusZero | TailSignum::MinusZero => 0,
+    }
+}
+
+fn tail_mode_summary(
+    mode: &TailFilterMode,
+) -> (&'static str, &'static str, u64, Option<u8>, &'static str) {
+    match mode {
+        TailFilterMode::Lines(signum, delimiter) => (
+            "lines",
+            tail_signum_name(signum),
+            tail_signum_count(signum),
+            Some(*delimiter),
+            if *delimiter == b'\n' {
+                "newline"
+            } else if *delimiter == 0 {
+                "zero"
+            } else {
+                "byte"
+            },
+        ),
+        TailFilterMode::Bytes(signum) => (
+            "bytes",
+            tail_signum_name(signum),
+            tail_signum_count(signum),
+            None,
+            "bytes",
+        ),
+    }
+}
+
+fn tail_follow_mode_name(follow: Option<TailFollowMode>) -> Option<&'static str> {
+    match follow {
+        Some(TailFollowMode::Descriptor) => Some("descriptor"),
+        Some(TailFollowMode::Name) => Some("name"),
+        None => None,
+    }
+}
+
+fn tail_warning_messages(options: &TailOptions) -> Vec<String> {
+    let mut warnings = Vec::new();
+
+    if options.retry {
+        if options.follow.is_none() {
+            warnings.push(
+                "tail: warning: --retry ignored; --retry is useful only when following\n".into(),
+            );
+        } else if options.follow == Some(TailFollowMode::Descriptor) {
+            warnings.push("tail: warning: --retry only effective for the initial open\n".into());
+        }
+    }
+
+    if options.pid != 0 {
+        if options.follow.is_none() {
+            warnings.push(
+                "tail: warning: PID ignored; --pid=PID is useful only when following\n".into(),
+            );
+        } else if !platform::supports_pid_checks(options.pid) {
+            warnings.push("tail: warning: --pid=PID is not supported on this system\n".into());
+        }
+    }
+
+    if options.follow.is_some() && options.has_stdin() {
+        let blocking_stdin = options.pid == 0
+            && options.follow == Some(TailFollowMode::Descriptor)
+            && options.num_inputs() == 1
+            && Handle::stdin().is_ok_and(|handle| {
+                handle
+                    .as_file()
+                    .metadata()
+                    .is_ok_and(|meta| !meta.is_file())
+            });
+
+        if !blocking_stdin && stdin().is_terminal() {
+            warnings.push(
+                "tail: warning: following standard input indefinitely is ineffective\n".into(),
+            );
+        }
+    }
+
+    warnings
+}
+
+fn tail_content_string(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn tail_rows_from_bytes(
+    source_name: &str,
+    source_index: usize,
+    mode: &TailFilterMode,
+    bytes: &[u8],
+    next_row_index: &mut usize,
+) -> Vec<TailRow> {
+    match mode {
+        TailFilterMode::Lines(_, delimiter) => {
+            let mut rows = Vec::new();
+            let mut start = 0;
+            let mut source_row_index = 1;
+
+            for (index, byte) in bytes.iter().enumerate() {
+                if *byte == *delimiter {
+                    let segment = &bytes[start..=index];
+                    rows.push(TailRow {
+                        source_name: source_name.into(),
+                        source_index,
+                        row_index: *next_row_index,
+                        source_row_index,
+                        content: tail_content_string(segment),
+                        byte_len: segment.len(),
+                        terminated: true,
+                    });
+                    *next_row_index += 1;
+                    source_row_index += 1;
+                    start = index + 1;
+                }
+            }
+
+            if start < bytes.len() {
+                let segment = &bytes[start..];
+                rows.push(TailRow {
+                    source_name: source_name.into(),
+                    source_index,
+                    row_index: *next_row_index,
+                    source_row_index,
+                    content: tail_content_string(segment),
+                    byte_len: segment.len(),
+                    terminated: false,
+                });
+                *next_row_index += 1;
+            }
+
+            rows
+        }
+        TailFilterMode::Bytes(_) => {
+            if bytes.is_empty() {
+                Vec::new()
+            } else {
+                let row = TailRow {
+                    source_name: source_name.into(),
+                    source_index,
+                    row_index: *next_row_index,
+                    source_row_index: 1,
+                    content: tail_content_string(bytes),
+                    byte_len: bytes.len(),
+                    terminated: false,
+                };
+                *next_row_index += 1;
+                vec![row]
+            }
+        }
+    }
+}
+
+fn tail_render_open_file_output(
+    options: &TailOptions,
+    header_printer: &mut TailHeaderPrinter,
+    input: &TailInput,
+    file: &mut File,
+    offset: u64,
+) -> CTResult<(Option<String>, Vec<u8>)> {
+    let header = header_printer.render_input(input);
+    let mut output = Vec::new();
+
+    if let Some(count) = prepare_char_device_negative_bytes_tail(file, options) {
+        tail_limited_bytes_to_writer(file, count, &mut output)?;
+    } else if should_use_bounded_io(file, options, offset) {
+        tail_bounded_to_writer(file, options, &mut output)?;
+    } else {
+        let mut reader = BufReader::new(file);
+        tail_unbounded_to_writer(&mut reader, options, &mut output)?;
+    }
+
+    Ok((header, output))
+}
+
+pub fn tail_native_semantic(args: impl ctcore::Args) -> CTResult<TailSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    set_ct_exit_code(0);
+
+    let options = tail_parse_args(args)?;
+    let mut stderr_text = String::new();
+    for warning in tail_warning_messages(&options) {
+        stderr_text.push_str(&warning);
+    }
+
+    match options.verify() {
+        args::TailVerificationResult::CannotFollowStdinByName => {
+            return Err(CtSimpleError::new(
+                1,
+                format!("cannot follow {} by name", text::TAIL_DASH.quote()),
+            ));
+        }
+        args::TailVerificationResult::NoOutput => {}
+        args::TailVerificationResult::Ok => {}
+    }
+
+    if options.follow.is_some() {
+        return Err(CtSimpleError::new(
+            1,
+            "following output is not supported in data mode",
+        ));
+    }
+
+    let (mode_name, signum_name, count, delimiter_byte, delimiter_kind) =
+        tail_mode_summary(&options.mode);
+    let mut classic_output = Vec::new();
+    let mut rows = Vec::new();
+    let mut next_row_index = 1_usize;
+    let mut exit_code = 0;
+    let mut header_printer = TailHeaderPrinter::new(options.verbose, true);
+
+    for (source_index, input) in options.inputs.iter().enumerate() {
+        match input.kind() {
+            TailInputKind::File(path)
+                if cfg!(not(unix)) || path != &PathBuf::from(text::TAIL_DEV_STDIN) =>
+            {
+                if !path.exists() {
+                    stderr_text.push_str(&format!(
+                        "tail: cannot open '{}' for reading: {}\n",
+                        input.display_name,
+                        text::TAIL_NO_SUCH_FILE
+                    ));
+                    exit_code = 1;
+                    continue;
+                }
+
+                if path.is_dir() {
+                    stderr_text.push_str(&format!(
+                        "tail: error reading '{}': Is a directory\n",
+                        input.display_name
+                    ));
+                    exit_code = 1;
+                    continue;
+                }
+
+                match File::open(path) {
+                    Ok(mut file) => {
+                        let (header, output) = tail_render_open_file_output(
+                            &options,
+                            &mut header_printer,
+                            input,
+                            &mut file,
+                            0,
+                        )?;
+                        if let Some(header) = header {
+                            classic_output.extend_from_slice(header.as_bytes());
+                        }
+                        classic_output.extend_from_slice(&output);
+                        rows.extend(tail_rows_from_bytes(
+                            input.display_name.as_str(),
+                            source_index + 1,
+                            &options.mode,
+                            &output,
+                            &mut next_row_index,
+                        ));
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                        let err = error.map_err_context(|| {
+                            format!("cannot open '{}' for reading", input.display_name)
+                        });
+                        stderr_text.push_str(&format!("tail: {err}\n"));
+                        exit_code = 1;
+                    }
+                    Err(error) => {
+                        return Err(error.map_err_context(|| {
+                            format!("cannot open '{}' for reading", input.display_name)
+                        }));
+                    }
+                }
+            }
+            TailInputKind::File(_) | TailInputKind::Stdin => {
+                if let Some(path) = input.resolve() {
+                    if !path.exists() {
+                        stderr_text.push_str(&format!(
+                            "tail: cannot open '{}' for reading: {}\n",
+                            input.display_name,
+                            text::TAIL_NO_SUCH_FILE
+                        ));
+                        exit_code = 1;
+                        continue;
+                    }
+
+                    match File::open(&path) {
+                        Ok(mut file) => {
+                            let (header, output) = tail_render_open_file_output(
+                                &options,
+                                &mut header_printer,
+                                input,
+                                &mut file,
+                                get_stdin_offset(),
+                            )?;
+                            if let Some(header) = header {
+                                classic_output.extend_from_slice(header.as_bytes());
+                            }
+                            classic_output.extend_from_slice(&output);
+                            rows.extend(tail_rows_from_bytes(
+                                input.display_name.as_str(),
+                                source_index + 1,
+                                &options.mode,
+                                &output,
+                                &mut next_row_index,
+                            ));
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                            let err = error.map_err_context(|| {
+                                format!("cannot open '{}' for reading", input.display_name)
+                            });
+                            stderr_text.push_str(&format!("tail: {err}\n"));
+                            exit_code = 1;
+                        }
+                        Err(error) => {
+                            return Err(error.map_err_context(|| {
+                                format!("cannot open '{}' for reading", input.display_name)
+                            }));
+                        }
+                    }
+                } else if paths::tail_stdin_is_bad_fd() {
+                    stderr_text.push_str(&format!(
+                        "tail: cannot fstat {}: {}\n",
+                        text::TAIL_STDIN_HEADER.quote(),
+                        text::TAIL_BAD_FD
+                    ));
+                    exit_code = 1;
+                } else {
+                    let header = header_printer.render_input(input);
+                    let mut output = Vec::new();
+                    let mut reader = BufReader::new(stdin());
+                    tail_unbounded_to_writer(&mut reader, &options, &mut output)?;
+                    if let Some(header) = header {
+                        classic_output.extend_from_slice(header.as_bytes());
+                    }
+                    classic_output.extend_from_slice(&output);
+                    rows.extend(tail_rows_from_bytes(
+                        input.display_name.as_str(),
+                        source_index + 1,
+                        &options.mode,
+                        &output,
+                        &mut next_row_index,
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(TailSemantic {
+        mode: mode_name.into(),
+        signum: signum_name.into(),
+        count,
+        delimiter_byte,
+        delimiter_kind: delimiter_kind.into(),
+        verbose: options.verbose,
+        follow_mode: tail_follow_mode_name(options.follow).map(str::to_string),
+        rows,
+        classic_text: tail_content_string(&classic_output),
+        stderr_text,
+        exit_code,
+    })
 }
 
 fn tail_exec(options: &TailOptions) -> CTResult<()> {
@@ -575,24 +976,32 @@ fn tail_bounded(
         multi_writer.add_writer(BufWriter::new(buf));
     }
 
+    tail_bounded_to_writer(file, options, &mut multi_writer)
+}
+
+fn tail_bounded_to_writer<W: Write>(
+    file: &mut File,
+    options: &TailOptions,
+    writer: &mut W,
+) -> CTResult<()> {
     match &options.mode {
         TailFilterMode::Lines(signum, sep) => {
-            handle_bounded_lines(file, signum, *sep, &mut multi_writer)?;
+            handle_bounded_lines(file, signum, *sep, writer)?;
         }
         TailFilterMode::Bytes(signum) => {
-            handle_bounded_bytes(file, signum, &mut multi_writer)?;
+            handle_bounded_bytes(file, signum, writer)?;
         }
     }
 
-    multi_writer.flush()?;
+    writer.flush()?;
     Ok(())
 }
 
-fn handle_bounded_lines(
+fn handle_bounded_lines<W: Write>(
     file: &mut File,
     signum: &TailSignum,
     separator: u8,
-    writer: &mut MultiWriter,
+    writer: &mut W,
 ) -> CTResult<()> {
     match signum {
         TailSignum::Negative(count) => {
@@ -613,10 +1022,10 @@ fn handle_bounded_lines(
     Ok(())
 }
 
-fn handle_bounded_bytes(
+fn handle_bounded_bytes<W: Write>(
     file: &mut File,
     signum: &TailSignum,
-    writer: &mut MultiWriter,
+    writer: &mut W,
 ) -> CTResult<()> {
     match signum {
         TailSignum::Negative(count) => {
@@ -661,9 +1070,17 @@ fn tail_limited_bytes<T: Read>(
         multi_writer.add_writer(BufWriter::new(buf));
     }
 
+    tail_limited_bytes_to_writer(reader, count, &mut multi_writer)
+}
+
+fn tail_limited_bytes_to_writer<T: Read, W: Write>(
+    reader: &mut T,
+    count: u64,
+    writer: &mut W,
+) -> CTResult<()> {
     let mut limited = reader.take(count);
-    io::copy(&mut limited, &mut multi_writer)?;
-    multi_writer.flush()?;
+    io::copy(&mut limited, writer)?;
+    writer.flush()?;
     Ok(())
 }
 
@@ -716,14 +1133,22 @@ fn tail_unbounded<T: Read>(
         multi_writer.add_writer(BufWriter::new(buf));
     }
 
+    tail_unbounded_to_writer(reader, options, &mut multi_writer)
+}
+
+fn tail_unbounded_to_writer<T: Read, W: Write>(
+    reader: &mut BufReader<T>,
+    options: &TailOptions,
+    writer: &mut W,
+) -> CTResult<()> {
     match &options.mode {
         TailFilterMode::Lines(TailSignum::Negative(count), sep) => {
             let mut chunks = chunks::TailLinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
-            chunks.print(&mut multi_writer)?;
+            chunks.print(&mut *writer)?;
         }
         TailFilterMode::Lines(TailSignum::PlusZero | TailSignum::Positive(1), _) => {
-            io::copy(reader, &mut multi_writer)?;
+            io::copy(reader, writer)?;
         }
         TailFilterMode::Lines(TailSignum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
@@ -737,17 +1162,17 @@ fn tail_unbounded<T: Read>(
                 }
             }
             if chunk.has_data() {
-                chunk.print_lines(&mut multi_writer, num_skip as usize)?;
-                io::copy(reader, &mut multi_writer)?;
+                chunk.print_lines(&mut *writer, num_skip as usize)?;
+                io::copy(reader, writer)?;
             }
         }
         TailFilterMode::Bytes(TailSignum::Negative(count)) => {
             let mut chunks = chunks::TailBytesChunkBuffer::new(*count);
             chunks.fill(reader)?;
-            chunks.print(&mut multi_writer)?;
+            chunks.print(&mut *writer)?;
         }
         TailFilterMode::Bytes(TailSignum::PlusZero | TailSignum::Positive(1)) => {
-            io::copy(reader, &mut multi_writer)?;
+            io::copy(reader, writer)?;
         }
         TailFilterMode::Bytes(TailSignum::Positive(count)) => {
             let mut num_skip = *count - 1;
@@ -761,7 +1186,7 @@ fn tail_unbounded<T: Read>(
                             break;
                         }
                         Ordering::Greater => {
-                            multi_writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
                             break;
                         }
                     }
@@ -769,11 +1194,11 @@ fn tail_unbounded<T: Read>(
                     return Ok(());
                 }
             }
-            io::copy(reader, &mut multi_writer)?;
+            io::copy(reader, writer)?;
         }
         _ => {}
     }
-    multi_writer.flush()?;
+    writer.flush()?;
     Ok(())
 }
 

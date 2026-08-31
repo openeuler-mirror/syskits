@@ -131,6 +131,56 @@ enum CountMode {
     Characters, // -c模式：按Unicode字符数计算
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoldMode {
+    Columns,
+    Bytes,
+    Characters,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoldRow {
+    pub row_index: usize,
+    pub line: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoldSemantic {
+    pub mode: FoldMode,
+    pub width: usize,
+    pub break_spaces: bool,
+    pub rows: Vec<FoldRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct FoldRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
+}
+
+fn fold_mode(flags: &FoldFlags) -> FoldMode {
+    if flags.bytes {
+        FoldMode::Bytes
+    } else if flags.characters {
+        FoldMode::Characters
+    } else {
+        FoldMode::Columns
+    }
+}
+
+fn fold_rows_from_output(output: &str) -> Vec<FoldRow> {
+    output
+        .split_terminator('\n')
+        .enumerate()
+        .map(|(index, line)| FoldRow {
+            row_index: index + 1,
+            line: line.to_string(),
+        })
+        .collect()
+}
+
 /// 通用的折叠文件函数 - 完全按照GNU fold.c的架构实现
 fn fold_file_generic<T: Read, W: Write>(
     writer: &mut W,
@@ -324,7 +374,12 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
         }
     };
 
-    let flags = FoldFlags {
+    let flags = fold_flags_from_matches(&matches, obs_width);
+    fold(writer, &flags)
+}
+
+fn fold_flags_from_matches(matches: &clap::ArgMatches, obs_width: Option<String>) -> FoldFlags {
+    FoldFlags {
         bytes: matches.get_flag(fold_flags::FOLD_BYTES),
         characters: matches.get_flag(fold_flags::FOLD_CHARACTERS),
         spaces: matches.get_flag(fold_flags::FOLD_SPACES),
@@ -338,9 +393,7 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
             Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         },
-    };
-
-    fold(writer, &flags)
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -432,6 +485,19 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 ///
 /// - 如果折叠成功，返回`Ok(())`；如果发生错误，返回`Err`。
 fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
+    let outcome = fold_with_writer(writer, fold_flags)?;
+    if !outcome.stderr_text.is_empty() {
+        eprint!("{}", outcome.stderr_text);
+    }
+    if outcome.exit_code != 0 {
+        set_ct_exit_code(outcome.exit_code);
+    }
+    Ok(())
+}
+
+fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<FoldRunOutcome> {
+    let mut stderr_text = String::new();
+
     for filename in &fold_flags.files {
         let filename: &str = filename;
         let mut stdin_buf;
@@ -453,7 +519,7 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
                         std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
                         _ => e.to_string(),
                     };
-                    eprintln!("fold: {filename}: {error_msg}");
+                    stderr_text.push_str(&format!("fold: {filename}: {error_msg}\n"));
                     continue;
                 }
             }
@@ -474,7 +540,52 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
         // 使用统一的折叠函数
         fold_file_generic(writer, buffer, spaces, width, mode)?;
     }
-    Ok(())
+    Ok(FoldRunOutcome {
+        stderr_text,
+        exit_code: 0,
+    })
+}
+
+pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let string_args: Vec<String> = args.collect_lossy();
+
+    let (args, obs_width) = handle_obsolete(&string_args[..]);
+    let matches = match ct_app().try_get_matches_from(args) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind() == ErrorKind::ArgumentConflict {
+                return Ok(FoldSemantic {
+                    mode: FoldMode::Columns,
+                    width: obs_width
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .unwrap_or(80),
+                    break_spaces: false,
+                    rows: Vec::new(),
+                    classic_text: String::new(),
+                    stderr_text: String::new(),
+                    exit_code: 2,
+                });
+            }
+            return Err(e.into());
+        }
+    };
+
+    let flags = fold_flags_from_matches(&matches, obs_width);
+    let mut classic_output = Vec::new();
+    let outcome = fold_with_writer(&mut classic_output, &flags)?;
+    let classic_text = String::from_utf8(classic_output).expect("fold output should be utf-8");
+
+    Ok(FoldSemantic {
+        mode: fold_mode(&flags),
+        width: flags.width,
+        break_spaces: flags.spaces,
+        rows: fold_rows_from_output(&classic_text),
+        classic_text,
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    })
 }
 
 #[derive(Default)]

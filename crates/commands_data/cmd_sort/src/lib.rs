@@ -80,46 +80,7 @@ impl SortCore {
 }
 
 fn argv_uses_stdin(argv: &[OsString], value_flags: &[&str]) -> bool {
-    let mut saw_file = false;
-    let mut end_options = false;
-    let mut index = 1;
-
-    while index < argv.len() {
-        let arg = argv[index].to_string_lossy();
-        if arg == "-" {
-            return true;
-        }
-        if end_options {
-            saw_file = true;
-            break;
-        }
-        if arg == "--" {
-            end_options = true;
-            index += 1;
-            continue;
-        }
-        if arg.starts_with("--") {
-            let flag = arg.split('=').next().unwrap_or_default();
-            if value_flags.contains(&flag) && !arg.contains('=') {
-                index += 2;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if arg.starts_with('-') && arg.len() > 1 {
-            if value_flags.contains(&arg.as_ref()) {
-                index += 2;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        saw_file = true;
-        break;
-    }
-
-    !saw_file
+    ctengine::argv_uses_stdin(argv, value_flags)
 }
 
 fn render_error_text(err: &dyn CTError) -> String {

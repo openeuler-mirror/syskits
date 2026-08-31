@@ -1039,6 +1039,7 @@ dependencies = [
 name = "cmd_split"
 version = "3.2.2"
 dependencies = [
+ "clap",
  "ct_split",
  "ctcore",
  "ctengine",

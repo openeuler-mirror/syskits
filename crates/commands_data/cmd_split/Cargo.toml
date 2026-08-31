@@ -12,6 +12,7 @@ description = "Phase A native split command"
 repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
 
 [dependencies]
+clap = { workspace = true }
 ct_split = { path = "../../commands/split" }
 ctcore = { workspace = true }
 ctengine = { workspace = true }

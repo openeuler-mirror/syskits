@@ -1,7 +1,8 @@
+use clap::error::ErrorKind;
 use ctcore::ct_error::CTError;
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -31,6 +32,20 @@ impl SplitIntent {
 
 impl SplitCore {
     fn run_core(intent: &SplitIntent) -> (CtValue, String, String, i32) {
+        if let Err(err) = ct_split::ct_app().try_get_matches_from(intent.argv.iter().cloned())
+            && matches!(
+                err.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            )
+        {
+            return (
+                CtValue::List(Vec::new()),
+                err.render().to_string(),
+                String::new(),
+                0,
+            );
+        }
+
         match ct_split::split_native_semantic(intent.argv.iter().cloned()) {
             Ok(semantic) => (
                 semantic_to_value(&semantic),
@@ -121,6 +136,12 @@ impl DataCommand for CmdSplit {
         DataSignature::new("split", "structured split output rows")
             .input(CtType::Nothing)
             .output(CtType::List)
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible split arguments",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true)
     }
 
     fn run(

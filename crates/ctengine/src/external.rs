@@ -1438,7 +1438,7 @@ impl Read for ExternalStream {
                     .load(std::sync::atomic::Ordering::Relaxed)
                     && let Ok(mut child) = self.child.lock()
                 {
-                    let _ = child.kill();
+                    terminate_process_tree(&mut child);
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
@@ -1518,10 +1518,33 @@ impl Drop for ExternalStream {
         self.process_done
             .store(true, std::sync::atomic::Ordering::Relaxed);
         if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
+            terminate_process_tree(&mut child);
             let _ = child.wait();
         }
     }
+}
+
+fn configure_process_group(cmd: &mut std::process::Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+}
+
+fn terminate_process_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let pgid = child.id() as i32;
+        unsafe {
+            libc::kill(-pgid, libc::SIGTERM);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        unsafe {
+            libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
 }
 
 pub struct ExternalExecutor;
@@ -1545,6 +1568,7 @@ impl ExternalExecutor {
             cmd.current_dir(cwd);
         }
         cmd.envs(&spec.env_overrides);
+        configure_process_group(&mut cmd);
 
         if stdin_input.is_some() {
             cmd.stdin(std::process::Stdio::piped());
@@ -1636,15 +1660,7 @@ impl ExternalExecutor {
                 }
                 timeout_abort_clone.store(true, std::sync::atomic::Ordering::Relaxed);
                 if let Ok(mut child) = child_for_timeout.lock() {
-                    #[cfg(unix)]
-                    {
-                        let pid = child.id() as i32;
-                        unsafe {
-                            libc::kill(pid, libc::SIGTERM);
-                        }
-                        std::thread::sleep(std::time::Duration::from_millis(50));
-                    }
-                    let _ = child.kill();
+                    terminate_process_tree(&mut child);
                 }
             });
         }

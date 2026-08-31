@@ -23,10 +23,13 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_show_error;
+use std::any::Any;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdout};
+use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdin, stdout};
 use std::path::PathBuf;
+use std::process::{Command as ProcessCommand, Stdio};
+use std::thread;
 use sys_locale::get_locale;
 
 #[cfg(unix)]
@@ -73,6 +76,126 @@ enum OutputErrorMode {
     ExitNoPipe,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeeRow {
+    pub row_index: usize,
+    pub line: String,
+    pub byte_len: usize,
+    pub terminated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeeSemantic {
+    pub append: bool,
+    pub ignore_interrupts: bool,
+    pub output_error_mode: String,
+    pub target_files: Vec<String>,
+    pub rows: Vec<TeeRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct DirectTeeInvocation {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
+}
+
+fn output_error_mode_name(mode: Option<&OutputErrorMode>) -> &'static str {
+    match mode {
+        Some(OutputErrorMode::Warn) => "warn",
+        Some(OutputErrorMode::WarnNoPipe) | None => "warn_nopipe",
+        Some(OutputErrorMode::Exit) => "exit",
+        Some(OutputErrorMode::ExitNoPipe) => "exit_nopipe",
+    }
+}
+
+fn tee_rows_from_output(output: &[u8]) -> Vec<TeeRow> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+
+    for (index, byte) in output.iter().enumerate() {
+        if *byte == b'\n' {
+            let chunk = &output[start..=index];
+            rows.push(TeeRow {
+                row_index: rows.len() + 1,
+                line: String::from_utf8_lossy(chunk).into_owned(),
+                byte_len: chunk.len(),
+                terminated: true,
+            });
+            start = index + 1;
+        }
+    }
+
+    if start < output.len() {
+        let chunk = &output[start..];
+        rows.push(TeeRow {
+            row_index: rows.len() + 1,
+            line: String::from_utf8_lossy(chunk).into_owned(),
+            byte_len: chunk.len(),
+            terminated: false,
+        });
+    }
+
+    rows
+}
+
+fn thread_panic_to_io_error(_: Box<dyn Any + Send + 'static>) -> Error {
+    Error::other("tee semantic helper thread panicked")
+}
+
+fn run_tee_direct_process(argv: &[OsString], stdin_bytes: &[u8]) -> CTResult<DirectTeeInvocation> {
+    let current_exe = std::env::current_exe()?;
+    let mut child = ProcessCommand::new(current_exe)
+        .args(argv)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let mut child_stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| Error::other("failed to open tee child stdin"))?;
+    let mut child_stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| Error::other("failed to open tee child stdout"))?;
+    let mut child_stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| Error::other("failed to open tee child stderr"))?;
+
+    let stdin_payload = stdin_bytes.to_vec();
+    let stdin_task = thread::spawn(move || -> std::io::Result<()> {
+        child_stdin.write_all(&stdin_payload)?;
+        child_stdin.flush()?;
+        Ok(())
+    });
+    let stdout_task = thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut output = Vec::new();
+        child_stdout.read_to_end(&mut output)?;
+        Ok(output)
+    });
+    let stderr_task = thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut output = Vec::new();
+        child_stderr.read_to_end(&mut output)?;
+        Ok(output)
+    });
+
+    let status = child.wait()?;
+    stdin_task.join().map_err(thread_panic_to_io_error)??;
+    let stdout = stdout_task.join().map_err(thread_panic_to_io_error)??;
+    let stderr = stderr_task.join().map_err(thread_panic_to_io_error)??;
+
+    Ok(DirectTeeInvocation {
+        stdout,
+        stderr,
+        exit_code: status.code().unwrap_or(1),
+    })
+}
+
 pub fn tee_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -102,6 +225,32 @@ pub fn tee_main(args: impl ctcore::Args) -> CTResult<()> {
         Ok(_) => Ok(()),
         Err(_) => Err(1.into()),
     }
+}
+
+pub fn tee_native_semantic(args: impl ctcore::Args) -> CTResult<TeeSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let matches = ct_app().try_get_matches_from(argv.clone())?;
+    let options = TeeOptions::new(&matches);
+
+    let mut stdin_bytes = Vec::new();
+    stdin().read_to_end(&mut stdin_bytes)?;
+
+    let direct = run_tee_direct_process(&argv, &stdin_bytes)?;
+    let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
+
+    Ok(TeeSemantic {
+        append: options.is_append,
+        ignore_interrupts: options.is_ignore_interrupts,
+        output_error_mode: output_error_mode_name(options.output_error.as_ref()).into(),
+        target_files: options.files,
+        rows: tee_rows_from_output(&direct.stdout),
+        classic_text,
+        stderr_text: String::from_utf8_lossy(&direct.stderr).into_owned(),
+        exit_code: direct.exit_code,
+    })
 }
 
 fn get_file_list(matches: &clap::ArgMatches) -> Vec<String> {
@@ -655,6 +804,38 @@ mod tests {
         assert!(!options.is_ignore_interrupts);
         assert_eq!(options.files, vec!["file.txt"]);
         assert!(options.output_error.is_none());
+    }
+
+    #[test]
+    fn tee_rows_from_output_tracks_termination() {
+        let rows = tee_rows_from_output(b"alpha\nbeta");
+
+        assert_eq!(
+            rows,
+            vec![
+                TeeRow {
+                    row_index: 1,
+                    line: "alpha\n".into(),
+                    byte_len: 6,
+                    terminated: true,
+                },
+                TeeRow {
+                    row_index: 2,
+                    line: "beta".into(),
+                    byte_len: 4,
+                    terminated: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn output_error_mode_name_defaults_to_warn_nopipe() {
+        assert_eq!(output_error_mode_name(None), "warn_nopipe");
+        assert_eq!(
+            output_error_mode_name(Some(&OutputErrorMode::ExitNoPipe)),
+            "exit_nopipe"
+        );
     }
 
     #[cfg(test)]

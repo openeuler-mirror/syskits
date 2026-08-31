@@ -1,5 +1,5 @@
 use crate::error::PluginError;
-use crate::proto::{HostFrame, PROTOCOL_VERSION, PluginFrame};
+use crate::proto::{HostFrame, PROTOCOL_VERSION, PluginDataCall, PluginFrame, PluginValue};
 use crate::util::{
     protocol_max_frame_bytes, protocol_timeout_ms, read_frame_line, spawn_timeout_killer,
 };
@@ -89,7 +89,7 @@ impl PluginHostRunner {
         // 2. Send Run
         let call_req = HostFrame::Run {
             name: name.to_string(),
-            args: call.clone(),
+            args: PluginDataCall::from(call.clone()),
         };
         writeln!(stdin, "{}", serde_json::to_string(&call_req)?)?;
 
@@ -109,7 +109,7 @@ impl PluginHostRunner {
             let frame: PluginFrame = serde_json::from_str(&line)?;
             match frame {
                 PluginFrame::Data { value } => {
-                    results.push(value);
+                    results.push(value.into());
                 }
                 PluginFrame::CallResponse {
                     accepted,
@@ -177,12 +177,16 @@ fn send_input_frames(
     match input {
         CtPipelineData::Empty => {}
         CtPipelineData::Value(value, _) => {
-            let frame = HostFrame::Data { value };
+            let frame = HostFrame::Data {
+                value: PluginValue::from(value),
+            };
             writeln!(stdin, "{}", serde_json::to_string(&frame)?)?;
         }
         CtPipelineData::ListStream(stream) => {
             for value in stream {
-                let frame = HostFrame::Data { value };
+                let frame = HostFrame::Data {
+                    value: PluginValue::from(value),
+                };
                 writeln!(stdin, "{}", serde_json::to_string(&frame)?)?;
             }
         }
@@ -194,7 +198,7 @@ fn send_input_frames(
                     break;
                 }
                 let frame = HostFrame::Data {
-                    value: ctpipeline::CtValue::Binary(buf[..n].to_vec()),
+                    value: PluginValue::from(ctpipeline::CtValue::Binary(buf[..n].to_vec())),
                 };
                 writeln!(stdin, "{}", serde_json::to_string(&frame)?)?;
             }

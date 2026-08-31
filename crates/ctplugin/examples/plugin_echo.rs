@@ -1,5 +1,6 @@
 use ctpipeline::value::CtValue;
-use ctplugin::proto::{HostFrame, PROTOCOL_VERSION, PluginFrame};
+use ctplugin::proto::{HostFrame, PROTOCOL_VERSION, PluginFrame, PluginValue};
+use ctsig::DataCall;
 use std::io::{self, BufRead, Write};
 
 fn main() {
@@ -54,6 +55,7 @@ fn main() {
                     writeln!(writer, "{}", serde_json::to_string(&err).unwrap()).unwrap();
                     return;
                 }
+                let args = DataCall::from(args);
                 if let Some(first_arg) = args.positionals.first() {
                     if let CtValue::String(s) = &first_arg.value {
                         prefix = s.clone();
@@ -101,7 +103,10 @@ fn main() {
         String::new()
     };
     let data = PluginFrame::Data {
-        value: CtValue::String(format!("{} from plugin!{}", prefix, suffix)),
+        value: PluginValue::from(CtValue::String(format!(
+            "{} from plugin!{}",
+            prefix, suffix
+        ))),
     };
     writeln!(writer, "{}", serde_json::to_string(&data).unwrap()).unwrap();
 

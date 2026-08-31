@@ -136,6 +136,56 @@ struct JoinSettings {
     is_headers: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinRow {
+    pub row_index: usize,
+    pub row_kind: String,
+    pub join_key: Option<String>,
+    pub source_file_num: Option<usize>,
+    pub file1_fields: Vec<String>,
+    pub file2_fields: Vec<String>,
+    pub output_line: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinSemantic {
+    pub key1: usize,
+    pub key2: usize,
+    pub print_joined: bool,
+    pub print_unpaired1: bool,
+    pub print_unpaired2: bool,
+    pub ignore_case: bool,
+    pub zero_terminated: bool,
+    pub headers: bool,
+    pub autoformat: bool,
+    pub check_order: String,
+    pub separator_mode: String,
+    pub separator_text: String,
+    pub rows: Vec<JoinRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+#[derive(Default)]
+struct JoinDiagnostics {
+    stderr_text: String,
+    exit_code: i32,
+}
+
+#[derive(Default)]
+struct JoinObserver {
+    enabled: bool,
+    next_row_index: usize,
+    rows: Vec<JoinRow>,
+}
+
+#[derive(Default)]
+struct JoinRuntime {
+    diagnostics: JoinDiagnostics,
+    observer: JoinObserver,
+}
+
 impl Default for JoinSettings {
     fn default() -> Self {
         Self {
@@ -266,6 +316,185 @@ impl<'a> JoinRepr<'a> {
 
     fn print_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
         writer.write_all(&[self.line_ending as u8])
+    }
+
+    fn render_single_line(
+        &self,
+        file_num: FileNum,
+        key: usize,
+        line: &Line,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let mut writer = Vec::new();
+        if self.uses_format() {
+            self.print_format(&mut writer, |spec| match *spec {
+                JoinSpec::Key => line.get_field(key),
+                JoinSpec::Field(spec_file_num, field_num) => {
+                    if spec_file_num == file_num {
+                        line.get_field(field_num)
+                    } else {
+                        None
+                    }
+                }
+            })?;
+        } else {
+            self.print_field(&mut writer, line.get_field(key))?;
+            self.print_fields(&mut writer, line, key)?;
+        }
+        self.print_line_ending(&mut writer)?;
+        Ok(writer)
+    }
+
+    fn render_joined_line(
+        &self,
+        file_num1: FileNum,
+        key1: usize,
+        line1: &Line,
+        file_num2: FileNum,
+        key2: usize,
+        line2: &Line,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let mut writer = Vec::new();
+        let join_key = line1.get_field(key1).or_else(|| line2.get_field(key2));
+        if self.uses_format() {
+            self.print_format(&mut writer, |spec| match *spec {
+                JoinSpec::Key => join_key,
+                JoinSpec::Field(spec_file_num, field_num) => {
+                    if spec_file_num == file_num1 {
+                        return line1.get_field(field_num);
+                    }
+                    if spec_file_num == file_num2 {
+                        return line2.get_field(field_num);
+                    }
+                    None
+                }
+            })?;
+        } else {
+            self.print_field(&mut writer, join_key)?;
+            self.print_fields(&mut writer, line1, key1)?;
+            self.print_fields(&mut writer, line2, key2)?;
+        }
+        self.print_line_ending(&mut writer)?;
+        Ok(writer)
+    }
+}
+
+fn join_bytes_to_string(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn line_fields_to_strings(line: &Line) -> Vec<String> {
+    line.field_ranges
+        .iter()
+        .map(|(low, high)| join_bytes_to_string(&line.string[*low..*high]))
+        .collect()
+}
+
+fn join_check_order_name(mode: CheckOrder) -> &'static str {
+    match mode {
+        CheckOrder::Default => "default",
+        CheckOrder::Disabled => "disabled",
+        CheckOrder::Enabled => "enabled",
+    }
+}
+
+fn join_separator_mode_name(separator: &Sep) -> &'static str {
+    match separator {
+        Sep::Char(_) => "char",
+        Sep::Line => "line",
+        Sep::Whitespaces => "whitespaces",
+    }
+}
+
+fn join_separator_text(separator: &Sep) -> String {
+    match separator {
+        Sep::Char(sep) => join_bytes_to_string(sep),
+        Sep::Line => String::new(),
+        Sep::Whitespaces => " ".into(),
+    }
+}
+
+impl JoinObserver {
+    fn disabled() -> Self {
+        Self::default()
+    }
+
+    fn enabled() -> Self {
+        Self {
+            enabled: true,
+            next_row_index: 1,
+            rows: Vec::new(),
+        }
+    }
+
+    fn record_single(
+        &mut self,
+        row_kind: &str,
+        file_num: FileNum,
+        key: usize,
+        line: &Line,
+        repr: &JoinRepr,
+    ) -> Result<(), std::io::Error> {
+        if !self.enabled {
+            return Ok(());
+        }
+
+        let output = repr.render_single_line(file_num, key, line)?;
+        let fields = line_fields_to_strings(line);
+        let join_key = line.get_field(key).map(join_bytes_to_string);
+        let (file1_fields, file2_fields, source_file_num) = match file_num {
+            FileNum::File1 => (fields, Vec::new(), Some(1)),
+            FileNum::File2 => (Vec::new(), fields, Some(2)),
+        };
+
+        self.rows.push(JoinRow {
+            row_index: self.next_row_index,
+            row_kind: row_kind.into(),
+            join_key,
+            source_file_num,
+            file1_fields,
+            file2_fields,
+            output_line: join_bytes_to_string(
+                output
+                    .strip_suffix(&[repr.line_ending as u8])
+                    .unwrap_or(&output),
+            ),
+        });
+        self.next_row_index += 1;
+        Ok(())
+    }
+
+    fn record_joined(
+        &mut self,
+        left: (&Line, usize, FileNum),
+        right: (&Line, usize, FileNum),
+        repr: &JoinRepr,
+    ) -> Result<(), std::io::Error> {
+        if !self.enabled {
+            return Ok(());
+        }
+
+        let (line1, key1, file_num1) = left;
+        let (line2, key2, file_num2) = right;
+        let output = repr.render_joined_line(file_num1, key1, line1, file_num2, key2, line2)?;
+
+        self.rows.push(JoinRow {
+            row_index: self.next_row_index,
+            row_kind: "joined".into(),
+            join_key: line1
+                .get_field(key1)
+                .or_else(|| line2.get_field(key2))
+                .map(join_bytes_to_string),
+            source_file_num: None,
+            file1_fields: line_fields_to_strings(line1),
+            file2_fields: line_fields_to_strings(line2),
+            output_line: join_bytes_to_string(
+                output
+                    .strip_suffix(&[repr.line_ending as u8])
+                    .unwrap_or(&output),
+            ),
+        });
+        self.next_row_index += 1;
+        Ok(())
     }
 }
 
@@ -494,21 +723,28 @@ impl<'a> JoinState<'a> {
         writer: &mut impl Write,
         input: &JoinInput,
         repr: &JoinRepr,
+        diagnostics: &mut JoinDiagnostics,
+        observer: &mut JoinObserver,
     ) -> CTResult<()> {
         // 如果需要打印不匹配的行
         if self.print_unpaired {
             self.print_first_line(writer, repr)?;
+            observer.record_single("unpaired", self.file_num, self.key, &self.seq[0], repr)?;
         }
 
         // 移动到下一行
-        self.reset_next_line(input)?;
+        self.reset_next_line(input, diagnostics)?;
         Ok(())
     }
 
     /// 扩展当前行序列直到键值改变
-    fn extend(&mut self, input: &JoinInput) -> CTResult<Option<Line>> {
+    fn extend(
+        &mut self,
+        input: &JoinInput,
+        diagnostics: &mut JoinDiagnostics,
+    ) -> CTResult<Option<Line>> {
         // 持续读取行，直到键值改变或文件结束
-        while let Some(line) = self.next_line(input)? {
+        while let Some(line) = self.next_line(input, diagnostics)? {
             // 比较当前键和新行的键
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
@@ -531,18 +767,21 @@ impl<'a> JoinState<'a> {
         writer: &mut impl Write,
         other: &JoinState,
         repr: &JoinRepr,
+        observer: &mut JoinObserver,
     ) -> Result<(), std::io::Error> {
         if self.has_line() {
             if other.has_line() {
                 // 如果两个文件都有行，合并打印
-                self.combine(writer, other, repr)?;
+                self.combine(writer, other, repr, observer)?;
             } else {
                 // 如果只有第一个文件有行，只打印第一个
                 self.print_first_line(writer, repr)?;
+                observer.record_single("header", self.file_num, self.key, &self.seq[0], repr)?;
             }
         } else if other.has_line() {
             // 如果只有第二个文件有行，只打印第二个
             other.print_first_line(writer, repr)?;
+            observer.record_single("header", other.file_num, other.key, &other.seq[0], repr)?;
         }
 
         Ok(())
@@ -554,6 +793,7 @@ impl<'a> JoinState<'a> {
         writer: &mut impl Write,
         other: &JoinState,
         repr: &JoinRepr,
+        observer: &mut JoinObserver,
     ) -> Result<(), std::io::Error> {
         // 获取当前键值
         let key = self.get_current_key();
@@ -583,6 +823,11 @@ impl<'a> JoinState<'a> {
                 }
 
                 repr.print_line_ending(writer)?;
+                observer.record_joined(
+                    (line1, self.key, self.file_num),
+                    (line2, other.key, other.file_num),
+                    repr,
+                )?;
             }
         }
 
@@ -604,8 +849,12 @@ impl<'a> JoinState<'a> {
         Ok(())
     }
 
-    fn reset_next_line(&mut self, input: &JoinInput) -> Result<(), JoinError> {
-        let line = self.next_line(input)?;
+    fn reset_next_line(
+        &mut self,
+        input: &JoinInput,
+        diagnostics: &mut JoinDiagnostics,
+    ) -> Result<(), JoinError> {
+        let line = self.next_line(input, diagnostics)?;
         self.reset(line);
         Ok(())
     }
@@ -637,19 +886,23 @@ impl<'a> JoinState<'a> {
         writer: &mut impl Write,
         input: &JoinInput,
         repr: &JoinRepr,
+        diagnostics: &mut JoinDiagnostics,
+        observer: &mut JoinObserver,
     ) -> CTResult<()> {
         if self.has_line() {
             if self.print_unpaired {
                 self.print_first_line(writer, repr)?;
+                observer.record_single("unpaired", self.file_num, self.key, &self.seq[0], repr)?;
             }
 
-            let mut next_line = self.next_line(input)?;
+            let mut next_line = self.next_line(input, diagnostics)?;
             while let Some(line) = &next_line {
                 if self.print_unpaired {
                     self.print_line(writer, line, repr)?;
+                    observer.record_single("unpaired", self.file_num, self.key, line, repr)?;
                 }
                 self.reset(next_line);
-                next_line = self.next_line(input)?;
+                next_line = self.next_line(input, diagnostics)?;
             }
         }
 
@@ -678,7 +931,11 @@ impl<'a> JoinState<'a> {
     ///
     /// # 返回值
     /// 返回下一行，如果发现排序错误则设置错误标志
-    fn next_line(&mut self, input: &JoinInput) -> Result<Option<Line>, JoinError> {
+    fn next_line(
+        &mut self,
+        input: &JoinInput,
+        diagnostics: &mut JoinDiagnostics,
+    ) -> Result<Option<Line>, JoinError> {
         if let Some(line) = self.read_line(&input.separator)? {
             // 如果不需要检查排序顺序，直接返回
             if input.check_order == CheckOrder::Disabled {
@@ -701,7 +958,10 @@ impl<'a> JoinState<'a> {
                 if input.check_order == CheckOrder::Enabled {
                     return Err(JoinError::UnorderedInput(err_msg));
                 }
-                eprintln!("{}: {}", ctcore::ct_execute_phrase(), err_msg);
+                diagnostics
+                    .stderr_text
+                    .push_str(&format!("{}: {err_msg}\n", ctcore::ct_execute_phrase()));
+                diagnostics.exit_code = diagnostics.exit_code.max(1);
                 self.has_failed = true;
             }
 
@@ -997,15 +1257,47 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功
-fn join_exec(file1: &str, file2: &str, mut settings: JoinSettings) -> CTResult<()> {
-    let stdin = stdin(); // Move stdin here to extend its lifetime
-    let stdout = stdout(); // Move stdout here to manage lifetime
-    let mut writer = BufWriter::new(stdout.lock());
+struct JoinRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
+    rows: Vec<JoinRow>,
+}
 
-    // 此时只获取 state 和 input，可变借用在这里结束后就会释放
+fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
+    let stdout = stdout();
+    let mut writer = BufWriter::new(stdout.lock());
+    let outcome = join_exec_to_writer(file1, file2, settings, &mut writer, false)?;
+    if !outcome.stderr_text.is_empty() {
+        eprint!("{}", outcome.stderr_text);
+    }
+    if outcome.exit_code != 0 {
+        set_ct_exit_code(outcome.exit_code);
+    }
+    Ok(())
+}
+
+fn join_exec_to_writer(
+    file1: &str,
+    file2: &str,
+    mut settings: JoinSettings,
+    writer: &mut impl Write,
+    collect_rows: bool,
+) -> CTResult<JoinRunOutcome> {
+    let stdin = stdin();
+    let mut runtime = if collect_rows {
+        JoinRuntime {
+            diagnostics: JoinDiagnostics::default(),
+            observer: JoinObserver::enabled(),
+        }
+    } else {
+        JoinRuntime {
+            diagnostics: JoinDiagnostics::default(),
+            observer: JoinObserver::disabled(),
+        }
+    };
+
     let (mut state1, mut state2, input) = init_join_states(file1, file2, &mut settings, &stdin)?;
 
-    // 可变借用结束后，我们安全地创建 repr（不可变借用 settings）
     let repr = JoinRepr::new(
         settings.line_ending,
         match &settings.separator {
@@ -1016,25 +1308,41 @@ fn join_exec(file1: &str, file2: &str, mut settings: JoinSettings) -> CTResult<(
         &settings.empty,
     );
 
-    // 处理标题行
     if settings.is_headers {
-        process_headers(&mut state1, &mut state2, &mut writer, &input, &repr)?;
+        process_headers(
+            &mut state1,
+            &mut state2,
+            writer,
+            &input,
+            &repr,
+            &mut runtime.observer,
+        )?;
     }
 
-    // 执行主连接循环
     process_join_loop(
         &mut state1,
         &mut state2,
-        &mut writer,
+        writer,
         &input,
         &repr,
         &settings,
+        &mut runtime,
     )?;
 
-    // 处理剩余行并完成操作
-    finalize_join(&mut state1, &mut state2, &mut writer, &input, &repr)?;
+    finalize_join(
+        &mut state1,
+        &mut state2,
+        writer,
+        &input,
+        &repr,
+        &mut runtime,
+    )?;
 
-    Ok(())
+    Ok(JoinRunOutcome {
+        stderr_text: runtime.diagnostics.stderr_text,
+        exit_code: runtime.diagnostics.exit_code,
+        rows: runtime.observer.rows,
+    })
 }
 
 /// 初始化连接操作的状态
@@ -1109,12 +1417,13 @@ fn prepare_format(
 fn process_headers(
     state1: &mut JoinState,
     state2: &mut JoinState,
-    writer: &mut BufWriter<std::io::StdoutLock>,
+    writer: &mut impl Write,
     input: &JoinInput,
     repr: &JoinRepr,
+    observer: &mut JoinObserver,
 ) -> CTResult<()> {
     // 打印标题行
-    state1.print_headers(writer, state2, repr)?;
+    state1.print_headers(writer, state2, repr, observer)?;
     // 重置两个文件的读取位置
     state1.reset_read_line(input)?;
     state2.reset_read_line(input)?;
@@ -1133,10 +1442,11 @@ fn process_headers(
 fn process_join_loop(
     state1: &mut JoinState,
     state2: &mut JoinState,
-    writer: &mut BufWriter<std::io::StdoutLock>,
+    writer: &mut impl Write,
     input: &JoinInput,
     repr: &JoinRepr,
     settings: &JoinSettings,
+    runtime: &mut JoinRuntime,
 ) -> CTResult<()> {
     // 当两个文件都还有数据时继续处理
     while state1.has_line() && state2.has_line() {
@@ -1144,9 +1454,13 @@ fn process_join_loop(
         let diff = input.compare(state1.get_current_key(), state2.get_current_key());
         // 根据比较结果处理不同情况
         match diff {
-            Ordering::Less => process_less_case(state1, state2, writer, input, repr)?,
-            Ordering::Greater => process_greater_case(state1, state2, writer, input, repr)?,
-            Ordering::Equal => process_equal_case(state1, state2, writer, input, repr, settings)?,
+            Ordering::Less => process_less_case(state1, state2, writer, input, repr, runtime)?,
+            Ordering::Greater => {
+                process_greater_case(state1, state2, writer, input, repr, runtime)?
+            }
+            Ordering::Equal => {
+                process_equal_case(state1, state2, writer, input, repr, settings, runtime)?
+            }
         }
     }
     Ok(())
@@ -1163,12 +1477,19 @@ fn process_join_loop(
 fn process_less_case(
     state1: &mut JoinState,
     state2: &mut JoinState,
-    writer: &mut BufWriter<std::io::StdoutLock>,
+    writer: &mut impl Write,
     input: &JoinInput,
     repr: &JoinRepr,
+    runtime: &mut JoinRuntime,
 ) -> CTResult<()> {
     // 尝试跳过第一个文件的当前行
-    if let Err(e) = state1.skip_line(writer, input, repr) {
+    if let Err(e) = state1.skip_line(
+        writer,
+        input,
+        repr,
+        &mut runtime.diagnostics,
+        &mut runtime.observer,
+    ) {
         writer.flush()?;
         return Err(e);
     }
@@ -1189,12 +1510,19 @@ fn process_less_case(
 fn process_greater_case(
     state1: &mut JoinState,
     state2: &mut JoinState,
-    writer: &mut BufWriter<std::io::StdoutLock>,
+    writer: &mut impl Write,
     input: &JoinInput,
     repr: &JoinRepr,
+    runtime: &mut JoinRuntime,
 ) -> CTResult<()> {
     // 尝试跳过第二个文件的当前行
-    if let Err(e) = state2.skip_line(writer, input, repr) {
+    if let Err(e) = state2.skip_line(
+        writer,
+        input,
+        repr,
+        &mut runtime.diagnostics,
+        &mut runtime.observer,
+    ) {
         writer.flush()?;
         return Err(e);
     }
@@ -1216,13 +1544,14 @@ fn process_greater_case(
 fn process_equal_case(
     state1: &mut JoinState,
     state2: &mut JoinState,
-    writer: &mut BufWriter<std::io::StdoutLock>,
+    writer: &mut impl Write,
     input: &JoinInput,
     repr: &JoinRepr,
     settings: &JoinSettings,
+    runtime: &mut JoinRuntime,
 ) -> CTResult<()> {
     // 扩展第一个文件的行序列
-    let next_line1 = match state1.extend(input) {
+    let next_line1 = match state1.extend(input, &mut runtime.diagnostics) {
         Ok(line) => line,
         Err(e) => {
             writer.flush()?;
@@ -1230,7 +1559,7 @@ fn process_equal_case(
         }
     };
     // 扩展第二个文件的行序列
-    let next_line2 = match state2.extend(input) {
+    let next_line2 = match state2.extend(input, &mut runtime.diagnostics) {
         Ok(line) => line,
         Err(e) => {
             writer.flush()?;
@@ -1240,7 +1569,7 @@ fn process_equal_case(
 
     // 如果需要打印匹配的行
     if settings.is_print_joined {
-        state1.combine(writer, state2, repr)?;
+        state1.combine(writer, state2, repr, &mut runtime.observer)?;
     }
 
     // 重置两个文件的状态
@@ -1260,17 +1589,30 @@ fn process_equal_case(
 fn finalize_join(
     state1: &mut JoinState,
     state2: &mut JoinState,
-    writer: &mut BufWriter<std::io::StdoutLock>,
+    writer: &mut impl Write,
     input: &JoinInput,
     repr: &JoinRepr,
+    runtime: &mut JoinRuntime,
 ) -> CTResult<()> {
     // 处理第一个文件的剩余行
-    if let Err(e) = state1.finalize(writer, input, repr) {
+    if let Err(e) = state1.finalize(
+        writer,
+        input,
+        repr,
+        &mut runtime.diagnostics,
+        &mut runtime.observer,
+    ) {
         writer.flush()?;
         return Err(e);
     }
     // 处理第二个文件的剩余行
-    if let Err(e) = state2.finalize(writer, input, repr) {
+    if let Err(e) = state2.finalize(
+        writer,
+        input,
+        repr,
+        &mut runtime.diagnostics,
+        &mut runtime.observer,
+    ) {
         writer.flush()?;
         return Err(e);
     }
@@ -1280,11 +1622,11 @@ fn finalize_join(
 
     // 如果有排序错误，设置错误状态
     if state1.has_failed || state2.has_failed {
-        eprintln!(
-            "{}: input is not in sorted order",
+        runtime.diagnostics.stderr_text.push_str(&format!(
+            "{}: input is not in sorted order\n",
             ctcore::ct_execute_phrase()
-        );
-        set_ct_exit_code(1);
+        ));
+        runtime.diagnostics.exit_code = runtime.diagnostics.exit_code.max(1);
     }
     Ok(())
 }
@@ -1355,6 +1697,55 @@ fn parse_field_number_option(value: Option<&str>) -> CTResult<Option<usize>> {
         None => Ok(None),
         Some(val) => Ok(Some(parse_field_number(val)?)),
     }
+}
+
+pub fn join_native_semantic(args: impl ctcore::Args) -> CTResult<JoinSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+
+    let settings = JoinSettings::new(&matches)?;
+    let file1 = matches.get_one::<String>("file1").unwrap();
+    let file2 = matches.get_one::<String>("file2").unwrap();
+
+    if file1 == "-" && file2 == "-" {
+        return Err(CtSimpleError::new(1, "both files cannot be standard input"));
+    }
+
+    let key1 = settings.key1 + 1;
+    let key2 = settings.key2 + 1;
+    let print_joined = settings.is_print_joined;
+    let print_unpaired1 = settings.is_print_unpaired1;
+    let print_unpaired2 = settings.is_print_unpaired2;
+    let ignore_case = settings.is_ignore_case;
+    let zero_terminated = matches!(settings.line_ending, CtLineEnding::Nul);
+    let headers = settings.is_headers;
+    let autoformat = settings.is_autoformat;
+    let check_order = join_check_order_name(settings.check_order).to_string();
+    let separator_mode = join_separator_mode_name(&settings.separator).to_string();
+    let separator_text = join_separator_text(&settings.separator);
+
+    let mut output = Vec::new();
+    let outcome = join_exec_to_writer(file1, file2, settings, &mut output, true)?;
+
+    Ok(JoinSemantic {
+        key1,
+        key2,
+        print_joined,
+        print_unpaired1,
+        print_unpaired2,
+        ignore_case,
+        zero_terminated,
+        headers,
+        autoformat,
+        check_order,
+        separator_mode,
+        separator_text,
+        rows: outcome.rows,
+        classic_text: join_bytes_to_string(&output),
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    })
 }
 
 #[cfg(test)]
@@ -1458,7 +1849,7 @@ mod tests {
             .unwrap();
 
         let settings = JoinSettings::new(&matches).unwrap();
-        assert!(matches!(settings.separator, Sep::Char(ref v) if v == &[b',']));
+        assert!(matches!(settings.separator, Sep::Char(ref v) if v == b","));
 
         // 测试空分隔符
         let matches = ct_app()

@@ -25,9 +25,9 @@ pub fn compile<'a>(nir: &NirPipeline<'a>) -> IrPipeline<'a> {
 
         let NirNode::Command(current_call) = current.node;
         // Peephole optimization: merge adjacent "where" and "select"
-        if current_call.name == "where" && i + 1 < stages.len() {
+        if !current_call.force_external && current_call.name == "where" && i + 1 < stages.len() {
             let NirNode::Command(next_call) = stages[i + 1].node;
-            if next_call.name == "select" {
+            if !next_call.force_external && next_call.name == "select" {
                 ops.push(IrOp::MergedWhereSelect {
                     where_call: current_call,
                     select_call: next_call,
@@ -72,5 +72,17 @@ mod tests {
             matches!(&pipeline.ops[1], IrOp::MergedWhereSelect { where_call, select_call } 
             if where_call.name == "where" && select_call.name == "select")
         );
+    }
+
+    #[test]
+    fn test_compile_does_not_merge_forced_external_where_select() {
+        let expr = parse("~where size > 100 | select name").unwrap();
+        let nir = Binder::bind(&expr).unwrap();
+        let pipeline = compile(&nir);
+        assert_eq!(pipeline.ops.len(), 2);
+        assert!(
+            matches!(pipeline.ops[0], IrOp::Command(c) if c.name == "where" && c.force_external)
+        );
+        assert!(matches!(pipeline.ops[1], IrOp::Command(c) if c.name == "select"));
     }
 }

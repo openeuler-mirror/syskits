@@ -73,7 +73,11 @@ impl Parser {
         // 命令名：通常是 Ident；`true`/`false` 在命令名位置按
         // coreutils 命令名处理，在参数位置仍保持 BoolLit。
         let name_tok = self.expect_command_name()?;
-        let name = name_tok.0;
+        let (name, force_external) = if let Some(external_name) = name_tok.0.strip_prefix('~') {
+            (external_name.to_string(), true)
+        } else {
+            (name_tok.0, false)
+        };
         let call_span = name_tok.1.clone();
 
         let mut args = Vec::new();
@@ -83,6 +87,7 @@ impl Parser {
             args.push(self.parse_where_expr()?);
             return Ok(Call {
                 name,
+                force_external,
                 args,
                 span: call_span,
             });
@@ -108,6 +113,7 @@ impl Parser {
 
         Ok(Call {
             name,
+            force_external,
             args,
             span: call_span,
         })
@@ -362,6 +368,7 @@ mod tests {
         let stages = expr.stages();
         assert_eq!(stages.len(), 1);
         assert_eq!(stages[0].name, "ls");
+        assert!(!stages[0].force_external);
         assert!(stages[0].args.is_empty());
     }
 
@@ -378,7 +385,8 @@ mod tests {
     fn test_parse_tilde_prefixed_command_name() {
         let expr = parse("~uname -a");
         let stages = expr.stages();
-        assert_eq!(stages[0].name, "~uname");
+        assert_eq!(stages[0].name, "uname");
+        assert!(stages[0].force_external);
         assert!(matches!(
             &stages[0].args[0],
             Arg::ShortFlag { name: 'a', .. }

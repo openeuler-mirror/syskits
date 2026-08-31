@@ -10,6 +10,7 @@ use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
 use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct CmdSelect;
@@ -72,12 +73,17 @@ impl DataCommand for CmdSelect {
 }
 
 fn project(fields: Vec<(String, CtValue)>, cols: &[String]) -> Vec<(String, CtValue)> {
+    let mut field_index = HashMap::with_capacity(fields.len());
+    for (idx, (key, _)) in fields.iter().enumerate() {
+        field_index.entry(key.as_str()).or_insert(idx);
+    }
+
     cols.iter()
         .filter_map(|col| {
-            fields
-                .iter()
-                .find(|(k, _)| k == col)
-                .map(|(k, v)| (k.clone(), v.clone()))
+            field_index.get(col.as_str()).map(|idx| {
+                let (key, value) = &fields[*idx];
+                (key.clone(), value.clone())
+            })
         })
         .collect()
 }
@@ -204,5 +210,33 @@ mod tests {
         } else {
             panic!("expected Record");
         }
+    }
+
+    #[test]
+    fn test_select_project_preserves_order_duplicates_missing_and_first_wins() {
+        let r = CmdSelect
+            .run(
+                &cols_call(&["c", "missing", "a", "a"]),
+                rec(vec![
+                    ("a", CtValue::Int(1)),
+                    ("b", CtValue::Int(2)),
+                    ("a", CtValue::Int(99)),
+                    ("c", CtValue::Int(3)),
+                ]),
+                &ctx(),
+            )
+            .unwrap();
+
+        let CtPipelineData::Value(CtValue::Record(f), _) = r else {
+            panic!("expected Record");
+        };
+        assert_eq!(
+            f,
+            vec![
+                ("c".to_string(), CtValue::Int(3)),
+                ("a".to_string(), CtValue::Int(1)),
+                ("a".to_string(), CtValue::Int(1)),
+            ]
+        );
     }
 }

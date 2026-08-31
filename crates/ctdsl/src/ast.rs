@@ -113,6 +113,8 @@ pub enum Arg {
 pub struct Call {
     /// 命令名（已解析为字符串）
     pub name: String,
+    /// 是否强制通过 PATH 执行外部命令（由 `~cmd` 语法触发）
+    pub force_external: bool,
     /// 参数列表（顺序与原始表达式一致）
     pub args: Vec<Arg>,
     /// 整条调用的 span（从命令名开始）
@@ -165,6 +167,7 @@ mod tests {
         use ctpipeline::CtSpan;
         let call = Call {
             name: "ls".into(),
+            force_external: false,
             args: vec![],
             span: CtSpan::inline(0, 2, 1, 1),
         };

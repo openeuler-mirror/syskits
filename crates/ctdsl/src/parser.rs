@@ -69,8 +69,9 @@ impl Parser {
     // ── 主要规则 ─────────────────────────────────────────
 
     fn parse_call(&mut self) -> Result<Call, ParseError> {
-        // 命令名：必须是 Ident
-        let name_tok = self.expect_ident("command name")?;
+        // 命令名：通常是 Ident；`true`/`false` 在命令名位置按
+        // coreutils 命令名处理，在参数位置仍保持 BoolLit。
+        let name_tok = self.expect_command_name()?;
         let name = name_tok.0;
         let call_span = name_tok.1.clone();
 
@@ -300,12 +301,13 @@ impl Parser {
         tok
     }
 
-    fn expect_ident(&mut self, context: &str) -> Result<(String, CtSpan), ParseError> {
+    fn expect_command_name(&mut self) -> Result<(String, CtSpan), ParseError> {
         let st = self.advance();
         match &st.token {
             Token::Ident(s) => Ok((s.clone(), st.span.clone())),
+            Token::BoolLit(value) => Ok((value.to_string(), st.span.clone())),
             other => Err(ParseError::syntax(
-                format!("expected {context}, got `{other}`"),
+                format!("expected command name, got `{other}`"),
                 st.span.clone(),
             )),
         }
@@ -336,6 +338,35 @@ mod tests {
         assert_eq!(stages.len(), 1);
         assert_eq!(stages[0].name, "ls");
         assert!(stages[0].args.is_empty());
+    }
+
+    #[test]
+    fn test_parse_bool_keywords_as_command_names() {
+        let expr = parse("false | true");
+        let stages = expr.stages();
+        assert_eq!(stages.len(), 2);
+        assert_eq!(stages[0].name, "false");
+        assert_eq!(stages[1].name, "true");
+    }
+
+    #[test]
+    fn test_parse_bool_keywords_as_positional_literals() {
+        let expr = parse("echo false true");
+        let args = &expr.stages()[0].args;
+        assert!(matches!(
+            &args[0],
+            Arg::Positional {
+                value: Lit::Bool(false),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &args[1],
+            Arg::Positional {
+                value: Lit::Bool(true),
+                ..
+            }
+        ));
     }
 
     #[test]

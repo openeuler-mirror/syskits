@@ -443,6 +443,34 @@ fn shell_entry_accepts_gnu_flags_like_data_entry() {
 }
 
 #[test]
+fn shell_direct_only_command_prefers_internal_tool_before_external_path() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["chroot", "--help"])
+        .output()
+        .expect("run direct syskits chroot --help");
+    let shell = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "chroot", "--help"])
+        .output()
+        .expect("run syskits shell chroot --help classic");
+
+    assert_same_process_output(&shell, &expected);
+}
+
+#[test]
+fn shell_direct_only_nonzero_command_matches_internal_tool() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["false"])
+        .output()
+        .expect("run direct syskits false");
+    let shell = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "false"])
+        .output()
+        .expect("run syskits shell false classic");
+
+    assert_same_process_output(&shell, &expected);
+}
+
+#[test]
 fn data_uname_json_machine_flag_uses_explicit_flags() {
     let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["data", "format=json", "uname", "-m"])

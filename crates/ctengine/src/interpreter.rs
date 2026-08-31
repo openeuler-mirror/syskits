@@ -304,24 +304,19 @@ fn eval_call(
         return Ok(out);
     }
 
-    if let Some(adapter) = &ctx.legacy_adapter {
-        if adapter.can_resolve(&call.name) {
-            return match adapter.run_call(call, input)? {
-                Some(output) => Ok(output),
-                None => Err(CtDiagnosticError::simple(format!(
-                    "legacy adapter resolved `{}` but returned no executable command",
-                    call.name
-                ))),
-            };
-        }
-    }
-
     if let Some(registry) = &ctx.plugin_registry {
         if let Some(cmd) = registry.get_command(&call.name) {
             let sig = cmd.signature();
             let data_call = build_data_call(call, Some(&sig))?;
             validate_data_call_against_signature(call, &data_call, &sig)?;
             return cmd.run(&data_call, input, ctx);
+        }
+    }
+
+    if let Some(adapter) = &ctx.legacy_adapter {
+        if adapter.can_resolve(&call.name) {
+            let spec = adapter.external_call_spec(call)?;
+            return crate::external::ExternalExecutor::run(spec, input, ctx);
         }
     }
 

@@ -42,6 +42,18 @@ pub(crate) fn filter_precheck_diags_for_repl(
     expr: &ctdsl::Expr,
     diags: Vec<ctdsl::PrecheckDiagnostic>,
     signatures: &HashMap<String, DataSignature>,
+    legacy_resolver: Option<LegacyToolResolver>,
+) -> Vec<ctdsl::PrecheckDiagnostic> {
+    filter_precheck_diags_for_repl_with_known_command(expr, diags, signatures, |name| {
+        legacy_resolver.is_some_and(|resolver| resolver(name).is_some())
+    })
+}
+
+pub(crate) fn filter_precheck_diags_for_repl_with_known_command(
+    expr: &ctdsl::Expr,
+    diags: Vec<ctdsl::PrecheckDiagnostic>,
+    signatures: &HashMap<String, DataSignature>,
+    is_known_legacy_command: impl Fn(&str) -> bool,
 ) -> Vec<ctdsl::PrecheckDiagnostic> {
     diags
         .into_iter()
@@ -52,7 +64,7 @@ pub(crate) fn filter_precheck_diags_for_repl(
             let Some(stage) = expr.stages().get(d.stage_index) else {
                 return true;
             };
-            !signatures.contains_key(&stage.name)
+            !signatures.contains_key(&stage.name) && !is_known_legacy_command(&stage.name)
         })
         .collect()
 }
@@ -122,6 +134,7 @@ pub fn run_repl(
                     &expr,
                     ctdsl::precheck_expr(&expr, signatures.as_ref()),
                     signatures.as_ref(),
+                    legacy_resolver,
                 );
                 if !precheck_diags.is_empty() {
                     print_precheck_diagnostics(&precheck_diags, &texts);

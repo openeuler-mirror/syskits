@@ -22,9 +22,10 @@ use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
 use ctcore::uio_error;
+use std::cell::RefCell;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -32,6 +33,7 @@ use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use sys_locale::get_locale;
 
 static OPT_BYTES: &str = "bytes";
@@ -54,6 +56,11 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
+thread_local! {
+    static SPLIT_BUFFERED_STDOUT: RefCell<Option<Arc<Mutex<Vec<u8>>>>> = const { RefCell::new(None) };
+    static SPLIT_OBSERVED_FILES: RefCell<Option<Arc<Mutex<Vec<String>>>>> = const { RefCell::new(None) };
+}
+
 #[derive(Default)]
 pub struct Split;
 impl Tool for Split {
@@ -73,10 +80,39 @@ impl Tool for Split {
 pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let settings = split_parse_invocation(args)?;
+    split(&settings)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SplitRow {
+    pub row_index: usize,
+    pub output_kind: String,
+    pub path: Option<String>,
+    pub file_name: Option<String>,
+    pub byte_len: usize,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SplitSemantic {
+    pub strategy: String,
+    pub prefix: String,
+    pub input: String,
+    pub filter: Option<String>,
+    pub separator_text: String,
+    pub verbose: bool,
+    pub elide_empty_files: bool,
+    pub unbuffered: bool,
+    pub rows: Vec<SplitRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+fn split_parse_invocation(args: impl ctcore::Args) -> CTResult<SpliceSettings> {
     let (args, obs_lines) = split_handle_obsolete(args);
 
-    // GNU split accepts only `---io-blksize` (hidden option), not `--io-blksize`.
-    // Pre-check to return GNU-compatible diagnostics instead of clap's generic error.
     if let Some(invalid_opt) = split_find_invalid_io_blksize_opt(&args) {
         let util_name = ctcore::ct_util_name();
         return Err(CtSimpleError::new(
@@ -89,21 +125,193 @@ pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let args_match = ct_app().try_get_matches_from(args)?;
 
-    match SpliceSettings::from(&args_match, &obs_lines) {
-        Ok(settings) => {
-            #[cfg(test)]
-            let settings = {
-                let mut settings = settings;
-                if settings.prefix == "x" {
-                    settings.prefix = split_test_prefix();
-                }
-                settings
-            };
-            split(&settings)
+    let settings = match SpliceSettings::from(&args_match, &obs_lines) {
+        Ok(settings) => settings,
+        Err(e) if e.splice_requires_usage() => return Err(CTsageError::new(1, format!("{e}"))),
+        Err(e) => return Err(CtSimpleError::new(1, format!("{e}"))),
+    };
+
+    #[cfg(test)]
+    let settings = {
+        let mut settings = settings;
+        if settings.prefix == "x" {
+            settings.prefix = split_test_prefix();
         }
-        Err(e) if e.splice_requires_usage() => Err(CTsageError::new(1, format!("{e}"))),
-        Err(e) => Err(CtSimpleError::new(1, format!("{e}"))),
+        settings
+    };
+
+    Ok(settings)
+}
+
+enum SplitStdoutWriter {
+    Buffer(Arc<Mutex<Vec<u8>>>),
+    Stdout(std::io::Stdout),
+}
+
+impl Write for SplitStdoutWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Buffer(buffer) => {
+                buffer
+                    .lock()
+                    .expect("split stdout buffer lock")
+                    .extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            Self::Stdout(stdout) => stdout.write(buf),
+        }
     }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Buffer(_) => Ok(()),
+            Self::Stdout(stdout) => stdout.flush(),
+        }
+    }
+}
+
+fn split_stdout_writer() -> SplitStdoutWriter {
+    let buffer = SPLIT_BUFFERED_STDOUT.with(|slot| slot.borrow().clone());
+    match buffer {
+        Some(buffer) => SplitStdoutWriter::Buffer(buffer),
+        None => SplitStdoutWriter::Stdout(std::io::stdout()),
+    }
+}
+
+fn split_emit_creating_file(file_name: &str) -> io::Result<()> {
+    let mut writer = split_stdout_writer();
+    writeln!(
+        writer,
+        "{} {}",
+        t!("split.creating_file"),
+        file_name.quote()
+    )?;
+    writer.flush()
+}
+
+fn split_observe_output_file(file_name: &str) {
+    SPLIT_OBSERVED_FILES.with(|slot| {
+        if let Some(files) = slot.borrow().as_ref() {
+            let mut files = files.lock().expect("split file observation lock");
+            if !files.iter().any(|existing| existing == file_name) {
+                files.push(file_name.to_string());
+            }
+        }
+    });
+}
+
+fn split_run_with_buffered_observers<F>(f: F) -> (CTResult<()>, Vec<u8>, Vec<String>)
+where
+    F: FnOnce() -> CTResult<()>,
+{
+    let buffered_stdout = Arc::new(Mutex::new(Vec::new()));
+    let observed_files = Arc::new(Mutex::new(Vec::new()));
+    let previous_stdout =
+        SPLIT_BUFFERED_STDOUT.with(|slot| slot.replace(Some(Arc::clone(&buffered_stdout))));
+    let previous_files =
+        SPLIT_OBSERVED_FILES.with(|slot| slot.replace(Some(Arc::clone(&observed_files))));
+    let result = f();
+    SPLIT_BUFFERED_STDOUT.with(|slot| {
+        let _ = slot.replace(previous_stdout);
+    });
+    SPLIT_OBSERVED_FILES.with(|slot| {
+        let _ = slot.replace(previous_files);
+    });
+
+    let stdout = buffered_stdout
+        .lock()
+        .expect("split stdout buffer lock")
+        .clone();
+    let files = observed_files
+        .lock()
+        .expect("split file observation lock")
+        .clone();
+    (result, stdout, files)
+}
+
+fn split_render_error_text(err: &dyn CTError) -> String {
+    let mut stderr = format!("split: {err}\n");
+    if err.usage() {
+        stderr.push_str("Try 'split --help' for more information.\n");
+    }
+    stderr
+}
+
+fn split_strategy_name(strategy: &Strategy) -> &'static str {
+    match strategy {
+        Strategy::Lines(_) => "lines",
+        Strategy::Bytes(_) => "bytes",
+        Strategy::LineBytes(_) => "line_bytes",
+        Strategy::Number(StrategyNumberType::Bytes(_)) => "number_bytes",
+        Strategy::Number(StrategyNumberType::KthBytes(_, _)) => "number_kth_bytes",
+        Strategy::Number(StrategyNumberType::Lines(_)) => "number_lines",
+        Strategy::Number(StrategyNumberType::KthLines(_, _)) => "number_kth_lines",
+        Strategy::Number(StrategyNumberType::RoundRobin(_)) => "number_round_robin",
+        Strategy::Number(StrategyNumberType::KthRoundRobin(_, _)) => "number_kth_round_robin",
+    }
+}
+
+fn split_rows_from_outputs(stdout: &[u8], files: &[String]) -> Vec<SplitRow> {
+    let mut rows = Vec::new();
+
+    for file in files {
+        let path = Path::new(file);
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        rows.push(SplitRow {
+            row_index: rows.len() + 1,
+            output_kind: "file".into(),
+            path: Some(file.clone()),
+            file_name: path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned),
+            byte_len: bytes.len(),
+            content: String::from_utf8_lossy(&bytes).into_owned(),
+        });
+    }
+
+    if !stdout.is_empty() {
+        rows.push(SplitRow {
+            row_index: rows.len() + 1,
+            output_kind: "stdout".into(),
+            path: None,
+            file_name: None,
+            byte_len: stdout.len(),
+            content: String::from_utf8_lossy(stdout).into_owned(),
+        });
+    }
+
+    rows
+}
+
+pub fn split_native_semantic(args: impl ctcore::Args) -> CTResult<SplitSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let settings = split_parse_invocation(args)?;
+    let (result, stdout, files) = split_run_with_buffered_observers(|| split(&settings));
+    let classic_text = String::from_utf8_lossy(&stdout).into_owned();
+
+    let (stderr_text, exit_code) = match result {
+        Ok(()) => (String::new(), 0),
+        Err(err) => (split_render_error_text(err.as_ref()), err.code()),
+    };
+
+    Ok(SplitSemantic {
+        strategy: split_strategy_name(&settings.strategy).into(),
+        prefix: settings.prefix.clone(),
+        input: settings.input.clone(),
+        filter: settings.filter.clone(),
+        separator_text: String::from_utf8_lossy(&[settings.separator]).into_owned(),
+        verbose: settings.verbose,
+        elide_empty_files: settings.elide_empty_files,
+        unbuffered: settings.unbuffered,
+        rows: split_rows_from_outputs(&stdout, &files),
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
 }
 
 fn split_find_invalid_io_blksize_opt(args: &[OsString]) -> Option<String> {
@@ -665,7 +873,9 @@ impl SpliceSettings {
             )));
         }
 
-        platform::instantiate_current_writer(&self.filter, file_name, new)
+        let writer = platform::instantiate_current_writer(&self.filter, file_name, new)?;
+        split_observe_output_file(file_name);
+        Ok(writer)
     }
 }
 
@@ -859,7 +1069,7 @@ impl<'a> SpliceByteChunkWriter<'a> {
             .next()
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
         if splice_settings.verbose {
-            println!("{} {}", t!("split.creating_file"), file_name.quote());
+            split_emit_creating_file(&file_name).map_err(CTIoError::from)?;
         }
         let splice_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SpliceByteChunkWriter {
@@ -901,7 +1111,7 @@ impl Write for SpliceByteChunkWriter<'_> {
                     .next()
                     .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
-                    println!("{} {}", t!("split.creating_file"), file_name.quote());
+                    split_emit_creating_file(&file_name)?;
                 }
                 self.inner = self
                     .settings
@@ -988,7 +1198,7 @@ impl<'a> SpliceLineChunkWriter<'a> {
             .next()
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
         if splice_settings.verbose {
-            println!("{} {}", t!("split.creating_file"), file_name.quote());
+            split_emit_creating_file(&file_name).map_err(CTIoError::from)?;
         }
         let buf_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SpliceLineChunkWriter {
@@ -1025,7 +1235,7 @@ impl Write for SpliceLineChunkWriter<'_> {
 
                 // 开启详细日志时，打印创建文件信息
                 if self.settings.verbose {
-                    println!("{} {}", t!("split.creating_file"), filename.quote());
+                    split_emit_creating_file(&filename)?;
                 }
 
                 // 实例化当前分块对应的底层写入器
@@ -1098,7 +1308,7 @@ fn splice_line_bytes<R: BufRead>(
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
 
         if splice_settings.verbose {
-            println!("{} {}", t!("split.creating_file"), filename.quote());
+            split_emit_creating_file(&filename).map_err(CTIoError::from)?;
         }
 
         let mut writer = splice_settings
@@ -1381,7 +1591,7 @@ where
     }
 
     // 准备输出：如果在 Kth 块 of N 块模式，则写入标准输出；否则，为每个块创建一个写入器
-    let mut splice_stdout_writer = std::io::stdout().lock();
+    let mut splice_stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
 
     // 计算每个块的基础大小和余数，用于之后计算块大小
@@ -1511,7 +1721,7 @@ where
     }
 
     // 准备输出：确定是写入标准输出还是多个文件
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
 
     // 计算基本块大小和余数，用于确定应写入的字节数
@@ -1634,7 +1844,7 @@ where
     R: BufRead,
 {
     // 初始化输出目标。如果在N块模式下，将创建多个文件作为输出；如果在Kth块模式下，输出将直接写入标准输出。
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
 
     // 在N块模式下初始化输出文件。
@@ -1781,6 +1991,8 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+    use tempfile::tempdir;
 
     fn unique_output_filename() -> &'static str {
         static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -1806,7 +2018,7 @@ mod tests {
             .parent()
             .map(std::path::Path::to_path_buf)
             .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_else(|| std::env::temp_dir());
+            .unwrap_or_else(std::env::temp_dir);
         let Ok(entries) = std::fs::read_dir(parent) else {
             return;
         };
@@ -1821,6 +2033,105 @@ mod tests {
             if file_name.starts_with(prefix_name) {
                 let _ = std::fs::remove_file(file_path);
             }
+        }
+    }
+
+    fn collect_outputs_by_prefix(prefix: &str) -> BTreeMap<String, Vec<u8>> {
+        let prefix_path = std::path::Path::new(prefix);
+        let Some(prefix_name) = prefix_path.file_name().and_then(|name| name.to_str()) else {
+            return BTreeMap::new();
+        };
+        let parent = prefix_path
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(std::env::temp_dir);
+
+        let mut outputs = BTreeMap::new();
+        let Ok(entries) = std::fs::read_dir(parent) else {
+            return outputs;
+        };
+
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with(prefix_name) {
+                outputs.insert(
+                    name,
+                    std::fs::read(entry.path()).expect("read split output"),
+                );
+            }
+        }
+
+        outputs
+    }
+
+    mod semantic_tests {
+        use super::*;
+
+        #[test]
+        fn test_split_native_semantic_lines_rows() {
+            let temp = tempdir().expect("tempdir");
+            let input = temp.path().join("input.txt");
+            let prefix = temp.path().join("chunk_");
+            std::fs::write(&input, "1\n2\n3\n4\n5\n").expect("write split semantic input");
+
+            let semantic = split_native_semantic(
+                vec![
+                    OsString::from("split"),
+                    OsString::from("-l"),
+                    OsString::from("2"),
+                    OsString::from(input.display().to_string()),
+                    OsString::from(prefix.display().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("split semantic");
+
+            assert_eq!(semantic.strategy, "lines");
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.rows.len(), 3);
+            assert_eq!(semantic.rows[0].output_kind, "file");
+            assert_eq!(semantic.rows[0].file_name.as_deref(), Some("chunk_aa"));
+            assert_eq!(semantic.rows[0].content, "1\n2\n");
+            assert_eq!(semantic.rows[0].byte_len, 4);
+
+            let outputs = collect_outputs_by_prefix(&prefix.display().to_string());
+            assert_eq!(outputs.len(), 3);
+            assert_eq!(outputs["chunk_aa"], b"1\n2\n");
+            assert_eq!(outputs["chunk_ab"], b"3\n4\n");
+            assert_eq!(outputs["chunk_ac"], b"5\n");
+        }
+
+        #[test]
+        fn test_split_native_semantic_missing_input_reports_runtime_error() {
+            let temp = tempdir().expect("tempdir");
+            let missing = temp.path().join("missing.txt");
+            let prefix = temp.path().join("chunk_");
+
+            let semantic = split_native_semantic(
+                vec![
+                    OsString::from("split"),
+                    OsString::from("-l"),
+                    OsString::from("2"),
+                    OsString::from(missing.display().to_string()),
+                    OsString::from(prefix.display().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("split semantic runtime error");
+
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(semantic.exit_code, 1);
+            assert!(
+                semantic
+                    .stderr_text
+                    .contains(&format!("cannot open '{}' for reading", missing.display())),
+                "stderr: {}",
+                semantic.stderr_text
+            );
+            assert!(semantic.rows.is_empty());
         }
     }
 

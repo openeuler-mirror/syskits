@@ -447,15 +447,9 @@ fn persist_checkpoint(
     let path = checkpoint_file_path(&stage.name, stage_idx, run_id);
 
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            CtDiagnosticError::simple(format!(
-                "failed to create checkpoint dir '{}': {}",
-                parent.display(),
-                e
-            ))
-        })?;
+        ensure_checkpoint_dir(parent)?;
     }
-    std::fs::write(&path, bytes).map_err(|e| {
+    write_checkpoint_file(&path, &bytes).map_err(|e| {
         CtDiagnosticError::simple(format!(
             "failed to write checkpoint '{}': {}",
             path.display(),
@@ -470,19 +464,107 @@ fn new_checkpoint_run_id() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    format!("{}-{}", std::process::id(), timestamp)
+    let mut random = [0u8; 8];
+    let mut rng = rand::rngs::OsRng;
+    rand::RngCore::fill_bytes(&mut rng, &mut random);
+    format!(
+        "{}-{}-{:016x}",
+        std::process::id(),
+        timestamp,
+        u64::from_ne_bytes(random)
+    )
 }
 
 fn checkpoint_file_path(stage_name: &str, stage_idx: usize, run_id: &str) -> std::path::PathBuf {
-    let dir = std::env::var("SYSKITS_WORKFLOW_CHECKPOINT_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"));
+    let dir = checkpoint_base_dir();
     dir.join(format!(
         "syskits-checkpoint-{}-{}-{}.json",
         run_id,
         stage_idx,
         sanitize_stage_name(stage_name)
     ))
+}
+
+fn checkpoint_base_dir() -> std::path::PathBuf {
+    std::env::var("SYSKITS_WORKFLOW_CHECKPOINT_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| default_checkpoint_base_dir())
+}
+
+fn default_checkpoint_base_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("syskits-workflow-checkpoints")
+}
+
+fn ensure_checkpoint_dir(dir: &std::path::Path) -> Result<(), CtDiagnosticError> {
+    if dir == default_checkpoint_base_dir() {
+        ensure_private_checkpoint_dir(dir)
+    } else {
+        std::fs::create_dir_all(dir).map_err(|e| {
+            CtDiagnosticError::simple(format!(
+                "failed to create checkpoint dir '{}': {}",
+                dir.display(),
+                e
+            ))
+        })
+    }
+}
+
+fn ensure_private_checkpoint_dir(dir: &std::path::Path) -> Result<(), CtDiagnosticError> {
+    match std::fs::symlink_metadata(dir) {
+        Ok(meta) => {
+            if meta.file_type().is_symlink() || !meta.is_dir() {
+                return Err(CtDiagnosticError::simple(format!(
+                    "checkpoint dir '{}' must be a real directory",
+                    dir.display()
+                )));
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir(dir).map_err(|e| {
+                CtDiagnosticError::simple(format!(
+                    "failed to create checkpoint dir '{}': {}",
+                    dir.display(),
+                    e
+                ))
+            })?;
+        }
+        Err(e) => {
+            return Err(CtDiagnosticError::simple(format!(
+                "failed to inspect checkpoint dir '{}': {}",
+                dir.display(),
+                e
+            )));
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).map_err(|e| {
+            CtDiagnosticError::simple(format!(
+                "failed to secure checkpoint dir '{}': {}",
+                dir.display(),
+                e
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+fn write_checkpoint_file(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(bytes)?;
+    file.flush()
 }
 
 fn sanitize_stage_name(stage_name: &str) -> String {
@@ -793,7 +875,7 @@ mod tests {
 
     fn matching_checkpoint_paths(stage_name: &str) -> Vec<std::path::PathBuf> {
         let suffix = format!("-{}.json", sanitize_stage_name(stage_name));
-        let Ok(entries) = std::fs::read_dir("/tmp") else {
+        let Ok(entries) = std::fs::read_dir(checkpoint_base_dir()) else {
             return Vec::new();
         };
         let mut paths: Vec<_> = entries
@@ -815,6 +897,40 @@ mod tests {
         for path in matching_checkpoint_paths(stage_name) {
             let _ = std::fs::remove_file(path);
         }
+    }
+
+    #[test]
+    fn checkpoint_default_path_uses_private_temp_subdir() {
+        let path = default_checkpoint_base_dir().join("probe.json");
+        assert_ne!(path.parent(), Some(std::path::Path::new("/tmp")));
+        assert!(
+            path.starts_with(std::env::temp_dir().join("syskits-workflow-checkpoints")),
+            "checkpoint path should use a private temp subdir by default: {}",
+            path.display()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persist_checkpoint_does_not_follow_existing_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!(
+            "syskits-checkpoint-symlink-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("checkpoint.json");
+        let victim = dir.join("victim.txt");
+        std::fs::write(&victim, "safe").unwrap();
+        symlink(&victim, &path).unwrap();
+
+        let result = write_checkpoint_file(&path, b"checkpoint");
+        assert!(result.is_err(), "checkpoint write should reject symlinks");
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "safe");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

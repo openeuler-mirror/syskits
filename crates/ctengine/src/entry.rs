@@ -108,21 +108,18 @@ pub fn run_data_entry_with_registry_and_legacy(
                             }
                         }
                         Err(e) => {
-                            eprintln!("syskits data: error: {}", e);
+                            eprintln!("syskits data: error: {e}");
                             return workflow_error_exit_code(&e);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!(
-                        "syskits data: workflow parse error in {}: {}",
-                        workflow_path, e
-                    );
+                    eprintln!("syskits data: workflow parse error in {workflow_path}: {e}");
                     return exit_code::RUNTIME_ERROR;
                 }
             },
             Err(e) => {
-                eprintln!("syskits data: read error for {}: {}", workflow_path, e);
+                eprintln!("syskits data: read error for {workflow_path}: {e}");
                 return exit_code::RUNTIME_ERROR;
             }
         }

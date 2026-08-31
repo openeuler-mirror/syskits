@@ -16,6 +16,7 @@ use clap::{Arg, Command};
 use clap_complete::Shell;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
+#[cfg(feature = "feat_data_pipeline")]
 // DataTools 宏生成的代码引用 DataCommand trait 和 DataCommandFactory 类型，必须在此 use
 use ctengine::{DataCommand, DataCommandFactory};
 use std::ffi::OsStr;
@@ -23,7 +24,9 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-use tool_derive::{DataTools, Tools};
+#[cfg(feature = "feat_data_pipeline")]
+use tool_derive::DataTools;
+use tool_derive::Tools;
 
 const CT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -34,6 +37,7 @@ struct SysKits {}
 /// 数据管线命令注册表，tool_derive::DataTools 自动扫描 crates/commands_data/
 /// 生成 ALL_DATA_COMMANDS / get_data_command / data_command_factories
 #[allow(dead_code)]
+#[cfg(feature = "feat_data_pipeline")]
 #[derive(DataTools)]
 struct DataRegistry {}
 
@@ -163,6 +167,7 @@ struct CommandHandler {
     context: ExecutionContext, // 执行上下文
 }
 
+#[cfg(feature = "feat_data_pipeline")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DataMetaAction {
     Help,
@@ -237,6 +242,11 @@ impl CommandHandler {
         self.handle_data();
     }
 
+    #[cfg(not(feature = "feat_data_pipeline"))]
+    fn handle_data(&self) -> ! {
+        Self::report_not_found(&OsString::from("data"));
+    }
+
     fn should_bridge_shell_init(util: &str, args: &[OsString]) -> bool {
         util == "shell" && Self::is_legacy_shell_init_args(args)
     }
@@ -298,6 +308,7 @@ impl CommandHandler {
     ///
     /// data 的引数为 context.args（已去掉 "data" 和之前的 syskits）。
     /// M1a 阶段调用存核实现，M1b 等价替换为完整引擎。
+    #[cfg(feature = "feat_data_pipeline")]
     fn handle_data(&self) -> ! {
         if let Some(action) = Self::data_meta_action(&self.context.args) {
             match action {
@@ -342,6 +353,7 @@ impl CommandHandler {
         process::exit(code);
     }
 
+    #[cfg(feature = "feat_data_pipeline")]
     fn data_meta_action(args: &[OsString]) -> Option<DataMetaAction> {
         if args.len() != 1 {
             return None;
@@ -354,6 +366,7 @@ impl CommandHandler {
         }
     }
 
+    #[cfg(feature = "feat_data_pipeline")]
     fn print_data_help() {
         println!("syskits data {CT_VERSION}");
         println!("Usage: syskits data <expr>");
@@ -523,7 +536,14 @@ fn execute_tool(tool: Box<dyn Tool>, args: &[OsString]) -> i32 {
 
 fn map_tool_error_exit_code(code: i32, usage: bool) -> i32 {
     let _ = usage;
-    ctengine::ExitPolicy::normalize(code)
+    match code {
+        0 => 1,
+        2 => 2,
+        124 => 124,
+        130 => 130,
+        c if c > 0 => c,
+        _ => 1,
+    }
 }
 
 /// 从路径中提取可执行文件名
@@ -712,6 +732,7 @@ mod tests {
         assert!(path.exists());
     }
 
+    #[cfg(feature = "feat_data_pipeline")]
     #[test]
     fn test_data_entry_legacy_fallback_echo() {
         let args = vec![OsString::from("echo"), OsString::from("hello")];
@@ -805,6 +826,7 @@ mod tests {
         assert_eq!(forwarded[3], OsString::from("/tmp/demo"));
     }
 
+    #[cfg(feature = "feat_data_pipeline")]
     #[test]
     fn test_data_meta_action_help() {
         assert_eq!(
@@ -817,6 +839,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "feat_data_pipeline")]
     #[test]
     fn test_data_meta_action_version() {
         assert_eq!(
@@ -829,6 +852,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "feat_data_pipeline")]
     #[test]
     fn test_data_meta_action_none() {
         assert_eq!(CommandHandler::data_meta_action(&[]), None);

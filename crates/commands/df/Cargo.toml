@@ -19,13 +19,8 @@ sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["libc", "fsext"] }
-ctengine = { workspace = true, optional = true }
-ctpipeline = { workspace = true, optional = true }
-ctsig = { workspace = true, optional = true }
 
 unicode-width = { workspace = true }
-[features]
-feat_typed_cmds = ["ctengine", "ctpipeline", "ctsig"]
 
 [dev-dependencies]
 tempfile = "3"

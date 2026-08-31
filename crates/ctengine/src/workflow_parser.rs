@@ -80,8 +80,7 @@ fn parse_on_failure(
                 return Ok(crate::workflow::OnFailure::Goto(target.to_string()));
             }
             Err(WorkflowParseError::TextError(format!(
-                "invalid on_failure value '{}'; expected fail|continue|goto(stage)",
-                s
+                "invalid on_failure value '{s}'; expected fail|continue|goto(stage)"
             )))
         }
         serde_yaml::Value::Mapping(m) => {

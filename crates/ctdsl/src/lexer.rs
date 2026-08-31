@@ -92,6 +92,13 @@ impl<'s> Lexer<'s> {
         chars.next()
     }
 
+    fn peek3(&self) -> Option<char> {
+        let mut chars = self.src[self.pos..].chars();
+        chars.next();
+        chars.next();
+        chars.next()
+    }
+
     fn advance(&mut self) -> Option<char> {
         let ch = self.peek()?;
         self.pos += ch.len_utf8();
@@ -226,6 +233,11 @@ impl<'s> Lexer<'s> {
                     .peek2()
                     .map(|c| c.is_ascii_alphabetic())
                     .unwrap_or(false)
+                    || (self.peek2() == Some('0')
+                        && self
+                            .peek3()
+                            .map(|c| c.is_whitespace() || c == '|')
+                            .unwrap_or(true))
                 {
                     self.lex_short_flag()
                 } else if self
@@ -687,6 +699,12 @@ mod tests {
     fn test_lex_short_flag() {
         let toks = lex("-v");
         assert_eq!(toks[0], Token::ShortFlag('v'));
+    }
+
+    #[test]
+    fn test_lex_numeric_zero_short_flag() {
+        let toks = lex("-0");
+        assert_eq!(toks[0], Token::ShortFlag('0'));
     }
 
     #[test]

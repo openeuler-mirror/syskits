@@ -118,3 +118,12 @@ fn data_runtime_dependencies_are_optional_and_pipeline_gated() {
         );
     }
 }
+
+#[test]
+fn experimental_feature_forwards_ctengine_ir_flag() {
+    let manifest = syskits_manifest();
+    let experimental = feature_entries(&manifest, "feat_data_experimental");
+
+    assert!(experimental.contains(&"feat_data_pipeline".to_string()));
+    assert!(experimental.contains(&"ctengine/feat_data_experimental".to_string()));
+}

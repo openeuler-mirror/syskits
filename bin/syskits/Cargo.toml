@@ -107,7 +107,7 @@ feat_data_pipeline = [
 ]
 feat_data_workflow = ["feat_data_pipeline", "ctengine/workflow"]
 feat_data_plugin = ["feat_data_pipeline", "ctplugin"]
-feat_data_experimental = ["feat_data_pipeline"]
+feat_data_experimental = ["feat_data_pipeline", "ctengine/feat_data_experimental"]
 feat_shell_init = ["shell_init"]
 feat_shell_interactive = [
   "feat_data_pipeline",

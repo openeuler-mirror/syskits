@@ -343,6 +343,10 @@ mod tests {
 
     use std::io::Write;
 
+    fn current_uid_arg() -> OsString {
+        OsString::from(unsafe { ctcore::libc::geteuid() }.to_string())
+    }
+
     #[test]
     fn test_parse_uid() {
         assert!(matches!(chown_parse_uid("", "", ':'), Ok(None)));
@@ -728,9 +732,14 @@ mod tests {
             .expect("Failed to write to file");
         println!("File '{file_path}' created successfully.");
 
-        let args = [ctcore::ct_util_name(), "-R", "1000", dir_path];
+        let args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-R"),
+            current_uid_arg(),
+            OsString::from(dir_path),
+        ];
 
-        let result = chown_main(args.iter().map(OsString::from));
+        let result = chown_main(args.into_iter());
         assert!(result.is_ok());
         // 删除目录及其内容
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");
@@ -751,9 +760,13 @@ mod tests {
             .expect("Failed to write to file");
         println!("File '{file_path}' created successfully.");
 
-        let args = [ctcore::ct_util_name(), "1000", file_name];
+        let args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            current_uid_arg(),
+            OsString::from(file_name),
+        ];
 
-        let result = chown_main(args.iter().map(OsString::from));
+        let result = chown_main(args.into_iter());
         assert!(result.is_ok());
 
         // Remove the file
@@ -781,9 +794,14 @@ mod tests {
             .expect("Failed to write to file");
         println!("File '{file_path}' created successfully.");
 
-        let args = [ctcore::ct_util_name(), "--recursive", "1000", dir_path];
+        let args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("--recursive"),
+            current_uid_arg(),
+            OsString::from(dir_path),
+        ];
 
-        let result = chown_main(args.iter().map(OsString::from));
+        let result = chown_main(args.into_iter());
         assert!(result.is_ok());
         // Remove the directory hierarchy
         fs::remove_dir_all(dir_path).expect("Failed to delete directory");

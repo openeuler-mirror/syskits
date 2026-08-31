@@ -546,9 +546,16 @@ mod tests {
 
     #[cfg(test)]
     mod get_mode_tests {
+        use std::sync::{Mutex, OnceLock};
+
         use ctcore::libc;
 
         use super::*;
+
+        fn umask_test_lock() -> &'static Mutex<()> {
+            static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+            LOCK.get_or_init(|| Mutex::new(()))
+        }
 
         fn get_test_matches(args: Vec<&str>) -> ArgMatches {
             ct_app().try_get_matches_from(args).unwrap()
@@ -557,6 +564,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_default() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name()]);
             let mode = mkdir_get_mode(&matches, false).unwrap();
             assert_eq!(mode, !ct_mode::get_umask() & 0o0777);
@@ -565,6 +573,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_numeric() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755"]);
             let mode = mkdir_get_mode(&matches, false).unwrap();
             assert_eq!(mode, 0o755);
@@ -573,6 +582,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_symbolic() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rwx,go-w"]);
             let mode = mkdir_get_mode(&matches, false).unwrap();
             assert_eq!(mode, 0o755);
@@ -581,6 +591,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_mixed() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755,u+s"]);
             let mode = mkdir_get_mode(&matches, false);
 
@@ -592,6 +603,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_invalid() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "invalid"]);
             let mode = mkdir_get_mode(&matches, false);
             assert!(mode.is_err());
@@ -600,6 +612,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_combined_symbolic() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rwx,g-w,o+r"]);
             let mode = mkdir_get_mode(&matches, false).unwrap();
             assert_eq!(mode, 0o757);
@@ -608,6 +621,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_empty_mode_string() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", ""]);
             let mode = mkdir_get_mode(&matches, false);
             assert!(mode.is_err());
@@ -616,6 +630,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_partial_mode_string() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755,"]);
             let mode = mkdir_get_mode(&matches, false);
 
@@ -626,6 +641,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_complex_symbolic() {
+            let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rw,go-rw"]);
             let mode = mkdir_get_mode(&matches, false).unwrap();
             assert_eq!(mode, 0o711);
@@ -634,6 +650,7 @@ mod tests {
         #[cfg(not(windows))]
         #[test]
         fn test_get_mode_with_umask() {
+            let _guard = umask_test_lock().lock().unwrap();
             // Set a specific umask for the test and restore afterwards
             let original_umask = unsafe { libc::umask(0o027) };
             let matches = get_test_matches(vec![ctcore::ct_util_name()]);

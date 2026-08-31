@@ -18,3 +18,8 @@ target/
 basedata
 .idea
 .gitmessage.txt
+.specify
+.specs
+.codex
+AGENTS.md
+.worktrees/

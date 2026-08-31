@@ -15,8 +15,10 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::{Quotable, ct_print_verbatim};
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{
+    CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code, strip_errno,
+};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
@@ -107,6 +109,33 @@ struct DuStatPrinter {
     time_format: String,
     line_ending: CtLineEnding,
     summarize: bool,
+}
+
+const DU_INODES_APPARENT_SIZE_WARNING: &str =
+    "options --apparent-size and -b are ineffective with --inodes";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuRow {
+    pub kind: String,
+    pub path: Option<String>,
+    pub label: Option<String>,
+    pub depth: usize,
+    pub is_dir: bool,
+    pub display_size: String,
+    pub measured_size: u64,
+    pub apparent_size_bytes: u64,
+    pub allocated_bytes: u64,
+    pub inodes: u64,
+    pub time_seconds: Option<u64>,
+    pub time_display: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuSemantic {
+    pub rows: Vec<DuRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 #[derive(PartialEq, Clone)]
@@ -531,9 +560,12 @@ impl CTError for DuError {
  * 返回值:
  *  - Vec<String>: 包含文件中每一行内容的vector。
  */
-fn du_file_as_vec(file_name: impl AsRef<Path>) -> Vec<String> {
-    // 打开指定的文件，如果文件不存在则抛出异常。
-    let filename = File::open(file_name).expect("no such file");
+fn du_file_as_vec(file_name: impl AsRef<Path>) -> CTResult<Vec<String>> {
+    let file_name = file_name.as_ref();
+    // 打开指定的文件，失败时按普通命令错误返回，不能 panic 退出 101。
+    let filename = File::open(file_name).map_err(|err| {
+        CTsageError::new(1, format!("{}: {}", file_name.display(), strip_errno(&err)))
+    })?;
     // 创建一个缓冲读取器以提高读取效率。
     let buffer = BufReader::new(filename);
 
@@ -541,7 +573,11 @@ fn du_file_as_vec(file_name: impl AsRef<Path>) -> Vec<String> {
     // 如果某一行读取失败，则抛出异常。
     buffer
         .lines()
-        .map(|l| l.expect("Could not parse line"))
+        .map(|line| {
+            line.map_err(|err| {
+                CTsageError::new(1, format!("{}: {}", file_name.display(), strip_errno(&err)))
+            })
+        })
         .collect()
 }
 
@@ -551,10 +587,13 @@ fn du_file_as_vec(file_name: impl AsRef<Path>) -> Vec<String> {
  */
 fn du_build_exclude_patterns(args_match: &ArgMatches) -> CTResult<Vec<Pattern>> {
     // 从 --exclude-from 参数中获取文件路径，并尝试将其内容作为排除模式。
-    let exclude_from_iterator = args_match
+    let mut exclude_from_patterns = Vec::new();
+    for file_name in args_match
         .get_many::<String>(opt_flags::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(du_file_as_vec);
+    {
+        exclude_from_patterns.extend(du_file_as_vec(file_name)?);
+    }
 
     // 从 --exclude 参数中获取排除模式的字符串列表。
     let excludes_iterator = args_match
@@ -564,7 +603,7 @@ fn du_build_exclude_patterns(args_match: &ArgMatches) -> CTResult<Vec<Pattern>> 
 
     // 准备存储排除模式的向量。
     let mut exclude_patterns = Vec::new();
-    for f in excludes_iterator.chain(exclude_from_iterator) {
+    for f in excludes_iterator.chain(exclude_from_patterns) {
         // 如果启用了详细模式，打印正在添加的排除模式。
         if args_match.get_flag(opt_flags::VERBOSE) {
             println!("adding {:?} to the exclude list ", &f);
@@ -602,6 +641,83 @@ impl DuStatPrinter {
         }
     }
 
+    fn du_should_print(&self, stat_info: &StatPrintInfo, size: u64) -> bool {
+        !self
+            .threshold
+            .is_some_and(|threshold| threshold.should_exclude(size))
+            && self
+                .max_depth
+                .is_none_or(|max_depth| stat_info.depth <= max_depth)
+            && (!self.summarize || stat_info.depth == 0)
+    }
+
+    fn du_time_info(&self, du_stat: &DuStat) -> CTResult<Option<(u64, String)>> {
+        if let Some(time) = self.time {
+            let seconds = du_get_time_secs(time, du_stat)?;
+            let du_time = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(seconds));
+            let time_string = if let Some(fmt) = self.time_format.strip_prefix('+') {
+                du_format_local_time_strftime(seconds, fmt)
+                    .unwrap_or_else(|| du_time.format(fmt).to_string())
+            } else {
+                du_time.format(&self.time_format).to_string()
+            };
+            Ok(Some((seconds, time_string)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn du_render_stat_line(&self, du_stat: &DuStat, size: u64) -> CTResult<String> {
+        let mut line = String::new();
+        if let Some((_, time_string)) = self.du_time_info(du_stat)? {
+            line.push_str(&self.du_convert_size(size));
+            line.push('\t');
+            line.push_str(&time_string);
+            line.push('\t');
+        } else {
+            line.push_str(&self.du_convert_size(size));
+            line.push('\t');
+        }
+        line.push_str(&du_stat.path.display().to_string());
+        line.push_str(&format!("{}", self.line_ending));
+        Ok(line)
+    }
+
+    fn du_row_from_stat(&self, du_stat: &DuStat, depth: usize, size: u64) -> CTResult<DuRow> {
+        let time_info = self.du_time_info(du_stat)?;
+        Ok(DuRow {
+            kind: "entry".into(),
+            path: Some(du_stat.path.display().to_string()),
+            label: None,
+            depth,
+            is_dir: du_stat.is_dir,
+            display_size: self.du_convert_size(size),
+            measured_size: size,
+            apparent_size_bytes: du_stat.size,
+            allocated_bytes: du_stat.blocks * 512,
+            inodes: du_stat.inodes,
+            time_seconds: time_info.as_ref().map(|(seconds, _)| *seconds),
+            time_display: time_info.map(|(_, display)| display),
+        })
+    }
+
+    fn du_total_row(&self, grand_total: u64) -> DuRow {
+        DuRow {
+            kind: "total".into(),
+            path: None,
+            label: Some(t!("du.total")),
+            depth: 0,
+            is_dir: false,
+            display_size: self.du_convert_size(grand_total),
+            measured_size: grand_total,
+            apparent_size_bytes: 0,
+            allocated_bytes: 0,
+            inodes: 0,
+            time_seconds: None,
+            time_display: None,
+        }
+    }
+
     /**
      * 打印统计信息。
      *
@@ -625,15 +741,7 @@ impl DuStatPrinter {
                             grand_total += size; // 如果统计深度为0，则累加到总统计数。
                         }
 
-                        // 只有当不被阈值排除、深度不超过最大深度且（如果不是总结模式或当前是顶层深度）时，才打印统计信息。
-                        if !self
-                            .threshold
-                            .is_some_and(|threshold| threshold.should_exclude(size))
-                            && self
-                                .max_depth
-                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
-                            && (!self.summarize || stat_info.depth == 0)
-                        {
+                        if self.du_should_print(&stat_info, size) {
                             self.du_print_stat(&stat_info.stat, size)?;
                         }
                     }
@@ -645,7 +753,12 @@ impl DuStatPrinter {
 
         // 如果启用了总结模式，打印总数。
         if self.total {
-            print!("{}\t{}", self.du_convert_size(grand_total), t!("du.total"));
+            let total_row = self.du_total_row(grand_total);
+            print!(
+                "{}\t{}",
+                total_row.display_size,
+                total_row.label.clone().unwrap_or_default()
+            );
             print!("{}", self.line_ending);
         }
 
@@ -712,28 +825,21 @@ impl DuStatPrinter {
      *
      */
     fn du_print_stat(&self, du_stat: &DuStat, size: u64) -> CTResult<()> {
-        // 如果定义了时间格式，则格式化并打印时间
-        if let Some(time) = self.time {
-            let seconds = du_get_time_secs(time, du_stat)?;
-            let du_time = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(seconds));
-            let time_string = if let Some(fmt) = self.time_format.strip_prefix('+') {
-                du_format_local_time_strftime(seconds, fmt)
-                    .unwrap_or_else(|| du_time.format(fmt).to_string())
-            } else {
-                du_time.format(&self.time_format).to_string()
-            };
-            // 格式化并打印文件大小和时间
-            print!("{}\t{}\t", self.du_convert_size(size), time_string);
-        } else {
-            // 未定义时间格式时，只格式化并打印文件大小
-            print!("{}\t", self.du_convert_size(size));
-        }
-
-        // 打印文件或目录的路径
-        ct_print_verbatim(&du_stat.path).unwrap();
-        print!("{}", self.line_ending);
-
+        print!("{}", self.du_render_stat_line(du_stat, size)?);
         Ok(())
+    }
+}
+
+fn du_inodes_apparent_size_warning(
+    args_match: &ArgMatches,
+    du_stat_printer: &DuStatPrinter,
+) -> Option<&'static str> {
+    if du_stat_printer.inodes
+        && (args_match.get_flag(opt_flags::APPARENT_SIZE) || args_match.get_flag(opt_flags::BYTES))
+    {
+        Some(DU_INODES_APPARENT_SIZE_WARNING)
+    } else {
+        None
     }
 }
 
@@ -936,10 +1042,8 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     )?;
 
     // 如果同时指定了 --inodes 和 --apparent-size 或 --bytes，给出警告
-    if du_stat_printer.inodes
-        && (args_match.get_flag(opt_flags::APPARENT_SIZE) || args_match.get_flag(opt_flags::BYTES))
-    {
-        ct_show_warning!("options --apparent-size and -b are ineffective with --inodes");
+    if let Some(warning) = du_inodes_apparent_size_warning(&args_match, &du_stat_printer) {
+        ct_show_warning!("{warning}");
     }
 
     // 使用独立线程进行输出打印，以便在计算仍在进行时能打印完成的结果
@@ -1006,6 +1110,171 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         .map_err(|_| CtSimpleError::new(1, "Printing thread panicked."))??;
 
     Ok(())
+}
+
+fn du_collect_semantic(
+    du_stat_printer: &DuStatPrinter,
+    rx_msg: &mpsc::Receiver<CTResult<StatPrintInfo>>,
+) -> CTResult<DuSemantic> {
+    let mut grand_total = 0u64;
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+
+    loop {
+        let received = rx_msg.recv();
+        match received {
+            Ok(message) => match message {
+                Ok(stat_info) => {
+                    let size = du_stat_printer.du_choose_size(&stat_info.stat);
+                    if stat_info.depth == 0 {
+                        grand_total += size;
+                    }
+                    if du_stat_printer.du_should_print(&stat_info, size) {
+                        classic_text
+                            .push_str(&du_stat_printer.du_render_stat_line(&stat_info.stat, size)?);
+                        rows.push(du_stat_printer.du_row_from_stat(
+                            &stat_info.stat,
+                            stat_info.depth,
+                            size,
+                        )?);
+                    }
+                }
+                Err(err) => {
+                    exit_code = err.code();
+                    stderr_text.push_str(&format!("du: {err}\n"));
+                }
+            },
+            Err(_) => break,
+        }
+    }
+
+    if du_stat_printer.total {
+        let total_row = du_stat_printer.du_total_row(grand_total);
+        classic_text.push_str(&format!(
+            "{}\t{}{}",
+            total_row.display_size,
+            total_row.label.clone().unwrap_or_default(),
+            du_stat_printer.line_ending
+        ));
+        rows.push(total_row);
+    }
+
+    Ok(DuSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
+}
+
+pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args_match = ct_app().try_get_matches_from(args)?;
+
+    let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);
+    let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
+
+    let files_path = if let Some(file_from) = args_match.get_one::<String>(opt_flags::FILES0_FROM) {
+        if args_match.get_one::<String>(opt_flags::FILE).is_some() {
+            return Err(std::io::Error::other(format!(
+                "extra operand {}\nfile operands cannot be combined with --files0-from",
+                args_match
+                    .get_one::<String>(opt_flags::FILE)
+                    .unwrap()
+                    .quote()
+            ))
+            .into());
+        }
+        du_read_files_from(file_from)?
+    } else {
+        match args_match.get_one::<String>(opt_flags::FILE) {
+            Some(_) => args_match
+                .get_many::<String>(opt_flags::FILE)
+                .unwrap()
+                .map(PathBuf::from)
+                .collect(),
+            None => vec![PathBuf::from(".")],
+        }
+    };
+
+    let du_time = du_get_time(&args_match);
+    let du_size_format = du_get_size_format(&args_match)?;
+    let du_traversal_options = DuTraversalOptions {
+        all: args_match.get_flag(opt_flags::ALL),
+        separate_dirs: args_match.get_flag(opt_flags::SEPARATE_DIRS),
+        one_file_system: args_match.get_flag(opt_flags::ONE_FILE_SYSTEM),
+        dereference: if args_match.get_flag(opt_flags::DEREFERENCE) {
+            DuDeref::All
+        } else if args_match.get_flag(opt_flags::DEREFERENCE_ARGS) {
+            DuDeref::Args(files_path.clone())
+        } else {
+            DuDeref::None
+        },
+        count_links: args_match.get_flag(opt_flags::COUNT_LINKS),
+        verbose: args_match.get_flag(opt_flags::VERBOSE),
+        excludes: du_build_exclude_patterns(&args_match)?,
+    };
+
+    let du_stat_printer = du_get_stat_printer(
+        &args_match,
+        is_summarize,
+        du_max_depth,
+        du_time,
+        du_size_format,
+    )?;
+
+    let (print_tx, rx) = mpsc::channel::<CTResult<StatPrintInfo>>();
+    let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
+
+    'loop_file: for path in files_path {
+        if !du_traversal_options.excludes.is_empty() {
+            let path_string = path.to_string_lossy();
+            for pattern in &du_traversal_options.excludes {
+                if pattern.matches(&path_string) {
+                    continue 'loop_file;
+                }
+            }
+        }
+
+        if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
+            if let Some(inode) = stat.inode {
+                if !du_traversal_options.count_links || stat.is_dir {
+                    if seen_inodes.contains(&inode) {
+                        continue;
+                    }
+                    seen_inodes.insert(inode);
+                }
+            }
+
+            let stat = du(stat, &du_traversal_options, 0, &mut seen_inodes, &print_tx)
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            print_tx
+                .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        } else {
+            print_tx
+                .send(Err(CtSimpleError::new(
+                    1,
+                    format!(
+                        "cannot access {}: No such file or directory",
+                        path.to_string_lossy().quote()
+                    ),
+                )))
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        }
+    }
+
+    drop(print_tx);
+    let mut semantic = du_collect_semantic(&du_stat_printer, &rx)?;
+    if let Some(warning) = du_inodes_apparent_size_warning(&args_match, &du_stat_printer) {
+        semantic
+            .stderr_text
+            .insert_str(0, &format!("du: warning: {warning}\n"));
+    }
+    Ok(semantic)
 }
 
 fn du_get_stat_printer(
@@ -7732,6 +8001,22 @@ mod tests {
             let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_exclude_from_missing_file_returns_error() {
+            let temp_dir = Builder::new()
+                .prefix("tests_ct_main_dir")
+                .tempdir()
+                .unwrap();
+            let dir = temp_dir.path().to_str().unwrap();
+            let missing = temp_dir.path().join("missing-excludes");
+            let missing = missing.to_str().unwrap();
+
+            let args = [ctcore::ct_util_name(), dir, "-X", missing];
+            let err = du_main(args.iter().map(OsString::from)).expect_err("missing -X file");
+
+            assert_eq!(err.code(), 1);
         }
 
         #[test]

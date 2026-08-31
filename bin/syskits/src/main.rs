@@ -357,6 +357,7 @@ impl CommandHandler {
     fn print_data_help() {
         println!("syskits data {CT_VERSION}");
         println!("Usage: syskits data <expr>");
+        #[cfg(feature = "feat_data_workflow")]
         println!("       syskits data -f <workflow.skd>");
         println!("       syskits data [--help|--version]");
         println!();
@@ -749,6 +750,16 @@ mod tests {
     fn test_should_enter_data_repl_non_tty_stdout_is_false() {
         let args: Vec<OsString> = vec![];
         assert!(!CommandHandler::should_enter_data_repl(&args, true, false));
+    }
+
+    #[cfg(feature = "feat_data_pipeline")]
+    #[test]
+    fn test_data_pipeline_feature_includes_split_command() {
+        assert!(
+            ALL_DATA_COMMANDS.contains(&"split"),
+            "registered data commands: {ALL_DATA_COMMANDS:?}"
+        );
+        assert!(get_data_command("split").is_some());
     }
 
     #[test]

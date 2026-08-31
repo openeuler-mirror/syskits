@@ -1,0 +1,19 @@
+[package]
+name = "cmd_sum"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Phase A native sum command"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[dependencies]
+ctcore = { workspace = true }
+ct_sum = { path = "../../commands/sum" }
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }

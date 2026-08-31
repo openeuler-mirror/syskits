@@ -1,0 +1,24 @@
+[package]
+name = "cmd_base32"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Structured data command for base32"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ct_base32 = { package = "ct_base32", path = "../../commands/base32" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

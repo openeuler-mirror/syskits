@@ -27,6 +27,9 @@ regex = { workspace = true }
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [[bin]]
 name = "more"
 path = "src/main.rs"

@@ -34,4 +34,4 @@ pub mod pager;
 pub mod render;
 pub mod tty;
 
-pub use more::{More, more_main};
+pub use more::{More, MoreSemantic, MoreSemanticRow, more_main, more_native_semantic};

@@ -38,6 +38,7 @@ use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
+use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
@@ -49,6 +50,36 @@ enum OutFormat {
     Dumb,
     Roff,
     Tex,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PtxSemanticRow {
+    pub row_index: usize,
+    pub keyword: String,
+    pub before: String,
+    pub after: String,
+    pub head: String,
+    pub tail: String,
+    pub reference: String,
+    pub file: String,
+    pub line_index: usize,
+    pub global_line_index: usize,
+    pub rendered_text: String,
+    pub format: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PtxSemantic {
+    pub rows: Vec<PtxSemanticRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct DirectPtxInvocation {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    exit_code: i32,
 }
 
 #[derive(Debug)]
@@ -513,6 +544,53 @@ fn ptx_get_reference(
         }
     } else {
         String::new()
+    }
+}
+
+fn run_ptx_direct_process(
+    argv: &[OsString],
+    stdin_bytes: Option<&[u8]>,
+) -> CTResult<DirectPtxInvocation> {
+    let current_exe = std::env::current_exe()?;
+    let mut command = ProcessCommand::new(current_exe);
+    command
+        .args(argv)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if stdin_bytes.is_some() {
+        command.stdin(Stdio::piped());
+    } else {
+        command.stdin(Stdio::inherit());
+    }
+
+    let mut child = command.spawn()?;
+    let mut stdin_write_error = None;
+    if let Some(bytes) = stdin_bytes
+        && let Some(mut stdin) = child.stdin.take()
+        && let Err(err) = stdin.write_all(bytes)
+        && err.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        stdin_write_error = Some(err);
+    }
+
+    let output = child.wait_with_output()?;
+    if let Some(err) = stdin_write_error {
+        return Err(err.into());
+    }
+
+    Ok(DirectPtxInvocation {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.status.code().unwrap_or(1),
+    })
+}
+
+fn ptx_format_name(format: &OutFormat) -> &'static str {
+    match format {
+        OutFormat::Dumb => "dumb",
+        OutFormat::Roff => "roff",
+        OutFormat::Tex => "tex",
     }
 }
 
@@ -1101,7 +1179,205 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     Ok(())
 }
 
+fn ptx_reference_max_width(settings: &PtxSettings, context_reg: &Regex) -> usize {
+    let mut reference_max_width = 0usize;
+    if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
+    {
+        for word_ref in &settings.words {
+            let content = &settings.file_map[word_ref.file_index];
+            let reference = ptx_get_reference(
+                &settings.config,
+                word_ref,
+                &content.filename,
+                &content.lines[word_ref.local_line_nr],
+                context_reg,
+            );
+            reference_max_width = reference_max_width.max(str_cols(&reference));
+        }
+    }
+    reference_max_width
+}
+
+fn ptx_render_row(
+    settings: &PtxSettings,
+    word_ref: &WordRef,
+    context_reg: &Regex,
+    reference_max_width: usize,
+) -> PtxSemanticRow {
+    let content = &settings.file_map[word_ref.file_index];
+    let line = &content.lines[word_ref.local_line_nr];
+    let chars_line = &content.chars_lines[word_ref.local_line_nr];
+    let reference = ptx_get_reference(
+        &settings.config,
+        word_ref,
+        &content.filename,
+        line,
+        context_reg,
+    );
+    let before_start = context_base_start(&settings.config, line, chars_line, context_reg);
+    let (context_left, context_right) = context_bounds(
+        &settings.config,
+        line,
+        context_reg,
+        word_ref.position,
+        word_ref.position_end,
+        before_start,
+    );
+    let keyword = line[word_ref.position..word_ref.position_end].to_string();
+    let all_before = &chars_line[context_left..word_ref.position];
+    let all_after = &chars_line[word_ref.position_end..context_right];
+    let (tail, before, after, head) =
+        ptx_get_output_chunks(all_before, &keyword, all_after, &settings.config);
+    let rendered_text = match settings.config.format {
+        OutFormat::Tex => ptx_format_tex_line(
+            &settings.config,
+            word_ref,
+            line,
+            chars_line,
+            context_reg,
+            &reference,
+        ),
+        OutFormat::Roff => ptx_format_roff_line(
+            &settings.config,
+            word_ref,
+            line,
+            chars_line,
+            context_reg,
+            &reference,
+        ),
+        OutFormat::Dumb => ptx_format_dumb_line(
+            &settings.config,
+            word_ref,
+            line,
+            chars_line,
+            context_reg,
+            &reference,
+            reference_max_width,
+        ),
+    };
+
+    PtxSemanticRow {
+        row_index: 0,
+        keyword,
+        before,
+        after,
+        head,
+        tail,
+        reference,
+        file: content.filename.clone(),
+        line_index: word_ref.local_line_nr + 1,
+        global_line_index: word_ref.global_line_nr + 1,
+        rendered_text,
+        format: ptx_format_name(&settings.config.format).to_string(),
+    }
+}
+
+fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
+    let context_reg = compile_regex_lossy(&settings.config.context_regex);
+    let reference_max_width = ptx_reference_max_width(settings, &context_reg);
+    let mut rows: Vec<PtxSemanticRow> = settings
+        .words
+        .iter()
+        .map(|word_ref| ptx_render_row(settings, word_ref, &context_reg, reference_max_width))
+        .collect();
+
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.row_index = index + 1;
+    }
+
+    rows
+}
+
+fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResult<()> {
+    let context_reg = compile_regex_lossy(&settings.config.context_regex);
+
+    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "error: regular expression has a match of length zero: '{}'",
+                settings.config.context_regex
+            ),
+        ));
+    }
+
+    let mut reference_max_width = 0usize;
+    if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
+    {
+        for word_ref in &settings.words {
+            let file_map_value = &settings.file_map[word_ref.file_index];
+            let reference = ptx_get_reference(
+                &settings.config,
+                word_ref,
+                &file_map_value.filename,
+                &file_map_value.lines[word_ref.local_line_nr],
+                &context_reg,
+            );
+            reference_max_width = reference_max_width.max(str_cols(&reference));
+        }
+    }
+
+    for word_ref in &settings.words {
+        let file_map_value = &settings.file_map[word_ref.file_index];
+
+        let reference = ptx_get_reference(
+            &settings.config,
+            word_ref,
+            &file_map_value.filename,
+            &file_map_value.lines[word_ref.local_line_nr],
+            &context_reg,
+        );
+
+        let output_line = match settings.config.format {
+            OutFormat::Tex => ptx_format_tex_line(
+                &settings.config,
+                word_ref,
+                &file_map_value.lines[word_ref.local_line_nr],
+                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &context_reg,
+                &reference,
+            ),
+            OutFormat::Roff => ptx_format_roff_line(
+                &settings.config,
+                word_ref,
+                &file_map_value.lines[word_ref.local_line_nr],
+                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &context_reg,
+                &reference,
+            ),
+            OutFormat::Dumb => ptx_format_dumb_line(
+                &settings.config,
+                word_ref,
+                &file_map_value.lines[word_ref.local_line_nr],
+                &file_map_value.chars_lines[word_ref.local_line_nr],
+                &context_reg,
+                &reference,
+                reference_max_width,
+            ),
+        };
+
+        writeln!(writer, "{output_line}").map_err_context(String::new)?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PtxCoreOutput {
+    pub bytes: Vec<u8>,
+}
+
 pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
+    let mut out = stdout().lock();
+    ptx_main_with_writer(args, &mut out)
+}
+
+pub fn ptx_core_output(args: impl ctcore::Args) -> CTResult<PtxCoreOutput> {
+    let mut out = Vec::new();
+    ptx_main_with_writer(args, &mut out)?;
+    Ok(PtxCoreOutput { bytes: out })
+}
+
+pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args: Vec<OsString> = args.collect();
@@ -1110,11 +1386,11 @@ pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
         Err(err) => {
             return match err.kind() {
                 ErrorKind::DisplayHelp => {
-                    print!("{PTX_HELP_TEXT}");
+                    out.write_all(PTX_HELP_TEXT.as_bytes())?;
                     Ok(())
                 }
                 ErrorKind::DisplayVersion => {
-                    print!("{PTX_VERSION_TEXT}");
+                    out.write_all(PTX_VERSION_TEXT.as_bytes())?;
                     Ok(())
                 }
                 _ => Err(err.into()),
@@ -1122,7 +1398,168 @@ pub fn ptx_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
     let settings = PtxSettings::from_matches(matches)?;
-    ptx_exec(&settings)
+    if settings.output_filename != "-" {
+        ptx_exec(&settings)?;
+        return Ok(());
+    }
+
+    ptx_exec_to_writer(&settings, out)
+}
+
+pub fn ptx_core_output_from_args(args: Vec<OsString>) -> CTResult<PtxCoreOutput> {
+    ptx_core_output(args.into_iter())
+}
+
+pub fn ptx_native_semantic(args: impl ctcore::Args) -> CTResult<PtxSemantic> {
+    ptx_native_semantic_with_stdin(args, None)
+}
+
+pub fn ptx_native_semantic_with_stdin(
+    args: impl ctcore::Args,
+    stdin_bytes: Option<Vec<u8>>,
+) -> CTResult<PtxSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let direct = run_ptx_direct_process(&argv, stdin_bytes.as_deref())?;
+    let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
+    let stderr_text = String::from_utf8_lossy(&direct.stderr).into_owned();
+
+    let rows = if direct.exit_code == 0 {
+        ptx_collect_semantic_rows_from_argv(argv, stdin_bytes)?
+    } else {
+        Vec::new()
+    };
+
+    Ok(PtxSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code: direct.exit_code,
+    })
+}
+
+fn ptx_collect_semantic_rows_from_argv(
+    argv: Vec<OsString>,
+    stdin_bytes: Option<Vec<u8>>,
+) -> CTResult<Vec<PtxSemanticRow>> {
+    let matches = match ct_app().try_get_matches_from(argv) {
+        Ok(matches) => matches,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    if let Some(bytes) = stdin_bytes {
+        return ctcore::ct_io::with_stdin_writer(
+            "ptx",
+            move |mut stdin| match stdin.write_all(&bytes) {
+                Ok(()) => Ok(()),
+                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+                Err(err) => Err(err),
+            },
+            move || ptx_collect_semantic_rows_from_matches(matches),
+            |err| CtSimpleError::new(1, format!("ptx: stdin write error: {err}")),
+        );
+    }
+
+    ptx_collect_semantic_rows_from_matches(matches)
+}
+
+fn ptx_collect_semantic_rows_from_matches(
+    matches: clap::ArgMatches,
+) -> CTResult<Vec<PtxSemanticRow>> {
+    let settings = match PtxSettings::from_matches(matches) {
+        Ok(settings) => settings,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    Ok(ptx_semantic_rows_for_settings(&settings))
+}
+
+fn ptx_semantic_from_clap_error(error: clap::Error) -> PtxSemantic {
+    match error.kind() {
+        ErrorKind::DisplayHelp => PtxSemantic {
+            rows: Vec::new(),
+            classic_text: PTX_HELP_TEXT.into(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        },
+        ErrorKind::DisplayVersion => PtxSemantic {
+            rows: Vec::new(),
+            classic_text: PTX_VERSION_TEXT.into(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        },
+        _ => PtxSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text: error.to_string(),
+            exit_code: 1,
+        },
+    }
+}
+
+fn ptx_render_error_text(err: &dyn CTError) -> String {
+    let mut stderr = format!("ptx: {err}\n");
+    if err.usage() {
+        stderr.push_str("Try 'ptx --help' for more information.\n");
+    }
+    stderr
+}
+
+fn ptx_zero_length_regex_error(pattern: &str) -> Box<dyn CTError> {
+    CtSimpleError::new(
+        1,
+        format!("error: regular expression has a match of length zero: '{pattern}'"),
+    )
+}
+
+fn ptx_semantic_rows_for_settings(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
+    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
+        Vec::new()
+    } else {
+        ptx_collect_semantic_rows(settings)
+    }
+}
+
+pub fn ptx_native_semantic_rows_only(args: impl ctcore::Args) -> CTResult<PtxSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let argv: Vec<OsString> = args.collect();
+    let matches = match ct_app().try_get_matches_from(argv) {
+        Ok(matches) => matches,
+        Err(error) => return Ok(ptx_semantic_from_clap_error(error)),
+    };
+
+    let settings = match PtxSettings::from_matches(matches) {
+        Ok(settings) => settings,
+        Err(error) => {
+            return Ok(PtxSemantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                stderr_text: ptx_render_error_text(error.as_ref()),
+                exit_code: error.code(),
+            });
+        }
+    };
+
+    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
+        let error = ptx_zero_length_regex_error(&settings.config.context_regex);
+        return Ok(PtxSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text: ptx_render_error_text(error.as_ref()),
+            exit_code: error.code(),
+        });
+    }
+
+    Ok(PtxSemantic {
+        rows: ptx_semantic_rows_for_settings(&settings),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
+    })
 }
 
 mod ptx_options {
@@ -1641,14 +2078,12 @@ mod tests {
                     ..Default::default()
                 },
                 file_map: {
-                    let mut map = FileMap::new();
-                    map.push(FileContent {
+                    vec![FileContent {
                         filename: "test.txt".to_string(),
                         lines: vec!["hello test world".to_string()],
                         chars_lines: vec!["hello test world".chars().collect()],
                         offset: 0,
-                    });
-                    map
+                    }]
                 },
                 words: {
                     let mut set = BTreeSet::new();
@@ -1682,14 +2117,12 @@ mod tests {
                     ..Default::default()
                 },
                 file_map: {
-                    let mut map = FileMap::new();
-                    map.push(FileContent {
+                    vec![FileContent {
                         filename: "test.txt".to_string(),
                         lines: vec!["test".to_string()],
                         chars_lines: vec!["test".chars().collect()],
                         offset: 0,
-                    });
-                    map
+                    }]
                 },
                 words: {
                     let mut set = BTreeSet::new();
@@ -1868,13 +2301,12 @@ mod tests {
                 word_regex: r"\w+".to_string(),
             };
 
-            let mut file_map = FileMap::new();
-            file_map.push(FileContent {
+            let file_map = vec![FileContent {
                 filename: "test.txt".to_string(),
                 lines: vec!["hello world".to_string()],
                 chars_lines: vec!["hello world".chars().collect()],
                 offset: 0,
-            });
+            }];
 
             let word_set = ptx_create_word_set(&config, &filter, &file_map);
 
@@ -1895,13 +2327,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let mut file_map = FileMap::new();
-            file_map.push(FileContent {
+            let file_map = vec![FileContent {
                 filename: "test.txt".to_string(),
                 lines: vec!["Hello WORLD".to_string()],
                 chars_lines: vec!["Hello WORLD".chars().collect()],
                 offset: 0,
-            });
+            }];
 
             let word_set = ptx_create_word_set(&config, &filter, &file_map);
 

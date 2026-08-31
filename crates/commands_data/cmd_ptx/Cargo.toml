@@ -1,0 +1,24 @@
+[package]
+name = "cmd_ptx"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+
+description = "Structured data command for ptx"
+repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ctengine = { workspace = true }
+ctpipeline = { workspace = true }
+ctsig = { workspace = true }
+ct_ptx = { package = "ct_ptx", path = "../../commands/ptx" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -253,6 +253,12 @@ impl DataCommand for PluginCommand {
     fn signature(&self) -> ctsig::DataSignature {
         let name_static = intern_plugin_command_name(&self.name);
         ctsig::DataSignature::new(name_static, "Plugin command")
+            .rest(ctsig::CtPositionalArg::optional(
+                "args",
+                "plugin command arguments",
+                ctpipeline::CtType::Any,
+            ))
+            .allow_unknown_args(true)
     }
 
     fn run(
@@ -264,5 +270,22 @@ impl DataCommand for PluginCommand {
         self.runner
             .call(&self.name, call, input, ctx)
             .map_err(|e| ctengine::error::CtDiagnosticError::simple(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_command_signature_accepts_arguments() {
+        let cmd = PluginCommand {
+            runner: crate::runner::PluginHostRunner::new(PathBuf::from("plugin")),
+            name: "plug".to_string(),
+        };
+        let sig = cmd.signature();
+
+        assert!(sig.allows_unknown());
+        assert!(sig.rest_positional_arg().is_some());
     }
 }

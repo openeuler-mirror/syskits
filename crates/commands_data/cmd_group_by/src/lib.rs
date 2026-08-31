@@ -24,6 +24,11 @@ impl DataCommand for CmdGroupBy {
                 "field path(s), e.g. region meta.zone",
                 CtType::String,
             ))
+            .rest(CtPositionalArg::optional(
+                "keys",
+                "additional field paths to group by",
+                CtType::String,
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -216,6 +221,12 @@ mod tests {
             .find(|(k, _)| k == name)
             .expect("field exists")
             .1
+    }
+
+    #[test]
+    fn test_group_by_signature_allows_multiple_keys() {
+        let sig = CmdGroupBy.signature();
+        assert!(sig.rest_positional_arg().is_some());
     }
 
     #[test]

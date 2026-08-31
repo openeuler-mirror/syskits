@@ -28,6 +28,11 @@ impl DataCommand for CmdAgg {
             "aggregation specs, e.g. count sum:bytes avg:bytes=max_avg",
             CtType::String,
         ))
+        .rest(CtPositionalArg::optional(
+            "ops",
+            "additional aggregation specs",
+            CtType::String,
+        ))
         .input(CtType::Any)
         .output(CtType::Any)
     }
@@ -452,6 +457,12 @@ mod tests {
             .find(|(k, _)| k == name)
             .expect("field exists")
             .1
+    }
+
+    #[test]
+    fn test_agg_signature_allows_multiple_ops() {
+        let sig = CmdAgg.signature();
+        assert!(sig.rest_positional_arg().is_some());
     }
 
     #[test]

@@ -24,6 +24,11 @@ impl DataCommand for CmdSortBy {
                 "field path(s), e.g. age metadata.name",
                 CtType::String,
             ))
+            .rest(CtPositionalArg::optional(
+                "keys",
+                "additional field paths to sort by",
+                CtType::String,
+            ))
             .flag(CtFlag::switch(
                 "desc",
                 Some('r'),
@@ -206,6 +211,12 @@ mod tests {
             panic!("expected int");
         };
         *n
+    }
+
+    #[test]
+    fn test_sort_by_signature_allows_multiple_keys() {
+        let sig = CmdSortBy.signature();
+        assert!(sig.rest_positional_arg().is_some());
     }
 
     #[test]

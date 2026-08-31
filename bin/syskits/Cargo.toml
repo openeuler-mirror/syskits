@@ -76,6 +76,7 @@ feat_data_pipeline = [
   "cmd_join",
   "cmd_ptx",
   "cmd_shuf",
+  "cmd_split",
   "cmd_od",
   "cmd_tr",
   "cmd_cut",

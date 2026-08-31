@@ -219,7 +219,7 @@ fn more_non_interactive_semantic(files: &[String], stdin_is_tty: bool) -> CTResu
 
     if !stdin_is_tty {
         let mut stdin_buf = Vec::new();
-        stdin().read_to_end(&mut stdin_buf)?;
+        ctcore::ct_io::stdin_reader_box().read_to_end(&mut stdin_buf)?;
         if !stdin_buf.is_empty() {
             semantic
                 .classic_text

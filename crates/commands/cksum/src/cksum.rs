@@ -811,7 +811,7 @@ fn render_cksum_compute_classic(
 fn cksum_open_for_semantic(file_name: &str) -> Result<Box<dyn Read>, String> {
     let filename = Path::new(file_name);
     if filename == OsStr::new("-") {
-        Ok(Box::new(stdin()) as Box<dyn Read>)
+        Ok(ctcore::ct_io::stdin_reader_box())
     } else if filename.is_dir() {
         Err("Is a directory".into())
     } else {
@@ -826,7 +826,7 @@ fn cksum_native_compute(invocation: &CksumSemanticInvocation) -> CTResult<CksumS
     let mut digest = cksum_detect_algo(invocation.algo_name, invocation.length).1;
 
     if invocation.files.is_empty() {
-        let mut stdin_buffer = BufReader::new(stdin());
+        let mut stdin_buffer = BufReader::new(ctcore::ct_io::stdin_reader_box());
         let (sum_hex, bytes) =
             cksum_digest_read(&mut digest, &mut stdin_buffer, invocation.output_bits)
                 .map_err_context(|| "failed to read input".to_string())?;
@@ -930,7 +930,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
         let mut current_default_algo = invocation.algo_name;
 
         let file_input: Box<dyn BufRead> = if f_name == OsStr::new("-") {
-            Box::new(BufReader::new(stdin()))
+            Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box()))
         } else {
             match File::open(f_name) {
                 Ok(file) => Box::new(BufReader::new(file)),

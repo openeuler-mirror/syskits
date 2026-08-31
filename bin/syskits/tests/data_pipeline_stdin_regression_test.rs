@@ -244,6 +244,16 @@ fn hashsum_reads_pipeline_input() {
 }
 
 #[test]
+fn cksum_reads_pipeline_input() {
+    assert_data_classic_matches_direct(&["cksum"], "from text | cksum", "abc\n");
+}
+
+#[test]
+fn more_reads_pipeline_input() {
+    assert_data_classic_matches_direct(&["more"], "from text | more", "alpha\nbeta\n");
+}
+
+#[test]
 fn numfmt_reads_pipeline_input() {
     assert_data_classic_matches_direct(
         &["numfmt", "--to", "si"],
@@ -397,4 +407,33 @@ fn data_format_raw_preserves_external_raw_stdout() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(output.stdout, b"abc");
+}
+
+#[test]
+fn data_help_matches_enabled_workflow_feature() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "--help"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn syskits");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    #[cfg(feature = "feat_data_workflow")]
+    assert!(
+        stdout.contains("syskits data -f <workflow.skd>"),
+        "stdout: {stdout}"
+    );
+
+    #[cfg(not(feature = "feat_data_workflow"))]
+    assert!(
+        !stdout.contains("syskits data -f <workflow.skd>"),
+        "stdout: {stdout}"
+    );
 }

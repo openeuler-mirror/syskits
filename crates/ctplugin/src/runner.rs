@@ -1,7 +1,8 @@
 use crate::error::PluginError;
 use crate::proto::{HostFrame, PROTOCOL_VERSION, PluginDataCall, PluginFrame, PluginValue};
 use crate::util::{
-    protocol_max_frame_bytes, protocol_timeout_ms, read_frame_line, spawn_timeout_killer,
+    configure_plugin_command, protocol_max_frame_bytes, protocol_timeout_ms, read_frame_line,
+    spawn_timeout_killer, terminate_child,
 };
 use ctengine::context::DataEngineContext;
 use ctpipeline::metadata::CtPipelineMetadata;
@@ -10,8 +11,8 @@ use ctsig::DataCall;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 pub struct PluginHostRunner {
     pub path: PathBuf,
@@ -31,23 +32,25 @@ impl PluginHostRunner {
     ) -> Result<CtPipelineData, PluginError> {
         let timeout_ms = protocol_timeout_ms();
         let max_frame_bytes = protocol_max_frame_bytes();
-        let mut child = Command::new(&self.path)
+        let mut command = Command::new(&self.path);
+        command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-        let child_id = child.id();
+            .stderr(Stdio::inherit());
+        configure_plugin_command(&mut command);
+        let mut child = command.spawn()?;
         let timed_out = Arc::new(AtomicBool::new(false));
         let process_done = Arc::new(AtomicBool::new(false));
+
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let child = Arc::new(Mutex::new(child));
         spawn_timeout_killer(
-            child_id,
+            child.clone(),
             timeout_ms,
             timed_out.clone(),
             process_done.clone(),
         );
-
-        let mut stdin = child.stdin.take().unwrap();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap());
 
         // 1. Handshake
         let hello_req = HostFrame::Hello {
@@ -58,13 +61,13 @@ impl PluginHostRunner {
         let line = match read_frame_line(&mut stdout, max_frame_bytes)? {
             Some(line) => line,
             None => {
-                if timed_out.load(Ordering::Relaxed) {
-                    let _ = child.kill();
+                if timed_out.load(Ordering::Acquire) {
+                    terminate_child(&child);
                     return Err(PluginError::Protocol(format!(
                         "plugin handshake timeout after {timeout_ms}ms"
                     )));
                 }
-                let _ = child.kill();
+                terminate_child(&child);
                 return Err(PluginError::Protocol(
                     "plugin closed stdout before Hello".into(),
                 ));
@@ -74,14 +77,14 @@ impl PluginHostRunner {
         match resp {
             PluginFrame::Hello { protocol, .. } => {
                 if protocol != PROTOCOL_VERSION {
-                    let _ = child.kill();
+                    terminate_child(&child);
                     return Err(PluginError::Protocol(format!(
                         "protocol version mismatch: {protocol}"
                     )));
                 }
             }
             _ => {
-                let _ = child.kill();
+                terminate_child(&child);
                 return Err(PluginError::Protocol("expected Hello frame".into()));
             }
         }
@@ -117,8 +120,8 @@ impl PluginHostRunner {
                     code,
                 } => {
                     if !accepted {
-                        let _ = child.kill();
-                        process_done.store(true, Ordering::Relaxed);
+                        terminate_child(&child);
+                        process_done.store(true, Ordering::Release);
                         let msg = message.unwrap_or_else(|| "unknown".to_string());
                         return Err(PluginError::PluginFailed(format!(
                             "plugin rejected call (code={code}): {msg}"
@@ -129,8 +132,8 @@ impl PluginHostRunner {
                     // ignore
                 }
                 PluginFrame::Error { message, code: _ } => {
-                    let _ = child.kill();
-                    process_done.store(true, Ordering::Relaxed);
+                    terminate_child(&child);
+                    process_done.store(true, Ordering::Release);
                     return Err(PluginError::PluginFailed(message));
                 }
                 PluginFrame::End => {
@@ -141,15 +144,26 @@ impl PluginHostRunner {
             }
         }
 
-        process_done.store(true, Ordering::Relaxed);
-        let status = child.wait()?;
+        let status = {
+            let mut child = child
+                .lock()
+                .map_err(|_| PluginError::Protocol("plugin process lock poisoned".into()))?;
+            let status = child.wait()?;
+            process_done.store(true, Ordering::Release);
+            status
+        };
         if !status.success() {
+            if timed_out.load(Ordering::Acquire) {
+                return Err(PluginError::Protocol(format!(
+                    "plugin call timeout after {timeout_ms}ms"
+                )));
+            }
             return Err(PluginError::PluginFailed(format!(
                 "plugin process exited with error status: {status}"
             )));
         }
-        if timed_out.load(Ordering::Relaxed) {
-            let _ = child.kill();
+        if timed_out.load(Ordering::Acquire) {
+            terminate_child(&child);
             return Err(PluginError::Protocol(format!(
                 "plugin call timeout after {timeout_ms}ms"
             )));

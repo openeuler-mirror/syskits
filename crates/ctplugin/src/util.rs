@@ -1,7 +1,8 @@
 use crate::error::PluginError;
 use std::io::BufRead;
-use std::sync::Arc;
+use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 pub(crate) const DEFAULT_PLUGIN_TIMEOUT_MS: u64 = 30_000;
 pub(crate) const DEFAULT_PLUGIN_MAX_FRAME_BYTES: usize = 1_048_576;
@@ -23,24 +24,55 @@ pub(crate) fn protocol_max_frame_bytes() -> usize {
 }
 
 pub(crate) fn spawn_timeout_killer(
-    child_id: u32,
+    child: Arc<Mutex<Child>>,
     timeout_ms: u64,
     timed_out: Arc<AtomicBool>,
     process_done: Arc<AtomicBool>,
 ) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(timeout_ms));
-        if process_done.load(Ordering::Relaxed) {
+        if process_done.load(Ordering::Acquire) {
             return;
         }
-        timed_out.store(true, Ordering::Relaxed);
-        #[cfg(unix)]
-        unsafe {
-            libc::kill(child_id as i32, libc::SIGTERM);
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            libc::kill(child_id as i32, libc::SIGKILL);
+        timed_out.store(true, Ordering::Release);
+        let mut child = child
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if process_done.load(Ordering::Acquire) {
+            return;
         }
+        terminate_locked_child(&mut child);
     });
+}
+
+pub(crate) fn configure_plugin_command(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+}
+
+pub(crate) fn terminate_child(child: &Arc<Mutex<Child>>) {
+    let mut child = child
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    terminate_locked_child(&mut child);
+}
+
+pub(crate) fn terminate_locked_child(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        let pgid = child.id() as i32;
+        unsafe {
+            libc::kill(-pgid, libc::SIGTERM);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        unsafe {
+            libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
 }
 
 /// Read one newline-delimited plugin frame with bounded memory.

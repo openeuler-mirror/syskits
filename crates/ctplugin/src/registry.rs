@@ -1,14 +1,14 @@
 use crate::error::PluginError;
 use crate::util::{
-    protocol_max_frame_bytes, protocol_timeout_ms, read_frame_line, spawn_timeout_killer,
+    configure_plugin_command, protocol_max_frame_bytes, protocol_timeout_ms, read_frame_line,
+    spawn_timeout_killer, terminate_child,
 };
 use ctengine::command::DataCommand;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Debug, Clone)]
 pub struct PluginDescriptor {
@@ -72,23 +72,25 @@ impl PluginRegistry {
         let timeout_ms = protocol_timeout_ms();
         let max_frame_bytes = protocol_max_frame_bytes();
 
-        let mut child = Command::new(path)
+        let mut command = Command::new(path);
+        command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-        let child_id = child.id();
+            .stderr(Stdio::inherit());
+        configure_plugin_command(&mut command);
+        let mut child = command.spawn()?;
         let timed_out = Arc::new(AtomicBool::new(false));
         let process_done = Arc::new(AtomicBool::new(false));
+
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let child = Arc::new(Mutex::new(child));
         spawn_timeout_killer(
-            child_id,
+            child.clone(),
             timeout_ms,
             timed_out.clone(),
             process_done.clone(),
         );
-
-        let mut stdin = child.stdin.take().unwrap();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap());
 
         // Send Hello
         let req = HostFrame::Hello {
@@ -100,9 +102,9 @@ impl PluginRegistry {
         let line = match read_frame_line(&mut stdout, max_frame_bytes)? {
             Some(line) => line,
             None => {
-                let _ = child.kill();
-                process_done.store(true, Ordering::Relaxed);
-                if timed_out.load(Ordering::Relaxed) {
+                terminate_child(&child);
+                process_done.store(true, Ordering::Release);
+                if timed_out.load(Ordering::Acquire) {
                     return Err(PluginError::Protocol(format!(
                         "plugin handshake timeout after {timeout_ms}ms"
                     )));
@@ -113,16 +115,16 @@ impl PluginRegistry {
             }
         };
         let resp: PluginFrame = serde_json::from_str(&line).map_err(|e| {
-            let _ = child.kill();
-            process_done.store(true, Ordering::Relaxed);
+            terminate_child(&child);
+            process_done.store(true, Ordering::Release);
             PluginError::Serialization(e)
         })?;
 
         let (protocol, commands_from_hello) = match resp {
             PluginFrame::Hello { protocol, commands } => {
                 if protocol != PROTOCOL_VERSION {
-                    let _ = child.kill();
-                    process_done.store(true, Ordering::Relaxed);
+                    terminate_child(&child);
+                    process_done.store(true, Ordering::Release);
                     return Err(PluginError::Protocol(format!(
                         "protocol mismatch: expected {PROTOCOL_VERSION}, got {protocol}"
                     )));
@@ -137,8 +139,8 @@ impl PluginRegistry {
                 )
             }
             _ => {
-                let _ = child.kill();
-                process_done.store(true, Ordering::Relaxed);
+                terminate_child(&child);
+                process_done.store(true, Ordering::Release);
                 return Err(PluginError::Protocol(format!(
                     "expected Hello frame, got {resp:?}"
                 )));
@@ -153,24 +155,24 @@ impl PluginRegistry {
             let line = match read_frame_line(&mut stdout, max_frame_bytes)? {
                 Some(line) => line,
                 None => {
-                    let _ = child.kill();
-                    process_done.store(true, Ordering::Relaxed);
+                    terminate_child(&child);
+                    process_done.store(true, Ordering::Release);
                     return Err(PluginError::Protocol(
                         "plugin closed stdout before Signature".into(),
                     ));
                 }
             };
             let sig: PluginFrame = serde_json::from_str(&line).map_err(|e| {
-                let _ = child.kill();
-                process_done.store(true, Ordering::Relaxed);
+                terminate_child(&child);
+                process_done.store(true, Ordering::Release);
                 PluginError::Serialization(e)
             })?;
             match sig {
                 PluginFrame::Signature { commands } => commands,
                 PluginFrame::Hello { commands, .. } if !commands.is_empty() => commands,
                 other => {
-                    let _ = child.kill();
-                    process_done.store(true, Ordering::Relaxed);
+                    terminate_child(&child);
+                    process_done.store(true, Ordering::Release);
                     return Err(PluginError::Protocol(format!(
                         "expected Signature frame, got {other:?}"
                     )));
@@ -184,8 +186,11 @@ impl PluginRegistry {
             commands,
         };
 
-        process_done.store(true, Ordering::Relaxed);
-        let _ = child.kill();
+        process_done.store(true, Ordering::Release);
+        terminate_child(&child);
+        let mut child = child
+            .lock()
+            .map_err(|_| PluginError::Protocol("plugin process lock poisoned".into()))?;
         let _ = child.wait();
 
         Ok(desc)

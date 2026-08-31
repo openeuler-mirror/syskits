@@ -350,6 +350,17 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_tilde_prefixed_command_name() {
+        let expr = parse("~uname -a");
+        let stages = expr.stages();
+        assert_eq!(stages[0].name, "~uname");
+        assert!(matches!(
+            &stages[0].args[0],
+            Arg::ShortFlag { name: 'a', .. }
+        ));
+    }
+
+    #[test]
     fn test_parse_bool_keywords_as_positional_literals() {
         let expr = parse("echo false true");
         let args = &expr.stages()[0].args;

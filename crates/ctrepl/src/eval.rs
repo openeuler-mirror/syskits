@@ -38,6 +38,10 @@ fn looks_like_unknown_command_warning(message: &str) -> bool {
     message.starts_with("precheck: unknown command `")
 }
 
+fn is_explicit_external_command(name: &str) -> bool {
+    name.strip_prefix('~').is_some_and(|cmd| !cmd.is_empty())
+}
+
 pub(crate) fn filter_precheck_diags_for_repl(
     expr: &ctdsl::Expr,
     diags: Vec<ctdsl::PrecheckDiagnostic>,
@@ -64,7 +68,9 @@ pub(crate) fn filter_precheck_diags_for_repl_with_known_command(
             let Some(stage) = expr.stages().get(d.stage_index) else {
                 return true;
             };
-            !signatures.contains_key(&stage.name) && !is_known_legacy_command(&stage.name)
+            !is_explicit_external_command(&stage.name)
+                && !signatures.contains_key(&stage.name)
+                && !is_known_legacy_command(&stage.name)
         })
         .collect()
 }

@@ -129,13 +129,26 @@ impl TailHeaderPrinter {
     }
 
     pub fn print(&mut self, string: &str) {
+        if let Some(header) = self.render(string) {
+            print!("{header}");
+        }
+    }
+
+    pub fn render_input(&mut self, input: &TailInput) -> Option<String> {
+        self.render(input.display_name.as_str())
+    }
+
+    pub fn render(&mut self, string: &str) -> Option<String> {
         if self.verbose {
-            println!(
-                "{}==> {} <==",
+            let header = format!(
+                "{}==> {} <==\n",
                 if self.first_header { "" } else { "\n" },
                 string,
             );
             self.first_header = false;
+            Some(header)
+        } else {
+            None
         }
     }
 }

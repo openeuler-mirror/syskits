@@ -294,6 +294,19 @@ fn data_phase_b_gnu_flags_match_direct_classic_output() {
 }
 
 #[test]
+fn data_gnu_numeric_and_clustered_short_flags_match_direct_classic_output() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("sample.txt");
+    fs::write(&file, "1\n2\n3\n4\n5\n6\n").expect("write gnu short flags fixture");
+    let dir = temp_dir.path().display().to_string();
+    let file = file.display().to_string();
+
+    assert_data_classic_matches_direct(&["ls", "-1", &dir]);
+    assert_data_classic_matches_direct(&["ls", "-la", &file]);
+    assert_data_classic_matches_direct(&["head", "-5", &file]);
+}
+
+#[test]
 fn data_split_classic_help_matches_direct_split() {
     assert_data_classic_matches_direct(&["split", "--help"]);
 }

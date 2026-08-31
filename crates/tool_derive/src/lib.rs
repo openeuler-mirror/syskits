@@ -85,6 +85,7 @@ extern crate proc_macro;
 use glob::glob;
 use proc_macro::TokenStream;
 use quote::quote;
+use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
 use std::io::Write;
@@ -614,21 +615,42 @@ fn deduplicate_data_commands(commands: Vec<DataCommandInfo>) -> Vec<DataCommandI
     sorted.sort_by(|a, b| {
         a.cmd_name
             .cmp(&b.cmd_name)
+            .then_with(|| data_command_variant_rank(a).cmp(&data_command_variant_rank(b)))
             .then_with(|| a.module_name.cmp(&b.module_name))
             .then_with(|| a.type_name.cmp(&b.type_name))
     });
 
     let mut deduped = Vec::new();
+    let mut seen_variants = HashSet::new();
+    let mut kept_canonical_cmd_names = HashSet::new();
+    let mut kept_fallback_cmd_names = HashSet::new();
     for cmd in sorted {
-        if deduped
-            .last()
-            .is_some_and(|last: &DataCommandInfo| last.cmd_name == cmd.cmd_name)
+        let rank = data_command_variant_rank(&cmd);
+        if rank <= 1 {
+            let variant_key = (cmd.cmd_name.clone(), rank);
+            if !seen_variants.insert(variant_key) {
+                continue;
+            }
+            kept_canonical_cmd_names.insert(cmd.cmd_name.clone());
+        } else if kept_canonical_cmd_names.contains(&cmd.cmd_name)
+            || !kept_fallback_cmd_names.insert(cmd.cmd_name.clone())
         {
             continue;
         }
         deduped.push(cmd);
     }
     deduped
+}
+
+fn data_command_variant_rank(cmd: &DataCommandInfo) -> u8 {
+    let canonical = cmd.cmd_name.replace('-', "_");
+    if cmd.module_name == canonical {
+        0
+    } else if cmd.module_name == format!("cmd_{canonical}") {
+        1
+    } else {
+        2
+    }
 }
 
 /// 扫描文件中的所有 `impl DataCommand for` 实现

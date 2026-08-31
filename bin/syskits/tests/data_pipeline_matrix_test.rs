@@ -212,7 +212,7 @@ fn data_phase_a_gnu_flags_match_direct_classic_output() {
         &["date", "-u", "+%Y"],
         &["date", "-u", "\"+%Y\""],
     );
-    assert_data_classic_matches_direct(&["df", "-a", "/"]);
+    assert_data_classic_matches_direct(&["df", "-a", "--output=source", "/"]);
     assert_data_classic_matches_direct_with_data_args(
         "env",
         &["env", "-0", "-i", "FOO=bar"],
@@ -230,6 +230,48 @@ fn data_phase_a_gnu_flags_match_direct_classic_output() {
     assert_data_classic_matches_direct(&["realpath", "--relative-to", &dir, &file]);
     assert_data_classic_matches_direct(&["tty", "-s"]);
     assert_data_classic_matches_direct(&["uptime", "-s"]);
+}
+
+#[test]
+fn data_phase_b_gnu_flags_match_direct_classic_output() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("sample.txt");
+    fs::write(&file, "alpha\n").expect("write phase-b fixture");
+
+    let dir = temp_dir.path().display().to_string();
+    let file = file.display().to_string();
+
+    assert_data_classic_matches_direct(&["dir", "-d", "-a", &dir]);
+    assert_data_classic_matches_direct(&["dirname", "-z", "/tmp/alpha"]);
+    assert_data_classic_matches_direct(&["echo", "-n", "alpha"]);
+    assert_data_classic_matches_direct_with_data_args(
+        "expr",
+        &["expr", "--", "1", "=", "1"],
+        &["expr", "--", "\"1\"", "\"=\"", "\"1\""],
+    );
+    assert_data_classic_matches_direct(&["hostname", "-s"]);
+    assert_data_classic_matches_direct(&["id", "-u"]);
+    assert_data_classic_matches_direct(&["logname", "--help"]);
+    assert_data_classic_matches_direct(&["pathchk", "-p", "alpha"]);
+    assert_data_classic_matches_direct(&["pinky", "-s"]);
+    assert_data_classic_matches_direct_with_data_args(
+        "printf",
+        &["printf", "--", "%s", "alpha"],
+        &["printf", "--", "\"%s\"", "alpha"],
+    );
+    assert_data_classic_matches_direct_with_data_args(
+        "seq",
+        &["seq", "-s", ",", "1", "3"],
+        &["seq", "-s", "\",\"", "\"1\"", "\"3\""],
+    );
+    assert_data_classic_matches_direct_with_data_args(
+        "stat",
+        &["stat", "-c", "%s", &file],
+        &["stat", "-c", "\"%s\"", &file],
+    );
+    assert_data_classic_matches_direct(&["vdir", "-d", "-a", &dir]);
+    assert_data_classic_matches_direct(&["who", "-q"]);
+    assert_data_classic_matches_direct(&["whoami", "--help"]);
 }
 
 #[test]

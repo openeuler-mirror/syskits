@@ -250,6 +250,7 @@ use std::io::{BufRead, BufReader, Read};
 const AUTO_DECODE_MAX_BYTES: usize = 1024 * 1024;
 /// 用于格式嗅探的初始探测窗口。足够识别 JSON/CSV/SSV 特征，同时避免等待 EOF。
 const AUTO_PROBE_BYTES: usize = 8 * 1024;
+const MAX_CAPTURED_STDERR_BYTES: usize = 64 * 1024;
 
 type MetadataCustom = std::sync::Arc<std::sync::Mutex<BTreeMap<String, ctpipeline::CtValue>>>;
 
@@ -615,6 +616,22 @@ fn read_capped_auto_bytes(
         .read_to_end(&mut out)
         .map_err(|e| decode_io_error("stdout decode(auto) failed to read bytes", e))?;
     Ok(out)
+}
+
+fn read_capped_stderr(mut reader: impl Read) -> std::io::Result<Vec<u8>> {
+    let mut retained = Vec::with_capacity(MAX_CAPTURED_STDERR_BYTES);
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        let remaining = MAX_CAPTURED_STDERR_BYTES.saturating_sub(retained.len());
+        if remaining > 0 {
+            retained.extend_from_slice(&buf[..n.min(remaining)]);
+        }
+    }
+    Ok(retained)
 }
 
 fn decode_csv(
@@ -1166,6 +1183,14 @@ mod decoder_tests {
     }
 
     #[test]
+    fn test_read_capped_stderr_drains_but_retains_only_limit() {
+        let input = vec![b'x'; 70 * 1024];
+        let retained = read_capped_stderr(std::io::Cursor::new(input)).unwrap();
+
+        assert_eq!(retained.len(), 64 * 1024);
+    }
+
+    #[test]
     fn test_decode_auto_large_output_falls_back_to_raw_stream() {
         let meta = CtPipelineMetadata::default();
         let payload = vec![b'a'; AUTO_DECODE_MAX_BYTES + 8];
@@ -1506,11 +1531,7 @@ impl ExternalExecutor {
 
         let stderr_thread = if spec.stderr_mode == ExternalStderrMode::Capture {
             child.stderr.take().map(|mut stderr| {
-                std::thread::spawn(move || {
-                    let mut buf = Vec::new();
-                    let _ = std::io::Read::read_to_end(&mut stderr, &mut buf);
-                    buf
-                })
+                std::thread::spawn(move || read_capped_stderr(&mut stderr).unwrap_or_default())
             })
         } else {
             // For MergeToStdout or Inherit, we do not separately capture stderr

@@ -17,13 +17,39 @@ use clap::Arg;
 use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
+use std::io::Cursor;
 use std::io::Read;
 use std::io::stdin;
 use sys_locale::get_locale;
 
-use ctcore::{Tool, ct_encoding::Format, ct_error::CTResult};
+use ctcore::{
+    Tool,
+    ct_encoding::Format,
+    ct_error::{CTError, CTResult, FromIo},
+};
 
 use std::ffi::OsString;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Base64SemanticRow {
+    pub mode: String,
+    pub wrap: usize,
+    pub ignore_garbage: bool,
+    pub input: String,
+    pub file: Option<String>,
+    pub line: usize,
+    pub output_text: String,
+    pub byte_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Base64Semantic {
+    pub rows: Vec<Base64SemanticRow>,
+    pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
 
 #[derive(Default)]
 pub struct Base64;
@@ -61,6 +87,158 @@ pub fn base64_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) ->
         config_mod.base_ignore_garbage,
         config_mod.base_decode,
     )
+}
+
+fn base64_render_error_text(err: &dyn CTError) -> String {
+    let mut stderr = format!("base64: {err}\n");
+    if err.usage() {
+        stderr.push_str("Try 'base64 --help' for more information.\n");
+    }
+    stderr
+}
+
+fn base64_rows_from_output(
+    config: &base_common::BaseConfig,
+    output: &[u8],
+) -> Vec<Base64SemanticRow> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+    let mut line = 1;
+
+    for (index, byte) in output.iter().enumerate() {
+        if *byte == b'\n' {
+            rows.push(Base64SemanticRow {
+                mode: if config.base_decode {
+                    "decode".into()
+                } else {
+                    "encode".into()
+                },
+                wrap: config.base_wrap_cols.unwrap_or(76),
+                ignore_garbage: config.base_ignore_garbage,
+                input: if config.base_to_read.is_some() {
+                    "file".into()
+                } else {
+                    "stdin".into()
+                },
+                file: config.base_to_read.clone(),
+                line,
+                output_text: String::from_utf8_lossy(&output[start..index]).into_owned(),
+                byte_len: index - start,
+            });
+            start = index + 1;
+            line += 1;
+        }
+    }
+
+    if start < output.len() {
+        rows.push(Base64SemanticRow {
+            mode: if config.base_decode {
+                "decode".into()
+            } else {
+                "encode".into()
+            },
+            wrap: config.base_wrap_cols.unwrap_or(76),
+            ignore_garbage: config.base_ignore_garbage,
+            input: if config.base_to_read.is_some() {
+                "file".into()
+            } else {
+                "stdin".into()
+            },
+            file: config.base_to_read.clone(),
+            line,
+            output_text: String::from_utf8_lossy(&output[start..]).into_owned(),
+            byte_len: output.len() - start,
+        });
+    }
+
+    rows
+}
+
+fn base64_semantic_from_output(
+    config: &base_common::BaseConfig,
+    output: Vec<u8>,
+    stderr_text: String,
+    exit_code: i32,
+) -> Base64Semantic {
+    let classic_text = String::from_utf8_lossy(&output).into_owned();
+    Base64Semantic {
+        rows: base64_rows_from_output(config, &output),
+        classic_text,
+        classic_bytes: output,
+        stderr_text,
+        exit_code,
+    }
+}
+
+pub fn base64_native_semantic(args: impl ctcore::Args) -> CTResult<Base64Semantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let base64_about = t!("base64.about");
+    let base64_usage = t!("base64.usage");
+
+    let config = match base_common::base_parsing_command_args(args, base64_about, base64_usage) {
+        Ok(config) => config,
+        Err(err) => {
+            return Ok(Base64Semantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                classic_bytes: Vec::new(),
+                stderr_text: base64_render_error_text(err.as_ref()),
+                exit_code: err.code(),
+            });
+        }
+    };
+
+    let stdin_info = stdin();
+    let mut input_info = match base_common::get_base_input(&config, &stdin_info) {
+        Ok(input) => input,
+        Err(err) => {
+            return Ok(Base64Semantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                classic_bytes: Vec::new(),
+                stderr_text: base64_render_error_text(err.as_ref()),
+                exit_code: err.code(),
+            });
+        }
+    };
+
+    let mut input_bytes = Vec::new();
+    if let Err(err) = input_info
+        .read_to_end(&mut input_bytes)
+        .map_err_context(|| config.base_to_read.clone().unwrap_or_else(|| "-".into()))
+    {
+        return Ok(Base64Semantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            classic_bytes: Vec::new(),
+            stderr_text: base64_render_error_text(err.as_ref()),
+            exit_code: err.code(),
+        });
+    }
+
+    let mut output = Vec::new();
+    match base_common::handle_base_input(
+        &mut Cursor::new(&input_bytes),
+        &mut output,
+        Format::Base64,
+        config.base_wrap_cols,
+        config.base_ignore_garbage,
+        config.base_decode,
+    ) {
+        Ok(()) => Ok(base64_semantic_from_output(
+            &config,
+            output,
+            String::new(),
+            0,
+        )),
+        Err(err) => Ok(base64_semantic_from_output(
+            &config,
+            output,
+            base64_render_error_text(err.as_ref()),
+            err.code(),
+        )),
+    }
 }
 
 pub fn ct_app() -> Command {

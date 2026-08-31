@@ -403,7 +403,12 @@ fn build_data_call(
     while idx < call.args.len() {
         match &call.args[idx] {
             Arg::Positional { value, span } => {
-                positionals.push(BoundArg::new(lit_to_ct_value(value), Some(span.clone())));
+                let value = if sig.is_some_and(DataSignature::allows_unknown) {
+                    lit_to_unknown_argv_ct_value(value)
+                } else {
+                    lit_to_ct_value(value)
+                };
+                positionals.push(BoundArg::new(value, Some(span.clone())));
             }
             Arg::LongFlag { name, span } => {
                 if (is_run_external && !is_run_external_control_flag(name))
@@ -665,6 +670,14 @@ pub fn lit_to_ct_value(lit: &Lit) -> CtValue {
         Lit::Duration(ns) => CtValue::Duration(*ns),
         Lit::DateTime(ns) => CtValue::DateTime(*ns),
         Lit::Ident(s) => CtValue::String(s.clone()),
+    }
+}
+
+fn lit_to_unknown_argv_ct_value(lit: &Lit) -> CtValue {
+    match lit {
+        Lit::Int(n) if *n < 0 => CtValue::String(n.to_string()),
+        Lit::Float(f) if f.is_sign_negative() => CtValue::String(f.to_string()),
+        _ => lit_to_ct_value(lit),
     }
 }
 
@@ -1476,6 +1489,46 @@ mod tests {
                 .get_flag::<String>("stdout-mode")
                 .expect("flag extraction"),
             Some("text".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_data_call_unknown_gnu_short_args_preserve_argv_strings() {
+        let call = parse_single_call("ls -1 -la");
+        let sig = DataSignature::new("ls", "ls")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible args",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true);
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        let values: Vec<&CtValue> = data_call.positionals.iter().map(|arg| &arg.value).collect();
+        assert_eq!(
+            values,
+            vec![
+                &CtValue::String("-1".into()),
+                &CtValue::String("-la".into())
+            ]
+        );
+
+        let call = parse_single_call("head -5");
+        let sig = DataSignature::new("head", "head")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible args",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true);
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+        assert_eq!(
+            data_call
+                .positionals
+                .iter()
+                .map(|arg| &arg.value)
+                .collect::<Vec<_>>(),
+            vec![&CtValue::String("-5".into())]
         );
     }
 

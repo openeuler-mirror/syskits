@@ -99,6 +99,14 @@ impl<'s> Lexer<'s> {
         chars.next()
     }
 
+    fn peek4(&self) -> Option<char> {
+        let mut chars = self.src[self.pos..].chars();
+        chars.next();
+        chars.next();
+        chars.next();
+        chars.next()
+    }
+
     fn advance(&mut self) -> Option<char> {
         let ch = self.peek()?;
         self.pos += ch.len_utf8();
@@ -231,22 +239,33 @@ impl<'s> Lexer<'s> {
                     self.lex_long_flag()
                 } else if self
                     .peek2()
-                    .map(|c| c.is_ascii_alphabetic())
-                    .unwrap_or(false)
-                    || (self.peek2() == Some('0')
-                        && self
-                            .peek3()
-                            .map(|c| c.is_whitespace() || c == '|')
-                            .unwrap_or(true))
-                {
-                    self.lex_short_flag()
-                } else if self
-                    .peek2()
                     .map(|c| c.is_whitespace() || c == '|')
                     .unwrap_or(true)
                 {
                     self.advance();
                     Ok(Token::Ident("-".into()))
+                } else if self
+                    .peek2()
+                    .map(|c| c.is_ascii_alphabetic() || c == '0')
+                    .unwrap_or(false)
+                {
+                    let after_dash = self.peek2();
+                    let after_short = self.peek3();
+                    let zero_prefixed_number = after_dash == Some('0')
+                        && after_short.is_some_and(|c| {
+                            c.is_ascii_digit()
+                                || (c == '.' && self.peek4().is_some_and(|n| n.is_ascii_digit()))
+                        });
+                    if zero_prefixed_number {
+                        self.lex_number()
+                    } else if after_short
+                        .map(|c| c.is_whitespace() || c == '|')
+                        .unwrap_or(true)
+                    {
+                        self.lex_short_flag()
+                    } else {
+                        self.lex_dash_prefixed_ident()
+                    }
                 } else {
                     // 负数：- 接数字
                     self.lex_number()
@@ -475,6 +494,19 @@ impl<'s> Lexer<'s> {
         self.advance();
         Ok(Token::ShortFlag(ch))
     }
+
+    fn lex_dash_prefixed_ident(&mut self) -> Result<Token, ParseError> {
+        let start = self.pos;
+        self.advance(); // `-`
+        while self
+            .peek()
+            .map(|c| !c.is_whitespace() && c != '|')
+            .unwrap_or(false)
+        {
+            self.advance();
+        }
+        Ok(Token::Ident(self.src[start..self.pos].to_string()))
+    }
 }
 
 // ── 字面量后缀解析辅助 ───────────────────────────────────
@@ -666,6 +698,13 @@ mod tests {
     }
 
     #[test]
+    fn test_lex_negative_zero_prefixed_number_literals() {
+        let toks = lex("-05 -0.5");
+        assert_eq!(toks[0], Token::IntLit(-5));
+        assert_eq!(toks[1], Token::FloatLit(-0.5));
+    }
+
+    #[test]
     fn test_lex_float() {
         let toks = lex("2.5");
         assert_eq!(toks[0], Token::FloatLit(2.5));
@@ -718,6 +757,12 @@ mod tests {
     fn test_lex_numeric_zero_short_flag() {
         let toks = lex("-0");
         assert_eq!(toks[0], Token::ShortFlag('0'));
+    }
+
+    #[test]
+    fn test_lex_clustered_short_flags_as_single_argv_token() {
+        let toks = lex("-la");
+        assert_eq!(toks[0], Token::Ident("-la".into()));
     }
 
     #[test]

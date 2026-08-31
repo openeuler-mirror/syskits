@@ -256,6 +256,8 @@ const AUTO_DECODE_MAX_BYTES: usize = 1024 * 1024;
 /// 用于格式嗅探的初始探测窗口。足够识别 JSON/CSV/SSV 特征，同时避免等待 EOF。
 const AUTO_PROBE_BYTES: usize = 8 * 1024;
 
+type MetadataCustom = std::sync::Arc<std::sync::Mutex<BTreeMap<String, ctpipeline::CtValue>>>;
+
 fn decode_error(message: impl Into<String>, timed_out: bool) -> crate::error::CtDiagnosticError {
     let err = crate::error::CtDiagnosticError::simple(message.into());
     if timed_out {
@@ -1255,6 +1257,29 @@ mod decoder_tests {
         );
         assert_eq!(wrapped_timeout.code, crate::execution::exit_code::TIMEOUT);
     }
+
+    #[test]
+    fn test_insert_external_metadata_custom_recovers_poisoned_lock() {
+        let custom = std::sync::Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new()));
+        let poisoned = custom.clone();
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = poisoned.lock().unwrap();
+            panic!("poison custom metadata");
+        });
+
+        insert_external_metadata_custom(
+            &custom,
+            vec![("external.exit_code", ctpipeline::CtValue::Int(9))],
+        );
+
+        let guard = custom
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(
+            guard.get("external.exit_code"),
+            Some(&ctpipeline::CtValue::Int(9))
+        );
+    }
 }
 
 struct ExternalStream {
@@ -1267,9 +1292,20 @@ struct ExternalStream {
     process_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     stderr_buf: Option<std::io::Cursor<Vec<u8>>>,
     stdin_handle: Option<std::thread::JoinHandle<()>>,
-    meta_custom: Option<
-        std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, ctpipeline::CtValue>>>,
-    >,
+    meta_custom: Option<MetadataCustom>,
+}
+
+fn insert_external_metadata_custom<I, K>(custom: &MetadataCustom, entries: I)
+where
+    I: IntoIterator<Item = (K, ctpipeline::CtValue)>,
+    K: Into<String>,
+{
+    let mut guard = custom
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    for (key, value) in entries {
+        guard.insert(key.into(), value);
+    }
 }
 
 impl Read for ExternalStream {
@@ -1331,22 +1367,23 @@ impl Read for ExternalStream {
             let exit_code = status.code().unwrap_or(-1);
 
             if let Some(custom) = &self.meta_custom {
-                if let Ok(mut guard) = custom.lock() {
-                    guard.insert(
-                        "external.exit_code".to_string(),
+                let mut entries = vec![
+                    (
+                        "external.exit_code",
                         ctpipeline::CtValue::Int(exit_code as i64),
-                    );
-                    guard.insert(
-                        "external.duration_ms".to_string(),
+                    ),
+                    (
+                        "external.duration_ms",
                         ctpipeline::CtValue::Int(duration_ms.min(i64::MAX as u64) as i64),
-                    );
-                    if self.spec.stderr_mode == ExternalStderrMode::Capture {
-                        guard.insert(
-                            "external.stderr_summary".to_string(),
-                            ctpipeline::CtValue::String(stderr_summary.clone()),
-                        );
-                    }
+                    ),
+                ];
+                if self.spec.stderr_mode == ExternalStderrMode::Capture {
+                    entries.push((
+                        "external.stderr_summary",
+                        ctpipeline::CtValue::String(stderr_summary.clone()),
+                    ));
                 }
+                insert_external_metadata_custom(custom, entries);
             }
 
             if timed_out {
@@ -1521,45 +1558,42 @@ impl ExternalExecutor {
         // True exit_code/stderr/duration will only be known after the stream ends,
         // but downstream requires these keys to exist eagerly.
         let init_duration = start_time.elapsed().as_millis() as u64;
-        {
-            let mut custom = meta.custom.lock().unwrap();
-            custom.insert(
-                "external.command".to_string(),
+        let mut entries = vec![
+            (
+                "external.command",
                 ctpipeline::CtValue::String(spec.cmd.clone()),
-            );
-            custom.insert(
-                "external.args".to_string(),
+            ),
+            (
+                "external.args",
                 ctpipeline::CtValue::List(
                     spec.args
                         .iter()
                         .map(|s| ctpipeline::CtValue::String(s.clone()))
                         .collect(),
                 ),
-            );
-            custom.insert(
-                "external.cwd".to_string(),
+            ),
+            (
+                "external.cwd",
                 ctpipeline::CtValue::String(
                     spec.cwd
                         .as_ref()
                         .map(|p| p.display().to_string())
                         .unwrap_or_else(|| ".".to_string()),
                 ),
-            );
-            custom.insert(
-                "external.exit_code".to_string(),
-                ctpipeline::CtValue::Int(0),
-            );
-            custom.insert(
-                "external.duration_ms".to_string(),
-                ctpipeline::CtValue::Int(init_duration as i64),
-            );
-            if spec.stderr_mode == ExternalStderrMode::Capture {
-                custom.insert(
-                    "external.stderr_summary".to_string(),
-                    ctpipeline::CtValue::String(String::new()),
-                );
-            }
+            ),
+            ("external.exit_code", ctpipeline::CtValue::Int(0)),
+            (
+                "external.duration_ms",
+                ctpipeline::CtValue::Int(init_duration.min(i64::MAX as u64) as i64),
+            ),
+        ];
+        if spec.stderr_mode == ExternalStderrMode::Capture {
+            entries.push((
+                "external.stderr_summary",
+                ctpipeline::CtValue::String(String::new()),
+            ));
         }
+        insert_external_metadata_custom(&meta.custom, entries);
 
         let external_stream = ExternalStream {
             stdout,

@@ -230,16 +230,20 @@ impl CtValueError {
 
 /// 将 Unix 纳秒时间戳格式化为 ISO-8601 字符串
 fn format_datetime_nanos(nanos: i128) -> String {
-    let secs = nanos.div_euclid(1_000_000_000) as i64;
-    let subsec_nanos = nanos.rem_euclid(1_000_000_000) as u32;
+    const NANOS_PER_SEC: i128 = 1_000_000_000;
+    const SECS_PER_DAY: i64 = 86_400;
+
+    let raw_secs = nanos.div_euclid(NANOS_PER_SEC);
+    let secs = match i64::try_from(raw_secs) {
+        Ok(secs) => secs,
+        Err(_) if raw_secs < 0 => i64::MIN,
+        Err(_) => i64::MAX,
+    };
+    let subsec_nanos = nanos.rem_euclid(NANOS_PER_SEC) as u32;
     // 手动计算 UTC 日期时间（避免引入外部时间库）
     // 使用 Unix epoch (1970-01-01) 为基准
-    let days = if secs >= 0 {
-        secs / 86400
-    } else {
-        (secs - 86399) / 86400
-    };
-    let day_secs = secs - days * 86400;
+    let days = secs.div_euclid(SECS_PER_DAY);
+    let day_secs = secs.rem_euclid(SECS_PER_DAY);
     let h = day_secs / 3600;
     let m = (day_secs % 3600) / 60;
     let s = day_secs % 60;
@@ -426,6 +430,18 @@ mod tests {
     fn test_ctvalue_datetime_negative_subsecond() {
         let v = CtValue::DateTime(-1);
         assert_eq!(v.to_text(), "1969-12-31T23:59:59.999999999Z");
+    }
+
+    #[test]
+    fn test_ctvalue_datetime_i128_max_saturates_seconds() {
+        let v = CtValue::DateTime(i128::MAX);
+        assert_eq!(v.to_text(), "292277026596-12-04T15:30:07.884105727Z");
+    }
+
+    #[test]
+    fn test_ctvalue_datetime_i128_min_saturates_seconds() {
+        let v = CtValue::DateTime(i128::MIN);
+        assert_eq!(v.to_text(), "-292277022657-01-27T08:29:52.115894272Z");
     }
 
     #[test]

@@ -283,4 +283,18 @@ mod tests {
         });
         assert!(out.is_empty());
     }
+
+    #[test]
+    fn test_filter_precheck_diags_suppresses_unknown_for_tilde_external_command() {
+        let expr = ctdsl::parse("~chroot --help").expect("parse");
+        let diags = vec![ctdsl::PrecheckDiagnostic {
+            level: ctdsl::PrecheckLevel::Warning,
+            message: "precheck: unknown command `~chroot`; skip type-chain check".to_string(),
+            stage_index: 0,
+            span: None,
+        }];
+        let sigs = HashMap::new();
+        let out = filter_precheck_diags_for_repl(&expr, diags, &sigs, None);
+        assert!(out.is_empty());
+    }
 }

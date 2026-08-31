@@ -269,6 +269,19 @@ fn eval_call(
     input: CtPipelineData,
     ctx: &DataEngineContext,
 ) -> Result<CtPipelineData, CtDiagnosticError> {
+    if let Some(external_name) = call.name.strip_prefix('~') {
+        if external_name.is_empty() {
+            return Err(CtDiagnosticError::with_span(
+                "external command prefix `~` requires a command name",
+                call.span.clone(),
+            ));
+        }
+        let ext_args = external_args_from_call(call);
+        let mut spec = crate::external::ExternalCallSpec::quick(external_name, &ext_args);
+        spec.exit_policy = crate::external::ExternalExitPolicy::AllowNonZero;
+        return crate::external::ExternalExecutor::run(spec, input, ctx);
+    }
+
     if let Some(cmd) = ctx.registry.get(&call.name) {
         let sig = cmd.signature();
         if let Some(expected) = sig.input_type
@@ -321,6 +334,12 @@ fn eval_call(
     }
 
     // 3rd fallback: treat as external binary
+    let ext_args = external_args_from_call(call);
+    let spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
+    crate::external::ExternalExecutor::run(spec, input, ctx)
+}
+
+fn external_args_from_call(call: &Call) -> Vec<String> {
     let mut ext_args = Vec::new();
     for arg in &call.args {
         match arg {
@@ -355,9 +374,7 @@ fn eval_call(
             }
         }
     }
-
-    let spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
-    crate::external::ExternalExecutor::run(spec, input, ctx)
+    ext_args
 }
 
 fn pipeline_data_type(data: &CtPipelineData) -> CtType {

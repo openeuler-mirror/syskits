@@ -414,6 +414,36 @@ fn data_arch_classic_invalid_flag_matches_direct_arch() {
 }
 
 #[test]
+fn data_tilde_prefix_forces_external_for_native_command() {
+    let expected = Command::new("uname")
+        .arg("-a")
+        .output()
+        .expect("run system uname -a");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "~uname", "-a"])
+        .output()
+        .expect("run syskits data ~uname -a classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
+fn data_tilde_prefix_forces_external_for_direct_only_command() {
+    let expected = Command::new("chroot")
+        .arg("--help")
+        .output()
+        .expect("run system chroot --help");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "~chroot", "--help"])
+        .output()
+        .expect("run syskits data ~chroot --help classic");
+
+    assert_same_process_output(&out, &expected);
+}
+
+#[test]
 fn shell_entry_accepts_gnu_flags_like_data_entry() {
     let expected_uname = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["uname", "-a"])
@@ -452,6 +482,45 @@ fn shell_direct_only_command_prefers_internal_tool_before_external_path() {
         .args(["shell", "format=classic", "chroot", "--help"])
         .output()
         .expect("run syskits shell chroot --help classic");
+
+    assert_same_process_output(&shell, &expected);
+}
+
+#[test]
+fn shell_tilde_prefix_forces_external_for_native_command() {
+    let expected = Command::new("uname")
+        .arg("-a")
+        .output()
+        .expect("run system uname -a");
+    let shell = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "~uname", "-a"])
+        .output()
+        .expect("run syskits shell ~uname -a classic");
+
+    assert_same_process_output(&shell, &expected);
+}
+
+#[test]
+fn shell_tilde_prefix_forces_external_for_direct_only_command() {
+    let expected = Command::new("chroot")
+        .arg("--help")
+        .output()
+        .expect("run system chroot --help");
+    let shell = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "~chroot", "--help"])
+        .output()
+        .expect("run syskits shell ~chroot --help classic");
+
+    assert_same_process_output(&shell, &expected);
+}
+
+#[test]
+fn shell_tilde_prefix_preserves_external_nonzero_status() {
+    let expected = Command::new("false").output().expect("run system false");
+    let shell = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["shell", "format=classic", "~false"])
+        .output()
+        .expect("run syskits shell ~false classic");
 
     assert_same_process_output(&shell, &expected);
 }

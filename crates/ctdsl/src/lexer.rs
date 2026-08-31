@@ -281,7 +281,13 @@ impl<'s> Lexer<'s> {
                 }
             }
 
-            c if c.is_ascii_alphabetic() || c == '_' || c == '$' || c == '/' || c == '.' => {
+            c if c.is_ascii_alphabetic()
+                || c == '_'
+                || c == '$'
+                || c == '/'
+                || c == '.'
+                || c == '~' =>
+            {
                 self.lex_ident_or_keyword()
             }
 
@@ -423,6 +429,7 @@ impl<'s> Lexer<'s> {
                     || c == '$'
                     || c == ':'
                     || c == '/'
+                    || c == '~'
             })
             .unwrap_or(false)
         {
@@ -757,6 +764,13 @@ mod tests {
     fn test_lex_numeric_zero_short_flag() {
         let toks = lex("-0");
         assert_eq!(toks[0], Token::ShortFlag('0'));
+    }
+
+    #[test]
+    fn test_lex_tilde_prefixed_command_name() {
+        let toks = lex("~uname -a");
+        assert_eq!(toks[0], Token::Ident("~uname".into()));
+        assert_eq!(toks[1], Token::ShortFlag('a'));
     }
 
     #[test]

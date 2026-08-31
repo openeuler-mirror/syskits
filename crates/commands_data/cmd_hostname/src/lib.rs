@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -133,8 +133,14 @@ fn value_for_query(query_type: ct_hostname::NameType, text: &str) -> CtValue {
 impl DataCommand for CmdHostname {
     fn signature(&self) -> DataSignature {
         DataSignature::new("hostname", "structured hostname information")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible hostname query arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::Record)
+            .allow_unknown_args(true)
     }
 
     fn run(

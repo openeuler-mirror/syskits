@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -149,8 +149,14 @@ fn field_value(row: &ct_stat::StatSemanticRow, field: ct_stat::StatSemanticField
 impl DataCommand for CmdStat {
     fn signature(&self) -> DataSignature {
         DataSignature::new("stat", "structured file and file system status")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible stat arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

@@ -19,12 +19,13 @@
 //! 尽管它们是不同的类，但它们共享共同的功能。
 //! 对这种共同功能的访问在`OwnedFileDescriptorOrHandle`中提供。
 
+use std::cell::RefCell;
+use std::io::{Cursor, Read};
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, OwnedFd};
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, OwnedFd as UnixOwnedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsHandle, OwnedHandle};
+use std::sync::{Arc, Mutex};
 use std::{
     fs::{File, OpenOptions},
     io,
@@ -36,6 +37,8 @@ use std::{
 type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
+
+type InjectedStdinCursor = Arc<Mutex<Cursor<Vec<u8>>>>;
 
 /// 用于封装原生文件句柄/文件描述符的抽象层
 pub struct CtOwnedFileDescriptorOrHandle {
@@ -104,121 +107,68 @@ impl From<CtOwnedFileDescriptorOrHandle> for Stdio {
     }
 }
 
-#[cfg(unix)]
-struct CtRawFdGuard {
-    fd: i32,
+thread_local! {
+    static CT_STDIN_INJECTION: RefCell<Option<InjectedStdinCursor>> = const { RefCell::new(None) };
 }
 
-#[cfg(unix)]
-impl CtRawFdGuard {
-    fn new(fd: i32) -> Self {
-        Self { fd }
-    }
-
-    fn as_raw_fd(&self) -> i32 {
-        self.fd
-    }
+struct InjectedStdinReader {
+    cursor: InjectedStdinCursor,
 }
 
-#[cfg(unix)]
-impl Drop for CtRawFdGuard {
-    fn drop(&mut self) {
-        let _ = nix::unistd::close(self.fd);
+impl Read for InjectedStdinReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut cursor = self
+            .cursor
+            .lock()
+            .map_err(|_| io::Error::other("injected stdin lock poisoned"))?;
+        cursor.read(buf)
     }
 }
 
-#[cfg(unix)]
-fn io_other(label: &str, stage: &str, err: impl std::fmt::Display) -> io::Error {
-    io::Error::other(format!("{label}: {stage}: {err}"))
-}
-
-#[cfg(unix)]
-pub fn with_stdin_writer<T, E, F, W, M>(
-    label: &str,
-    write_stdin: W,
-    run: F,
-    map_io_err: M,
-) -> Result<T, E>
+/// Run `run` with a thread-local stdin byte source for semantic/data helpers.
+///
+/// This does not mutate fd 0. Direct legacy commands keep reading the real
+/// process stdin; data-pipeline helpers can opt into `stdin_reader_box()`.
+pub fn with_injected_stdin<T, F>(stdin_bytes: Vec<u8>, run: F) -> T
 where
-    F: FnOnce() -> Result<T, E>,
-    W: FnOnce(File) -> io::Result<()> + Send + 'static,
-    M: Copy + Fn(io::Error) -> E,
+    F: FnOnce() -> T,
 {
-    let (stdin_read_fd, stdin_write_fd): (UnixOwnedFd, UnixOwnedFd) =
-        nix::unistd::pipe().map_err(|e| map_io_err(io_other(label, "stdin pipe failed", e)))?;
+    struct InjectionGuard(Option<InjectedStdinCursor>);
 
-    let saved_stdin = nix::unistd::dup(std::io::stdin().as_raw_fd())
-        .map_err(|e| map_io_err(io_other(label, "dup stdin failed", e)))?;
-    let saved_stdin = CtRawFdGuard::new(saved_stdin);
-
-    let writer_thread = std::thread::spawn(move || {
-        let file = File::from(stdin_write_fd);
-        write_stdin(file)
-    });
-
-    if let Err(e) = nix::unistd::dup2(stdin_read_fd.as_raw_fd(), std::io::stdin().as_raw_fd()) {
-        drop(stdin_read_fd);
-        let _ = writer_thread.join();
-        return Err(map_io_err(io_other(label, "redirect stdin failed", e)));
-    }
-    drop(stdin_read_fd);
-
-    let run_result = run();
-    let restore_stdin = nix::unistd::dup2(saved_stdin.as_raw_fd(), std::io::stdin().as_raw_fd());
-    let writer_result = writer_thread.join();
-
-    if let Err(e) = restore_stdin {
-        return Err(map_io_err(io_other(label, "restore stdin failed", e)));
-    }
-
-    match writer_result {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => return Err(map_io_err(io_other(label, "write stdin failed", e))),
-        Err(_) => {
-            return Err(map_io_err(io::Error::other(format!(
-                "{label}: stdin writer thread panicked"
-            ))));
+    impl Drop for InjectionGuard {
+        fn drop(&mut self) {
+            CT_STDIN_INJECTION.with(|slot| {
+                *slot.borrow_mut() = self.0.take();
+            });
         }
     }
 
-    run_result
+    let cursor = Arc::new(Mutex::new(Cursor::new(stdin_bytes)));
+    let previous = CT_STDIN_INJECTION.with(|slot| slot.replace(Some(cursor)));
+    let _guard = InjectionGuard(previous);
+    run()
 }
 
-#[cfg(unix)]
-pub fn with_stdin_writer_io<T, F, W>(label: &str, write_stdin: W, run: F) -> io::Result<T>
-where
-    F: FnOnce() -> io::Result<T>,
-    W: FnOnce(File) -> io::Result<()> + Send + 'static,
-{
-    with_stdin_writer(label, write_stdin, run, |e| e)
+pub fn injected_stdin_bytes() -> Option<Vec<u8>> {
+    CT_STDIN_INJECTION.with(|slot| {
+        let cursor = slot.borrow().clone()?;
+        let cursor = cursor.lock().ok()?;
+        Some(cursor.get_ref().clone())
+    })
 }
 
-#[cfg(not(unix))]
-pub fn with_stdin_writer<T, E, F, W, M>(
-    label: &str,
-    _write_stdin: W,
-    _run: F,
-    map_io_err: M,
-) -> Result<T, E>
-where
-    F: FnOnce() -> Result<T, E>,
-    W: FnOnce(File) -> io::Result<()> + Send + 'static,
-    M: Copy + Fn(io::Error) -> E,
-{
-    Err(map_io_err(io::Error::other(format!(
-        "{label}: stdin redirection is unsupported on non-unix targets"
-    ))))
+pub fn stdin_reader_box() -> Box<dyn Read> {
+    match CT_STDIN_INJECTION.with(|slot| slot.borrow().clone()) {
+        Some(cursor) => Box::new(InjectedStdinReader { cursor }),
+        None => Box::new(io::stdin()),
+    }
 }
 
-#[cfg(not(unix))]
-pub fn with_stdin_writer_io<T, F, W>(label: &str, _write_stdin: W, _run: F) -> io::Result<T>
-where
-    F: FnOnce() -> io::Result<T>,
-    W: FnOnce(File) -> io::Result<()> + Send + 'static,
-{
-    Err(io::Error::other(format!(
-        "{label}: stdin redirection is unsupported on non-unix targets"
-    )))
+pub fn stdin_reader_box_send() -> Box<dyn Read + Send> {
+    match CT_STDIN_INJECTION.with(|slot| slot.borrow().clone()) {
+        Some(cursor) => Box::new(InjectedStdinReader { cursor }),
+        None => Box::new(io::stdin()),
+    }
 }
 
 #[cfg(test)]

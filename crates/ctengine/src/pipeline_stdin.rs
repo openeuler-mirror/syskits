@@ -36,16 +36,14 @@ where
     F: FnOnce() -> Result<T, E>,
     M: Copy + Fn(io::Error) -> E,
 {
+    let _ = label;
     if !use_stdin || matches!(input, CtPipelineData::Empty) {
         return run();
     }
 
-    ctcore::ct_io::with_stdin_writer(
-        label,
-        move |stdin| write_pipeline_as_text(input, stdin),
-        run,
-        map_io_err,
-    )
+    let mut stdin_bytes = Vec::new();
+    write_pipeline_as_text(input, &mut stdin_bytes).map_err(map_io_err)?;
+    ctcore::ct_io::with_injected_stdin(stdin_bytes, run)
 }
 
 pub fn run_with_optional_pipeline_stdin_io<T, F>(

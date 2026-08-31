@@ -31,7 +31,7 @@ use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, ExitCode};
 
 use crate::command::{CommandParser, MoreAction};
 use crate::pager::{Pager, PagerOptions, PagerResult};
@@ -56,10 +56,27 @@ pub mod more_options {
     pub const MORE_FILES: &str = "files";
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MoreSemanticRow {
+    pub kind: String,
+    pub file: Option<String>,
+    pub line_index: Option<usize>,
+    pub text: String,
+    pub source: String,
+    pub terminated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MoreSemantic {
+    pub rows: Vec<MoreSemanticRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 /// Main entry point for more command
 pub fn more_main(args: impl Iterator<Item = OsString>) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    init_more_locale();
 
     // Setup panic handler
     setup_panic_handler();
@@ -85,7 +102,9 @@ pub fn more_main(args: impl Iterator<Item = OsString>) -> CTResult<()> {
 
     // Non-TTY mode: direct output
     if !stdout_is_tty {
-        return non_interactive_mode(&files);
+        let semantic = more_non_interactive_semantic(&files, stdin_is_tty)?;
+        write_more_semantic_output(&semantic)?;
+        return finalize_more_semantic_exit(&semantic);
     }
 
     // TTY mode: interactive paging
@@ -96,49 +115,303 @@ pub fn more_main(args: impl Iterator<Item = OsString>) -> CTResult<()> {
     }
 }
 
-/// Non-interactive mode (stdout is not a TTY)
-fn non_interactive_mode(files: &[String]) -> CTResult<()> {
-    let mut out = stdout();
-    let stdin_is_tty = stdin().is_terminal();
+pub fn more_native_semantic(args: impl Iterator<Item = OsString>) -> CTResult<MoreSemantic> {
+    init_more_locale();
 
-    // Output stdin first if not a TTY
+    let normalized_args = normalize_more_args(args);
+    let matches = match parse_arguments_for_semantic(normalized_args) {
+        Ok(matches) => matches,
+        Err(semantic) => return Ok(semantic),
+    };
+
+    let files: Vec<String> = matches
+        .get_many::<String>(more_options::MORE_FILES)
+        .map(|values| values.cloned().collect())
+        .unwrap_or_default();
+
+    let stdin_is_tty = stdin().is_terminal();
+    if stdin_is_tty && files.is_empty() {
+        return Ok(more_semantic_error(
+            CTsageError::new(1, "bad usage").as_ref(),
+        ));
+    }
+
+    match more_non_interactive_semantic(&files, stdin_is_tty) {
+        Ok(semantic) => Ok(semantic),
+        Err(err) => Ok(more_semantic_error(err.as_ref())),
+    }
+}
+
+fn parse_arguments_for_semantic(args: Vec<OsString>) -> Result<ArgMatches, MoreSemantic> {
+    match ct_app().try_get_matches_from(args) {
+        Ok(matches) => Ok(matches),
+        Err(err) => {
+            let rendered = err.to_string();
+            if err.use_stderr() {
+                Err(MoreSemantic {
+                    rows: Vec::new(),
+                    classic_text: String::new(),
+                    stderr_text: rendered,
+                    exit_code: 1,
+                })
+            } else {
+                Err(MoreSemantic {
+                    rows: Vec::new(),
+                    classic_text: rendered,
+                    stderr_text: String::new(),
+                    exit_code: 0,
+                })
+            }
+        }
+    }
+}
+
+fn init_more_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+}
+
+fn more_semantic_error(err: &dyn CTError) -> MoreSemantic {
+    let mut stderr_text = format!("more: {err}\n");
+    if err.usage() {
+        stderr_text.push_str("Try 'more --help' for more information.\n");
+    }
+
+    MoreSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text,
+        exit_code: err.code(),
+    }
+}
+
+fn finalize_more_semantic_exit(semantic: &MoreSemantic) -> CTResult<()> {
+    if semantic.exit_code == 0 {
+        Ok(())
+    } else {
+        Err(ExitCode::new(semantic.exit_code))
+    }
+}
+
+fn write_more_semantic_output(semantic: &MoreSemantic) -> CTResult<()> {
+    let mut out = stdout();
+    let mut err = stderr();
+
+    if !semantic.classic_text.is_empty() {
+        out.write_all(semantic.classic_text.as_bytes())?;
+    }
+    if !semantic.stderr_text.is_empty() {
+        err.write_all(semantic.stderr_text.as_bytes())?;
+    }
+
+    out.flush()?;
+    err.flush()?;
+    Ok(())
+}
+
+fn more_non_interactive_semantic(files: &[String], stdin_is_tty: bool) -> CTResult<MoreSemantic> {
+    let mut semantic = MoreSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
+    };
+
     if !stdin_is_tty {
         let mut stdin_buf = Vec::new();
         stdin().read_to_end(&mut stdin_buf)?;
         if !stdin_buf.is_empty() {
-            out.write_all(&stdin_buf)?;
+            semantic
+                .classic_text
+                .push_str(&String::from_utf8_lossy(&stdin_buf));
+            push_text_rows(&mut semantic.rows, "stdin_line", None, "stdout", &stdin_buf);
         }
     }
 
-    // Output each file
     for file in files {
-        output_file_noninteractive(file, &mut out)?;
+        collect_file_noninteractive_semantic(file, &mut semantic)?;
     }
 
-    out.flush()?;
-    Ok(())
+    Ok(semantic)
 }
 
-/// Output a single file in non-interactive mode
-fn output_file_noninteractive(file: &str, out: &mut impl Write) -> CTResult<()> {
+fn push_row(
+    rows: &mut Vec<MoreSemanticRow>,
+    kind: &str,
+    file: Option<&str>,
+    line_index: Option<usize>,
+    text: String,
+    source: &str,
+    terminated: bool,
+) {
+    rows.push(MoreSemanticRow {
+        kind: kind.into(),
+        file: file.map(str::to_string),
+        line_index,
+        text,
+        source: source.into(),
+        terminated,
+    });
+}
+
+fn push_text_rows(
+    rows: &mut Vec<MoreSemanticRow>,
+    kind: &str,
+    file: Option<&str>,
+    source: &str,
+    bytes: &[u8],
+) {
+    let mut start = 0;
+    let mut line_index = 1;
+
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'\n' {
+            push_row(
+                rows,
+                kind,
+                file,
+                Some(line_index),
+                String::from_utf8_lossy(&bytes[start..index]).into_owned(),
+                source,
+                true,
+            );
+            start = index + 1;
+            line_index += 1;
+        }
+    }
+
+    if start < bytes.len() {
+        push_row(
+            rows,
+            kind,
+            file,
+            Some(line_index),
+            String::from_utf8_lossy(&bytes[start..]).into_owned(),
+            source,
+            false,
+        );
+    }
+}
+
+fn push_literal_rows(
+    rows: &mut Vec<MoreSemanticRow>,
+    kind: &str,
+    file: Option<&str>,
+    source: &str,
+    text: &str,
+) {
+    let mut start = 0;
+    let bytes = text.as_bytes();
+
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'\n' {
+            push_row(
+                rows,
+                kind,
+                file,
+                None,
+                String::from_utf8_lossy(&bytes[start..index]).into_owned(),
+                source,
+                true,
+            );
+            start = index + 1;
+        }
+    }
+
+    if start < bytes.len() {
+        push_row(
+            rows,
+            kind,
+            file,
+            None,
+            String::from_utf8_lossy(&bytes[start..]).into_owned(),
+            source,
+            false,
+        );
+    }
+}
+
+fn push_file_header_rows(rows: &mut Vec<MoreSemanticRow>, file: &str) {
+    push_row(
+        rows,
+        "file_header_border",
+        Some(file),
+        None,
+        "::::::::::::::".into(),
+        "stdout",
+        true,
+    );
+    push_row(
+        rows,
+        "file_header_name",
+        Some(file),
+        None,
+        file.into(),
+        "stdout",
+        true,
+    );
+    push_row(
+        rows,
+        "file_header_border",
+        Some(file),
+        None,
+        "::::::::::::::".into(),
+        "stdout",
+        true,
+    );
+}
+
+/// Collect a single file in non-interactive mode.
+fn collect_file_noninteractive_semantic(file: &str, semantic: &mut MoreSemantic) -> CTResult<()> {
     let path = Path::new(file);
 
     if path.is_dir() {
-        write!(out, "{}", t!("more.is_directory", file = file))?;
+        let notice = t!("more.is_directory", file = file);
+        semantic.classic_text.push_str(&notice);
+        push_literal_rows(
+            &mut semantic.rows,
+            "directory_notice",
+            Some(file),
+            "stdout",
+            &notice,
+        );
         return Ok(());
     }
 
     let opened_file = match File::open(path) {
         Ok(f) => f,
         Err(err) => {
-            eprintln!("more: cannot open {}: {}", file, os_error_message(&err));
+            let message = format!("more: cannot open {}: {}\n", file, os_error_message(&err));
+            semantic.stderr_text.push_str(&message);
+            push_literal_rows(
+                &mut semantic.rows,
+                "open_error",
+                Some(file),
+                "stderr",
+                &message,
+            );
             return Ok(());
         }
     };
 
-    write!(out, "::::::::::::::\n{file}\n::::::::::::::\n")?;
+    semantic
+        .classic_text
+        .push_str(&format!("::::::::::::::\n{file}\n::::::::::::::\n"));
+    push_file_header_rows(&mut semantic.rows, file);
+
     let mut reader = BufReader::new(opened_file);
-    io::copy(&mut reader, out)?;
+    let mut file_buf = Vec::new();
+    reader.read_to_end(&mut file_buf)?;
+    semantic
+        .classic_text
+        .push_str(&String::from_utf8_lossy(&file_buf));
+    push_text_rows(
+        &mut semantic.rows,
+        "content_line",
+        Some(file),
+        "stdout",
+        &file_buf,
+    );
     Ok(())
 }
 
@@ -677,6 +950,8 @@ impl Tool for More {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_normalize_args() {
@@ -724,5 +999,94 @@ mod tests {
 
         let cmd = tool.command();
         assert!(cmd.get_name().contains("more"));
+    }
+
+    #[test]
+    fn more_native_semantic_collects_non_interactive_rows_and_metadata() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let path = temp_dir.path().join("sample.txt");
+        fs::write(&path, "alpha\nbeta\n").expect("write more sample");
+        let path = path.display().to_string();
+
+        let semantic =
+            more_native_semantic(vec![OsString::from("more"), OsString::from(&path)].into_iter())
+                .expect("more semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(
+            semantic.classic_text,
+            format!("::::::::::::::\n{path}\n::::::::::::::\nalpha\nbeta\n")
+        );
+        assert!(semantic.stderr_text.is_empty());
+        assert!(
+            semantic.rows.iter().any(|row| {
+                row.kind == "file_header_name"
+                    && row.file.as_deref() == Some(path.as_str())
+                    && row.text == path
+            }),
+            "rows: {:?}",
+            semantic.rows
+        );
+        assert!(
+            semantic.rows.iter().any(|row| {
+                row.kind == "content_line"
+                    && row.file.as_deref() == Some(path.as_str())
+                    && row.line_index == Some(1)
+                    && row.text == "alpha"
+                    && row.source == "stdout"
+                    && row.terminated
+            }),
+            "rows: {:?}",
+            semantic.rows
+        );
+    }
+
+    #[test]
+    fn more_native_semantic_preserves_missing_file_error() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let missing = temp_dir.path().join("missing.txt");
+        let missing = missing.display().to_string();
+
+        let semantic = more_native_semantic(
+            vec![OsString::from("more"), OsString::from(&missing)].into_iter(),
+        )
+        .expect("more semantic missing file");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert!(semantic.classic_text.is_empty());
+        assert_eq!(
+            semantic.stderr_text,
+            format!("more: cannot open {missing}: No such file or directory\n")
+        );
+        let expected_text = format!("more: cannot open {missing}: No such file or directory");
+        assert_eq!(
+            semantic.rows,
+            vec![MoreSemanticRow {
+                kind: "open_error".into(),
+                file: Some(missing),
+                line_index: None,
+                text: expected_text,
+                source: "stderr".into(),
+                terminated: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn more_native_semantic_preserves_clap_parse_error_text() {
+        let semantic = more_native_semantic(
+            vec![OsString::from("more"), OsString::from("--badflag")].into_iter(),
+        )
+        .expect("more semantic parse error");
+
+        assert_eq!(semantic.exit_code, 1);
+        assert!(semantic.classic_text.is_empty(), "{semantic:?}");
+        assert!(
+            semantic
+                .stderr_text
+                .contains("unexpected argument '--badflag' found"),
+            "{semantic:?}"
+        );
+        assert!(!semantic.stderr_text.ends_with("more: \n"), "{semantic:?}");
     }
 }

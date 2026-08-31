@@ -94,6 +94,12 @@ impl Factors {
         self.add(prime, 1);
     }
 
+    pub fn prime_powers(&self) -> Vec<(u64, u8)> {
+        let mut values = self.0.borrow().0.iter().copied().collect::<Vec<_>>();
+        values.sort_unstable();
+        values
+    }
+
     #[cfg(test)]
     fn product(&self) -> u64 {
         self.0.borrow().product()

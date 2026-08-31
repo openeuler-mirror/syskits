@@ -72,6 +72,41 @@ pub struct UniqFlags {
     is_zero_terminated: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UniqRow {
+    pub row_index: usize,
+    pub group_index: usize,
+    pub occurrence_index: usize,
+    pub count: usize,
+    pub line: String,
+    pub is_repeated: bool,
+    pub is_unique: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UniqSemantic {
+    pub delimiter_mode: String,
+    pub show_counts: bool,
+    pub repeated_only: bool,
+    pub unique_only: bool,
+    pub all_repeated: bool,
+    pub ignore_case: bool,
+    pub zero_terminated: bool,
+    pub skip_fields: Option<usize>,
+    pub skip_chars: Option<usize>,
+    pub check_chars: Option<usize>,
+    pub rows: Vec<UniqRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct UniqInvocation {
+    config: UniqFlags,
+    in_file_name: Option<OsString>,
+    out_file_name: Option<OsString>,
+}
+
 macro_rules! uniq_write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
         $writer
@@ -302,6 +337,187 @@ impl UniqFlags {
 
         uniq_write_line_terminator!(w, line_terminator)
     }
+
+    fn emit_semantic_group(
+        &self,
+        group_lines: &[Vec<u8>],
+        group_index: usize,
+        rows: &mut Vec<UniqRow>,
+        classic_output: &mut Vec<u8>,
+        is_first_line_printed: &mut bool,
+    ) -> CTResult<()> {
+        let count = group_lines.len();
+        if (count == 1 && self.is_repeats_only) || (count > 1 && self.is_uniques_only) {
+            return Ok(());
+        }
+
+        let emitted_lines: Box<dyn Iterator<Item = (usize, &[u8])>> = if self.is_all_repeated {
+            Box::new(
+                group_lines
+                    .iter()
+                    .enumerate()
+                    .map(|(index, line)| (index + 1, line.as_slice())),
+            )
+        } else {
+            Box::new(std::iter::once((1, group_lines[0].as_slice())))
+        };
+
+        for (occurrence_index, line) in emitted_lines {
+            let render_count = if self.is_all_repeated {
+                occurrence_index
+            } else {
+                count
+            };
+            self.print_line(classic_output, line, render_count, *is_first_line_printed)?;
+            *is_first_line_printed = true;
+            rows.push(UniqRow {
+                row_index: rows.len() + 1,
+                group_index,
+                occurrence_index,
+                count,
+                line: String::from_utf8_lossy(line).into_owned(),
+                is_repeated: count > 1,
+                is_unique: count == 1,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn semantic_from_reader(&self, reader: impl BufRead) -> CTResult<(Vec<UniqRow>, Vec<u8>)> {
+        let mut rows = Vec::new();
+        let mut classic_output = Vec::new();
+        let mut is_first_line_printed = false;
+        let line_terminator = self.get_line_terminator();
+        let mut lines = reader.split(line_terminator);
+        let Some(first_line) = lines.next() else {
+            return Ok((rows, classic_output));
+        };
+
+        let mut group_index = 1;
+        let mut current_group = vec![first_line?];
+
+        for next_line in lines {
+            let next_line = next_line?;
+            if self.cmp_keys(current_group.last().expect("current group"), &next_line) {
+                self.emit_semantic_group(
+                    &current_group,
+                    group_index,
+                    &mut rows,
+                    &mut classic_output,
+                    &mut is_first_line_printed,
+                )?;
+                group_index += 1;
+                current_group.clear();
+            }
+            current_group.push(next_line);
+        }
+
+        self.emit_semantic_group(
+            &current_group,
+            group_index,
+            &mut rows,
+            &mut classic_output,
+            &mut is_first_line_printed,
+        )?;
+
+        if (self.delimiters == UniqDelimiters::Append || self.delimiters == UniqDelimiters::Both)
+            && is_first_line_printed
+        {
+            uniq_write_line_terminator!(classic_output, line_terminator)?;
+        }
+
+        Ok((rows, classic_output))
+    }
+}
+
+fn uniq_delimiter_mode(delimiters: UniqDelimiters) -> &'static str {
+    match delimiters {
+        UniqDelimiters::Append => "append",
+        UniqDelimiters::Prepend => "prepend",
+        UniqDelimiters::Separate => "separate",
+        UniqDelimiters::Both => "both",
+        UniqDelimiters::None => "none",
+    }
+}
+
+fn uniq_invocation_from_matches(
+    matches: &ArgMatches,
+    skip_fields_old: Option<usize>,
+    skip_chars_old: Option<usize>,
+) -> CTResult<UniqInvocation> {
+    let files = matches.get_many::<OsString>(UNIQ_ARG_FILES);
+
+    let (in_file_name, out_file_name) = files
+        .map(|fi| fi.cloned())
+        .map(|mut fi| (fi.next(), fi.next()))
+        .unwrap_or_default();
+
+    let skip_fields_modern: Option<usize> = uniq_opt_parsed(uniq_flags::SKIP_FIELDS, matches)?;
+    let skip_chars_modern: Option<usize> = uniq_opt_parsed(uniq_flags::SKIP_CHARS, matches)?;
+
+    let config = UniqFlags {
+        is_repeats_only: matches.get_flag(uniq_flags::REPEATED)
+            || matches.contains_id(uniq_flags::ALL_REPEATED),
+        is_uniques_only: matches.get_flag(uniq_flags::UNIQUE),
+        is_all_repeated: matches.contains_id(uniq_flags::ALL_REPEATED)
+            || matches.contains_id(uniq_flags::GROUP),
+        delimiters: uniq_get_delimiter(matches),
+        is_show_counts: matches.get_flag(uniq_flags::COUNT),
+        skip_fields: skip_fields_modern.or(skip_fields_old),
+        slice_start: skip_chars_modern.or(skip_chars_old),
+        slice_stop: uniq_opt_parsed(uniq_flags::CHECK_CHARS, matches)?,
+        is_ignore_case: matches.get_flag(uniq_flags::IGNORE_CASE),
+        is_zero_terminated: matches.get_flag(uniq_flags::ZERO_TERMINATED),
+    };
+
+    if config.is_show_counts && config.is_all_repeated {
+        let err_message = "printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.";
+        return Err(CtSimpleError::new(1, err_message));
+    }
+
+    Ok(UniqInvocation {
+        config,
+        in_file_name,
+        out_file_name,
+    })
+}
+
+fn uniq_semantic_from_invocation(invocation: &UniqInvocation) -> CTResult<UniqSemantic> {
+    let (rows, classic_output) = invocation
+        .config
+        .semantic_from_reader(uniq_open_input_file(invocation.in_file_name.as_deref())?)?;
+
+    let classic_text = match invocation.out_file_name.as_deref() {
+        Some(path) if path != "-" => {
+            let mut writer = uniq_open_output_file(Some(path))?;
+            writer
+                .write_all(&classic_output)
+                .map_err_context(|| format!("Failed to write {}", path.maybe_quote()))?;
+            writer
+                .flush()
+                .map_err_context(|| format!("Failed to write {}", path.maybe_quote()))?;
+            String::new()
+        }
+        _ => String::from_utf8_lossy(&classic_output).into_owned(),
+    };
+
+    Ok(UniqSemantic {
+        delimiter_mode: uniq_delimiter_mode(invocation.config.delimiters).into(),
+        show_counts: invocation.config.is_show_counts,
+        repeated_only: invocation.config.is_repeats_only,
+        unique_only: invocation.config.is_uniques_only,
+        all_repeated: invocation.config.is_all_repeated,
+        ignore_case: invocation.config.is_ignore_case,
+        zero_terminated: invocation.config.is_zero_terminated,
+        skip_fields: invocation.config.skip_fields,
+        skip_chars: invocation.config.slice_start,
+        check_chars: invocation.config.slice_stop,
+        rows,
+        classic_text,
+        stderr_text: String::new(),
+        exit_code: 0,
+    })
 }
 
 fn uniq_opt_parsed(opt_name: &str, arg_matches: &ArgMatches) -> CTResult<Option<usize>> {
@@ -627,40 +843,23 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
 
-    let files = matches.get_many::<OsString>(UNIQ_ARG_FILES);
+    let invocation = uniq_invocation_from_matches(&matches, skip_fields_old, skip_chars_old)?;
 
-    let (in_file_name, out_file_name) = files
-        .map(|fi| fi.map(AsRef::as_ref))
-        .map(|mut fi| (fi.next(), fi.next()))
-        .unwrap_or_default();
-
-    let skip_fields_modern: Option<usize> = uniq_opt_parsed(uniq_flags::SKIP_FIELDS, &matches)?;
-    let skip_chars_modern: Option<usize> = uniq_opt_parsed(uniq_flags::SKIP_CHARS, &matches)?;
-
-    let uniq_config = UniqFlags {
-        is_repeats_only: matches.get_flag(uniq_flags::REPEATED)
-            || matches.contains_id(uniq_flags::ALL_REPEATED),
-        is_uniques_only: matches.get_flag(uniq_flags::UNIQUE),
-        is_all_repeated: matches.contains_id(uniq_flags::ALL_REPEATED)
-            || matches.contains_id(uniq_flags::GROUP),
-        delimiters: uniq_get_delimiter(&matches),
-        is_show_counts: matches.get_flag(uniq_flags::COUNT),
-        skip_fields: skip_fields_modern.or(skip_fields_old),
-        slice_start: skip_chars_modern.or(skip_chars_old),
-        slice_stop: uniq_opt_parsed(uniq_flags::CHECK_CHARS, &matches)?,
-        is_ignore_case: matches.get_flag(uniq_flags::IGNORE_CASE),
-        is_zero_terminated: matches.get_flag(uniq_flags::ZERO_TERMINATED),
-    };
-
-    if uniq_config.is_show_counts && uniq_config.is_all_repeated {
-        let err_message = "printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.";
-        return Err(CtSimpleError::new(1, err_message));
-    }
-
-    uniq_config.print_uniq(
-        uniq_open_input_file(in_file_name)?,
-        uniq_open_output_file(out_file_name)?,
+    invocation.config.print_uniq(
+        uniq_open_input_file(invocation.in_file_name.as_deref())?,
+        uniq_open_output_file(invocation.out_file_name.as_deref())?,
     )
+}
+
+pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
+    let matches = ct_app()
+        .try_get_matches_from(args)
+        .map_err(|err| uniq_map_clap_errors(&err))?;
+    let invocation = uniq_invocation_from_matches(&matches, skip_fields_old, skip_chars_old)?;
+    uniq_semantic_from_invocation(&invocation)
 }
 
 pub fn ct_app() -> Command {
@@ -880,6 +1079,86 @@ mod tests {
         let args = vec![OsString::from("uniq"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_ok());
+    }
+
+    mod native_semantic_tests {
+        use super::*;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_uniq_native_semantic_collects_rows_and_metadata() {
+            let temp_dir = TempDir::new().expect("tempdir");
+            let input = temp_dir.path().join("uniq.txt");
+            std::fs::write(&input, "alpha\nalpha\nbeta\nbeta\nbeta\ngamma\n")
+                .expect("write uniq fixture");
+
+            let semantic = uniq_native_semantic(
+                vec![OsString::from("uniq"), input.as_os_str().to_os_string()].into_iter(),
+            )
+            .expect("uniq semantic");
+
+            assert_eq!(semantic.delimiter_mode, "none");
+            assert!(!semantic.show_counts);
+            assert_eq!(semantic.classic_text, "alpha\nbeta\ngamma\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(
+                semantic.rows,
+                vec![
+                    UniqRow {
+                        row_index: 1,
+                        group_index: 1,
+                        occurrence_index: 1,
+                        count: 2,
+                        line: "alpha".into(),
+                        is_repeated: true,
+                        is_unique: false,
+                    },
+                    UniqRow {
+                        row_index: 2,
+                        group_index: 2,
+                        occurrence_index: 1,
+                        count: 3,
+                        line: "beta".into(),
+                        is_repeated: true,
+                        is_unique: false,
+                    },
+                    UniqRow {
+                        row_index: 3,
+                        group_index: 3,
+                        occurrence_index: 1,
+                        count: 1,
+                        line: "gamma".into(),
+                        is_repeated: false,
+                        is_unique: true,
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn test_uniq_native_semantic_preserves_output_file_side_effect() {
+            let temp_dir = TempDir::new().expect("tempdir");
+            let input = temp_dir.path().join("input.txt");
+            let output = temp_dir.path().join("output.txt");
+            std::fs::write(&input, "alpha\nalpha\nbeta\n").expect("write uniq fixture");
+
+            let semantic = uniq_native_semantic(
+                vec![
+                    OsString::from("uniq"),
+                    input.as_os_str().to_os_string(),
+                    output.as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect("uniq semantic");
+
+            assert!(semantic.classic_text.is_empty());
+            assert_eq!(
+                std::fs::read_to_string(&output).expect("read output"),
+                "alpha\nbeta\n"
+            );
+        }
     }
 
     #[cfg(test)]

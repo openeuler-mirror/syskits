@@ -3,6 +3,7 @@
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 fn run_data_with_args(args: &[&str], stdin: &str) -> Output {
@@ -326,6 +327,58 @@ fn wc_supports_line_flag_in_pipeline_mode() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"lines\": 2") || stdout.contains("\"lines\":2"));
+}
+
+#[test]
+fn wc_total_only_reads_pipeline_input() {
+    let output = run_data("from text | wc --total only | to json", "a\nb\n");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"lines\": 2") || stdout.contains("\"lines\":2"));
+}
+
+#[cfg(unix)]
+#[test]
+fn run_external_timeout_kills_child_after_stdout_eof() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "run-external sh -c 'exec 1>&-; sleep 60' --stdout-mode raw --timeout-ms 100",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn syskits");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Some(_status) = child.try_wait().expect("poll syskits") {
+            let output = child.wait_with_output().expect("collect syskits output");
+            assert!(
+                !output.status.success(),
+                "timeout command unexpectedly succeeded: stdout={}, stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("timed out"),
+                "expected timeout diagnostic, stderr: {stderr}"
+            );
+            return;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("run-external timeout did not terminate after stdout EOF");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 #[test]

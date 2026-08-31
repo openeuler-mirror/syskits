@@ -41,7 +41,7 @@ impl WcCore {
         let result = ctengine::run_with_optional_pipeline_stdin(
             "wc",
             input,
-            ctengine::argv_uses_stdin(&intent.argv, &["--files0-from"]),
+            ctengine::argv_uses_stdin(&intent.argv, &["--files0-from", "--total"]),
             || Ok(ct_wc::wc_native_semantic(intent.argv.iter().cloned())),
             |err| CtDiagnosticError::simple(format!("wc: {err}")),
         )?;

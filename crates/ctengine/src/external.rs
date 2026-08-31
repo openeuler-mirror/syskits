@@ -1273,9 +1273,6 @@ impl Read for ExternalStream {
         }
 
         if self.stderr_buf.is_none() {
-            self.process_done
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-
             if let Some(handle) = self.stdin_handle.take() {
                 let _ = handle.join();
             }
@@ -1303,6 +1300,8 @@ impl Read for ExternalStream {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
+            self.process_done
+                .store(true, std::sync::atomic::Ordering::Relaxed);
 
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
             let timed_out = self

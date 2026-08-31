@@ -609,34 +609,21 @@ struct DataCommandInfo {
     cmd_name: String,
 }
 
-fn is_cmd_module_name(module_name: &str) -> bool {
-    module_name.starts_with("cmd_")
-}
-
-fn data_command_priority(cmd: &DataCommandInfo) -> u8 {
-    if is_cmd_module_name(&cmd.module_name) {
-        1
-    } else {
-        0
-    }
-}
-
 fn deduplicate_data_commands(commands: Vec<DataCommandInfo>) -> Vec<DataCommandInfo> {
     let mut sorted = commands;
     sorted.sort_by(|a, b| {
         a.cmd_name
             .cmp(&b.cmd_name)
-            .then_with(|| data_command_priority(a).cmp(&data_command_priority(b)))
             .then_with(|| a.module_name.cmp(&b.module_name))
             .then_with(|| a.type_name.cmp(&b.type_name))
     });
 
     let mut deduped = Vec::new();
     for cmd in sorted {
-        if deduped.last().is_some_and(|last: &DataCommandInfo| {
-            last.cmd_name == cmd.cmd_name
-                && data_command_priority(last) == data_command_priority(&cmd)
-        }) {
+        if deduped
+            .last()
+            .is_some_and(|last: &DataCommandInfo| last.cmd_name == cmd.cmd_name)
+        {
             continue;
         }
         deduped.push(cmd);
@@ -688,34 +675,27 @@ fn collect_data_commands(
     log_file_path_for_print: &std::path::Path,
 ) -> Vec<DataCommandInfo> {
     let mut commands = Vec::new();
-    let dirs_to_scan = [
-        root_dir.join("crates/commands_data"),
-        root_dir.join("crates/commands"),
-    ];
+    let scan_dir = root_dir.join("crates/commands_data");
 
-    for scan_dir in dirs_to_scan {
-        if !scan_dir.exists() || !scan_dir.is_dir() {
-            continue;
-        }
-
+    if scan_dir.exists() && scan_dir.is_dir() {
         let pattern = scan_dir.join("*").to_string_lossy().to_string();
         if let Ok(entries) = glob(&pattern) {
             for path in entries.flatten() {
-                if path.is_dir() {
-                    if let Some(module_name) = path.file_name().and_then(|n| n.to_str()) {
-                        let lib_rs = path.join("src").join("lib.rs");
-                        let mod_rs = path.join("src").join(format!("{module_name}.rs"));
-                        let scan_path = if lib_rs.exists() {
-                            Some(lib_rs)
-                        } else if mod_rs.exists() {
-                            Some(mod_rs)
-                        } else {
-                            None
-                        };
-                        if let Some(p) = scan_path {
-                            let mut found = scan_data_command_implementations(&p, module_name);
-                            commands.append(&mut found);
-                        }
+                if path.is_dir()
+                    && let Some(module_name) = path.file_name().and_then(|n| n.to_str())
+                {
+                    let lib_rs = path.join("src").join("lib.rs");
+                    let mod_rs = path.join("src").join(format!("{module_name}.rs"));
+                    let scan_path = if lib_rs.exists() {
+                        Some(lib_rs)
+                    } else if mod_rs.exists() {
+                        Some(mod_rs)
+                    } else {
+                        None
+                    };
+                    if let Some(p) = scan_path {
+                        let mut found = scan_data_command_implementations(&p, module_name);
+                        commands.append(&mut found);
                     }
                 }
             }
@@ -771,27 +751,13 @@ fn generate_data_tools_code(
     let mut match_arms = Vec::new();
     let mut all_commands = Vec::new();
     let mut factory_entries = Vec::new();
-    let typed_command_names: std::collections::HashSet<&str> = commands
-        .iter()
-        .filter(|cmd| !is_cmd_module_name(&cmd.module_name))
-        .map(|cmd| cmd.cmd_name.as_str())
-        .collect();
-
     for cmd in commands {
         let type_name = syn::Ident::new(&cmd.type_name, proc_macro2::Span::call_site());
         let feature_name = cmd.module_name.clone();
         let module_name =
             quote::format_ident!("{}", cmd.module_name, span = proc_macro2::Span::call_site());
         let cmd_name_literal = proc_macro2::Literal::string(&cmd.cmd_name);
-        let cfg_expr = if is_cmd_module_name(&cmd.module_name) {
-            if typed_command_names.contains(cmd.cmd_name.as_str()) {
-                format!("all(feature = \"{feature_name}\", not(feature = \"feat_typed_cmds\"))")
-            } else {
-                format!("feature = \"{feature_name}\"")
-            }
-        } else {
-            format!("all(feature = \"{feature_name}\", feature = \"feat_typed_cmds\")")
-        };
+        let cfg_expr = format!("feature = \"{feature_name}\"");
         let cfg_attr =
             syn::parse_str::<proc_macro2::TokenStream>(&format!("#[cfg({cfg_expr})]")).unwrap();
 

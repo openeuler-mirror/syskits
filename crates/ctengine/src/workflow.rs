@@ -3,17 +3,12 @@ use crate::trace::{StageTrace, TraceStatus};
 use ctpipeline::pipeline_data::CtPipelineData;
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum OnFailure {
+    #[default]
     Fail,
     Continue,
     Goto(String),
-}
-
-impl Default for OnFailure {
-    fn default() -> Self {
-        OnFailure::Fail
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -52,10 +47,10 @@ impl std::fmt::Display for WorkflowError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             WorkflowError::ParseStage { stage, err } => {
-                write!(f, "workflow stage '{}': {}", stage, err)
+                write!(f, "workflow stage '{stage}': {err}")
             }
             WorkflowError::RunStage { stage, err } => {
-                write!(f, "workflow stage '{}': {}", stage, err)
+                write!(f, "workflow stage '{stage}': {err}")
             }
             WorkflowError::EmptyScript => write!(f, "empty workflow script"),
         }
@@ -195,8 +190,7 @@ pub fn run_workflow(
                         return Err(WorkflowError::RunStage {
                             stage: stage.name.clone(),
                             err: CtDiagnosticError::simple(format!(
-                                "goto target '{}' not found",
-                                target
+                                "goto target '{target}' not found"
                             )),
                         });
                     }
@@ -242,7 +236,7 @@ fn record_recovered_stage_error(
         duration_ms: 0,
         rows_in: estimate_rows(input),
         rows_out: 0,
-        status: TraceStatus::Error(format!("{} (recovered by workflow policy)", err)),
+        status: TraceStatus::Error(format!("{err} (recovered by workflow policy)")),
     });
 }
 

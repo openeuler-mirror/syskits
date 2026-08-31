@@ -17,6 +17,10 @@ rust-version = { workspace = true }
 default = ["feat_common_core"]
 # data pipeline rollback / staged release flags
 feat_data_pipeline = [
+  "ctengine",
+  "ctpipeline",
+  "ctsig",
+  "ctrepl",
   "cmd_from",
   "cmd_parse",
   "cmd_get",
@@ -100,18 +104,14 @@ feat_data_pipeline = [
   "cmd_printf",
   "cmd_numfmt",
   "cmd_vdir",
-  "ctrepl",
 ]
 feat_data_workflow = ["feat_data_pipeline", "ctengine/workflow"]
 feat_data_plugin = ["feat_data_pipeline", "ctplugin"]
 feat_data_experimental = ["feat_data_pipeline"]
-feat_typed_cmds = [
+feat_shell_init = ["shell_init"]
+feat_shell_interactive = [
   "feat_data_pipeline",
-  "ls/feat_typed_cmds",
-  "env/feat_typed_cmds",
-  "df/feat_typed_cmds",
-  "uname/feat_typed_cmds",
-  "stat/feat_typed_cmds",
+  "feat_shell_init",
 ]
 
 feat_require_selinux = ["chcon", "runcon"]
@@ -201,7 +201,6 @@ feat_common_core = [
   "wc",
   "whoami",
   "yes",
-  "shell_init",
 ]
 
 feat_common_core_unix = [
@@ -244,7 +243,12 @@ feat_os_unix = [
 feat_os_windows = ["feat_common_core"]
 
 # OS feature shortcodes
-unix = ["feat_os_unix", "feat_typed_cmds"]
+unix = [
+  "feat_os_unix",
+  "feat_shell_interactive",
+  "feat_data_workflow",
+  "feat_data_plugin",
+]
 windows = ["feat_os_windows"]
 
 [dependencies]
@@ -252,9 +256,9 @@ windows = ["feat_os_windows"]
 ctcore = { workspace = true }
 tool_derive = { workspace = true }
 # M1a: data pipeline crates
-ctpipeline = { workspace = true }
-ctsig = { workspace = true }
-ctengine = { workspace = true }
+ctpipeline = { optional = true, workspace = true }
+ctsig = { optional = true, workspace = true }
+ctengine = { optional = true, workspace = true }
 cmd_from = { optional = true, package = "cmd_from", path = "../../crates/commands_data/cmd_from" }
 cmd_parse = { optional = true, package = "cmd_parse", path = "../../crates/commands_data/cmd_parse" }
 cmd_get = { optional = true, package = "cmd_get", path = "../../crates/commands_data/cmd_get" }

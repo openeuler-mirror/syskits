@@ -20,11 +20,6 @@ rust-i18n = { workspace = true }
 platform-info = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true }
-ctengine = { workspace = true }
-ctpipeline = { workspace = true }
-
-[features]
-feat_typed_cmds = []
 
 [[bin]]
 name = "uname"

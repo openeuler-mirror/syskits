@@ -183,6 +183,465 @@ impl HashsumFlags {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashsumRow {
+    pub kind: String,
+    pub algorithm: String,
+    pub file: String,
+    pub digest_hex: String,
+    pub output_bits: usize,
+    pub binary_marker: String,
+    pub output_style: String,
+    pub source: String,
+    pub filename_was_escaped: bool,
+    pub rendered_filename: Option<String>,
+    pub manifest_file: Option<String>,
+    pub expected_digest: Option<String>,
+    pub actual_digest: Option<String>,
+    pub status: Option<String>,
+    pub matched: Option<bool>,
+    pub input_format: Option<String>,
+    pub ignored_missing: bool,
+    pub binary_check: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashsumSemantic {
+    pub rows: Vec<HashsumRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+fn hashsum_output_style(flags: &HashsumFlags) -> &'static str {
+    if flags.is_tag {
+        "tag"
+    } else if flags.is_nonames {
+        "no_names"
+    } else {
+        "gnu"
+    }
+}
+
+fn render_compute_row_classic(
+    flags: &HashsumFlags,
+    filename: &Path,
+    binary_marker: &str,
+    sum: &str,
+) -> String {
+    if flags.is_tag {
+        if flags.is_zero {
+            format!("{} ({}) = {}\0", flags.algoname, filename.display(), sum)
+        } else {
+            let (escaped_filename, prefix) = escape_filename(filename);
+            format!(
+                "{}{} ({}) = {}\n",
+                prefix, flags.algoname, escaped_filename, sum
+            )
+        }
+    } else if flags.is_nonames {
+        format!("{sum}\n")
+    } else if flags.is_zero {
+        let filename = filename.display();
+        format!("{sum} {binary_marker}{filename}\0")
+    } else {
+        let (escaped_filename, prefix) = escape_filename(filename);
+        format!("{prefix}{sum} {binary_marker}{escaped_filename}\n")
+    }
+}
+
+fn compute_row(
+    flags: &mut HashsumFlags,
+    filename: &Path,
+    file: &mut BufReader<Box<dyn Read>>,
+    binary_marker: &str,
+) -> CTResult<(HashsumRow, String)> {
+    let sum = digest_reader(&mut flags.digest, file, flags.is_binary, flags.output_bits)
+        .map_err_context(|| "failed to read input".to_string())?;
+
+    let (escaped_filename, prefix) = escape_filename(filename);
+    let row = HashsumRow {
+        kind: "digest".into(),
+        algorithm: flags.algoname.to_string(),
+        file: filename.display().to_string(),
+        digest_hex: sum.clone(),
+        output_bits: flags.output_bits,
+        binary_marker: binary_marker.to_string(),
+        output_style: hashsum_output_style(flags).to_string(),
+        source: if filename == Path::new("-") {
+            "stdin".into()
+        } else {
+            "file".into()
+        },
+        filename_was_escaped: !prefix.is_empty(),
+        rendered_filename: if flags.is_nonames {
+            None
+        } else if flags.is_zero && !flags.is_tag {
+            Some(filename.display().to_string())
+        } else {
+            Some(escaped_filename)
+        },
+        manifest_file: None,
+        expected_digest: None,
+        actual_digest: None,
+        status: None,
+        matched: None,
+        input_format: None,
+        ignored_missing: false,
+        binary_check: None,
+    };
+
+    let classic = render_compute_row_classic(flags, filename, binary_marker, &sum);
+    Ok((row, classic))
+}
+
+fn hashsum_error_line(message: &str) -> String {
+    format!("{NAME}: {message}\n")
+}
+
+fn hashsum_warning_line(message: &str) -> String {
+    format!("{NAME}: warning: {message}\n")
+}
+
+fn render_check_row_classic(prefix: &str, file: &str, status: &str) -> String {
+    format!("{prefix}{file}: {status}\n")
+}
+
+fn verify_file_hash_semantic(
+    flags: &mut HashsumFlags,
+    manifest_file: &Path,
+    ck_filename: &str,
+    expected_sum: String,
+    binary_check: bool,
+    is_escaped: bool,
+) -> CTResult<(HashsumRow, String, String, bool, bool)> {
+    if flags.algoname == "BLAKE2" {
+        let mut expected_bytes = expected_sum.len() / 2;
+        if expected_bytes == 0 {
+            expected_bytes = 1;
+        } else if expected_bytes > 64 {
+            expected_bytes = 64;
+        }
+
+        flags.output_bits = expected_bytes * 8;
+        flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
+    }
+
+    let (ck_filename_unescaped, prefix) = if is_escaped {
+        (unescape_filename(ck_filename), "\\")
+    } else {
+        (ck_filename.to_string(), "")
+    };
+
+    let mut stderr_text = String::new();
+    let mut classic_text = String::new();
+
+    let f = match File::open(&ck_filename_unescaped) {
+        Err(e) => {
+            if flags.is_ignore_missing && e.kind() == std::io::ErrorKind::NotFound {
+                return Ok((
+                    HashsumRow {
+                        kind: "check".into(),
+                        algorithm: flags.algoname.to_string(),
+                        file: ck_filename_unescaped,
+                        digest_hex: String::new(),
+                        output_bits: flags.output_bits,
+                        binary_marker: if binary_check { "*" } else { " " }.into(),
+                        output_style: hashsum_output_style(flags).to_string(),
+                        source: "manifest".into(),
+                        filename_was_escaped: is_escaped,
+                        rendered_filename: Some(ck_filename.to_string()),
+                        manifest_file: Some(manifest_file.display().to_string()),
+                        expected_digest: Some(expected_sum),
+                        actual_digest: None,
+                        status: Some("missing".into()),
+                        matched: Some(true),
+                        input_format: None,
+                        ignored_missing: true,
+                        binary_check: Some(binary_check),
+                    },
+                    classic_text,
+                    stderr_text,
+                    false,
+                    false,
+                ));
+            }
+
+            let err_msg = e.to_string();
+            let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+            stderr_text.push_str(&hashsum_error_line(&format!("{ck_filename}: {clean_err}")));
+            if !flags.is_status {
+                classic_text.push_str(&render_check_row_classic(
+                    prefix,
+                    ck_filename,
+                    &t!("hashsum.check.failed_open_or_read"),
+                ));
+            }
+            return Ok((
+                HashsumRow {
+                    kind: "check".into(),
+                    algorithm: flags.algoname.to_string(),
+                    file: ck_filename_unescaped,
+                    digest_hex: String::new(),
+                    output_bits: flags.output_bits,
+                    binary_marker: if binary_check { "*" } else { " " }.into(),
+                    output_style: hashsum_output_style(flags).to_string(),
+                    source: "manifest".into(),
+                    filename_was_escaped: is_escaped,
+                    rendered_filename: Some(ck_filename.to_string()),
+                    manifest_file: Some(manifest_file.display().to_string()),
+                    expected_digest: Some(expected_sum),
+                    actual_digest: None,
+                    status: Some("open_error".into()),
+                    matched: Some(false),
+                    input_format: None,
+                    ignored_missing: false,
+                    binary_check: Some(binary_check),
+                },
+                classic_text,
+                stderr_text,
+                false,
+                true,
+            ));
+        }
+        Ok(file) => file,
+    };
+
+    let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
+    let real_sum = match digest_reader(&mut flags.digest, &mut ckf, binary_check, flags.output_bits)
+    {
+        Ok(s) => s.to_ascii_lowercase(),
+        Err(e) => {
+            let err_msg = e.to_string();
+            let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+            stderr_text.push_str(&hashsum_error_line(&format!("{ck_filename}: {clean_err}")));
+            if !flags.is_status {
+                classic_text.push_str(&render_check_row_classic(
+                    prefix,
+                    ck_filename,
+                    &t!("hashsum.check.failed_open_or_read"),
+                ));
+            }
+            return Ok((
+                HashsumRow {
+                    kind: "check".into(),
+                    algorithm: flags.algoname.to_string(),
+                    file: ck_filename_unescaped,
+                    digest_hex: String::new(),
+                    output_bits: flags.output_bits,
+                    binary_marker: if binary_check { "*" } else { " " }.into(),
+                    output_style: hashsum_output_style(flags).to_string(),
+                    source: "manifest".into(),
+                    filename_was_escaped: is_escaped,
+                    rendered_filename: Some(ck_filename.to_string()),
+                    manifest_file: Some(manifest_file.display().to_string()),
+                    expected_digest: Some(expected_sum),
+                    actual_digest: None,
+                    status: Some("open_error".into()),
+                    matched: Some(false),
+                    input_format: None,
+                    ignored_missing: false,
+                    binary_check: Some(binary_check),
+                },
+                classic_text,
+                stderr_text,
+                false,
+                true,
+            ));
+        }
+    };
+
+    let matched = expected_sum == real_sum;
+    if matched {
+        if !flags.is_quiet {
+            classic_text.push_str(&render_check_row_classic(
+                prefix,
+                ck_filename,
+                &t!("hashsum.check.ok"),
+            ));
+        }
+    } else if !flags.is_status {
+        classic_text.push_str(&render_check_row_classic(
+            prefix,
+            ck_filename,
+            &t!("hashsum.check.failed"),
+        ));
+    }
+
+    Ok((
+        HashsumRow {
+            kind: "check".into(),
+            algorithm: flags.algoname.to_string(),
+            file: ck_filename_unescaped,
+            digest_hex: String::new(),
+            output_bits: flags.output_bits,
+            binary_marker: if binary_check { "*" } else { " " }.into(),
+            output_style: hashsum_output_style(flags).to_string(),
+            source: "manifest".into(),
+            filename_was_escaped: is_escaped,
+            rendered_filename: Some(ck_filename.to_string()),
+            manifest_file: Some(manifest_file.display().to_string()),
+            expected_digest: Some(expected_sum),
+            actual_digest: Some(real_sum),
+            status: Some(if matched {
+                "ok".into()
+            } else {
+                "mismatch".into()
+            }),
+            matched: Some(matched),
+            input_format: None,
+            ignored_missing: false,
+            binary_check: Some(binary_check),
+        },
+        classic_text,
+        stderr_text,
+        matched,
+        false,
+    ))
+}
+
+fn hashsum_check_semantic<'a, I>(mut flags: HashsumFlags, files: I) -> CTResult<HashsumSemantic>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+    let mut bad_format = 0usize;
+    let mut failed_cksum = 0usize;
+    let mut failed_open_file = 0usize;
+    let mut no_valid_lines = false;
+    let mut no_files_verified = false;
+
+    for manifest in files {
+        let manifest = Path::new(manifest);
+        let file = open_file(manifest)?;
+        let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes(&flags)?;
+        let mut bsd_reversed = None;
+        let mut file_has_valid_lines = false;
+        let mut matched_files = 0usize;
+
+        for (i, maybe_line) in file.lines().enumerate() {
+            let line = match maybe_line {
+                Ok(line) => line,
+                Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
+            };
+
+            if line.is_empty() {
+                continue;
+            }
+
+            match parse_hash_line(line, &mut gnu_re, &bsd_re, &bytes_marker, &mut bsd_reversed) {
+                Ok((ck_filename, sum, binary_check, is_escaped)) => {
+                    file_has_valid_lines = true;
+                    let (row, classic, stderr, matched, open_failed) = verify_file_hash_semantic(
+                        &mut flags,
+                        manifest,
+                        &ck_filename,
+                        sum,
+                        binary_check,
+                        is_escaped,
+                    )?;
+                    if row.status.as_deref() == Some("missing") && row.ignored_missing {
+                        // ignored
+                    } else {
+                        matched_files += 1;
+                    }
+                    if !matched {
+                        failed_cksum += 1;
+                        exit_code = 1;
+                    }
+                    if open_failed {
+                        failed_open_file += 1;
+                        exit_code = 1;
+                    }
+                    classic_text.push_str(&classic);
+                    stderr_text.push_str(&stderr);
+                    rows.push(row);
+                }
+                Err(ParseLineError::FormatError) => {
+                    bad_format += 1;
+                    if flags.is_warn {
+                        stderr_text.push_str(&hashsum_error_line(&format!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            manifest.maybe_quote(),
+                            i + 1,
+                            flags.algoname
+                        )));
+                    }
+                }
+                Err(ParseLineError::RegexError) => return Err(HashsumError::InvalidRegex.into()),
+            }
+        }
+
+        if !file_has_valid_lines {
+            no_valid_lines = true;
+            stderr_text.push_str(&hashsum_error_line(&format!(
+                "{}: no properly formatted checksum lines found",
+                manifest.display()
+            )));
+            exit_code = 1;
+        } else if flags.is_ignore_missing && matched_files == 0 {
+            no_files_verified = true;
+            stderr_text.push_str(&hashsum_error_line(&format!(
+                "{}: no file was verified",
+                manifest.display()
+            )));
+            exit_code = 1;
+        }
+    }
+
+    if !flags.is_status {
+        match bad_format.cmp(&1) {
+            Ordering::Equal => stderr_text.push_str(&hashsum_warning_line(&t!(
+                "hashsum.check.line_improperly_formatted",
+                count = bad_format
+            ))),
+            Ordering::Greater => stderr_text.push_str(&hashsum_warning_line(&t!(
+                "hashsum.check.lines_improperly_formatted",
+                count = bad_format
+            ))),
+            Ordering::Less => {}
+        }
+
+        match failed_cksum.cmp(&1) {
+            Ordering::Equal => stderr_text.push_str(&hashsum_warning_line(&t!(
+                "hashsum.check.checksum_did_not_match",
+                count = failed_cksum
+            ))),
+            Ordering::Greater => stderr_text.push_str(&hashsum_warning_line(&t!(
+                "hashsum.check.checksums_did_not_match",
+                count = failed_cksum
+            ))),
+            Ordering::Less => {}
+        }
+
+        match failed_open_file.cmp(&1) {
+            Ordering::Equal => stderr_text.push_str(&hashsum_warning_line(&t!(
+                "hashsum.check.file_could_not_be_read",
+                count = failed_open_file
+            ))),
+            Ordering::Greater => stderr_text.push_str(&hashsum_warning_line(&t!(
+                "hashsum.check.files_could_not_be_read",
+                count = failed_open_file
+            ))),
+            Ordering::Less => {}
+        }
+    }
+
+    if (bad_format > 0 && flags.is_strict) || no_valid_lines || no_files_verified {
+        exit_code = 1;
+    }
+
+    Ok(HashsumSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
+}
+
 /// 基于指定的长度参数创建 Blake2b 哈希器实例
 ///
 /// # 返回值
@@ -785,6 +1244,83 @@ pub fn hashsum_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
         Some(files) => hashsum(flags, files.map(|f| f.as_os_str()), writer),
         None => hashsum(flags, iter::once(OsStr::new("-")), writer),
     }
+}
+
+pub fn hashsum_native_semantic(args: impl ctcore::Args) -> CTResult<HashsumSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let mut args_iter = args.into_iter();
+    let program = args_iter.next().unwrap_or_else(|| OsString::from(NAME));
+    let binary_name = Path::new(&program)
+        .file_stem()
+        .unwrap_or_else(|| OsStr::new(NAME))
+        .to_string_lossy()
+        .to_string();
+
+    let args_vec: Vec<OsString> = iter::once(program).chain(args_iter).collect();
+    let matches = match ct_app(&binary_name).try_get_matches_from(args_vec) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = e.print();
+            if e.kind() == clap::error::ErrorKind::DisplayHelp
+                || e.kind() == clap::error::ErrorKind::DisplayVersion
+            {
+                return Ok(HashsumSemantic {
+                    rows: Vec::new(),
+                    classic_text: String::new(),
+                    stderr_text: String::new(),
+                    exit_code: 0,
+                });
+            }
+            return Err(CtSimpleError::new(1, ""));
+        }
+    };
+
+    let mut flags = HashsumFlags::new(matches.clone(), &binary_name)?;
+
+    let files = match matches.get_many::<OsString>(hashsum_flags::FILE) {
+        Some(files) => files.map(|f| f.as_os_str()).collect::<Vec<_>>(),
+        None => vec![OsStr::new("-")],
+    };
+
+    if flags.is_check {
+        return hashsum_check_semantic(flags, files.iter().copied());
+    }
+
+    let binary_marker = if flags.is_binary { "*" } else { " " };
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+    let mut missing_file = 0;
+
+    for filename in files {
+        let filename = Path::new(filename);
+        let mut file = match open_file(filename) {
+            Ok(f) => f,
+            Err(e) => {
+                missing_file += 1;
+                stderr_text.push_str(&format!("{NAME}: warning: {}: {e}\n", filename.display()));
+                continue;
+            }
+        };
+
+        let (row, classic) = compute_row(&mut flags, filename, &mut file, binary_marker)?;
+        classic_text.push_str(&classic);
+        rows.push(row);
+    }
+
+    if missing_file > 0 {
+        exit_code = 1;
+    }
+
+    Ok(HashsumSemantic {
+        rows,
+        classic_text,
+        stderr_text,
+        exit_code,
+    })
 }
 
 /// 定义命令行参数配置的构建器

@@ -15,7 +15,7 @@ use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 #[cfg(unix)]
 use std::ffi::CString;
-use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stderr, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
@@ -203,6 +203,26 @@ struct JoinLineSegment {
 struct PrRenderedLine {
     text: String,
     has_separator: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrSemanticRow {
+    pub page: usize,
+    pub kind: String,
+    pub section: String,
+    pub file: Option<String>,
+    pub file_id: usize,
+    pub line_index: Option<usize>,
+    pub group_key: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrSemantic {
+    pub rows: Vec<PrSemanticRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -518,6 +538,17 @@ impl Tool for Pr {
 }
 
 pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
+    let semantic = pr_native_semantic(args)?;
+    pr_write_semantic_output(&semantic)?;
+
+    if semantic.exit_code == 0 {
+        Ok(())
+    } else {
+        Err(semantic.exit_code.into())
+    }
+}
+
+pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
@@ -527,10 +558,14 @@ pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut command = ct_app();
     let matches = match command.try_get_matches_from_mut(opt_args) {
         Ok(m) => m,
-        Err(e) => {
-            e.print()?;
-            return Ok(());
-        }
+        Err(e) => return Ok(pr_semantic_from_clap_error(e)),
+    };
+
+    let mut semantic = PrSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
     };
 
     let mut files = matches
@@ -554,27 +589,59 @@ pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
-                pr_print_error(&matches, &err);
-                return Err(1.into());
+                semantic.stderr_text = pr_error_text(&matches, &err);
+                semantic.exit_code = 1;
+                return Ok(semantic);
             }
         };
 
         let cmd_result = match file_group.iter().exactly_one() {
-            Ok(group) => pr_handle(group, &options),
-            Err(_) => mpr_handle(&file_group, &options),
+            Ok(group) => pr_collect_semantic_for_path(&mut semantic, &file_group, group, &options),
+            Err(_) => pr_collect_semantic_for_merge(&mut semantic, &file_group, &options),
         };
 
-        let status = match cmd_result {
-            Err(error) => {
-                pr_print_error(&matches, &error);
-                1
-            }
-            _ => 0,
-        };
-        if status != 0 {
-            return Err(status.into());
+        if let Err(error) = cmd_result {
+            semantic.stderr_text = pr_error_text(&matches, &error);
+            semantic.exit_code = 1;
+            return Ok(semantic);
         }
     }
+
+    Ok(semantic)
+}
+
+fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
+    let rendered = error.to_string();
+    if error.use_stderr() {
+        PrSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            stderr_text: rendered,
+            exit_code: 1,
+        }
+    } else {
+        PrSemantic {
+            rows: Vec::new(),
+            classic_text: rendered,
+            stderr_text: String::new(),
+            exit_code: 0,
+        }
+    }
+}
+
+fn pr_write_semantic_output(semantic: &PrSemantic) -> CTResult<()> {
+    let mut out = stdout();
+    let mut err = stderr();
+
+    if !semantic.classic_text.is_empty() {
+        out.write_all(semantic.classic_text.as_bytes())?;
+    }
+    if !semantic.stderr_text.is_empty() {
+        err.write_all(semantic.stderr_text.as_bytes())?;
+    }
+
+    out.flush()?;
+    err.flush()?;
     Ok(())
 }
 
@@ -640,9 +707,11 @@ fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
     recreated_args
 }
 
-fn pr_print_error(arg_matches: &ArgMatches, pr_err: &PrError) {
-    if !arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS) {
-        eprintln!("{pr_err}");
+fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError) -> String {
+    if arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS) {
+        String::new()
+    } else {
+        format!("{pr_err}\n")
     }
 }
 
@@ -1289,17 +1358,113 @@ fn pr_split_lines_if_form_feed(
         })
 }
 
-fn pr_handle(path: &str, output_opts: &PrOutputOptions) -> Result<i32, PrError> {
-    let lines = BufReader::with_capacity(PR_READ_BUFFER_SIZE, pr_open(path)?).lines();
-
-    let pages = pr_read_stream_and_create_pages(output_opts, lines, 0);
-
-    for page_with_page_number in pages {
-        let page_number = page_with_page_number.0 + 1;
-        let page = page_with_page_number.1;
-        pr_print_page(&page, output_opts, page_number)?;
+fn pr_push_page_rows(
+    rows: &mut Vec<PrSemanticRow>,
+    paths: &[&str],
+    page_lines: &[PrFileLine],
+    output_opts: &PrOutputOptions,
+    page_number: usize,
+) -> Result<(), PrError> {
+    for (index, line) in pr_header_content(output_opts, page_number)
+        .into_iter()
+        .enumerate()
+    {
+        rows.push(PrSemanticRow {
+            page: page_number,
+            kind: "header".into(),
+            section: if line.is_empty() {
+                "blank".into()
+            } else {
+                "title".into()
+            },
+            file: paths.first().map(|path| (*path).to_string()),
+            file_id: 0,
+            line_index: None,
+            group_key: index,
+            text: line,
+        });
     }
 
+    let body_group_base = rows.len();
+    for (index, line) in page_lines.iter().enumerate() {
+        let text = match &line.line_content {
+            Ok(content) => content.clone(),
+            Err(err) => return Err(std::io::Error::new(err.kind(), err.to_string()).into()),
+        };
+
+        rows.push(PrSemanticRow {
+            page: page_number,
+            kind: "body".into(),
+            section: "content".into(),
+            file: paths.get(line.file_id).map(|path| (*path).to_string()),
+            file_id: line.file_id,
+            line_index: (line.line_number != 0).then_some(line.line_number),
+            group_key: body_group_base + line.group_key.max(index),
+            text,
+        });
+    }
+
+    let trailer_group_base = rows.len();
+    for (index, line) in pr_trailer_content(output_opts).into_iter().enumerate() {
+        rows.push(PrSemanticRow {
+            page: page_number,
+            kind: "trailer".into(),
+            section: if line.is_empty() {
+                "blank".into()
+            } else {
+                "content".into()
+            },
+            file: paths.first().map(|path| (*path).to_string()),
+            file_id: 0,
+            line_index: None,
+            group_key: trailer_group_base + index,
+            text: line,
+        });
+    }
+
+    Ok(())
+}
+
+fn pr_collect_semantic_for_path(
+    semantic: &mut PrSemantic,
+    paths: &[&str],
+    path: &str,
+    output_opts: &PrOutputOptions,
+) -> Result<(), PrError> {
+    let lines = BufReader::with_capacity(PR_READ_BUFFER_SIZE, pr_open(path)?).lines();
+    let pages = pr_read_stream_and_create_pages(output_opts, lines, 0);
+
+    for (page_index, page_lines) in pages {
+        let page_number = page_index + 1;
+        pr_push_page_rows(
+            &mut semantic.rows,
+            paths,
+            &page_lines,
+            output_opts,
+            page_number,
+        )?;
+        let mut page_output = Vec::new();
+        pr_output_page(&page_lines, output_opts, &mut page_output, page_number)?;
+        semantic
+            .classic_text
+            .push_str(&String::from_utf8_lossy(&page_output));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+fn pr_handle(path: &str, output_opts: &PrOutputOptions) -> Result<i32, PrError> {
+    let mut semantic = PrSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
+    };
+    pr_collect_semantic_for_path(&mut semantic, &[path], path, output_opts)?;
+    let mut out = stdout();
+    out.write_all(semantic.classic_text.as_bytes())?;
+    out.flush()?;
     Ok(0)
 }
 
@@ -1457,7 +1622,11 @@ fn pr_read_stream_and_create_pages(
     )
 }
 
-fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrError> {
+fn pr_collect_semantic_for_merge(
+    semantic: &mut PrSemantic,
+    paths: &[&str],
+    output_opts: &PrOutputOptions,
+) -> Result<(), PrError> {
     // 检查文件是否存在
     for path in paths {
         pr_open(path)?;
@@ -1483,7 +1652,7 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
         .max();
 
     let Some(last_page_index) = maybe_last_page_index else {
-        return Ok(0);
+        return Ok(());
     };
 
     let renumber_from_first_printed_page = output_opts
@@ -1555,7 +1724,7 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
                                 file_line.line_number
                             },
                             page_number,
-                            group_key: page_number * paths.len() + file_id,
+                            group_key: row_index,
                             line_content: Ok(content.clone()),
                             form_feeds_after: file_line.form_feeds_after,
                             inline_form_feed_after: file_line.inline_form_feed_after,
@@ -1567,7 +1736,7 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
                         file_id,
                         line_number: row_line_number,
                         page_number,
-                        group_key: page_number * paths.len() + file_id,
+                        group_key: row_index,
                         line_content: Ok(String::new()),
                         form_feeds_after: 0,
                         inline_form_feed_after: false,
@@ -1580,12 +1749,44 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
 
         let mut page_output_opts = output_opts.clone();
         page_output_opts.merge_files_print = Some(paths.len());
-        pr_print_page(&merged_lines, &page_output_opts, page_number)?;
+        pr_push_page_rows(
+            &mut semantic.rows,
+            paths,
+            &merged_lines,
+            &page_output_opts,
+            page_number,
+        )?;
+        let mut page_output = Vec::new();
+        pr_output_page(
+            &merged_lines,
+            &page_output_opts,
+            &mut page_output,
+            page_number,
+        )?;
+        semantic
+            .classic_text
+            .push_str(&String::from_utf8_lossy(&page_output));
     }
 
+    Ok(())
+}
+
+#[cfg(test)]
+fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrError> {
+    let mut semantic = PrSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
+    };
+    pr_collect_semantic_for_merge(&mut semantic, paths, output_opts)?;
+    let mut out = stdout();
+    out.write_all(semantic.classic_text.as_bytes())?;
+    out.flush()?;
     Ok(0)
 }
 
+#[cfg(test)]
 fn pr_print_page(
     lines: &[PrFileLine],
     output_opts: &PrOutputOptions,
@@ -5573,8 +5774,8 @@ mod tests {
             // 调用pr_main函数
             let result = pr_main(args.into_iter());
 
-            // 验证执行结果 - 无效选项会打印错误但仍返回Ok（错误由clap处理）
-            assert!(result.is_ok());
+            // 验证执行结果 - 无效选项应返回非零状态，匹配 GNU-visible 行为
+            assert!(result.is_err());
         }
 
         #[test]

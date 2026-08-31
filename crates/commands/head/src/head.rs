@@ -207,6 +207,28 @@ pub struct HeadOptions {
     pub files: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeadRow {
+    pub source_name: String,
+    pub row_index: usize,
+    pub line: String,
+    pub byte_length: usize,
+    pub terminated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeadSemantic {
+    pub mode: String,
+    pub count: u64,
+    pub zero_terminated: bool,
+    pub quiet: bool,
+    pub verbose: bool,
+    pub rows: Vec<HeadRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 impl HeadOptions {
     ///Construct options from matches
     pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
@@ -226,14 +248,26 @@ impl HeadOptions {
     }
 }
 
-fn read_n_bytes<R>(input: R, n: u64, mut buffer: Option<&mut Vec<u8>>) -> std::io::Result<u64>
+fn head_mode_name_and_count(mode: &Mode) -> (&'static str, u64) {
+    match mode {
+        Mode::FirstLines(n) => ("first_lines", *n),
+        Mode::AllButLastLines(n) => ("all_but_last_lines", *n),
+        Mode::FirstBytes(n) => ("first_bytes", *n),
+        Mode::AllButLastBytes(n) => ("all_but_last_bytes", *n),
+    }
+}
+
+fn read_n_bytes_to_writer<R, W>(
+    input: R,
+    n: u64,
+    writer: &mut W,
+    mut buffer: Option<&mut Vec<u8>>,
+) -> std::io::Result<u64>
 where
     R: Read,
+    W: Write,
 {
-    // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
 
     let mut total_written = 0;
     let mut buf = [0u8; BUF_SIZE];
@@ -245,7 +279,7 @@ where
             Err(e) => return Err(e),
         };
 
-        stdout.write_all(&buf[..read]).map_err(write_error)?;
+        writer.write_all(&buf[..read]).map_err(write_error)?;
 
         if let Some(ref mut b) = buffer {
             b.extend_from_slice(&buf[..read]);
@@ -255,15 +289,23 @@ where
     Ok(total_written)
 }
 
-fn read_n_lines(
+fn read_n_bytes<R>(input: R, n: u64, buffer: Option<&mut Vec<u8>>) -> std::io::Result<u64>
+where
+    R: Read,
+{
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    read_n_bytes_to_writer(input, n, &mut stdout, buffer)
+}
+
+fn read_n_lines_to_writer<W: Write>(
     input: &mut impl std::io::BufRead,
     n: u64,
     separator: u8,
+    writer: &mut W,
     mut buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<u64> {
-    let stdout = std::io::stdout();
-    let stdout = stdout.lock();
-    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout);
+    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, writer);
 
     let mut lines_read = 0;
     let mut total_written = 0;
@@ -304,6 +346,17 @@ fn read_n_lines(
     Ok(total_written)
 }
 
+fn read_n_lines(
+    input: &mut impl std::io::BufRead,
+    n: u64,
+    separator: u8,
+    buffer: Option<&mut Vec<u8>>,
+) -> std::io::Result<u64> {
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    read_n_lines_to_writer(input, n, separator, &mut stdout, buffer)
+}
+
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
     match usize::try_from(n) {
         Ok(value) => Some(value),
@@ -317,20 +370,18 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     }
 }
 
-fn read_but_last_n_bytes(
+fn read_but_last_n_bytes_to_writer<W: Write>(
     input: &mut impl std::io::BufRead,
     n: u64,
+    writer: &mut W,
     mut buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     if n == 0 {
-        let _ = read_n_bytes(input, u64::MAX, buffer)?;
+        let _ = read_n_bytes_to_writer(input, u64::MAX, writer, buffer)?;
         return Ok(());
     }
 
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
-        let stdout = std::io::stdout();
-        let mut stdout = stdout.lock();
-
         let mut ring_buffer = Vec::new();
         let mut buffer_size = [0u8; BUF_SIZE];
 
@@ -348,7 +399,7 @@ fn read_but_last_n_bytes(
             } else {
                 let to_write_len = total_available - n;
                 if to_write_len <= ring_buffer.len() {
-                    stdout
+                    writer
                         .write_all(&ring_buffer[..to_write_len])
                         .map_err(write_error)?;
                     if let Some(ref mut b) = buffer {
@@ -357,12 +408,12 @@ fn read_but_last_n_bytes(
                     ring_buffer.drain(..to_write_len);
                     ring_buffer.extend_from_slice(&buffer_size[..read]);
                 } else {
-                    stdout.write_all(&ring_buffer).map_err(write_error)?;
+                    writer.write_all(&ring_buffer).map_err(write_error)?;
                     if let Some(ref mut b) = buffer {
                         b.extend_from_slice(&ring_buffer);
                     }
                     let remaining = to_write_len - ring_buffer.len();
-                    stdout
+                    writer
                         .write_all(&buffer_size[..remaining])
                         .map_err(write_error)?;
                     if let Some(ref mut b) = buffer {
@@ -378,20 +429,28 @@ fn read_but_last_n_bytes(
     Ok(())
 }
 
-fn read_but_last_n_lines(
+fn read_but_last_n_bytes(
+    input: &mut impl std::io::BufRead,
+    n: u64,
+    buffer: Option<&mut Vec<u8>>,
+) -> std::io::Result<()> {
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    read_but_last_n_bytes_to_writer(input, n, &mut stdout, buffer)
+}
+
+fn read_but_last_n_lines_to_writer<W: Write>(
     input: impl std::io::BufRead,
     n: u64,
     separator: u8,
+    writer: &mut W,
     mut buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
-        let stdout = std::io::stdout();
-        let mut stdout = stdout.lock();
-
         for bytes in take_all_but(lines(input, separator), n) {
             let bytes = bytes?;
 
-            stdout.write_all(&bytes).map_err(write_error)?;
+            writer.write_all(&bytes).map_err(write_error)?;
 
             if let Some(ref mut buf) = buffer {
                 buf.extend_from_slice(&bytes);
@@ -399,6 +458,17 @@ fn read_but_last_n_lines(
         }
     }
     Ok(())
+}
+
+fn read_but_last_n_lines(
+    input: impl std::io::BufRead,
+    n: u64,
+    separator: u8,
+    buffer: Option<&mut Vec<u8>>,
+) -> std::io::Result<()> {
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    read_but_last_n_lines_to_writer(input, n, separator, &mut stdout, buffer)
 }
 
 fn write_error(e: std::io::Error) -> std::io::Error {
@@ -618,6 +688,151 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
     }
 }
 
+fn head_backwards_without_seek_file_to_writer<W: Write>(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, input);
+
+    match options.mode {
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes_to_writer(reader, n, writer, None)?,
+        Mode::AllButLastLines(n) => {
+            read_but_last_n_lines_to_writer(reader, n, options.line_ending.into(), writer, None)?
+        }
+        _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
+fn head_backwards_on_seekable_file_to_writer<W: Write>(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    let start_pos = input.stream_position()?;
+    match options.mode {
+        Mode::AllButLastBytes(n) => {
+            let size = input.metadata()?.len();
+            if n < size {
+                let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+                let written = read_n_bytes_to_writer(&mut reader, size - n, writer, None)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
+        }
+        Mode::AllButLastLines(n) => {
+            let target_pos = find_nth_line_from_end(input, n, options.line_ending.into())?;
+            let current_pos = input.stream_position()?;
+            if target_pos > current_pos {
+                let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+                let written =
+                    read_n_bytes_to_writer(&mut reader, target_pos - current_pos, writer, None)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
+        }
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn head_backwards_file_to_writer<W: Write>(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    let seekable = !options.presume_input_pipe && is_seekable(input);
+
+    if !seekable {
+        return head_backwards_without_seek_file_to_writer(input, options, writer);
+    }
+
+    let st = input.metadata()?;
+
+    if st.len() <= 65536 {
+        let start_pos = input.stream_position()?;
+        let mut data = Vec::new();
+        input.read_to_end(&mut data)?;
+        let true_size = data.len();
+
+        match options.mode {
+            Mode::AllButLastBytes(n) => {
+                let print_len = (true_size as u64).saturating_sub(n) as usize;
+                writer.write_all(&data[..print_len]).map_err(write_error)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + print_len as u64));
+            }
+            Mode::AllButLastLines(n) => {
+                let separator: u8 = options.line_ending.into();
+                let mut newline_positions = Vec::new();
+                for (i, &b) in data.iter().enumerate() {
+                    if b == separator {
+                        newline_positions.push(i);
+                    }
+                }
+
+                let mut total_lines = newline_positions.len() as u64;
+                if !data.is_empty() && *data.last().unwrap() != separator {
+                    total_lines += 1;
+                }
+
+                let lines_to_keep = total_lines.saturating_sub(n);
+                let print_len = if lines_to_keep == 0 {
+                    0
+                } else if (lines_to_keep as usize) <= newline_positions.len() {
+                    newline_positions[(lines_to_keep - 1) as usize] + 1
+                } else {
+                    true_size
+                };
+
+                writer.write_all(&data[..print_len]).map_err(write_error)?;
+                let _ = input.seek(SeekFrom::Start(start_pos + print_len as u64));
+            }
+            _ => unreachable!(),
+        }
+        return Ok(());
+    }
+
+    head_backwards_on_seekable_file_to_writer(input, options, writer)
+}
+
+fn head_file_to_writer<W: Write>(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    let seekable = !options.presume_input_pipe && is_seekable(input);
+    let start_pos = if seekable {
+        input.stream_position().unwrap_or(0)
+    } else {
+        0
+    };
+
+    match options.mode {
+        Mode::FirstBytes(n) => {
+            let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+            let written = read_n_bytes_to_writer(&mut reader, n, writer, None)?;
+            drop(reader);
+            if seekable {
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
+            Ok(())
+        }
+        Mode::FirstLines(n) => {
+            let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
+            let written =
+                read_n_lines_to_writer(&mut reader, n, options.line_ending.into(), writer, None)?;
+            drop(reader);
+            if seekable {
+                let _ = input.seek(SeekFrom::Start(start_pos + written));
+            }
+            Ok(())
+        }
+        Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => {
+            head_backwards_file_to_writer(input, options, writer)
+        }
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn ct_head(options: &HeadOptions) -> CTResult<()> {
     let mut first = true;
@@ -703,6 +918,21 @@ fn print_file_header(options: &HeadOptions, first: bool, name: &str) {
     }
 }
 
+fn print_file_header_to_writer<W: Write>(
+    options: &HeadOptions,
+    first: bool,
+    name: &str,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    if should_print_header(options) {
+        if !first {
+            writer.write_all(b"\n").map_err(write_error)?;
+        }
+        writeln!(writer, "==> {name} <==").map_err(write_error)?;
+    }
+    Ok(())
+}
+
 // 判断是否需要打印头部
 fn should_print_header(options: &HeadOptions) -> bool {
     (options.files.len() > 1 && !options.quiet) || options.verbose
@@ -726,6 +956,155 @@ fn handle_stdin(options: &HeadOptions) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn handle_stdin_to_writer<W: Write>(options: &HeadOptions, writer: &mut W) -> std::io::Result<()> {
+    let stdin = std::io::stdin();
+    let mut stdin = stdin.lock();
+
+    match options.mode {
+        Mode::FirstBytes(n) => {
+            let _ = read_n_bytes_to_writer(&mut stdin, n, writer, None)?;
+        }
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes_to_writer(&mut stdin, n, writer, None)?,
+        Mode::FirstLines(n) => {
+            let _ =
+                read_n_lines_to_writer(&mut stdin, n, options.line_ending.into(), writer, None)?;
+        }
+        Mode::AllButLastLines(n) => read_but_last_n_lines_to_writer(
+            &mut stdin,
+            n,
+            options.line_ending.into(),
+            writer,
+            None,
+        )?,
+    }
+    Ok(())
+}
+
+fn render_head_open_error(name: &str, err: std::io::Error) -> String {
+    let err = err.map_err_context(|| format!("cannot open {} for reading", name.quote()));
+    format!("head: {err}\n")
+}
+
+fn render_head_read_error(name: &str) -> String {
+    format!("head: error reading {name}: Input/output error\n")
+}
+
+fn head_rows_from_bytes(bytes: &[u8], source_name: &str, separator: u8) -> Vec<HeadRow> {
+    let mut rows = Vec::new();
+    let mut start = 0usize;
+    let mut row_index = 1usize;
+
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == separator {
+            let segment = &bytes[start..index];
+            rows.push(HeadRow {
+                source_name: source_name.to_string(),
+                row_index,
+                line: String::from_utf8_lossy(segment).into_owned(),
+                byte_length: segment.len(),
+                terminated: true,
+            });
+            row_index += 1;
+            start = index + 1;
+        }
+    }
+
+    if start < bytes.len() {
+        let segment = &bytes[start..];
+        rows.push(HeadRow {
+            source_name: source_name.to_string(),
+            row_index,
+            line: String::from_utf8_lossy(segment).into_owned(),
+            byte_length: segment.len(),
+            terminated: false,
+        });
+    }
+
+    rows
+}
+
+fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
+    let mut first = true;
+    let mut classic_bytes = Vec::new();
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
+    let mut rows = Vec::new();
+
+    for file in &options.files {
+        let display_name = if file == "-" {
+            "standard input"
+        } else {
+            file.as_str()
+        };
+        let mut file_output = Vec::new();
+        let result = if file == "-" {
+            let _ = print_file_header_to_writer(options, first, display_name, &mut classic_bytes);
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::FromRawFd;
+                let mut stdin_file =
+                    std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
+                if !options.presume_input_pipe && is_seekable(&mut stdin_file) {
+                    head_file_to_writer(&mut stdin_file, options, &mut file_output)
+                } else {
+                    handle_stdin_to_writer(options, &mut file_output)
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                handle_stdin_to_writer(options, &mut file_output)
+            }
+        } else {
+            match std::fs::File::open(file) {
+                Ok(mut handle) => {
+                    let _ = print_file_header_to_writer(options, first, file, &mut classic_bytes);
+                    head_file_to_writer(&mut handle, options, &mut file_output)
+                }
+                Err(err) => {
+                    stderr_text.push_str(&render_head_open_error(file, err));
+                    exit_code = 1;
+                    first = false;
+                    continue;
+                }
+            }
+        };
+
+        classic_bytes.extend_from_slice(&file_output);
+
+        if let Err(err) = result {
+            exit_code = 1;
+            let msg = err.to_string();
+            if msg.contains("error writing 'standard output'") {
+                stderr_text.push_str(&format!("head: {msg}\n"));
+            } else {
+                stderr_text.push_str(&render_head_read_error(display_name));
+            }
+        } else {
+            rows.extend(head_rows_from_bytes(
+                &file_output,
+                display_name,
+                options.line_ending.into(),
+            ));
+        }
+
+        first = false;
+    }
+
+    let (mode, count) = head_mode_name_and_count(&options.mode);
+
+    HeadSemantic {
+        mode: mode.into(),
+        count,
+        zero_terminated: options.line_ending == CtLineEnding::Nul,
+        quiet: options.quiet,
+        verbose: options.verbose,
+        rows,
+        classic_text: String::from_utf8_lossy(&classic_bytes).into_owned(),
+        stderr_text,
+        exit_code,
+    }
 }
 
 #[derive(Default)]
@@ -755,6 +1134,19 @@ pub fn head_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
     ct_head(&args)
+}
+
+pub fn head_native_semantic(args: impl ctcore::Args) -> CTResult<HeadSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(arg_iterate(args)?)?;
+    let options = match HeadOptions::get_from(&matches) {
+        Ok(o) => o,
+        Err(s) => {
+            return Err(CtSimpleError::new(1, s));
+        }
+    };
+    Ok(head_semantic_from_options(&options))
 }
 
 #[cfg(test)]
@@ -1250,6 +1642,78 @@ mod tests {
             };
 
             assert!(ct_head(&options).is_ok());
+        }
+    }
+
+    mod native_semantic_tests {
+        use super::{HeadRow, head_native_semantic};
+        use std::ffi::OsString;
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_head_native_semantic_collects_rows_and_metadata() {
+            let mut file = NamedTempFile::new().expect("temp file");
+            write!(file, "alpha\nbeta\ngamma\ndelta\n").expect("write fixture");
+
+            let semantic = head_native_semantic(
+                [
+                    OsString::from("head"),
+                    OsString::from("-n"),
+                    OsString::from("2"),
+                    file.path().as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.mode, "first_lines");
+            assert_eq!(semantic.count, 2);
+            assert!(!semantic.zero_terminated);
+            assert_eq!(
+                semantic.rows,
+                vec![
+                    HeadRow {
+                        source_name: file.path().display().to_string(),
+                        row_index: 1,
+                        line: "alpha".into(),
+                        byte_length: 5,
+                        terminated: true,
+                    },
+                    HeadRow {
+                        source_name: file.path().display().to_string(),
+                        row_index: 2,
+                        line: "beta".into(),
+                        byte_length: 4,
+                        terminated: true,
+                    },
+                ]
+            );
+            assert_eq!(semantic.classic_text, "alpha\nbeta\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
+        fn test_head_native_semantic_preserves_missing_file_error() {
+            let file = NamedTempFile::new().expect("temp file");
+            let missing = file.path().with_file_name("missing-head.txt");
+
+            let semantic = head_native_semantic(
+                [
+                    OsString::from("head"),
+                    OsString::from("-n"),
+                    OsString::from("2"),
+                    missing.as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert!(semantic.rows.is_empty());
+            assert_eq!(semantic.classic_text, "");
+            assert!(semantic.stderr_text.contains("cannot open"));
+            assert_eq!(semantic.exit_code, 1);
         }
     }
 }

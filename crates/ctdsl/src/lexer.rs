@@ -436,6 +436,13 @@ impl<'s> Lexer<'s> {
             self.advance();
         }
         if self.pos == start {
+            if self
+                .peek()
+                .map(|c| c.is_whitespace() || c == '|')
+                .unwrap_or(true)
+            {
+                return Ok(Token::Ident("--".into()));
+            }
             return Err(self.current_err("empty long flag after `--`"));
         }
         let name = self.src[start..self.pos].to_string();
@@ -687,6 +694,12 @@ mod tests {
     fn test_lex_long_flag() {
         let toks = lex("--output");
         assert_eq!(toks[0], Token::LongFlag("output".into()));
+    }
+
+    #[test]
+    fn test_lex_standalone_double_dash_as_positional() {
+        let toks = lex("--");
+        assert_eq!(toks[0], Token::Ident("--".into()));
     }
 
     #[test]

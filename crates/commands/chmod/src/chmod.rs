@@ -707,8 +707,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), mode_value, filename];
 
             let result = chmod_main(args.iter().map(OsString::from));
-
-            return;
+            assert!(result.is_ok());
 
             // 删除文件
             match base_delete_file(filename) {
@@ -734,8 +733,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--quiet", file_path1, file_path2];
 
             let result = chmod_main(args.iter().map(OsString::from));
-
-            return;
+            assert!(result.is_err());
         }
 
         #[test]
@@ -750,8 +748,7 @@ mod tests {
                 "/path/to/file",
             ];
             let result = chmod_main(args.iter().map(OsString::from));
-
-            return;
+            assert!(result.is_err());
         }
         // #[test]
         // fn test_ctmain_arg_required_mode_or_file() {
@@ -818,8 +815,7 @@ mod tests {
                 "/path/to/file2",
             ];
             let result = chmod_main(args.iter().map(OsString::from));
-
-            return;
+            assert!(result.is_err());
         }
         #[test]
         fn test_ctmain_arg_multiple_options() {
@@ -1098,8 +1094,7 @@ mod tests {
             "/path/to/file",
         ];
         let result = command.try_get_matches_from(args);
-
-        return;
+        assert!(result.is_ok());
     }
     // #[test]
     // fn test_ct_app_arg_required_mode_or_file() {
@@ -1134,8 +1129,7 @@ mod tests {
             "/path/to/reference_file",
         ];
         let result = command.try_get_matches_from(args);
-
-        return;
+        assert!(result.is_ok());
     }
     #[test]
     fn test_ct_app_arg_mode_and_reference_together() {
@@ -1161,8 +1155,7 @@ mod tests {
         // 测试用例：指定 --recursive 但只有一个文件
         let args = vec![ctcore::ct_util_name(), "--recursive", "/path/to/file"];
         let result = command.try_get_matches_from(args);
-
-        return;
+        assert!(result.is_ok());
     }
     #[test]
     fn test_ct_app_arg_recursive_and_multiple_files() {
@@ -1176,8 +1169,7 @@ mod tests {
             "/path/to/file2",
         ];
         let result = command.try_get_matches_from(args);
-
-        return;
+        assert!(result.is_ok());
     }
     #[test]
     fn test_ct_app_arg_multiple_options() {
@@ -1632,7 +1624,7 @@ mod tests {
 
         // 调用 chmod 方法
         let result = chmoder.process_path(&test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         // 验证文件权限已更改
         let final_mode = fs::metadata(&test_file_path).unwrap().permissions().mode();
@@ -1672,7 +1664,7 @@ mod tests {
 
         // 调用 walk_dir 方法
         let result = chmoder.process_path(temp_dir.path(), true);
-        return;
+        assert!(result.is_ok());
 
         // 验证目录和文件权限已更改
         let final_dir_mode = fs::metadata(&sub_dir_path).unwrap().permissions().mode();
@@ -1709,7 +1701,7 @@ mod tests {
 
         // 调用 chmod_file 方法
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         // 验证文件权限已更改
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -1744,7 +1736,7 @@ mod tests {
 
         // 调用 change_file 方法
         let result = chmoder.change_file(initial_mode, 0o644, test_file_path);
-        return;
+        assert!(result.is_ok());
 
         // 验证文件权限已更改
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -1773,7 +1765,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(empty_dir_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         let file_final_mode = fs::metadata(empty_dir_path).unwrap().permissions().mode();
         assert_eq!(file_final_mode & 0o777, 0o644);
@@ -1799,9 +1791,7 @@ mod tests {
         };
 
         let result = chmoder.change_file(0o600, 0o644, test_file_path.as_path());
-
-        println!("Result: {result:?}");
-        return;
+        assert!(result.is_ok());
 
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         assert_eq!(file_final_mode & 0o777, 0o644);
@@ -1862,7 +1852,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(&dir_path, true);
-        return;
+        assert!(result.is_ok());
 
         // Verify the file's permission within the directory has been changed
         let file_final_mode = fs::metadata(file_path).unwrap().permissions().mode();
@@ -1891,7 +1881,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(&temp_dir.path().join("dir1"), true);
-        return;
+        assert!(result.is_ok());
 
         // Verify the file's permission within the nested directory has been changed
         let file_final_mode = fs::metadata(file_path).unwrap().permissions().mode();
@@ -1918,7 +1908,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(test_file_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         assert_eq!(final_mode & 0o777, 0o644);
@@ -1944,7 +1934,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(test_file_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         assert_eq!(final_mode & 0o777, 0o745);
@@ -1975,7 +1965,7 @@ mod tests {
 
         // Call chmod_file method
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         // Verify file permissions remain unchanged
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2007,7 +1997,7 @@ mod tests {
 
         // Call chmod_file method
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         let dir_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2040,7 +2030,7 @@ mod tests {
 
         // Call chmod_file method
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         let dir_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2073,7 +2063,7 @@ mod tests {
 
         // Call chmod_file method
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         // Verify file permissions have been changed according to fmode
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2105,7 +2095,7 @@ mod tests {
 
         // Call chmod_file method
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
 
         // Verify file permissions have been changed according to fmode
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2152,7 +2142,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(test_file_path, true);
-        return;
+        assert!(result.is_ok());
         // Verify file and directory permissions have been changed
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         let dir_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2187,7 +2177,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(single_level_dir_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         // Verify file and directory permissions have been changed
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2226,7 +2216,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(symlink_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         // Verify symlink permissions have been changed
         let symlink_final_mode = fs::symlink_metadata(symlink_path)
@@ -2263,7 +2253,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(root_dir_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         // Verify file and root directory permissions are unchanged
         let file_final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
@@ -2339,7 +2329,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(test_file_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         assert_eq!(
             fs::metadata(test_file_path).unwrap().permissions().mode() & 0o777,
@@ -2374,7 +2364,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(large_file_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         // Verify file permissions have been changed
         let large_file_final_mode = fs::metadata(large_file_path).unwrap().permissions().mode();
@@ -2406,7 +2396,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(hidden_file_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         // Verify hidden file permissions have been changed
         let hidden_file_final_mode = fs::metadata(hidden_file_path).unwrap().permissions().mode();
@@ -2544,7 +2534,7 @@ mod tests {
         };
 
         let result = chmoder.process_path(test_dir_path.as_path(), true);
-        return;
+        assert!(result.is_ok());
 
         assert_eq!(
             fs::metadata(test_dir_path).unwrap().permissions().mode() & 0o777,

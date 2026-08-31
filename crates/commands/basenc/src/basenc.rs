@@ -20,12 +20,13 @@ use sys_locale::get_locale;
 
 use ctcore::{
     ct_encoding::Format,
-    ct_error::{CTResult, CTsageError},
+    ct_error::{CTError, CTResult, CTsageError, FromIo},
 };
 
 use ctcore::Tool;
 use ctcore::ct_error::UClapError;
 use std::ffi::OsString;
+use std::io::Cursor;
 use std::io::Read;
 use std::io::stdin;
 
@@ -58,6 +59,29 @@ const BASE64_ENCODINGS: &[(&str, Format, &str)] = &[
          when decoding, input length must be a multiple of 5",
     ),
 ];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BasencSemanticRow {
+    pub encoding: String,
+    pub kind: String,
+    pub mode: String,
+    pub wrap: usize,
+    pub ignore_garbage: bool,
+    pub input: String,
+    pub file: Option<String>,
+    pub line: usize,
+    pub output_text: String,
+    pub byte_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BasencSemantic {
+    pub rows: Vec<BasencSemanticRow>,
+    pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
 
 pub fn ct_app() -> Command {
     let base64_about = t!("basenc.about");
@@ -107,6 +131,178 @@ fn extract_unexpected_argument(err_text: &str) -> Option<String> {
     let rest = &err_text[start + marker.len()..];
     let end = rest.find('\'')?;
     Some(rest[..end].to_string())
+}
+
+fn basenc_render_error_text(err: &dyn CTError) -> String {
+    let mut stderr = format!("basenc: {err}\n");
+    if err.usage() {
+        stderr.push_str("Try 'basenc --help' for more information.\n");
+    }
+    stderr
+}
+
+fn basenc_encoding_name(format: Format) -> &'static str {
+    match format {
+        Format::Base64 => "base64",
+        Format::Base64Url => "base64url",
+        Format::Base32 => "base32",
+        Format::Base32Hex => "base32hex",
+        Format::Base16 => "base16",
+        Format::Base2Lsbf => "base2lsbf",
+        Format::Base2Msbf => "base2msbf",
+        Format::Base58 => "base58",
+        Format::Z85 => "z85",
+    }
+}
+
+fn basenc_rows_from_output(
+    config: &BaseConfig,
+    format: Format,
+    output: &[u8],
+) -> Vec<BasencSemanticRow> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+    let mut line = 1;
+
+    for (index, byte) in output.iter().enumerate() {
+        if *byte == b'\n' {
+            rows.push(BasencSemanticRow {
+                encoding: basenc_encoding_name(format).into(),
+                kind: "text".into(),
+                mode: if config.base_decode {
+                    "decode".into()
+                } else {
+                    "encode".into()
+                },
+                wrap: config.base_wrap_cols.unwrap_or(76),
+                ignore_garbage: config.base_ignore_garbage,
+                input: if config.base_to_read.is_some() {
+                    "file".into()
+                } else {
+                    "stdin".into()
+                },
+                file: config.base_to_read.clone(),
+                line,
+                output_text: String::from_utf8_lossy(&output[start..index]).into_owned(),
+                byte_len: index - start,
+            });
+            start = index + 1;
+            line += 1;
+        }
+    }
+
+    if start < output.len() {
+        rows.push(BasencSemanticRow {
+            encoding: basenc_encoding_name(format).into(),
+            kind: "text".into(),
+            mode: if config.base_decode {
+                "decode".into()
+            } else {
+                "encode".into()
+            },
+            wrap: config.base_wrap_cols.unwrap_or(76),
+            ignore_garbage: config.base_ignore_garbage,
+            input: if config.base_to_read.is_some() {
+                "file".into()
+            } else {
+                "stdin".into()
+            },
+            file: config.base_to_read.clone(),
+            line,
+            output_text: String::from_utf8_lossy(&output[start..]).into_owned(),
+            byte_len: output.len() - start,
+        });
+    }
+
+    rows
+}
+
+fn basenc_semantic_from_output(
+    config: &BaseConfig,
+    format: Format,
+    output: Vec<u8>,
+    stderr_text: String,
+    exit_code: i32,
+) -> BasencSemantic {
+    let classic_text = String::from_utf8_lossy(&output).into_owned();
+    BasencSemantic {
+        rows: basenc_rows_from_output(config, format, &output),
+        classic_text,
+        classic_bytes: output,
+        stderr_text,
+        exit_code,
+    }
+}
+
+pub fn basenc_native_semantic(args: impl ctcore::Args) -> CTResult<BasencSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let (config, format) = match basenc_parse_cmd_args(args) {
+        Ok(config) => config,
+        Err(err) => {
+            return Ok(BasencSemantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                classic_bytes: Vec::new(),
+                stderr_text: basenc_render_error_text(err.as_ref()),
+                exit_code: err.code(),
+            });
+        }
+    };
+
+    let stdin_info = stdin();
+    let mut input_info = match base_common::get_base_input(&config, &stdin_info) {
+        Ok(input) => input,
+        Err(err) => {
+            return Ok(BasencSemantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                classic_bytes: Vec::new(),
+                stderr_text: basenc_render_error_text(err.as_ref()),
+                exit_code: err.code(),
+            });
+        }
+    };
+
+    let mut input_bytes = Vec::new();
+    if let Err(err) = input_info
+        .read_to_end(&mut input_bytes)
+        .map_err_context(|| config.base_to_read.clone().unwrap_or_else(|| "-".into()))
+    {
+        return Ok(BasencSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            classic_bytes: Vec::new(),
+            stderr_text: basenc_render_error_text(err.as_ref()),
+            exit_code: err.code(),
+        });
+    }
+
+    let mut output = Vec::new();
+    match base_common::handle_base_input(
+        &mut Cursor::new(&input_bytes),
+        &mut output,
+        format,
+        config.base_wrap_cols,
+        config.base_ignore_garbage,
+        config.base_decode,
+    ) {
+        Ok(()) => Ok(basenc_semantic_from_output(
+            &config,
+            format,
+            output,
+            String::new(),
+            0,
+        )),
+        Err(err) => Ok(basenc_semantic_from_output(
+            &config,
+            format,
+            output,
+            basenc_render_error_text(err.as_ref()),
+            err.code(),
+        )),
+    }
 }
 
 #[derive(Default)]
@@ -2647,6 +2843,7 @@ mod test {
             Ok(_) => println!("File '{filename}' deleted successfully."),
             Err(e) => eprintln!("Error deleting file: {e}"),
         }
+        assert_eq!(s, expected_output);
     }
 
     #[test]
@@ -2656,8 +2853,8 @@ mod test {
         let expected_output = "46ZVcZ5fTn1as9FPhMAQVu9U5dTst58bJjDG3ayCWpbks9iJjvNRq5gQ5FeLoXKz7h";
 
         match base_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         let args = [ctcore::ct_util_name(), "--base58", filename];
@@ -2675,8 +2872,8 @@ mod test {
             }
         }
         match base_delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
     }
@@ -2688,8 +2885,8 @@ mod test {
         let expected_output = "Test test_base_common_handle_input_encode_base58";
 
         match base_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{}' created successfully.", filename),
-            Err(e) => eprintln!("Error creating file: {}", e),
+            Ok(_) => println!("File '{filename}' created successfully."),
+            Err(e) => eprintln!("Error creating file: {e}"),
         }
 
         let args = [ctcore::ct_util_name(), "-d", "--base58", filename];
@@ -2707,9 +2904,59 @@ mod test {
             }
         }
         match base_delete_file(filename) {
-            Ok(_) => println!("File '{}' deleted successfully.", filename),
-            Err(e) => eprintln!("Error deleting file: {}", e),
+            Ok(_) => println!("File '{filename}' deleted successfully."),
+            Err(e) => eprintln!("Error deleting file: {e}"),
         }
         assert_eq!(s, expected_output);
+    }
+
+    #[test]
+    fn test_basenc_native_semantic_encode_row() {
+        let filename = "test_basenc_native_semantic_encode_row.txt";
+        base_create_file_with_content(filename, "abc").expect("create basenc semantic fixture");
+
+        let semantic = basenc_native_semantic(
+            [ctcore::ct_util_name(), "--base64", filename]
+                .iter()
+                .map(OsString::from),
+        )
+        .expect("semantic");
+
+        base_delete_file(filename).expect("delete basenc semantic fixture");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "YWJj\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].encoding, "base64");
+        assert_eq!(semantic.rows[0].kind, "text");
+        assert_eq!(semantic.rows[0].mode, "encode");
+        assert_eq!(semantic.rows[0].input, "file");
+        assert_eq!(semantic.rows[0].file.as_deref(), Some(filename));
+        assert_eq!(semantic.rows[0].line, 1);
+        assert_eq!(semantic.rows[0].output_text, "YWJj");
+        assert_eq!(semantic.rows[0].byte_len, 4);
+        assert_eq!(semantic.rows[0].wrap, 76);
+        assert!(!semantic.rows[0].ignore_garbage);
+    }
+
+    #[test]
+    fn test_basenc_native_semantic_invalid_decode_reports_error_metadata() {
+        let filename = "test_basenc_native_semantic_invalid_decode.txt";
+        base_create_file_with_content(filename, "%%%").expect("create invalid basenc fixture");
+
+        let semantic = basenc_native_semantic(
+            [ctcore::ct_util_name(), "--decode", "--base64", filename]
+                .iter()
+                .map(OsString::from),
+        )
+        .expect("semantic");
+
+        base_delete_file(filename).expect("delete invalid basenc fixture");
+
+        assert_eq!(semantic.exit_code, 1);
+        assert_eq!(semantic.classic_text, "");
+        assert_eq!(semantic.rows, Vec::<BasencSemanticRow>::new());
+        assert_eq!(semantic.stderr_text, "basenc: invalid input\n");
     }
 }

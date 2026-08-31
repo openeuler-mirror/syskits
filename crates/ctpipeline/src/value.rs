@@ -62,7 +62,8 @@ pub enum CtType {
 pub enum CtValue {
     // NOTE:
     // CtValue 使用 untagged 反序列化时，数值/数组等变体存在匹配歧义。
-    // 对外部 JSON 输入请优先走显式转换流程（如 ctengine::external::json_to_ctvalue）。
+    // 该 serde 形态仅用于内部/受控数据流；外部 JSON 输入必须走显式转换流程
+    // （如 ctengine::external::json_to_ctvalue），不要直接暴露 from_str::<CtValue>。
     /// 空值（表示命令无输出）
     Nothing,
     Bool(bool),
@@ -159,6 +160,39 @@ impl CtValue {
             CtValue::String(s) => Ok(s.as_str()),
             other => Err(CtValueError::type_mismatch(
                 CtType::String,
+                other.value_type(),
+            )),
+        }
+    }
+
+    /// 尝试转换为 record 字段引用
+    pub fn as_record(&self) -> Result<&[(String, CtValue)], CtValueError> {
+        match self {
+            CtValue::Record(fields) => Ok(fields.as_slice()),
+            other => Err(CtValueError::type_mismatch(
+                CtType::Record,
+                other.value_type(),
+            )),
+        }
+    }
+
+    /// 尝试转换为 list 元素引用
+    pub fn as_list(&self) -> Result<&[CtValue], CtValueError> {
+        match self {
+            CtValue::List(items) => Ok(items.as_slice()),
+            other => Err(CtValueError::type_mismatch(
+                CtType::List,
+                other.value_type(),
+            )),
+        }
+    }
+
+    /// 尝试转换为 binary 字节引用
+    pub fn as_binary(&self) -> Result<&[u8], CtValueError> {
+        match self {
+            CtValue::Binary(bytes) => Ok(bytes.as_slice()),
+            other => Err(CtValueError::type_mismatch(
+                CtType::Binary,
                 other.value_type(),
             )),
         }
@@ -379,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ctvalue_json_numeric_array_deserializes_as_list() {
+    fn test_ctvalue_untagged_internal_json_numeric_array_deserializes_as_list() {
         let v: CtValue = serde_json::from_str("[1,2,3]").unwrap();
         let CtValue::List(items) = v else {
             panic!("expected List");
@@ -388,6 +422,44 @@ mod tests {
         assert!(matches!(items[0], CtValue::Int(1)));
         assert!(matches!(items[1], CtValue::Int(2)));
         assert!(matches!(items[2], CtValue::Int(3)));
+    }
+
+    #[test]
+    fn test_ctvalue_container_accessors_return_references() {
+        let record = CtValue::Record(vec![("name".to_string(), CtValue::String("alice".into()))]);
+        assert_eq!(record.as_record().unwrap()[0].0, "name");
+
+        let list = CtValue::List(vec![CtValue::Int(1), CtValue::Int(2)]);
+        assert_eq!(list.as_list().unwrap(), &[CtValue::Int(1), CtValue::Int(2)]);
+
+        let binary = CtValue::Binary(vec![0, 255, 16]);
+        assert_eq!(binary.as_binary().unwrap(), &[0, 255, 16]);
+    }
+
+    #[test]
+    fn test_ctvalue_container_accessors_report_type_mismatch() {
+        let value = CtValue::String("not a container".into());
+        assert!(matches!(
+            value.as_record(),
+            Err(CtValueError::TypeMismatch {
+                expected: CtType::Record,
+                got: CtType::String
+            })
+        ));
+        assert!(matches!(
+            value.as_list(),
+            Err(CtValueError::TypeMismatch {
+                expected: CtType::List,
+                got: CtType::String
+            })
+        ));
+        assert!(matches!(
+            value.as_binary(),
+            Err(CtValueError::TypeMismatch {
+                expected: CtType::Binary,
+                got: CtType::String
+            })
+        ));
     }
 
     #[test]

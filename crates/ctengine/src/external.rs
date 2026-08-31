@@ -1435,7 +1435,7 @@ impl Read for ExternalStream {
 
                 if self
                     .timeout_abort
-                    .load(std::sync::atomic::Ordering::Relaxed)
+                    .load(std::sync::atomic::Ordering::Acquire)
                     && let Ok(mut child) = self.child.lock()
                 {
                     terminate_process_tree(&mut child);
@@ -1443,12 +1443,12 @@ impl Read for ExternalStream {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
             self.process_done
-                .store(true, std::sync::atomic::Ordering::Relaxed);
+                .store(true, std::sync::atomic::Ordering::Release);
 
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
             let timed_out = self
                 .timeout_abort
-                .load(std::sync::atomic::Ordering::Relaxed);
+                .load(std::sync::atomic::Ordering::Acquire);
 
             let stderr_bytes = if let Some(th) = self.stderr_thread.take() {
                 th.join().unwrap_or_default()
@@ -1516,7 +1516,7 @@ impl Read for ExternalStream {
 impl Drop for ExternalStream {
     fn drop(&mut self) {
         self.process_done
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+            .store(true, std::sync::atomic::Ordering::Release);
         if let Ok(mut child) = self.child.lock() {
             terminate_process_tree(&mut child);
             let _ = child.wait();
@@ -1655,10 +1655,10 @@ impl ExternalExecutor {
             let child_for_timeout = child.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(ms));
-                if process_done_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                if process_done_clone.load(std::sync::atomic::Ordering::Acquire) {
                     return;
                 }
-                timeout_abort_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+                timeout_abort_clone.store(true, std::sync::atomic::Ordering::Release);
                 if let Ok(mut child) = child_for_timeout.lock() {
                     terminate_process_tree(&mut child);
                 }

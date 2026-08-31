@@ -89,6 +89,30 @@ use sys_locale::get_locale;
 
 const OD_PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OdView {
+    pub spec: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OdRow {
+    pub row_kind: String,
+    pub offset: u64,
+    pub label: Option<u64>,
+    pub byte_len: usize,
+    pub bytes: Vec<u8>,
+    pub views: Vec<OdView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OdSemantic {
+    pub rows: Vec<OdRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
 pub(crate) mod od_options {
     pub const OD_HELP: &str = "help";
     pub const OD_ADDRESS_RADIX: &str = "address-radix";
@@ -681,6 +705,18 @@ fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) -> C
     Ok(())
 }
 
+fn od_render_formatted_line(prefix: &str, output_text: &str, is_first: bool) -> String {
+    if is_first {
+        format!("{prefix}{output_text}\n")
+    } else {
+        format!(
+            "{:>width$}{output_text}\n",
+            "",
+            width = prefix.chars().count()
+        )
+    }
+}
+
 fn od_print_bytes(
     prefix: &str,
     input_decoder: &OdMemoryDecoder,
@@ -694,6 +730,41 @@ fn od_print_bytes(
         first = false;
     }
     Ok(())
+}
+
+fn od_view_spec(index: usize, formatter: &SpacedFormatterItemInfo) -> String {
+    let kind = match formatter.formatter_item_info.formatter {
+        OdFormatWriter::IntWriter(_) => "int",
+        OdFormatWriter::FloatWriter(_) => "float",
+        OdFormatWriter::MultibyteWriter(_) => "multi",
+    };
+    if formatter.add_ascii_dump {
+        format!("{kind}_{index}_ascii")
+    } else {
+        format!("{kind}_{index}")
+    }
+}
+
+fn od_collect_views(
+    prefix: &str,
+    input_decoder: &OdMemoryDecoder,
+    output_info: &OutputInfo,
+) -> (Vec<OdView>, String) {
+    let mut classic_text = String::new();
+    let mut views = Vec::new();
+    let mut first = true;
+
+    for (index, formatter) in output_info.spaced_formatters_iter().enumerate() {
+        let output_text = od_format_line(input_decoder, formatter, output_info);
+        views.push(OdView {
+            spec: od_view_spec(index, formatter),
+            text: output_text.clone(),
+        });
+        classic_text.push_str(&od_render_formatted_line(prefix, &output_text, first));
+        first = false;
+    }
+
+    (views, classic_text)
 }
 
 fn od_open_input_peek_reader(
@@ -712,6 +783,233 @@ fn od_open_input_peek_reader(
     let mf = OdMultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
     PeekReader::new(pr)
+}
+
+fn od_string_classic_line(offset: u64, radix: OdRadix, buffer: &[u8]) -> String {
+    let address = match radix {
+        OdRadix::Octal => format!("{offset:07o}"),
+        OdRadix::Decimal => format!("{offset:07}"),
+        OdRadix::Hexadecimal => format!("{offset:06x}"),
+        OdRadix::NoPrefix => String::new(),
+    };
+    let s = unsafe { std::str::from_utf8_unchecked(buffer) };
+    if address.is_empty() {
+        format!("{s}\n")
+    } else {
+        format!("{address} {s}\n")
+    }
+}
+
+fn od_collect_strings_semantic<R: Read>(
+    input: &mut R,
+    radix: OdRadix,
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
+    min_len: usize,
+) -> CTResult<OdSemantic> {
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut current_offset = skip_bytes;
+    let mut string_start = current_offset;
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 8192];
+    let mut bytes_read_total = 0u64;
+
+    loop {
+        let n = match input.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                return Ok(OdSemantic {
+                    rows,
+                    classic_text,
+                    stderr_text: format!("od: read error: {e}\n"),
+                    exit_code: 1,
+                });
+            }
+        };
+
+        for &b in &chunk[..n] {
+            bytes_read_total += 1;
+            if (0x20..=0x7E).contains(&b) {
+                if buffer.is_empty() {
+                    string_start = current_offset;
+                }
+                buffer.push(b);
+            } else {
+                if buffer.len() >= min_len && b == 0 {
+                    classic_text.push_str(&od_string_classic_line(string_start, radix, &buffer));
+                    rows.push(OdRow {
+                        row_kind: "string".into(),
+                        offset: string_start,
+                        label: None,
+                        byte_len: buffer.len(),
+                        bytes: buffer.clone(),
+                        views: vec![OdView {
+                            spec: "string".into(),
+                            text: unsafe { std::str::from_utf8_unchecked(&buffer) }.to_string(),
+                        }],
+                    });
+                }
+                buffer.clear();
+            }
+            current_offset += 1;
+        }
+    }
+
+    if buffer.len() >= min_len
+        && let Some(limit) = read_bytes
+        && bytes_read_total == limit
+    {
+        classic_text.push_str(&od_string_classic_line(string_start, radix, &buffer));
+        rows.push(OdRow {
+            row_kind: "string".into(),
+            offset: string_start,
+            label: None,
+            byte_len: buffer.len(),
+            bytes: buffer.clone(),
+            views: vec![OdView {
+                spec: "string".into(),
+                text: unsafe { std::str::from_utf8_unchecked(&buffer) }.to_string(),
+            }],
+        });
+    }
+
+    Ok(OdSemantic {
+        rows,
+        classic_text,
+        stderr_text: String::new(),
+        exit_code: 0,
+    })
+}
+
+pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args = args.collect_ignore();
+
+    let clap_matches = ct_app().try_get_matches_from(&args)?;
+    let od_settings = OdSettings::new(&clap_matches, &args)?;
+
+    let mut input_offset =
+        OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
+    let mut input = od_open_input_peek_reader(
+        &od_settings.input_strings,
+        od_settings.skip_bytes,
+        od_settings.read_bytes,
+    );
+
+    if let Some(min_len) = od_settings.strings_min_len {
+        return od_collect_strings_semantic(
+            &mut input,
+            od_settings.radix,
+            od_settings.skip_bytes,
+            od_settings.read_bytes,
+            min_len,
+        );
+    }
+
+    let mut input_decoder = OdInputDecoder::new(
+        &mut input,
+        od_settings.line_bytes,
+        OD_PEEK_BUFFER_SIZE,
+        od_settings.byte_order,
+    );
+    let output_info = OutputInfo::new(
+        od_settings.line_bytes,
+        &od_settings.formats[..],
+        od_settings.output_duplicates,
+    );
+
+    let mut rows = Vec::new();
+    let mut classic_text = String::new();
+    let mut state = DuplicateState::new();
+
+    loop {
+        match input_decoder.od_peek_read() {
+            Ok(mut memory_decoder) => {
+                let length = memory_decoder.length();
+
+                if length == 0 {
+                    if !input_decoder.has_error() {
+                        let final_offset = input_offset.format_byte_offset();
+                        if !final_offset.is_empty() {
+                            classic_text.push_str(&format!("{final_offset}\n"));
+                            rows.push(OdRow {
+                                row_kind: "final_offset".into(),
+                                offset: input_offset.byte_pos(),
+                                label: input_offset.label(),
+                                byte_len: 0,
+                                bytes: Vec::new(),
+                                views: Vec::new(),
+                            });
+                        }
+                        return Ok(OdSemantic {
+                            rows,
+                            classic_text,
+                            stderr_text: String::new(),
+                            exit_code: 0,
+                        });
+                    }
+                    return Ok(OdSemantic {
+                        rows,
+                        classic_text,
+                        stderr_text: String::new(),
+                        exit_code: 1,
+                    });
+                }
+
+                od_handle_incomplete_line(&mut memory_decoder, length, &output_info);
+
+                if is_duplicate_line(&memory_decoder, &output_info, &state, length) {
+                    if !state.is_duplicate {
+                        state.is_duplicate = true;
+                        classic_text.push_str("*\n");
+                        rows.push(OdRow {
+                            row_kind: "repeat".into(),
+                            offset: input_offset.byte_pos(),
+                            label: input_offset.label(),
+                            byte_len: length,
+                            bytes: memory_decoder.get_buffer(0)[..length].to_vec(),
+                            views: Vec::new(),
+                        });
+                    }
+                } else {
+                    state.is_duplicate = false;
+                    if length == output_info.byte_size_line {
+                        memory_decoder.clone_buffer(&mut state.previous_bytes);
+                    }
+                    let prefix = input_offset.format_byte_offset();
+                    let bytes = memory_decoder.get_buffer(0)[..length].to_vec();
+                    let (views, rendered) =
+                        od_collect_views(&prefix, &memory_decoder, &output_info);
+                    classic_text.push_str(&rendered);
+                    rows.push(OdRow {
+                        row_kind: "data".into(),
+                        offset: input_offset.byte_pos(),
+                        label: input_offset.label(),
+                        byte_len: length,
+                        bytes,
+                        views,
+                    });
+                }
+
+                input_offset.increase_position(length as u64);
+            }
+            Err(e) => {
+                let final_offset = input_offset.format_byte_offset();
+                if !final_offset.is_empty() {
+                    classic_text.push_str(&format!("{final_offset}\n"));
+                }
+                return Ok(OdSemantic {
+                    rows,
+                    classic_text,
+                    stderr_text: format!("od: {e}\n"),
+                    exit_code: 1,
+                });
+            }
+        }
+    }
 }
 
 fn od_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {

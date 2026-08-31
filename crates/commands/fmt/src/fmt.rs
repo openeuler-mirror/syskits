@@ -22,7 +22,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::OsString;
-use std::io::{BufReader, BufWriter, Read, Write, stdin};
+use std::io::{BufReader, BufWriter, Read, Write};
 use sys_locale::get_locale;
 
 mod line_break;
@@ -206,7 +206,7 @@ fn fmt_process_file_core<W: ?Sized + Write>(
     stderr_text: &mut String,
 ) -> CTResult<bool> {
     let mut fp = if file_name == "-" {
-        BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>)
+        BufReader::new(ctcore::ct_io::stdin_reader_box())
     } else {
         match File::open(file_name) {
             Ok(f) => {

@@ -15,13 +15,14 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, StdinLock};
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 
 #[cfg(unix)]
-pub trait WcWordCountable: AsRawFd + Read {
+pub trait WcWordCountable: Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
     fn inner_file(&mut self) -> Option<&mut File>;
+    fn raw_fd(&self) -> Option<RawFd>;
 }
 
 #[cfg(not(unix))]
@@ -40,6 +41,10 @@ impl WcWordCountable for StdinLock<'_> {
     fn inner_file(&mut self) -> Option<&mut File> {
         None
     }
+    #[cfg(unix)]
+    fn raw_fd(&self) -> Option<RawFd> {
+        Some(self.as_raw_fd())
+    }
 }
 
 impl WcWordCountable for File {
@@ -51,6 +56,27 @@ impl WcWordCountable for File {
 
     fn inner_file(&mut self) -> Option<&mut File> {
         Some(self)
+    }
+    #[cfg(unix)]
+    fn raw_fd(&self) -> Option<RawFd> {
+        Some(self.as_raw_fd())
+    }
+}
+
+impl WcWordCountable for Box<dyn Read> {
+    type Buffered = BufReader<Self>;
+
+    fn buffered(self) -> Self::Buffered {
+        BufReader::new(self)
+    }
+
+    fn inner_file(&mut self) -> Option<&mut File> {
+        None
+    }
+
+    #[cfg(unix)]
+    fn raw_fd(&self) -> Option<RawFd> {
+        None
     }
 }
 

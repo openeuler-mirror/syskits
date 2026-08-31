@@ -901,7 +901,7 @@ pub fn du_div_ceil(val_1: u64, val_2: u64) -> u64 {
 fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     // 根据文件名选择读取来源：标准输入或文件。
     let reader: Box<dyn BufRead> = if filename == "-" {
-        Box::new(BufReader::new(std::io::stdin()))
+        Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
         // 检查文件名是否指向一个目录。
         let path = PathBuf::from(filename);

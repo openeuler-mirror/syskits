@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::BufRead;
-use std::io::{self, Write, stdin, stdout};
+use std::io::{self, BufReader, Write, stdout};
 mod factor_algorithm;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::Quotable;
@@ -306,7 +306,7 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
     let settings = FactorFlags::new(&matches);
 
     if settings.numbers.is_empty() {
-        let stdin = stdin();
+        let stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
         let mut semantic = FactorSemantic {
             rows: Vec::new(),
             classic_text: String::new(),
@@ -314,7 +314,7 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
             exit_code: 0,
         };
 
-        for line in stdin.lock().lines() {
+        for line in stdin.lines() {
             match line {
                 Ok(line) => {
                     let line_semantic = factor_semantic_from_tokens(
@@ -477,8 +477,7 @@ fn factors_print_str(
 
 /// 处理从标准输入读取的数字
 fn process_stdin(w: &mut io::BufWriter<impl io::Write>, print_exponents: bool) -> CTResult<()> {
-    let stdin = stdin();
-    let lines = stdin.lock().lines();
+    let lines = BufReader::new(ctcore::ct_io::stdin_reader_box()).lines();
     for line in lines {
         match line {
             Ok(line) => {

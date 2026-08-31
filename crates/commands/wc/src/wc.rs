@@ -910,7 +910,7 @@ enum CountResult {
 /// 因此，读取实现总是返回总数，有时也会返回(WordCount, Option<io::Error>).
 fn word_count_from_input(input: &WcInput<'_>, settings: &WcSettings) -> CountResult {
     let (total, maybe_err) = match input {
-        WcInput::Stdin(_) => word_count_from_reader(io::stdin().lock(), settings),
+        WcInput::Stdin(_) => word_count_from_reader(ctcore::ct_io::stdin_reader_box(), settings),
         WcInput::Path(path) => match File::open(path) {
             Ok(f) => word_count_from_reader(f, settings),
             Err(err) => return CountResult::Failure(err),
@@ -976,7 +976,7 @@ type InputIterItem<'a> = Result<WcInput<'a>, Box<dyn CTError>>;
 
 /// 与 `--files0-from=-` 一起使用时，会对 files0_iter 的结果进行过滤，将"-"转换为相应的错误。
 fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
-    let files_iter = files0_iter(io::stdin().lock(), WC_STDIN_REPR.into());
+    let files_iter = files0_iter(ctcore::ct_io::stdin_reader_box(), WC_STDIN_REPR.into());
     let mut result: Vec<Result<WcInput<'a>, Box<dyn CTError>>> = vec![];
 
     for i in files_iter {

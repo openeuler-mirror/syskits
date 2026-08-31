@@ -48,7 +48,7 @@ use rand::{Rng, RngCore};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Error, Read, Write, stdout};
 use std::ops::RangeInclusive;
 use sys_locale::get_locale;
 
@@ -265,7 +265,7 @@ pub fn ct_app() -> Command {
 fn shuf_read_input_file(filename: &str) -> CTResult<Vec<u8>> {
     // 创建读取器
     let reader: Box<dyn Read> = if filename == "-" {
-        Box::new(stdin())
+        ctcore::ct_io::stdin_reader_box()
     } else {
         Box::new(
             File::open(filename)

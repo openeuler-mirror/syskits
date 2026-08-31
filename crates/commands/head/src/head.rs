@@ -22,7 +22,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
 use ctcore::ct_show;
 use std::ffi::OsString;
-use std::io::{BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use sys_locale::get_locale;
 
 const BUF_SIZE: usize = 65536;
@@ -940,8 +940,7 @@ fn should_print_header(options: &HeadOptions) -> bool {
 
 // 处理标准输入
 fn handle_stdin(options: &HeadOptions) -> std::io::Result<()> {
-    let stdin = std::io::stdin();
-    let mut stdin = stdin.lock();
+    let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
 
     match options.mode {
         Mode::FirstBytes(n) => {
@@ -959,8 +958,7 @@ fn handle_stdin(options: &HeadOptions) -> std::io::Result<()> {
 }
 
 fn handle_stdin_to_writer<W: Write>(options: &HeadOptions, writer: &mut W) -> std::io::Result<()> {
-    let stdin = std::io::stdin();
-    let mut stdin = stdin.lock();
+    let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
 
     match options.mode {
         Mode::FirstBytes(n) => {
@@ -1046,7 +1044,10 @@ fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
                 use std::os::unix::io::FromRawFd;
                 let mut stdin_file =
                     std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
-                if !options.presume_input_pipe && is_seekable(&mut stdin_file) {
+                if ctcore::ct_io::injected_stdin_bytes().is_none()
+                    && !options.presume_input_pipe
+                    && is_seekable(&mut stdin_file)
+                {
                     head_file_to_writer(&mut stdin_file, options, &mut file_output)
                 } else {
                     handle_stdin_to_writer(options, &mut file_output)

@@ -30,13 +30,11 @@ use thiserror::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
-
-#[cfg(unix)]
 use nix::libc;
 
 /// Linux splice support
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 mod splice;
 
 /// Unix domain socket support
@@ -157,14 +155,8 @@ struct CatRunOutcome {
     exit_code: i32,
 }
 
-#[cfg(unix)]
-trait CatFdReadable: Read + AsRawFd {}
-#[cfg(not(unix))]
 trait CatFdReadable: Read {}
 
-#[cfg(unix)]
-impl<T> CatFdReadable for T where T: Read + AsRawFd {}
-#[cfg(not(unix))]
 impl<T> CatFdReadable for T where T: Read {}
 
 /// Represents an open file handle, stream, or other device
@@ -514,37 +506,10 @@ fn cat_path_to_writer<W: Write>(
 ) -> CatResult<()> {
     match cat_get_input_type(input_path)? {
         CatInputType::StdIn => {
-            let stdin = io::stdin();
-
-            if let Some(out_info) = out_info {
-                if let Ok(stdin_info) = CtFileInformation::from_file(&stdin) {
-                    if stdin_info == *out_info {
-                        use std::os::unix::io::AsRawFd;
-
-                        let input_fd = stdin.as_raw_fd();
-                        let stdout_fd = std::io::stdout().as_raw_fd();
-                        let input_pos = unsafe { libc::lseek(input_fd, 0, libc::SEEK_CUR) };
-
-                        if input_pos >= 0 {
-                            let out_flags = unsafe { libc::fcntl(stdout_fd, libc::F_GETFL) };
-                            let whence = if out_flags >= 0 && (out_flags & libc::O_APPEND) != 0 {
-                                libc::SEEK_END
-                            } else {
-                                libc::SEEK_CUR
-                            };
-                            let output_pos = unsafe { libc::lseek(stdout_fd, 0, whence) };
-
-                            if input_pos < output_pos {
-                                return Err(CatError::OutputIsInput);
-                            }
-                        }
-                    }
-                }
-            }
-
             let mut handle = CatInputHandle {
-                reader: stdin,
-                is_interactive: std::io::stdin().is_terminal(),
+                reader: ctcore::ct_io::stdin_reader_box(),
+                is_interactive: ctcore::ct_io::injected_stdin_bytes().is_none()
+                    && std::io::stdin().is_terminal(),
             };
             cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
         }
@@ -738,14 +703,6 @@ fn cat_get_input_type(input_path: &str) -> CatResult<CatInputType> {
 fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> CatResult<()> {
     let stdout_info = io::stdout();
     let mut cat_stdout_lock = stdout_info.lock();
-    #[cfg(target_os = "linux")]
-    {
-        // 在类Unix系统中，表示"符号链接层数过多"的错误代码为40（即ELOOP）。
-        // 在此情况下，我们希望提供一个恰当的错误消息。
-        if !splice::splice_write_fast_using_splice(input_handle, &cat_stdout_lock)? {
-            return Ok(());
-        }
-    }
     cat_write_fast_to_writer(input_handle, &mut cat_stdout_lock)
 }
 

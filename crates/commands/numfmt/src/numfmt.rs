@@ -854,8 +854,7 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let result = match matches.get_many::<String>(numfmt_flags::NUMFMT_NUMBER) {
         Some(values) => numfmt_handle_args(values.map(|s| s.as_str()), &options),
         None => {
-            let stdin = std::io::stdin();
-            let mut locked_stdin = stdin.lock();
+            let mut locked_stdin = std::io::BufReader::new(ctcore::ct_io::stdin_reader_box());
             numfmt_handle_buffer(&mut locked_stdin, &options)
         }
     };
@@ -922,8 +921,7 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
             numfmt_collect_args_semantic(values.map(|s| s.as_str()), &options, &mut semantic)?
         }
         None => {
-            let stdin = std::io::stdin();
-            let mut locked_stdin = stdin.lock();
+            let mut locked_stdin = std::io::BufReader::new(ctcore::ct_io::stdin_reader_box());
             numfmt_collect_buffer_semantic(&mut locked_stdin, &options, &mut semantic)?
         }
     };

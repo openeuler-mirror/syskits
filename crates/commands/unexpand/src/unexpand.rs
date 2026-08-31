@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::fmt;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -401,7 +401,7 @@ fn unexpand_open(path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
             message: format!("{}: Is a directory", filename.display()),
         }))
     } else if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
+        Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
         file_buf = File::open(path).map_err_context(|| path.to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))

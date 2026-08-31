@@ -55,7 +55,6 @@ use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
 use std::io::Write;
-use std::io::stdin;
 use std::io::stdout;
 use std::num::IntErrorKind;
 use std::path::Path;
@@ -484,7 +483,7 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
 fn expand_open(file_path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buffer;
     if file_path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
+        Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
         file_buffer = File::open(file_path).map_err_context(|| file_path.to_string())?;
         Ok(BufReader::new(Box::new(file_buffer) as Box<dyn Read>))

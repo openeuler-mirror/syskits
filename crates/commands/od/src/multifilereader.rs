@@ -77,16 +77,21 @@ impl OdMultifileReader<'_> {
         while !self.ni.is_empty() {
             match self.ni.remove(0) {
                 OdInputSource::Stdin => {
-                    #[cfg(unix)]
-                    {
-                        // 使用无缓冲的标准输入，避免 over-read
-                        self.curr_file = Some(Box::new(UnbufferedStdin));
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        // Windows 等非 Unix 系统暂退回标准 stdin
-                        self.curr_file = Some(Box::new(std::io::stdin()));
-                    }
+                    self.curr_file = Some(match ctcore::ct_io::injected_stdin_bytes() {
+                        Some(_) => ctcore::ct_io::stdin_reader_box(),
+                        None => {
+                            #[cfg(unix)]
+                            {
+                                // 使用无缓冲的标准输入，避免 over-read
+                                Box::new(UnbufferedStdin) as Box<dyn io::Read>
+                            }
+                            #[cfg(not(unix))]
+                            {
+                                // Windows 等非 Unix 系统暂退回标准 stdin
+                                Box::new(std::io::stdin()) as Box<dyn io::Read>
+                            }
+                        }
+                    });
                     return;
                 }
                 OdInputSource::FileName(fname) => match File::open(fname) {

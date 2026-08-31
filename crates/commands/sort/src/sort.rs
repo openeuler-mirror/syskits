@@ -21,7 +21,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -1576,7 +1576,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
             let is_stdin = path == "-";
             // 这里故意不用 sort_open，为了完美匹配 GNU 在 --files0-from 下特殊的 "open failed" 报错文本
             let reader: Box<dyn Read> = if is_stdin {
-                Box::new(std::io::stdin())
+                ctcore::ct_io::stdin_reader_box()
             } else {
                 match std::fs::File::open(path) {
                     Ok(f) => Box::new(f),
@@ -2526,8 +2526,7 @@ fn sort_print_sorted<'a, T: Iterator<Item = &'a SortLine<'a>>>(
 fn sort_open(path: impl AsRef<OsStr>) -> CTResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
     if path == "-" {
-        let stdin = stdin();
-        return Ok(Box::new(stdin) as Box<dyn Read + Send>);
+        return Ok(ctcore::ct_io::stdin_reader_box_send());
     }
 
     let path = Path::new(path);

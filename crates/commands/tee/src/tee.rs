@@ -26,7 +26,7 @@ use ctcore::ct_show_error;
 use std::any::Any;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdin, stdout};
+use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdout};
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
@@ -236,7 +236,7 @@ pub fn tee_native_semantic(args: impl ctcore::Args) -> CTResult<TeeSemantic> {
     let options = TeeOptions::new(&matches);
 
     let mut stdin_bytes = Vec::new();
-    stdin().read_to_end(&mut stdin_bytes)?;
+    ctcore::ct_io::stdin_reader_box().read_to_end(&mut stdin_bytes)?;
 
     let direct = run_tee_direct_process(&argv, &stdin_bytes)?;
     let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();

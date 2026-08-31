@@ -242,7 +242,7 @@ fn dircolors_collect_output(
             format!("extra operand {}", files[1].quote()),
         ));
     } else if files[0].eq("-") {
-        let fin = BufReader::new(std::io::stdin());
+        let fin = BufReader::new(ctcore::ct_io::stdin_reader_box());
         dircolors_parse(fin.lines().map_while(Result::ok), out_format, files[0])
             .map_err(|s| CtSimpleError::new(1, s))
     } else {

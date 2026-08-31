@@ -159,7 +159,7 @@ fn base_args_init() -> Vec<Arg> {
 
 pub fn get_base_input<'a>(
     ct_config: &BaseConfig,
-    ct_stdin_ref: &'a Stdin,
+    _ct_stdin_ref: &'a Stdin,
 ) -> CTResult<Box<dyn Read + 'a>> {
     match &ct_config.base_to_read {
         Some(base_name) => {
@@ -167,9 +167,7 @@ pub fn get_base_input<'a>(
                 .map_err_context(|| base_name.maybe_quote().to_string())?;
             Ok(Box::new(BufReader::new(file_buf))) //作为 Box<dyn Read> 类型转换
         }
-        None => {
-            Ok(Box::new(ct_stdin_ref.lock())) //作为 Box<dyn Read> 类型转换
-        }
+        None => Ok(ctcore::ct_io::stdin_reader_box()),
     }
 }
 

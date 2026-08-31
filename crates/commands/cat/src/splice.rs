@@ -8,13 +8,13 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-use super::CatFdReadable;
 use super::CatInputHandle;
 use super::CatResult;
 
 use nix::errno::Errno;
 
 use nix::unistd;
+use std::io::Read;
 use std::os::{
     fd::AsFd,
     unix::io::{AsRawFd, RawFd},
@@ -33,7 +33,7 @@ const SPLICE_BUF_SIZE: usize = 1024 * 16;
 /// The `bool` in the result value indicates if we need to fall back to normal
 /// copying or not. False means we don't have to.
 #[inline]
-pub(super) fn splice_write_fast_using_splice<R: CatFdReadable, S: AsRawFd + AsFd>(
+pub(super) fn splice_write_fast_using_splice<R: Read + AsRawFd, S: AsRawFd + AsFd>(
     input_handle: &CatInputHandle<R>,
     splice_write_fd: &S,
 ) -> CatResult<bool> {

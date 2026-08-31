@@ -15,7 +15,7 @@ use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 #[cfg(unix)]
 use std::ffi::CString;
-use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stderr, stdin, stdout};
+use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stderr, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
@@ -1287,8 +1287,7 @@ fn parse_merge_mode(arg_matches: &ArgMatches) -> Result<bool, PrError> {
 
 fn pr_open(path: &str) -> Result<Box<dyn Read>, PrError> {
     if path == PR_FILE_STDIN {
-        let stdin = stdin();
-        return Ok(Box::new(stdin) as Box<dyn Read>);
+        return Ok(ctcore::ct_io::stdin_reader_box());
     }
 
     metadata(path)

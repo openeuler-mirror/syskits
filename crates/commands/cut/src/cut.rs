@@ -23,7 +23,7 @@ use ctcore::ct_ranges::CtRange;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -683,12 +683,13 @@ fn cut_files_to_writer<W: Write>(
             }
 
             // 根据模式对标准输入进行切割
+            let stdin = ctcore::ct_io::stdin_reader_box();
             if let Err(err) = match mode {
-                CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(stdin(), out, ranges, opts),
+                CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(stdin, out, ranges, opts),
                 CutMode::Characters(ranges, opts) => {
-                    cut_characters_to_writer(stdin(), out, ranges, opts)
+                    cut_characters_to_writer(stdin, out, ranges, opts)
                 }
-                CutMode::Fields(ranges, opts) => cut_fields_to_writer(stdin(), out, ranges, opts),
+                CutMode::Fields(ranges, opts) => cut_fields_to_writer(stdin, out, ranges, opts),
             } {
                 stderr_text.push_str(&format!("cut: {err}\n"));
                 exit_code = exit_code.max(err.code());

@@ -95,7 +95,7 @@ use ctcore::ct_error::{CTResult, FromIo, set_ct_exit_code};
 use rust_i18n::t;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, Read, Write, stdin};
+use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
@@ -500,19 +500,13 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
 
     for filename in &fold_flags.files {
         let filename: &str = filename;
-        let mut stdin_buf;
-        let mut file_buf;
-        let buffer = BufReader::new(if filename == "-" {
+        let input: Box<dyn Read> = if filename == "-" {
             // 如果文件名是`-`，则从标准输入读取内容
-            stdin_buf = stdin();
-            &mut stdin_buf as &mut dyn Read
+            ctcore::ct_io::stdin_reader_box()
         } else {
             // 否则，从指定的文件中读取内容
             match File::open(Path::new(filename)) {
-                Ok(f) => {
-                    file_buf = f;
-                    &mut file_buf as &mut dyn Read
-                }
+                Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
                     let error_msg = match e.kind() {
                         std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
@@ -523,7 +517,8 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
                     continue;
                 }
             }
-        });
+        };
+        let buffer = BufReader::new(input);
 
         let spaces = fold_flags.spaces;
         let width = fold_flags.width;

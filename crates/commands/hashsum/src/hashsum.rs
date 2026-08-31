@@ -33,7 +33,7 @@ use sys_locale::get_locale;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write, stdin};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
@@ -1662,7 +1662,7 @@ where
 /// 打开文件或使用标准输入
 fn open_file(filename: &Path) -> CTResult<BufReader<Box<dyn Read>>> {
     let file: Box<dyn Read> = if filename == Path::new("-") {
-        Box::new(stdin())
+        ctcore::ct_io::stdin_reader_box()
     } else {
         Box::new(File::open(filename).map_err_context(|| "failed to open file".to_string())?)
     };

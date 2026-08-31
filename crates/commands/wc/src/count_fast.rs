@@ -9,24 +9,22 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 
-#[cfg(target_os = "linux")]
-use libc::S_IFIFO;
 #[cfg(unix)]
 use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
 use nix::sys::stat;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 use ctcore::ct_pipes::{pipe, splice, splice_exact};
 
 // cSpell:ignore sysconf
@@ -40,13 +38,13 @@ const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
 const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
 const COUNT_FAST_BUF_SIZE: usize = 16 * 1024;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 const COUNT_FAST_SPLICE_SIZE: usize = 128 * 1024;
 
 /// 这是一个 Linux 专用函数，用于使用 `splice` 系统调用来计算字节数，这比使用 `read` 更快。
 /// 如果出错，它会返回读取到的字节数，因为调用者会返回到更简单的方法。
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 fn count_bytes_with_splice(fd: &impl AsRawFd) -> Result<usize, usize> {
     let null_file = OpenOptions::new()
         .write(true)
@@ -95,7 +93,9 @@ pub(crate) fn count_bytes_handle<T: WcWordCountable>(handle: &mut T) -> (usize, 
 
     #[cfg(unix)]
     {
-        let fd = handle.as_raw_fd();
+        let Some(fd) = handle.raw_fd() else {
+            return count_bytes_stream(handle, byte_count);
+        };
         if let Ok(stat) = stat::fstat(fd) {
             if fd > 0 && (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
                 let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
@@ -113,17 +113,6 @@ pub(crate) fn count_bytes_handle<T: WcWordCountable>(handle: &mut T) -> (usize, 
 
                     if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
                         byte_count = n as usize;
-                    }
-                }
-            }
-            #[cfg(target_os = "linux")]
-            {
-                // 否则，如果我们使用的是 Linux 系统，并且我们的文件是一个 FIFO 管道（或 stdin），
-                //我们就会使用 splice 来计算字节数。
-                if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
-                    match count_bytes_with_splice(handle) {
-                        Ok(n) => return (n, None),
-                        Err(n) => byte_count = n,
                     }
                 }
             }
@@ -145,6 +134,10 @@ pub(crate) fn count_bytes_handle<T: WcWordCountable>(handle: &mut T) -> (usize, 
         }
     }
 
+    count_bytes_stream(handle, byte_count)
+}
+
+fn count_bytes_stream<T: Read>(handle: &mut T, byte_count: usize) -> (usize, Option<io::Error>) {
     // 使用 "read"，但无需计算字数和行数。
     let mut total_bytes_read = byte_count;
     let mut buffer = [0_u8; COUNT_FAST_BUF_SIZE]; // Define BUF_SIZE appropriately elsewhere

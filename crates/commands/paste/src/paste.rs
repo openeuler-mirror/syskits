@@ -24,7 +24,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Write, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -202,7 +202,7 @@ impl<W: Write> PasteContext<W> {
         match file {
             Some(reader) => process_stream(reader),
             None => {
-                let mut stdin = stdin().lock();
+                let mut stdin = std::io::BufReader::new(ctcore::ct_io::stdin_reader_box());
                 process_stream(&mut stdin)
             }
         }

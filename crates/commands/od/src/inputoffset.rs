@@ -45,6 +45,14 @@ impl OdInputOffset {
         }
     }
 
+    pub fn byte_pos(&self) -> u64 {
+        self.byte_pos
+    }
+
+    pub fn label(&self) -> Option<u64> {
+        self.label
+    }
+
     #[cfg(test)]
     fn set_radix(&mut self, radix: OdRadix) {
         self.radix = radix;

@@ -1801,7 +1801,7 @@ mod tests {
 
             // Prepare output
             let output_path = temp_dir.path().join("output");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output".to_string()),
             };
@@ -1837,7 +1837,7 @@ mod tests {
             let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
 
             let output_path = tmp_dir.path().join("output.txt");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output.txt".to_string()),
             };
@@ -1871,7 +1871,7 @@ mod tests {
             let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
 
             let output_path = tmp_dir.path().join("output.txt");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output.txt".to_string()),
             };
@@ -1908,7 +1908,7 @@ mod tests {
             let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
 
             let output_path = tmp_dir.path().join("output.txt");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output.txt".to_string()),
             };
@@ -1943,7 +1943,7 @@ mod tests {
             let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
 
             let output_path = tmp_dir.path().join("output.txt");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output.txt".to_string()),
             };
@@ -1977,7 +1977,7 @@ mod tests {
             let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
 
             let output_path = tmp_dir.path().join("output.txt");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output.txt".to_string()),
             };
@@ -2014,7 +2014,7 @@ mod tests {
             let mut tmp_dir_wrapper = TmpDirWrapper::new(tmp_dir.path().to_path_buf());
 
             let output_path = tmp_dir.path().join("output.txt");
-            let output_file = File::create(&output_path).unwrap();
+            let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
                 file: Some("output.txt".to_string()),
             };

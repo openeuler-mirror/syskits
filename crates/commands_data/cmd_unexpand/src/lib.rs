@@ -1,0 +1,244 @@
+use ctcore::ct_error::CTError;
+use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
+use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use std::ffi::OsString;
+
+#[derive(Default)]
+pub struct CmdUnexpand;
+
+struct UnexpandIntent {
+    argv: Vec<OsString>,
+}
+
+struct UnexpandCore;
+
+impl UnexpandIntent {
+    fn from_call(call: &DataCall) -> Result<Self, CtDiagnosticError> {
+        let mut argv = Vec::with_capacity(call.positionals.len() + 1);
+        argv.push(OsString::from("unexpand"));
+
+        for arg in &call.positionals {
+            argv.push(OsString::from(value_to_arg(&arg.value)));
+        }
+
+        Ok(Self { argv })
+    }
+}
+
+fn value_to_arg(value: &CtValue) -> String {
+    match value {
+        CtValue::String(s) => s.clone(),
+        other => other.to_text(),
+    }
+}
+
+impl UnexpandCore {
+    fn run_core(
+        intent: &UnexpandIntent,
+        input: CtPipelineData,
+    ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
+        let result = ctengine::run_with_optional_pipeline_stdin(
+            "unexpand",
+            input,
+            ctengine::argv_uses_stdin(&intent.argv, &["-t", "--tabs"]),
+            || {
+                Ok(ct_unexpand::unexpand_native_semantic(
+                    intent.argv.iter().cloned(),
+                ))
+            },
+            |err| CtDiagnosticError::simple(format!("unexpand: {err}")),
+        )?;
+        Ok(match result {
+            Ok(semantic) => (
+                semantic_to_value(&semantic),
+                semantic.classic_text,
+                semantic.stderr_text,
+                semantic.exit_code,
+            ),
+            Err(err) => (
+                CtValue::List(Vec::new()),
+                String::new(),
+                render_error_text(err.as_ref()),
+                err.code(),
+            ),
+        })
+    }
+}
+
+fn render_error_text(err: &dyn CTError) -> String {
+    let mut stderr = format!("unexpand: {err}\n");
+    if err.usage() {
+        stderr.push_str("Try 'unexpand --help' for more information.\n");
+    }
+    stderr
+}
+
+fn tabstop_mode_name(mode: ct_unexpand::UnexpandTabstopMode) -> &'static str {
+    match mode {
+        ct_unexpand::UnexpandTabstopMode::None => "none",
+        ct_unexpand::UnexpandTabstopMode::Slash => "slash",
+        ct_unexpand::UnexpandTabstopMode::Plus => "plus",
+    }
+}
+
+fn row_to_value(
+    semantic: &ct_unexpand::UnexpandSemantic,
+    row: &ct_unexpand::UnexpandRow,
+) -> CtValue {
+    CtValue::Record(vec![
+        (
+            "tabstop_mode".into(),
+            CtValue::String(tabstop_mode_name(semantic.tabstop_mode).into()),
+        ),
+        (
+            "tabstops".into(),
+            CtValue::List(
+                semantic
+                    .tabstops
+                    .iter()
+                    .map(|tabstop| CtValue::Int(i64::try_from(*tabstop).expect("tabstop fits")))
+                    .collect(),
+            ),
+        ),
+        ("all_blanks".into(), CtValue::Bool(semantic.all_blanks)),
+        ("assume_utf8".into(), CtValue::Bool(semantic.assume_utf8)),
+        (
+            "row_index".into(),
+            CtValue::Int(i64::try_from(row.row_index).expect("row index fits")),
+        ),
+        ("line".into(), CtValue::String(row.line.clone())),
+        ("has_tabs".into(), CtValue::Bool(row.has_tabs)),
+    ])
+}
+
+fn semantic_to_value(semantic: &ct_unexpand::UnexpandSemantic) -> CtValue {
+    CtValue::List(
+        semantic
+            .rows
+            .iter()
+            .map(|row| row_to_value(semantic, row))
+            .collect(),
+    )
+}
+
+impl DataCommand for CmdUnexpand {
+    fn signature(&self) -> DataSignature {
+        DataSignature::new("unexpand", "structured unexpanded line rows")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible unexpand arguments",
+                CtType::Any,
+            ))
+            .input(CtType::Any)
+            .output(CtType::List)
+            .allow_unknown_args(true)
+    }
+
+    fn run(
+        &self,
+        call: &DataCall,
+        input: CtPipelineData,
+        _ctx: &DataEngineContext,
+    ) -> Result<CtPipelineData, CtDiagnosticError> {
+        let intent = UnexpandIntent::from_call(call)?;
+        let (value, classic_text, stderr_text, exit_code) = UnexpandCore::run_core(&intent, input)?;
+        Ok(CtPipelineData::Value(
+            value,
+            CtPipelineMetadata {
+                classic_text: Some(classic_text),
+                classic_bytes: None,
+                classic_append_newline: false,
+                stderr_text: if stderr_text.is_empty() {
+                    None
+                } else {
+                    Some(stderr_text)
+                },
+                exit_code,
+                source: Some("unexpand".into()),
+                ..Default::default()
+            },
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{UnexpandIntent, semantic_to_value};
+    use ctpipeline::CtValue;
+    use ctsig::{BoundArg, DataCall};
+    use std::ffi::OsString;
+
+    #[test]
+    fn from_call_builds_argv_from_positionals() {
+        let call = DataCall {
+            positionals: vec![
+                BoundArg::new(CtValue::String("-t".into()), None),
+                BoundArg::new(CtValue::String("4".into()), None),
+                BoundArg::new(CtValue::String("file.txt".into()), None),
+            ],
+            ..DataCall::named("unexpand")
+        };
+
+        let intent = UnexpandIntent::from_call(&call).expect("intent");
+
+        assert_eq!(
+            intent.argv,
+            vec![
+                OsString::from("unexpand"),
+                OsString::from("-t"),
+                OsString::from("4"),
+                OsString::from("file.txt"),
+            ]
+        );
+    }
+
+    #[test]
+    fn semantic_to_value_renders_rows() {
+        let value = semantic_to_value(&ct_unexpand::UnexpandSemantic {
+            tabstop_mode: ct_unexpand::UnexpandTabstopMode::None,
+            tabstops: vec![4],
+            all_blanks: false,
+            assume_utf8: true,
+            rows: vec![
+                ct_unexpand::UnexpandRow {
+                    row_index: 1,
+                    line: "\talpha".into(),
+                    has_tabs: true,
+                },
+                ct_unexpand::UnexpandRow {
+                    row_index: 2,
+                    line: "beta gamma".into(),
+                    has_tabs: false,
+                },
+            ],
+            classic_text: "\talpha\nbeta gamma\n".into(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        });
+
+        assert_eq!(
+            value,
+            CtValue::List(vec![
+                CtValue::Record(vec![
+                    ("tabstop_mode".into(), CtValue::String("none".into())),
+                    ("tabstops".into(), CtValue::List(vec![CtValue::Int(4)])),
+                    ("all_blanks".into(), CtValue::Bool(false)),
+                    ("assume_utf8".into(), CtValue::Bool(true)),
+                    ("row_index".into(), CtValue::Int(1)),
+                    ("line".into(), CtValue::String("\talpha".into())),
+                    ("has_tabs".into(), CtValue::Bool(true)),
+                ]),
+                CtValue::Record(vec![
+                    ("tabstop_mode".into(), CtValue::String("none".into())),
+                    ("tabstops".into(), CtValue::List(vec![CtValue::Int(4)])),
+                    ("all_blanks".into(), CtValue::Bool(false)),
+                    ("assume_utf8".into(), CtValue::Bool(true)),
+                    ("row_index".into(), CtValue::Int(2)),
+                    ("line".into(), CtValue::String("beta gamma".into())),
+                    ("has_tabs".into(), CtValue::Bool(false)),
+                ]),
+            ])
+        );
+    }
+}

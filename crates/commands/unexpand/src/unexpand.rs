@@ -27,9 +27,7 @@ use unicode_width::UnicodeWidthChar;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_show;
-use ctcore::ct_show_error;
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use std::ffi::OsString;
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
@@ -83,6 +81,57 @@ enum RemainingMode {
     None,
     Slash,
     Plus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnexpandTabstopMode {
+    None,
+    Slash,
+    Plus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnexpandRow {
+    pub row_index: usize,
+    pub line: String,
+    pub has_tabs: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnexpandSemantic {
+    pub tabstop_mode: UnexpandTabstopMode,
+    pub tabstops: Vec<usize>,
+    pub all_blanks: bool,
+    pub assume_utf8: bool,
+    pub rows: Vec<UnexpandRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+struct UnexpandRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
+}
+
+fn unexpand_tabstop_mode(remaining_mode: RemainingMode) -> UnexpandTabstopMode {
+    match remaining_mode {
+        RemainingMode::None => UnexpandTabstopMode::None,
+        RemainingMode::Slash => UnexpandTabstopMode::Slash,
+        RemainingMode::Plus => UnexpandTabstopMode::Plus,
+    }
+}
+
+fn unexpand_rows_from_output(output: &str) -> Vec<UnexpandRow> {
+    output
+        .split_terminator('\n')
+        .enumerate()
+        .map(|(index, line)| UnexpandRow {
+            row_index: index + 1,
+            line: line.to_string(),
+            has_tabs: line.contains('\t'),
+        })
+        .collect()
 }
 
 /// 判断字符是否为空格或逗号。
@@ -698,6 +747,48 @@ fn unexpand_line_with_state<W: Write>(
     Ok(())
 }
 
+fn report_unexpand_error<F: FnMut(&str)>(
+    stderr_text: &mut String,
+    exit_code: &mut i32,
+    code: i32,
+    message: String,
+    emit_stderr: &mut F,
+) {
+    stderr_text.push_str(&message);
+    *exit_code = (*exit_code).max(code);
+    emit_stderr(&message);
+}
+
+fn report_unexpand_ct_error<F: FnMut(&str)>(
+    stderr_text: &mut String,
+    exit_code: &mut i32,
+    err: &dyn CTError,
+    emit_stderr: &mut F,
+) {
+    report_unexpand_error(
+        stderr_text,
+        exit_code,
+        err.code(),
+        format!("unexpand: {err}\n"),
+        emit_stderr,
+    );
+}
+
+fn report_unexpand_io_error<F: FnMut(&str)>(
+    stderr_text: &mut String,
+    exit_code: &mut i32,
+    err: &std::io::Error,
+    emit_stderr: &mut F,
+) {
+    report_unexpand_error(
+        stderr_text,
+        exit_code,
+        1,
+        format!("unexpand: {err}\n"),
+        emit_stderr,
+    );
+}
+
 #[allow(clippy::cognitive_complexity)]
 #[cfg(test)]
 fn unexpand_line<W: Write>(
@@ -723,23 +814,47 @@ fn unexpand_line<W: Write>(
 
 fn unexpand(flags: &UnexpandFlags) -> CTResult<()> {
     let mut output = BufWriter::new(stdout());
+    let mut emit_stderr = |message: &str| eprint!("{message}");
+    let outcome = unexpand_to_writer(flags, &mut output, &mut emit_stderr)?;
+    output.flush()?;
 
-    unexpand_exe(flags, &mut output)?;
+    if outcome.exit_code != 0 {
+        set_ct_exit_code(outcome.exit_code);
+    }
     Ok(())
 }
 
-fn unexpand_exe<W: Write>(flags: &UnexpandFlags, output: &mut W) -> Result<(), Box<dyn CTError>> {
+fn unexpand_exe<W: Write>(
+    flags: &UnexpandFlags,
+    output: &mut W,
+) -> Result<UnexpandRunOutcome, Box<dyn CTError>> {
+    let mut discard_stderr = |_message: &str| {};
+    unexpand_to_writer(flags, output, &mut discard_stderr)
+}
+
+fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
+    flags: &UnexpandFlags,
+    output: &mut W,
+    emit_stderr: &mut F,
+) -> Result<UnexpandRunOutcome, Box<dyn CTError>> {
     let tabstops = &flags.tabstops[..];
     let remaining_mode = flags.remaining_mode;
     let mut data_buf = Vec::new();
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
+    let mut stderr_text = String::new();
+    let mut exit_code = 0;
 
     for file in &flags.files {
         let mut fh = match unexpand_open(file) {
             Ok(reader) => reader,
             Err(err) => {
-                ct_show!(err);
+                report_unexpand_ct_error(
+                    &mut stderr_text,
+                    &mut exit_code,
+                    err.as_ref(),
+                    emit_stderr,
+                );
                 continue;
             }
         };
@@ -753,7 +868,7 @@ fn unexpand_exe<W: Write>(flags: &UnexpandFlags, output: &mut W) -> Result<(), B
             let n = match chunk_reader.read_until(b'\n', &mut data_buf) {
                 Ok(size) => size,
                 Err(e) => {
-                    ct_show_error!("{}", e);
+                    report_unexpand_io_error(&mut stderr_text, &mut exit_code, &e, emit_stderr);
                     break;
                 }
             };
@@ -796,7 +911,33 @@ fn unexpand_exe<W: Write>(flags: &UnexpandFlags, output: &mut W) -> Result<(), B
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         is_first_file = false;
     }
-    Ok(())
+
+    Ok(UnexpandRunOutcome {
+        stderr_text,
+        exit_code,
+    })
+}
+
+pub fn unexpand_native_semantic(args: impl ctcore::Args) -> CTResult<UnexpandSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let args = args.collect_ignore();
+    let matches = ct_app().try_get_matches_from(expand_shortcuts(&args))?;
+    let flags = UnexpandFlags::new(&matches)?;
+    let mut classic_output = Vec::new();
+    let outcome = unexpand_exe(&flags, &mut classic_output)?;
+    let classic_text = String::from_utf8_lossy(&classic_output).into_owned();
+
+    Ok(UnexpandSemantic {
+        tabstop_mode: unexpand_tabstop_mode(flags.remaining_mode),
+        tabstops: flags.tabstops.clone(),
+        all_blanks: flags.is_a_flag,
+        assume_utf8: flags.is_u_flag,
+        rows: unexpand_rows_from_output(&classic_text),
+        classic_text,
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
+    })
 }
 
 #[derive(Default)]
@@ -970,10 +1111,70 @@ mod tests {
             unexpand_exe(&flags, &mut output).unwrap();
 
             let mut expected = vec![b'\t'; 70_000 / 3];
-            expected.extend(std::iter::repeat(b' ').take(70_000 % 3));
+            expected.extend(std::iter::repeat_n(b' ', 70_000 % 3));
             expected.extend_from_slice(b"X\n");
 
             assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_unexpand_native_semantic_collects_rows_and_metadata() {
+            let file = NamedTempFile::new().unwrap();
+            write(file.path(), b"    alpha\n        beta gamma\n").unwrap();
+
+            let semantic = unexpand_native_semantic(
+                vec![
+                    OsString::from("unexpand"),
+                    OsString::from("-t"),
+                    OsString::from("4"),
+                    file.path().as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+
+            assert_eq!(semantic.tabstop_mode, UnexpandTabstopMode::None);
+            assert_eq!(semantic.tabstops, vec![4]);
+            assert!(semantic.all_blanks);
+            assert!(semantic.assume_utf8);
+            assert_eq!(semantic.classic_text, "\talpha\n\t\tbeta gamma\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(
+                semantic.rows,
+                vec![
+                    UnexpandRow {
+                        row_index: 1,
+                        line: "\talpha".into(),
+                        has_tabs: true,
+                    },
+                    UnexpandRow {
+                        row_index: 2,
+                        line: "\t\tbeta gamma".into(),
+                        has_tabs: true,
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn test_unexpand_native_semantic_preserves_directory_error() {
+            let temp_dir = tempdir().unwrap();
+            let input_dir = temp_dir.path().join("input");
+            std::fs::create_dir(&input_dir).unwrap();
+
+            let semantic = unexpand_native_semantic(
+                vec![OsString::from("unexpand"), input_dir.as_os_str().into()].into_iter(),
+            )
+            .unwrap();
+
+            assert!(semantic.rows.is_empty());
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(
+                semantic.stderr_text,
+                format!("unexpand: {}: Is a directory\n", input_dir.display())
+            );
+            assert_eq!(semantic.exit_code, 1);
         }
     }
 

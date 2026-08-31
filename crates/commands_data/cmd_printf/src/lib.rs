@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -69,8 +69,14 @@ fn semantic_to_value(semantic: &ct_printf::PrintfSemantic) -> CtValue {
 impl DataCommand for CmdPrintf {
     fn signature(&self) -> DataSignature {
         DataSignature::new("printf", "structured printf visible-output rows")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible printf arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

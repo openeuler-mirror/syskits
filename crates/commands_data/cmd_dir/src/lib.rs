@@ -1,7 +1,7 @@
 use ctcore::ct_error::CTError;
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -112,8 +112,14 @@ fn semantic_to_value(semantic: &ct_dir::DirSemantic) -> CtValue {
 impl DataCommand for CmdDir {
     fn signature(&self) -> DataSignature {
         DataSignature::new("dir", "structured directory listing rows")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible dir arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

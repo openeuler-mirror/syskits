@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -60,8 +60,14 @@ fn semantic_to_value(semantic: &ct_logname::LognameSemantic) -> CtValue {
 impl DataCommand for CmdLogname {
     fn signature(&self) -> DataSignature {
         DataSignature::new("logname", "structured current login-name rows")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible logname arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

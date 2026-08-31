@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -94,8 +94,14 @@ fn row_to_value(row: &ct_who::WhoRow) -> CtValue {
 impl DataCommand for CmdWho {
     fn signature(&self) -> DataSignature {
         DataSignature::new("who", "structured utmp session listing")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible who arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

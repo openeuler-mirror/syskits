@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -55,8 +55,14 @@ fn row_to_value(row: &ct_dirname::DirnameRow) -> CtValue {
 impl DataCommand for CmdDirname {
     fn signature(&self) -> DataSignature {
         DataSignature::new("dirname", "structured parent directory extraction")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible dirname arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::List)
+            .allow_unknown_args(true)
     }
 
     fn run(

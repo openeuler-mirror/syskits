@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -51,8 +51,14 @@ fn semantic_to_value(semantic: &ct_expr::ExprSemantic) -> CtValue {
 impl DataCommand for CmdExpr {
     fn signature(&self) -> DataSignature {
         DataSignature::new("expr", "structured expression result")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible expr arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
             .output(CtType::Record)
+            .allow_unknown_args(true)
     }
 
     fn run(

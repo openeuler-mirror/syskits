@@ -24,6 +24,11 @@ impl WorkflowVars {
         self.inner.insert(name, val);
     }
 
+    /// Remove a variable by name
+    pub fn remove(&mut self, name: &str) -> Option<CtValue> {
+        self.inner.remove(name)
+    }
+
     /// Expands variable references (e.g. `$var_name`) in the expression
     /// using their stringified values.
     pub fn expand_in_expr(&self, expr: &str) -> String {

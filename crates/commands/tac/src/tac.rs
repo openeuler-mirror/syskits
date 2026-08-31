@@ -48,7 +48,7 @@ pub mod tac_flags {
 /// - `is_regex`: 是否将分隔符作为正则表达式处理
 /// - `separator`: 用于分隔行的字符串
 /// - `files`: 要处理的文件列表
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct TacFlags {
     is_before: bool,
     is_regex: bool,
@@ -73,6 +73,26 @@ impl Default for TacFlags {
             files: vec![String::from("-")],
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TacRow {
+    pub source_name: String,
+    pub file_index: usize,
+    pub row_index: usize,
+    pub chunk: String,
+    pub byte_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TacSemantic {
+    pub separator_kind: String,
+    pub separator_text: String,
+    pub before: bool,
+    pub rows: Vec<TacRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 impl TacFlags {
@@ -175,11 +195,7 @@ pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<(
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 解析命令行参数
-    let matches = ct_app().try_get_matches_from(args)?;
-
-    // 创建配置对象
-    let settings = TacFlags::new(&matches)?;
+    let settings = tac_parse_invocation(args)?;
 
     // 使用配置执行主要逻辑
     tac(writer, &settings)
@@ -235,39 +251,14 @@ pub fn ct_app() -> Command {
 ///
 /// # 返回值
 /// 返回 `std::io::Result<()>`，表示写入操作的结果
+#[cfg_attr(not(test), allow(dead_code))]
 fn tac_buffer_regex<W: Write>(
     writer: &mut W,
     data: &[u8],
     pattern: &regex::bytes::Regex,
     before: bool,
 ) -> std::io::Result<()> {
-    // 为了符合 GNU 的从左至右贪婪匹配行为，必须先正向提取所有匹配项的边界！
-    let matches: Vec<(usize, usize)> = pattern
-        .find_iter(data)
-        .map(|m| (m.start(), m.end()))
-        .collect();
-
-    let mut following_line_start = data.len();
-
-    // 然后倒序遍历这些正确的边界
-    for &(start, end) in matches.iter().rev() {
-        if before {
-            // before 模式：分隔符属于后面的记录
-            // 输出：分隔符 + 内容 (从分隔符的起点 start 开始，一直到上一个区块的起始位置)
-            writer.write_all(&data[start..following_line_start])?;
-            following_line_start = start;
-        } else {
-            // 默认模式：分隔符在记录之后
-            // 输出：内容 (不包含当前分隔符)
-            // 下一次循环时，这部分的分隔符会被自然囊括进上一个区块的输出中
-            writer.write_all(&data[end..following_line_start])?;
-            following_line_start = end;
-        }
-    }
-
-    // 输出开头剩余的最后一块内容
-    writer.write_all(&data[0..following_line_start])?;
-    Ok(())
+    tac_write_segments(writer, &tac_collect_regex_segments(data, pattern, before))
 }
 
 /// 使用固定字符串作为分隔符反向输出数据
@@ -280,32 +271,17 @@ fn tac_buffer_regex<W: Write>(
 ///
 /// # 返回值
 /// 返回 `std::io::Result<()>`，表示写入操作的结果
+#[cfg_attr(not(test), allow(dead_code))]
 fn tac_buffer<W: Write>(
     writer: &mut W,
     data: &[u8],
     before: bool,
     separator: &str,
 ) -> std::io::Result<()> {
-    let slen = separator.len();
-    let mut following_line_start = data.len();
-
-    for i in memmem::rfind_iter(data, separator) {
-        if before {
-            // before 模式:分隔符属于后面的记录
-            // 输出:分隔符 + 内容(从分隔符之后到下一个位置)
-            writer.write_all(&data[i..following_line_start])?;
-            // 更新下一个位置为当前分隔符的开始位置
-            following_line_start = i;
-        } else {
-            // 默认模式:分隔符在记录之后
-            writer.write_all(&data[i + slen..following_line_start])?;
-            following_line_start = i + slen;
-        }
-    }
-
-    // 输出剩余内容(从开头到 following_line_start)
-    writer.write_all(&data[0..following_line_start])?;
-    Ok(())
+    tac_write_segments(
+        writer,
+        &tac_collect_string_segments(data, before, separator),
+    )
 }
 
 /// 从标准输入读取数据
@@ -404,6 +380,98 @@ fn get_file_data(filename: &str) -> CTResult<FileData> {
     }
 }
 
+fn tac_parse_invocation(args: impl ctcore::Args) -> CTResult<TacFlags> {
+    let matches = ct_app().try_get_matches_from(args)?;
+    TacFlags::new(&matches)
+}
+
+fn tac_separator_kind(settings: &TacFlags) -> &'static str {
+    if settings.is_regex { "regex" } else { "string" }
+}
+
+fn tac_lossy_string(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn tac_collect_regex_segments(
+    data: &[u8],
+    pattern: &regex::bytes::Regex,
+    before: bool,
+) -> Vec<Vec<u8>> {
+    let matches: Vec<(usize, usize)> = pattern
+        .find_iter(data)
+        .map(|m| (m.start(), m.end()))
+        .collect();
+    let mut segments = Vec::with_capacity(matches.len() + 1);
+    let mut following_line_start = data.len();
+
+    for &(start, end) in matches.iter().rev() {
+        let segment = if before {
+            let segment = data[start..following_line_start].to_vec();
+            following_line_start = start;
+            segment
+        } else {
+            let segment = data[end..following_line_start].to_vec();
+            following_line_start = end;
+            segment
+        };
+        segments.push(segment);
+    }
+
+    segments.push(data[0..following_line_start].to_vec());
+    segments
+}
+
+fn tac_collect_string_segments(data: &[u8], before: bool, separator: &str) -> Vec<Vec<u8>> {
+    let slen = separator.len();
+    let mut segments = Vec::new();
+    let mut following_line_start = data.len();
+
+    for i in memmem::rfind_iter(data, separator) {
+        let segment = if before {
+            let segment = data[i..following_line_start].to_vec();
+            following_line_start = i;
+            segment
+        } else {
+            let segment = data[i + slen..following_line_start].to_vec();
+            following_line_start = i + slen;
+            segment
+        };
+        segments.push(segment);
+    }
+
+    segments.push(data[0..following_line_start].to_vec());
+    segments
+}
+
+fn tac_write_segments<W: Write>(writer: &mut W, segments: &[Vec<u8>]) -> std::io::Result<()> {
+    for segment in segments {
+        writer.write_all(segment)?;
+    }
+
+    Ok(())
+}
+
+fn tac_collect_file_segments(filename: &str, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
+    let data = get_file_data(filename)?;
+
+    if settings.is_regex {
+        let pattern =
+            regex::bytes::Regex::new(&settings.separator).map_err(TacError::InvalidRegex)?;
+        Ok(tac_collect_regex_segments(
+            data.as_ref(),
+            &pattern,
+            settings.is_before,
+        ))
+    } else {
+        Ok(tac_collect_string_segments(
+            data.as_ref(),
+            settings.is_before,
+            &settings.separator,
+        ))
+    }
+}
+
 /// 处理单个文件的 tac 操作
 ///
 /// # 参数
@@ -414,21 +482,8 @@ fn get_file_data(filename: &str) -> CTResult<FileData> {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示处理结果
 fn tac_process_file<W: Write>(writer: &mut W, filename: &str, settings: &TacFlags) -> CTResult<()> {
-    let data = get_file_data(filename)?;
-
-    if settings.is_regex {
-        let pattern =
-            regex::bytes::Regex::new(&settings.separator).map_err(TacError::InvalidRegex)?;
-        tac_buffer_regex(writer, data.as_ref(), &pattern, settings.is_before)
-    } else {
-        tac_buffer(
-            writer,
-            data.as_ref(),
-            settings.is_before,
-            &settings.separator,
-        )
-    }
-    .map_err(TacError::WriteError)?;
+    let segments = tac_collect_file_segments(filename, settings)?;
+    tac_write_segments(writer, &segments).map_err(TacError::WriteError)?;
 
     Ok(())
 }
@@ -457,6 +512,52 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+pub fn tac_native_semantic(args: impl ctcore::Args) -> CTResult<TacSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let settings = tac_parse_invocation(args)?;
+    let mut rows = Vec::new();
+    let mut classic_bytes = Vec::new();
+    let mut stderr_text = String::new();
+    let mut global_row_index = 1_usize;
+    let mut exit_code = 0;
+
+    for (file_index, filename) in settings.files.iter().enumerate() {
+        match tac_collect_file_segments(filename, &settings) {
+            Ok(segments) => {
+                for segment in segments {
+                    classic_bytes.extend_from_slice(&segment);
+                    if segment.is_empty() {
+                        continue;
+                    }
+                    rows.push(TacRow {
+                        source_name: filename.clone(),
+                        file_index: file_index + 1,
+                        row_index: global_row_index,
+                        chunk: tac_lossy_string(&segment),
+                        byte_len: segment.len(),
+                    });
+                    global_row_index += 1;
+                }
+            }
+            Err(err) => {
+                stderr_text.push_str(&format!("tac: {err}\n"));
+                exit_code = 1;
+            }
+        }
+    }
+
+    Ok(TacSemantic {
+        separator_kind: tac_separator_kind(&settings).into(),
+        separator_text: settings.separator,
+        before: settings.is_before,
+        rows,
+        classic_text: tac_lossy_string(&classic_bytes),
+        stderr_text,
+        exit_code,
+    })
 }
 
 /// 尝试对标准输入进行内存映射
@@ -1105,6 +1206,52 @@ mod tests {
             let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"abc");
+        }
+    }
+
+    #[cfg(test)]
+    mod semantic_tests {
+        use super::*;
+        use tempfile::NamedTempFile;
+
+        #[test]
+        fn test_tac_native_semantic_collects_rows_and_classic_text() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"alpha\nbeta\ngamma\n").unwrap();
+
+            let args = [
+                OsString::from("tac"),
+                temp_file.path().as_os_str().to_os_string(),
+            ];
+
+            let semantic = tac_native_semantic(args.into_iter()).expect("semantic");
+
+            assert_eq!(semantic.separator_kind, "string");
+            assert_eq!(semantic.separator_text, "\n");
+            assert!(!semantic.before);
+            assert_eq!(semantic.exit_code, 0);
+            assert!(semantic.stderr_text.is_empty());
+            assert_eq!(semantic.classic_text, "gamma\nbeta\nalpha\n");
+            assert_eq!(semantic.rows.len(), 3);
+            assert_eq!(semantic.rows[0].row_index, 1);
+            assert_eq!(semantic.rows[0].chunk, "gamma\n");
+            assert_eq!(semantic.rows[0].byte_len, 6);
+        }
+
+        #[test]
+        fn test_tac_native_semantic_missing_file_reports_runtime_error() {
+            let args = [OsString::from("tac"), OsString::from("missing-file.txt")];
+
+            let semantic = tac_native_semantic(args.into_iter()).expect("semantic");
+
+            assert_eq!(semantic.exit_code, 1);
+            assert!(semantic.classic_text.is_empty());
+            assert!(semantic.rows.is_empty());
+            assert!(
+                semantic
+                    .stderr_text
+                    .contains("tac: failed to open 'missing-file.txt' for reading")
+            );
         }
     }
 }

@@ -667,11 +667,12 @@
             "setup_commands": [
                 "mkdir test_vdir_vdir_basic",
                 "cd test_vdir_vdir_basic",
-                "touch a.txt",
-                "touch b.txt",
-                "touch c.txt",
-                "touch .hidden",
-                "mkdir subdir"
+                "touch -t 202001010001.00 a.txt",
+                "touch -t 202001010002.00 b.txt",
+                "touch -t 202001010003.00 c.txt",
+                "touch -t 202001010000.00 .hidden",
+                "mkdir subdir",
+                "touch -t 202001010004.00 subdir"
             ],
             "args": [
                 "-t"
@@ -679,7 +680,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "total 0\n-rw-r--r-- 1 root root  0 Jan 16 10:48 a.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 b.txt\n-rw-r--r-- 1 root root  0 Jan 16 10:48 c.txt\ndrwxr-xr-x 2 root root 40 Jan 16 10:48 subdir\n",
+                    "stdout": "total 0\ndrwxr-xr-x 2 root root 40 Jan  1  2020 subdir\n-rw-r--r-- 1 root root  0 Jan  1  2020 c.txt\n-rw-r--r-- 1 root root  0 Jan  1  2020 b.txt\n-rw-r--r-- 1 root root  0 Jan  1  2020 a.txt\n",
                     "stderr": ""
                 }
             },
@@ -907,7 +908,8 @@
             "description": "vdir: -d (directory)",
             "setup_commands": [
                 "mkdir -p test_vdir_d",
-                "touch test_vdir_d/file"
+                "touch test_vdir_d/file",
+                "touch -t 202001020304.05 test_vdir_d"
             ],
             "args": [
                 "-d",
@@ -916,7 +918,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "",
+                    "stdout": "drwxr-xr-x 2 root root 60 Jan  2  2020 test_vdir_d",
                     "stderr": ""
                 }
             },

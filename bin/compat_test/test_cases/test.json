@@ -628,12 +628,12 @@
             "command": "test",
             "args": [
                 "-N",
-                "/tmp/modified_file"
+                "modified_file"
             ],
             "setup_commands": [
-                "touch /tmp/modified_file",
-                "cat /tmp/modified_file",
-                "echo 'new content' > /tmp/modified_file"
+                "touch modified_file",
+                "touch -a -t 202001010000.00 modified_file",
+                "touch -m -t 202001020000.00 modified_file"
             ],
             "expectation": {
                 "execution": {
@@ -643,7 +643,7 @@
                 }
             },
             "cleanup_commands": [
-                "rm -f /tmp/modified_file"
+                "rm -f modified_file"
             ]
         }
     ]

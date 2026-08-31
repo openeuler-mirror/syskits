@@ -1,6 +1,7 @@
+use clap::error::ErrorKind;
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -11,6 +12,13 @@ struct ArchIntent {
 }
 
 struct ArchCore;
+struct ArchOutput {
+    value: CtValue,
+    classic_text: String,
+    classic_append_newline: bool,
+    stderr_text: Option<String>,
+    exit_code: i32,
+}
 
 impl ArchIntent {
     fn from_call(call: &DataCall) -> Result<Self, CtDiagnosticError> {
@@ -29,9 +37,43 @@ impl ArchIntent {
 }
 
 impl ArchCore {
-    fn run_core(intent: ArchIntent) -> Result<String, CtDiagnosticError> {
+    fn run_core(intent: ArchIntent) -> Result<ArchOutput, CtDiagnosticError> {
+        if let Err(err) = ct_arch::ct_app().try_get_matches_from(intent.argv.iter().cloned()) {
+            let rendered = err.render().to_string();
+            let is_display = matches!(
+                err.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            );
+            return Ok(if is_display {
+                ArchOutput {
+                    value: CtValue::Nothing,
+                    classic_text: rendered,
+                    classic_append_newline: false,
+                    stderr_text: None,
+                    exit_code: 0,
+                }
+            } else {
+                ArchOutput {
+                    value: CtValue::Nothing,
+                    classic_text: String::new(),
+                    classic_append_newline: false,
+                    stderr_text: Some(format!(
+                        "{rendered}Try 'arch --help' for more information.\n"
+                    )),
+                    exit_code: 1,
+                }
+            });
+        }
+
         ct_arch::arch_main(intent.argv.into_iter())
             .map_err(|e| CtDiagnosticError::simple(e.to_string()).with_code(e.code()))
+            .map(|machine| ArchOutput {
+                value: arch_value(machine.clone()),
+                classic_text: machine,
+                classic_append_newline: true,
+                stderr_text: None,
+                exit_code: 0,
+            })
     }
 }
 
@@ -42,8 +84,14 @@ fn arch_value(machine: String) -> CtValue {
 impl DataCommand for CmdArch {
     fn signature(&self) -> DataSignature {
         DataSignature::new("arch", "structured machine architecture")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible arch arguments",
+                CtType::Any,
+            ))
             .input(CtType::Nothing)
-            .output(CtType::Record)
+            .output(CtType::Any)
+            .allow_unknown_args(true)
     }
 
     fn run(
@@ -53,15 +101,15 @@ impl DataCommand for CmdArch {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = ArchIntent::from_call(call)?;
-        let machine = ArchCore::run_core(intent)?;
+        let output = ArchCore::run_core(intent)?;
         Ok(CtPipelineData::Value(
-            arch_value(machine.clone()),
+            output.value,
             CtPipelineMetadata {
-                classic_text: Some(machine),
+                classic_text: Some(output.classic_text),
                 classic_bytes: None,
-                classic_append_newline: true,
-                stderr_text: None,
-                exit_code: 0,
+                classic_append_newline: output.classic_append_newline,
+                stderr_text: output.stderr_text,
+                exit_code: output.exit_code,
                 source: Some("arch".into()),
                 ..Default::default()
             },

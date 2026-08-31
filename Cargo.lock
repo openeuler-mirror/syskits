@@ -411,6 +411,7 @@ dependencies = [
 name = "cmd_arch"
 version = "3.2.2"
 dependencies = [
+ "clap",
  "ct_arch",
  "ctengine",
  "ctpipeline",

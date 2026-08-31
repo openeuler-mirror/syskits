@@ -12,6 +12,7 @@ description = "Native arch data command"
 repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
 
 [dependencies]
+clap = { workspace = true }
 ct_arch = { package = "ct_arch", path = "../../commands/arch" }
 ctengine = { workspace = true }
 ctpipeline = { workspace = true }

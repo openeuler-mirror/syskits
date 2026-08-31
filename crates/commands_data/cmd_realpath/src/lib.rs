@@ -1,6 +1,6 @@
 use ctengine::{CtDiagnosticError, DataCommand, DataEngineContext};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtPositionalArg, DataCall, DataSignature};
 use std::ffi::OsString;
 
 #[derive(Default)]
@@ -86,8 +86,14 @@ impl DataCommand for CmdRealpath {
             "realpath",
             "structured absolute and relative path resolution",
         )
+        .rest(CtPositionalArg::optional(
+            "arg",
+            "GNU-compatible realpath arguments",
+            CtType::Any,
+        ))
         .input(CtType::Nothing)
         .output(CtType::List)
+        .allow_unknown_args(true)
     }
 
     fn run(

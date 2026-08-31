@@ -109,38 +109,33 @@ pub struct ExternalInputEncoder;
 impl ExternalInputEncoder {
     /// 根据指定的 stdin 模式，将 `input` 编码并写入 `writer`。
     pub fn encode(
-        mut input: CtPipelineData,
+        input: CtPipelineData,
         mode: ExternalStdinMode,
         mut writer: impl Write,
     ) -> std::io::Result<()> {
         match mode {
-            ExternalStdinMode::Raw => match &mut input {
-                CtPipelineData::ByteStream(stream) => {
-                    std::io::copy(stream, &mut writer)?;
-                }
-                CtPipelineData::Value(val, _) => {
-                    writer.write_all(val.to_text().as_bytes())?;
-                }
-                CtPipelineData::ListStream(stream) => {
-                    for item in stream {
-                        writer.write_all(item.to_text().as_bytes())?;
-                    }
-                }
-                CtPipelineData::Empty => {}
-            },
+            ExternalStdinMode::Raw => {
+                crate::pipeline_stdin::write_pipeline_as_text(input, &mut writer)?;
+            }
             ExternalStdinMode::TextLines => match input {
                 CtPipelineData::ByteStream(mut stream) => {
                     std::io::copy(&mut stream, &mut writer)?;
+                }
+                CtPipelineData::Value(ctpipeline::CtValue::List(items), meta) => {
+                    crate::pipeline_stdin::write_pipeline_as_text(
+                        CtPipelineData::Value(ctpipeline::CtValue::List(items), meta),
+                        &mut writer,
+                    )?;
                 }
                 CtPipelineData::Value(val, _) => {
                     writer.write_all(val.to_text().as_bytes())?;
                     writer.write_all(b"\n")?;
                 }
                 CtPipelineData::ListStream(stream) => {
-                    for item in stream {
-                        writer.write_all(item.to_text().as_bytes())?;
-                        writer.write_all(b"\n")?;
-                    }
+                    crate::pipeline_stdin::write_pipeline_as_text(
+                        CtPipelineData::ListStream(stream),
+                        &mut writer,
+                    )?;
                 }
                 CtPipelineData::Empty => {}
             },
@@ -1440,13 +1435,22 @@ impl ExternalExecutor {
     ) -> Result<ctpipeline::pipeline_data::CtPipelineData, crate::error::CtDiagnosticError> {
         let mut cmd = std::process::Command::new(&spec.cmd);
         cmd.args(&spec.args);
+        let stdin_input = if matches!(input, CtPipelineData::Empty) {
+            None
+        } else {
+            Some(input)
+        };
 
         if let Some(cwd) = &spec.cwd {
             cmd.current_dir(cwd);
         }
         cmd.envs(&spec.env_overrides);
 
-        cmd.stdin(std::process::Stdio::piped());
+        if stdin_input.is_some() {
+            cmd.stdin(std::process::Stdio::piped());
+        } else {
+            cmd.stdin(std::process::Stdio::inherit());
+        }
 
         let mut interleaved_read = None;
 
@@ -1492,9 +1496,11 @@ impl ExternalExecutor {
 
         let stdin_mode = spec.stdin_mode;
         // 使用独立线程写入 stdin，避免 wait_with_output 与 stdin 写入互相阻塞
-        let stdin_handle = child.stdin.take().map(|mut stdin| {
-            std::thread::spawn(move || {
-                let _ = ExternalInputEncoder::encode(input, stdin_mode, &mut stdin);
+        let stdin_handle = stdin_input.and_then(|input| {
+            child.stdin.take().map(|mut stdin| {
+                std::thread::spawn(move || {
+                    let _ = ExternalInputEncoder::encode(input, stdin_mode, &mut stdin);
+                })
             })
         });
 

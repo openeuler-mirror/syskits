@@ -410,6 +410,75 @@ fn data_format_raw_preserves_external_raw_stdout() {
 }
 
 #[test]
+fn run_external_raw_stdin_flattens_structured_text_lines() {
+    let output = run_data_with_args(
+        &[
+            "format=raw",
+            "from text | run-external cat --stdout-mode raw",
+        ],
+        "alpha\nbeta\n",
+    );
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"alpha\nbeta\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn forced_external_inherits_process_stdin_without_pipeline_input() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=raw", "~cat"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn syskits");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin handle")
+        .write_all(b"alpha\n")
+        .expect("write stdin");
+
+    let output = child.wait_with_output().expect("wait for syskits");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"alpha\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn run_external_raw_failure_preserves_child_exit_code() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "run-external sh -c 'exit 7' --stdout-mode raw --stderr-mode capture",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn syskits");
+
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn data_help_matches_enabled_workflow_feature() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["data", "--help"])

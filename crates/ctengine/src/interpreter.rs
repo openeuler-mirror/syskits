@@ -714,9 +714,13 @@ fn print_pipeline_bytes(
                 if e.kind() == std::io::ErrorKind::BrokenPipe {
                     break;
                 }
-                return Err(CtDiagnosticError::simple(format!(
-                    "Error reading ByteStream: {e}"
-                )));
+                let mut err = CtDiagnosticError::simple(format!("Error reading ByteStream: {e}"));
+                if e.kind() == std::io::ErrorKind::TimedOut {
+                    err = err.with_code(exit_code::TIMEOUT);
+                } else if let Some(code) = external_exit_code_from_byte_stream(&bs) {
+                    err = err.with_code(code);
+                }
+                return Err(err);
             }
         };
         if n == 0 {
@@ -732,6 +736,14 @@ fn print_pipeline_bytes(
         }
     }
     Ok(())
+}
+
+fn external_exit_code_from_byte_stream(bs: &ctpipeline::CtByteStream) -> Option<i32> {
+    let guard = bs.metadata.custom.lock().ok()?;
+    match guard.get("external.exit_code") {
+        Some(CtValue::Int(code)) if *code != 0 => i32::try_from(*code).ok(),
+        _ => None,
+    }
 }
 
 /// 将 `CtPipelineData` 打印到 stdout（稳定的一次性输出格式，CLI/workflow 使用）

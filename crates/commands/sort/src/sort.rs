@@ -11,6 +11,7 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use bigdecimal::BigDecimal;
@@ -26,6 +27,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::str::Utf8Error;
+use std::sync::{Arc, Mutex};
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -258,6 +260,28 @@ pub struct SortOutput {
     file: Option<String>,
 }
 
+thread_local! {
+    static SORT_BUFFERED_STDOUT: RefCell<Option<Arc<Mutex<Vec<u8>>>>> = const { RefCell::new(None) };
+}
+
+struct SortBufferedWriter {
+    shared: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Write for SortBufferedWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.shared
+            .lock()
+            .expect("sort stdout buffer lock")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 impl SortOutput {
     fn new(name: Option<&str>) -> CTResult<Self> {
         Ok(Self {
@@ -282,6 +306,8 @@ impl SortOutput {
                     std::process::exit(2);
                 });
             Box::new(file)
+        } else if let Some(shared) = SORT_BUFFERED_STDOUT.with(|slot| slot.borrow().clone()) {
+            Box::new(SortBufferedWriter { shared })
         } else {
             Box::new(stdout())
         };
@@ -316,6 +342,36 @@ pub struct SortGlobalConfigs {
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: SortPrecomputed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SortRow {
+    pub row_index: usize,
+    pub line: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SortSemantic {
+    pub mode: String,
+    pub merge: bool,
+    pub check: bool,
+    pub debug: bool,
+    pub reverse: bool,
+    pub stable: bool,
+    pub unique: bool,
+    pub zero_terminated: bool,
+    pub ignore_case: bool,
+    pub ignore_leading_blanks: bool,
+    pub dictionary_order: bool,
+    pub ignore_nonprinting: bool,
+    pub key_count: usize,
+    pub source_count: usize,
+    pub separator: String,
+    pub output_file: Option<String>,
+    pub rows: Vec<SortRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
 }
 
 /// 排序所需的数据。应在开始排序前计算一次
@@ -1117,15 +1173,25 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     let (settings, mut files, mut tmp_dir, output) = sort_handle_settings(matches)?;
+    sort_validate_inputs(&files, &output)?;
 
+    let result = sort_exec(&mut files, &settings, output, &mut tmp_dir);
+    //Wait here if `SIGINT` was received、
+    // for signal handler to do its work and terminate the program.
+    tmp_dir.wait_if_signal();
+    result
+    // Ok(())
+}
+
+fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()> {
     // 前置可用性扫描 (Early Validation)
     // 扫描所有输入文件是否可读，如果有不可读的直接报错，决不提前触碰 stdin
-    for file in &files {
+    for file in files {
         if file != "-" {
-            if let Err(e) = File::open(file) {
+            if let Err(error) = File::open(file) {
                 return Err(SortError::SortReadFailed {
                     path: PathBuf::from(file),
-                    error: e,
+                    error,
                 }
                 .into());
             }
@@ -1136,22 +1202,17 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
         let out_path = Path::new(out_name);
         if out_path.exists() {
             // 使用 append(true) 仅作写权限探测，避免提前 truncate 清空目标文件
-            if let Err(e) = OpenOptions::new().append(true).open(out_path) {
+            if let Err(error) = OpenOptions::new().append(true).open(out_path) {
                 return Err(SortError::SortOpenFailed {
                     path: out_name.to_string(),
-                    error: e,
+                    error,
                 }
                 .into());
             }
         }
     }
 
-    let result = sort_exec(&mut files, &settings, output, &mut tmp_dir);
-    //Wait here if `SIGINT` was received、
-    // for signal handler to do its work and terminate the program.
-    tmp_dir.wait_if_signal();
-    result
-    // Ok(())
+    Ok(())
 }
 
 fn parse_posix2_version() -> i32 {
@@ -1892,6 +1953,114 @@ fn sort_exec(
     }
 }
 
+fn sort_mode_name(mode: SortMode) -> &'static str {
+    match mode {
+        SortMode::SortDefault => "default",
+        SortMode::SortNumeric => "numeric",
+        SortMode::SortHumanNumeric => "human_numeric",
+        SortMode::SortGeneralNumeric => "general_numeric",
+        SortMode::SortMonth => "month",
+        SortMode::SortVersion => "version",
+        SortMode::SortRandom => "random",
+    }
+}
+
+fn sort_rows_from_output(output: &[u8], separator: u8) -> Vec<SortRow> {
+    let mut rows = Vec::new();
+    let mut row_index = 1;
+    let mut start = 0;
+
+    while start < output.len() {
+        let end = output[start..]
+            .iter()
+            .position(|byte| *byte == separator)
+            .map(|offset| start + offset)
+            .unwrap_or(output.len());
+
+        rows.push(SortRow {
+            row_index,
+            line: String::from_utf8_lossy(&output[start..end]).into_owned(),
+        });
+        row_index += 1;
+
+        if end == output.len() {
+            break;
+        }
+        start = end + 1;
+    }
+
+    rows
+}
+
+fn sort_with_buffered_stdout<F>(f: F) -> (CTResult<()>, Vec<u8>)
+where
+    F: FnOnce() -> CTResult<()>,
+{
+    let buffered = Arc::new(Mutex::new(Vec::new()));
+    let previous = SORT_BUFFERED_STDOUT.with(|slot| slot.replace(Some(Arc::clone(&buffered))));
+    let result = f();
+    SORT_BUFFERED_STDOUT.with(|slot| {
+        let _ = slot.replace(previous);
+    });
+    let stdout = buffered.lock().expect("sort stdout buffer lock").clone();
+    (result, stdout)
+}
+
+pub fn sort_native_semantic(args: impl ctcore::Args) -> CTResult<SortSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr() as *const _);
+    }
+
+    let args = preprocess_sort_args(args.into_iter().collect());
+    let matches = ct_app().try_get_matches_from(args)?;
+    let (settings, mut files, mut tmp_dir, output) = sort_handle_settings(matches)?;
+    sort_validate_inputs(&files, &output)?;
+
+    let output_file = output.as_output_name().map(str::to_owned);
+    let buffer_stdout = output_file.is_none();
+    let source_count = files.len();
+
+    let (result, stdout) = if buffer_stdout {
+        sort_with_buffered_stdout(|| sort_exec(&mut files, &settings, output, &mut tmp_dir))
+    } else {
+        (
+            sort_exec(&mut files, &settings, output, &mut tmp_dir),
+            Vec::new(),
+        )
+    };
+
+    tmp_dir.wait_if_signal();
+    result?;
+
+    let separator = settings.line_ending.into();
+    let classic_text = String::from_utf8_lossy(&stdout).into_owned();
+
+    Ok(SortSemantic {
+        mode: sort_mode_name(settings.mode).into(),
+        merge: settings.is_merge,
+        check: settings.is_check,
+        debug: settings.is_debug,
+        reverse: settings.is_reverse,
+        stable: settings.is_stable,
+        unique: settings.is_unique,
+        zero_terminated: matches!(settings.line_ending, CtLineEnding::Nul),
+        ignore_case: settings.is_ignore_case,
+        ignore_leading_blanks: settings.is_ignore_leading_blanks,
+        dictionary_order: settings.is_dictionary_order,
+        ignore_nonprinting: settings.is_ignore_non_printing,
+        key_count: settings.selectors.len(),
+        source_count,
+        separator: String::from_utf8_lossy(&[separator]).into_owned(),
+        output_file,
+        rows: sort_rows_from_output(&stdout, separator),
+        classic_text,
+        stderr_text: String::new(),
+        exit_code: 0,
+    })
+}
+
 fn sort_by<'a>(
     unsorted: &mut Vec<SortLine<'a>>,
     settings: &SortGlobalConfigs,
@@ -2404,6 +2573,28 @@ mod tests {
         let args = [OsString::from("sort"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn sort_native_semantic_collects_sorted_rows() {
+        let temp_dir = tempfile::TempDir::new().expect("tempdir");
+        let path = temp_dir.path().join("sort.txt");
+        std::fs::write(&path, "gamma\nalpha\t2\nalpha\t10\nbeta\n").expect("write sort fixture");
+
+        let semantic = sort_native_semantic(
+            [OsString::from("sort"), path.as_os_str().to_os_string()].into_iter(),
+        )
+        .expect("sort semantic");
+
+        assert_eq!(semantic.mode, "default");
+        assert_eq!(semantic.separator, "\n");
+        assert!(!semantic.reverse);
+        assert_eq!(semantic.rows.len(), 4);
+        assert_eq!(semantic.rows[0].row_index, 1);
+        assert_eq!(semantic.rows[0].line, "alpha\t10");
+        assert_eq!(semantic.rows[1].line, "alpha\t2");
+        assert_eq!(semantic.classic_text, "alpha\t10\nalpha\t2\nbeta\ngamma\n");
+        assert_eq!(semantic.exit_code, 0);
     }
 
     #[cfg(test)]

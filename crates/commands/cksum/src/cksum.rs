@@ -54,7 +54,7 @@ enum CkSumError {
     RawMultipleFiles,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CksumOutputFormat {
     Hexadecimal,
     Raw,
@@ -393,6 +393,1009 @@ struct CksumOptions {
     warn: bool,
     strict: bool,
     ignore_missing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CksumRow {
+    pub kind: String,
+    pub algorithm: String,
+    pub input: String,
+    pub file: Option<String>,
+    pub manifest_file: Option<String>,
+    pub checksum: String,
+    pub actual_checksum: Option<String>,
+    pub bytes: Option<usize>,
+    pub reported_size: Option<usize>,
+    pub size_kind: Option<String>,
+    pub block_size: Option<usize>,
+    pub output_format: String,
+    pub tagged: bool,
+    pub binary: bool,
+    pub status: Option<String>,
+    pub matched: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CksumSemantic {
+    pub rows: Vec<CksumRow>,
+    pub classic_text: String,
+    pub stderr_text: String,
+    pub exit_code: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CksumSemanticInvocation {
+    algo_name: &'static str,
+    output_bits: usize,
+    length: Option<usize>,
+    files: Vec<String>,
+    untagged: bool,
+    output_format: CksumOutputFormat,
+    zero: bool,
+    binary: bool,
+    quiet: bool,
+    status: bool,
+    warn: bool,
+    strict: bool,
+    ignore_missing: bool,
+    check: bool,
+}
+
+enum CksumSemanticDispatch {
+    Invocation(CksumSemanticInvocation),
+    Semantic(CksumSemantic),
+}
+
+fn empty_cksum_semantic() -> CksumSemantic {
+    CksumSemantic {
+        rows: Vec::new(),
+        classic_text: String::new(),
+        stderr_text: String::new(),
+        exit_code: 0,
+    }
+}
+
+fn semantic_error(message: impl Into<String>) -> CksumSemantic {
+    let mut semantic = empty_cksum_semantic();
+    semantic.stderr_text = format!("cksum: {}\n", message.into());
+    semantic.exit_code = 1;
+    semantic
+}
+
+fn push_stdout_line(buffer: &mut String, line: impl AsRef<str>) {
+    buffer.push_str(line.as_ref());
+    buffer.push('\n');
+}
+
+fn push_stderr_line(buffer: &mut String, line: impl AsRef<str>) {
+    buffer.push_str("cksum: ");
+    buffer.push_str(line.as_ref());
+    buffer.push('\n');
+}
+
+fn clean_io_error(err: &io::Error) -> String {
+    let err_msg = err.to_string();
+    err_msg
+        .split(" (os error")
+        .next()
+        .unwrap_or(&err_msg)
+        .to_string()
+}
+
+fn cksum_output_format_name(format: &CksumOutputFormat) -> &'static str {
+    match format {
+        CksumOutputFormat::Hexadecimal => "hexadecimal",
+        CksumOutputFormat::Raw => "raw",
+        CksumOutputFormat::Base64 => "base64",
+    }
+}
+
+fn parse_cksum_length(
+    algo_name: &str,
+    input_length_str: Option<&String>,
+) -> CTResult<Option<usize>> {
+    let Some(len_str) = input_length_str else {
+        return Ok(None);
+    };
+
+    let parsed_n = len_str.parse::<usize>();
+    let (is_err, n) = match parsed_n {
+        Ok(v) => (false, v),
+        Err(_) => (true, 0),
+    };
+
+    if !is_err && n == 0 {
+        return Ok(None);
+    }
+
+    match algo_name {
+        CKSUM_ALGORITHM_OPTIONS_BLAKE2B => {
+            if is_err || n > 512 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "maximum digest length for 'BLAKE2b' is 512 bits",
+                )
+                .into());
+            }
+            if n % 8 != 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "length is not a multiple of 8",
+                )
+                .into());
+            }
+            Ok(Some(n / 8))
+        }
+        CKSUM_ALGORITHM_OPTIONS_SHA2 | CKSUM_ALGORITHM_OPTIONS_SHA3 => {
+            if is_err || !matches!(n, 224 | 256 | 384 | 512) {
+                let algo_display = if algo_name == CKSUM_ALGORITHM_OPTIONS_SHA2 {
+                    "SHA2"
+                } else {
+                    "SHA3"
+                };
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("digest length for '{algo_display}' must be 224, 256, 384, or 512"),
+                )
+                .into());
+            }
+            Ok(Some(n))
+        }
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--length is only supported with --algorithm=blake2b, sha2, or sha3",
+        )
+        .into()),
+    }
+}
+
+fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSemanticDispatch> {
+    let args_vec: Vec<OsString> = args.collect();
+
+    let mut last_tag_idx = 0;
+    let mut last_untagged_idx = 0;
+    let mut last_binary_idx = 0;
+    let mut last_text_idx = 0;
+    let mut last_status_idx = 0;
+    let mut last_warn_idx = 0;
+
+    let mut untagged = false;
+    let mut tag = false;
+    let mut binary = false;
+    let mut text = false;
+    let mut status = false;
+    let mut warn = false;
+
+    for (i, arg) in args_vec.iter().enumerate() {
+        let arg_str = arg.to_string_lossy();
+        if arg_str == "--tag" {
+            last_tag_idx = i;
+            tag = true;
+        } else if arg_str == "--untagged" {
+            last_untagged_idx = i;
+            untagged = true;
+        } else if arg_str == "--binary" || arg_str == "-b" {
+            last_binary_idx = i;
+            binary = true;
+        } else if arg_str == "--text" || arg_str == "-t" {
+            last_text_idx = i;
+            text = true;
+        } else if arg_str == "--status" {
+            last_status_idx = i;
+            status = true;
+        } else if arg_str == "--warn" || arg_str == "-w" {
+            last_warn_idx = i;
+            warn = true;
+        } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
+            if arg_str.contains('b') {
+                last_binary_idx = i;
+                binary = true;
+            }
+            if arg_str.contains('t') {
+                last_text_idx = i;
+                text = true;
+            }
+            if arg_str.contains('w') {
+                last_warn_idx = i;
+                warn = true;
+            }
+        }
+    }
+
+    let binary_requested = binary;
+    let text_requested = text;
+
+    if untagged && tag && last_tag_idx > last_untagged_idx {
+        untagged = false;
+    }
+    if binary && text && last_text_idx > last_binary_idx {
+        binary = false;
+    }
+    if binary && last_tag_idx > last_binary_idx {
+        binary = false;
+    }
+    if status && warn && last_status_idx > last_warn_idx {
+        warn = false;
+    }
+
+    let matches = ct_app().try_get_matches_from(args_vec)?;
+    let algo_name = matches
+        .get_one::<String>(opt_flags::ALGORITHM)
+        .map(String::as_str)
+        .unwrap_or(CKSUM_ALGORITHM_OPTIONS_CRC);
+    let length = parse_cksum_length(algo_name, matches.get_one::<String>(opt_flags::LENGTH))?;
+    let (name, _algo, bits) = cksum_detect_algo(algo_name, length);
+
+    let output_format = if matches.get_flag(opt_flags::RAW) {
+        CksumOutputFormat::Raw
+    } else if matches.get_flag(opt_flags::BASE64) {
+        CksumOutputFormat::Base64
+    } else {
+        CksumOutputFormat::Hexadecimal
+    };
+
+    if output_format == CksumOutputFormat::Raw {
+        return Ok(CksumSemanticDispatch::Semantic(semantic_error(
+            "native data mode does not yet support --raw output",
+        )));
+    }
+
+    let check = matches.get_flag(opt_flags::CHECK);
+    if check {
+        if matches.get_flag(opt_flags::ZERO) {
+            return Ok(CksumSemanticDispatch::Semantic(semantic_error(
+                "the --zero option is not supported when verifying checksums",
+            )));
+        }
+
+        if binary_requested || text_requested {
+            let text_selected =
+                text_requested && (!binary_requested || last_text_idx > last_binary_idx);
+            let message = if text_selected && !untagged {
+                "--text mode is only supported with --untagged"
+            } else {
+                "the --binary and --text options are meaningless when verifying checksums"
+            };
+            return Ok(CksumSemanticDispatch::Semantic(semantic_error(message)));
+        }
+
+        if matches.contains_id(opt_flags::ALGORITHM)
+            && matches!(
+                name,
+                CKSUM_ALGORITHM_OPTIONS_BSD
+                    | CKSUM_ALGORITHM_OPTIONS_SYSV
+                    | CKSUM_ALGORITHM_OPTIONS_CRC
+                    | CKSUM_ALGORITHM_OPTIONS_CRC32B
+            )
+        {
+            return Ok(CksumSemanticDispatch::Semantic(semantic_error(format!(
+                "--check is not supported with --algorithm={name}"
+            ))));
+        }
+    }
+
+    let files = matches
+        .get_many::<String>(opt_flags::FILE)
+        .map(|values| values.cloned().collect())
+        .unwrap_or_default();
+
+    Ok(CksumSemanticDispatch::Invocation(CksumSemanticInvocation {
+        algo_name: name,
+        output_bits: bits,
+        length,
+        files,
+        untagged,
+        output_format,
+        zero: matches.get_flag(opt_flags::ZERO),
+        binary,
+        quiet: matches.get_flag(opt_flags::QUIET),
+        status,
+        warn,
+        strict: matches.get_flag(opt_flags::STRICT),
+        ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
+        check,
+    }))
+}
+
+fn cksum_render_sum(algo_name: &str, output_format: &CksumOutputFormat, sum_hex: &str) -> String {
+    match output_format {
+        CksumOutputFormat::Hexadecimal => sum_hex.to_string(),
+        CksumOutputFormat::Base64 => match algo_name {
+            CKSUM_ALGORITHM_OPTIONS_CRC
+            | CKSUM_ALGORITHM_OPTIONS_CRC32B
+            | CKSUM_ALGORITHM_OPTIONS_SYSV
+            | CKSUM_ALGORITHM_OPTIONS_BSD => sum_hex.to_string(),
+            _ => {
+                ct_encoding::encode(ct_encoding::Format::Base64, &decode(sum_hex).unwrap()).unwrap()
+            }
+        },
+        CksumOutputFormat::Raw => unreachable!("raw output handled before semantic execution"),
+    }
+}
+
+fn cksum_compute_size_fields(
+    algo_name: &str,
+    output_bits: usize,
+    bytes: usize,
+) -> (Option<usize>, Option<String>, Option<usize>) {
+    match algo_name {
+        CKSUM_ALGORITHM_OPTIONS_SYSV | CKSUM_ALGORITHM_OPTIONS_BSD => (
+            Some(div_ceil(bytes, output_bits)),
+            Some("blocks".into()),
+            Some(output_bits),
+        ),
+        CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
+            (Some(bytes), Some("bytes".into()), None)
+        }
+        _ => (None, None, None),
+    }
+}
+
+fn render_cksum_compute_classic(
+    invocation: &CksumSemanticInvocation,
+    sum: &str,
+    size: usize,
+    file: Option<&str>,
+) -> String {
+    let line_end = if invocation.zero { "\0" } else { "\n" };
+    let bsd_width = 5;
+
+    match invocation.algo_name {
+        CKSUM_ALGORITHM_OPTIONS_SYSV => match file {
+            Some(file) => format!(
+                "{} {} {}{}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(size, invocation.output_bits),
+                file,
+                line_end
+            ),
+            None => format!(
+                "{} {}{}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(size, invocation.output_bits),
+                line_end
+            ),
+        },
+        CKSUM_ALGORITHM_OPTIONS_BSD => match file {
+            Some(file) => format!(
+                "{:0bsd_width$} {:bsd_width$} {}{}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(size, invocation.output_bits),
+                file,
+                line_end
+            ),
+            None => format!(
+                "{:0bsd_width$} {:bsd_width$}{}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(size, invocation.output_bits),
+                line_end
+            ),
+        },
+        CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => match file {
+            Some(file) => format!("{sum} {size} {file}{line_end}"),
+            None => format!("{sum} {size}{line_end}"),
+        },
+        CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !invocation.untagged => {
+            match (invocation.length, file) {
+                (Some(length), Some(file)) => {
+                    format!("BLAKE2b-{} ({file}) = {sum}{line_end}", length * 8)
+                }
+                (Some(length), None) => format!("BLAKE2b-{} (-) = {sum}{line_end}", length * 8),
+                (None, Some(file)) => format!("BLAKE2b ({file}) = {sum}{line_end}"),
+                (None, None) => format!("BLAKE2b (-) = {sum}{line_end}"),
+            }
+        }
+        _ => {
+            if invocation.untagged {
+                let marker = if invocation.binary { "*" } else { " " };
+                match file {
+                    Some(file) => format!("{sum} {marker}{file}{line_end}"),
+                    None => format!("{sum} {marker}-{line_end}"),
+                }
+            } else {
+                match file {
+                    Some(file) => format!(
+                        "{} ({file}) = {sum}{line_end}",
+                        invocation.algo_name.to_ascii_uppercase()
+                    ),
+                    None => format!(
+                        "{} (-) = {sum}{line_end}",
+                        invocation.algo_name.to_ascii_uppercase()
+                    ),
+                }
+            }
+        }
+    }
+}
+
+fn cksum_open_for_semantic(file_name: &str) -> Result<Box<dyn Read>, String> {
+    let filename = Path::new(file_name);
+    if filename == OsStr::new("-") {
+        Ok(Box::new(stdin()) as Box<dyn Read>)
+    } else if filename.is_dir() {
+        Err("Is a directory".into())
+    } else {
+        File::open(filename)
+            .map(|file| Box::new(file) as Box<dyn Read>)
+            .map_err(|err| clean_io_error(&err))
+    }
+}
+
+fn cksum_native_compute(invocation: &CksumSemanticInvocation) -> CTResult<CksumSemantic> {
+    let mut semantic = empty_cksum_semantic();
+    let mut digest = cksum_detect_algo(invocation.algo_name, invocation.length).1;
+
+    if invocation.files.is_empty() {
+        let mut stdin_buffer = BufReader::new(stdin());
+        let (sum_hex, bytes) =
+            cksum_digest_read(&mut digest, &mut stdin_buffer, invocation.output_bits)
+                .map_err_context(|| "failed to read input".to_string())?;
+        let rendered = cksum_render_sum(invocation.algo_name, &invocation.output_format, &sum_hex);
+        semantic
+            .classic_text
+            .push_str(&render_cksum_compute_classic(
+                invocation, &rendered, bytes, None,
+            ));
+        let (reported_size, size_kind, block_size) =
+            cksum_compute_size_fields(invocation.algo_name, invocation.output_bits, bytes);
+        semantic.rows.push(CksumRow {
+            kind: "compute".into(),
+            algorithm: invocation.algo_name.into(),
+            input: "stdin".into(),
+            file: None,
+            manifest_file: None,
+            checksum: rendered,
+            actual_checksum: None,
+            bytes: Some(bytes),
+            reported_size,
+            size_kind,
+            block_size,
+            output_format: cksum_output_format_name(&invocation.output_format).into(),
+            tagged: !invocation.untagged,
+            binary: invocation.binary,
+            status: None,
+            matched: None,
+        });
+        return Ok(semantic);
+    }
+
+    for file_name in &invocation.files {
+        let reader = match cksum_open_for_semantic(file_name) {
+            Ok(reader) => reader,
+            Err(message) => {
+                push_stderr_line(&mut semantic.stderr_text, format!("{file_name}: {message}"));
+                semantic.exit_code = 1;
+                continue;
+            }
+        };
+
+        let mut reader = BufReader::new(reader);
+        let (sum_hex, bytes) = cksum_digest_read(&mut digest, &mut reader, invocation.output_bits)
+            .map_err_context(|| "failed to read input".to_string())?;
+        let rendered = cksum_render_sum(invocation.algo_name, &invocation.output_format, &sum_hex);
+        semantic
+            .classic_text
+            .push_str(&render_cksum_compute_classic(
+                invocation,
+                &rendered,
+                bytes,
+                Some(file_name),
+            ));
+        let (reported_size, size_kind, block_size) =
+            cksum_compute_size_fields(invocation.algo_name, invocation.output_bits, bytes);
+        semantic.rows.push(CksumRow {
+            kind: "compute".into(),
+            algorithm: invocation.algo_name.into(),
+            input: if file_name == "-" { "stdin" } else { "file" }.into(),
+            file: Some(file_name.clone()),
+            manifest_file: None,
+            checksum: rendered,
+            actual_checksum: None,
+            bytes: Some(bytes),
+            reported_size,
+            size_kind,
+            block_size,
+            output_format: cksum_output_format_name(&invocation.output_format).into(),
+            tagged: !invocation.untagged,
+            binary: invocation.binary,
+            status: None,
+            matched: None,
+        });
+    }
+
+    Ok(semantic)
+}
+
+fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSemantic> {
+    let mut semantic = empty_cksum_semantic();
+    let files: Vec<&str> = if invocation.files.is_empty() {
+        vec!["-"]
+    } else {
+        invocation.files.iter().map(String::as_str).collect()
+    };
+
+    let mut global_properly_formatted = 0usize;
+    let mut bad_format = 0usize;
+    let mut bad_checksum = 0usize;
+    let mut missing_files = 0usize;
+    let mut failed_open = 0usize;
+    let mut no_file_verified = false;
+    let show_warnings = !invocation.status || invocation.warn;
+
+    for cksum_file in files {
+        let manifest_name = cksum_file.to_string();
+        let f_name = Path::new(cksum_file);
+        let mut n_properly_formatted_this_file = 0usize;
+        let mut n_verified_this_file = 0usize;
+        let mut current_default_algo = invocation.algo_name;
+
+        let file_input: Box<dyn BufRead> = if f_name == OsStr::new("-") {
+            Box::new(BufReader::new(stdin()))
+        } else {
+            match File::open(f_name) {
+                Ok(file) => Box::new(BufReader::new(file)),
+                Err(err) => {
+                    push_stderr_line(
+                        &mut semantic.stderr_text,
+                        format!("{}: {}", f_name.display(), clean_io_error(&err)),
+                    );
+                    failed_open += 1;
+                    continue;
+                }
+            }
+        };
+
+        for (line_num, line_result) in file_input.lines().enumerate() {
+            let line = match line_result {
+                Ok(line) => line,
+                Err(err) => {
+                    push_stderr_line(
+                        &mut semantic.stderr_text,
+                        format!("{}: {}", f_name.display(), clean_io_error(&err)),
+                    );
+                    continue;
+                }
+            };
+
+            if line.trim().is_empty() || line.trim().starts_with('#') {
+                continue;
+            }
+
+            let (digest_str, filename_str, line_algo) = match parse_check_line(&line) {
+                Some(values) => values,
+                None => {
+                    bad_format += 1;
+                    if invocation.warn {
+                        push_stderr_line(
+                            &mut semantic.stderr_text,
+                            format!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                f_name.display(),
+                                line_num + 1,
+                                algo_display_name(current_default_algo)
+                            ),
+                        );
+                    }
+                    continue;
+                }
+            };
+
+            let (current_algo_name, mut current_digest, current_bits) = if let Some(tag) = line_algo
+            {
+                if let Some((digest, bits, name)) = detect_algo_from_tag(tag) {
+                    current_default_algo = name;
+                    (name, digest, bits)
+                } else {
+                    bad_format += 1;
+                    if invocation.warn {
+                        let display_tag = {
+                            let upper = tag.to_uppercase();
+                            if upper.starts_with("SHA3-") {
+                                "SHA3"
+                            } else if upper.starts_with("SHA2-") {
+                                "SHA2"
+                            } else if upper.starts_with("BLAKE2B-") {
+                                "BLAKE2b"
+                            } else {
+                                tag
+                            }
+                        };
+                        push_stderr_line(
+                            &mut semantic.stderr_text,
+                            format!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                f_name.display(),
+                                line_num + 1,
+                                display_tag
+                            ),
+                        );
+                    }
+                    continue;
+                }
+            } else {
+                let mut inferred_len = invocation.length;
+
+                if inferred_len.is_none() {
+                    let is_blake2b = current_default_algo.eq_ignore_ascii_case("blake2b");
+                    let is_sha2_family = matches!(
+                        current_default_algo,
+                        "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
+                    );
+                    let is_sha3_family = current_default_algo.starts_with("sha3");
+
+                    if is_blake2b || is_sha2_family || is_sha3_family {
+                        let mut bits = 0;
+                        let is_hex_chars = digest_str.chars().all(|c| c.is_ascii_hexdigit());
+                        let is_b64_chars = digest_str.len() % 4 == 0
+                            && digest_str.chars().all(|c| {
+                                c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
+                            });
+                        let has_b64_only_chars = digest_str.chars().any(|c| {
+                            c == '+'
+                                || c == '/'
+                                || c == '='
+                                || ('g'..='z').contains(&c)
+                                || ('G'..='Z').contains(&c)
+                        });
+
+                        if is_b64_chars && has_b64_only_chars {
+                            let padding =
+                                digest_str.chars().rev().take_while(|&c| c == '=').count();
+                            let bytes = (digest_str.len() / 4) * 3 - padding;
+                            bits = bytes * 8;
+                        } else if is_hex_chars {
+                            bits = digest_str.len() * 4;
+                        } else if is_b64_chars {
+                            let padding =
+                                digest_str.chars().rev().take_while(|&c| c == '=').count();
+                            let bytes = (digest_str.len() / 4) * 3 - padding;
+                            bits = bytes * 8;
+                        }
+
+                        if bits > 0 {
+                            if is_blake2b {
+                                inferred_len = Some(bits / 8);
+                                current_default_algo = "blake2b";
+                            } else if matches!(bits, 224 | 256 | 384 | 512) {
+                                inferred_len = Some(bits);
+                                current_default_algo = if is_sha2_family { "sha2" } else { "sha3" };
+                            }
+                        }
+                    }
+                }
+
+                cksum_detect_algo(current_default_algo, inferred_len)
+            };
+
+            if matches!(
+                current_algo_name,
+                CKSUM_ALGORITHM_OPTIONS_CRC
+                    | CKSUM_ALGORITHM_OPTIONS_SYSV
+                    | CKSUM_ALGORITHM_OPTIONS_BSD
+                    | CKSUM_ALGORITHM_OPTIONS_CRC32B
+            ) {
+                bad_format += 1;
+                if invocation.warn {
+                    let message = if let Some(tag) = line_algo {
+                        let display_tag = {
+                            let upper = tag.to_uppercase();
+                            if upper.starts_with("SHA3-") {
+                                "SHA3"
+                            } else if upper.starts_with("SHA2-") {
+                                "SHA2"
+                            } else if upper.starts_with("BLAKE2B-") {
+                                "BLAKE2b"
+                            } else {
+                                tag
+                            }
+                        };
+                        format!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            display_tag
+                        )
+                    } else {
+                        format!(
+                            "{}: {}: improperly formatted checksum line",
+                            f_name.display(),
+                            line_num + 1
+                        )
+                    };
+                    push_stderr_line(&mut semantic.stderr_text, message);
+                }
+                continue;
+            }
+
+            let expected_hex_len = current_bits / 4;
+            let expected_b64_len = current_bits.div_ceil(8).div_ceil(3) * 4;
+
+            let is_hex = digest_str.len() == expected_hex_len
+                && digest_str.chars().all(|c| c.is_ascii_hexdigit());
+            let is_b64 = digest_str.len() == expected_b64_len
+                && digest_str
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=');
+
+            if !is_hex && !is_b64 {
+                bad_format += 1;
+                if invocation.warn {
+                    let message = if let Some(tag) = line_algo {
+                        let display_tag = {
+                            let upper = tag.to_uppercase();
+                            if upper.starts_with("SHA3-") {
+                                "SHA3"
+                            } else if upper.starts_with("SHA2-") {
+                                "SHA2"
+                            } else if upper.starts_with("BLAKE2B-") {
+                                "BLAKE2b"
+                            } else {
+                                tag
+                            }
+                        };
+                        format!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            display_tag
+                        )
+                    } else {
+                        format!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            f_name.display(),
+                            line_num + 1,
+                            algo_display_name(current_default_algo)
+                        )
+                    };
+                    push_stderr_line(&mut semantic.stderr_text, message);
+                }
+                continue;
+            }
+
+            n_properly_formatted_this_file += 1;
+            global_properly_formatted += 1;
+
+            let target_path = Path::new(filename_str);
+            let row_output_format = if is_b64 { "base64" } else { "hexadecimal" };
+            let target_file = match File::open(target_path) {
+                Ok(file) => file,
+                Err(err) => {
+                    if !invocation.ignore_missing {
+                        push_stderr_line(
+                            &mut semantic.stderr_text,
+                            format!("{filename_str}: {}", clean_io_error(&err)),
+                        );
+                        if !invocation.status {
+                            push_stdout_line(
+                                &mut semantic.classic_text,
+                                format!(
+                                    "{}: {}",
+                                    filename_str,
+                                    t!("cksum.check.failed_open_or_read")
+                                ),
+                            );
+                        }
+                        semantic.rows.push(CksumRow {
+                            kind: "check".into(),
+                            algorithm: current_algo_name.into(),
+                            input: "manifest".into(),
+                            file: Some(filename_str.into()),
+                            manifest_file: Some(manifest_name.clone()),
+                            checksum: digest_str.into(),
+                            actual_checksum: None,
+                            bytes: None,
+                            reported_size: None,
+                            size_kind: None,
+                            block_size: None,
+                            output_format: row_output_format.into(),
+                            tagged: line_algo.is_some(),
+                            binary: false,
+                            status: Some("failed_open_or_read".into()),
+                            matched: Some(false),
+                        });
+                        missing_files += 1;
+                    }
+                    continue;
+                }
+            };
+
+            let mut target_reader = BufReader::new(target_file);
+            let (sum_hex, bytes) =
+                match cksum_digest_read(&mut current_digest, &mut target_reader, current_bits) {
+                    Ok(values) => {
+                        n_verified_this_file += 1;
+                        values
+                    }
+                    Err(err) => {
+                        if !invocation.ignore_missing {
+                            push_stderr_line(
+                                &mut semantic.stderr_text,
+                                format!("{filename_str}: {}", clean_io_error(&err)),
+                            );
+                            if !invocation.status {
+                                push_stdout_line(
+                                    &mut semantic.classic_text,
+                                    format!(
+                                        "{}: {}",
+                                        filename_str,
+                                        t!("cksum.check.failed_open_or_read")
+                                    ),
+                                );
+                            }
+                            semantic.rows.push(CksumRow {
+                                kind: "check".into(),
+                                algorithm: current_algo_name.into(),
+                                input: "manifest".into(),
+                                file: Some(filename_str.into()),
+                                manifest_file: Some(manifest_name.clone()),
+                                checksum: digest_str.into(),
+                                actual_checksum: None,
+                                bytes: None,
+                                reported_size: None,
+                                size_kind: None,
+                                block_size: None,
+                                output_format: row_output_format.into(),
+                                tagged: line_algo.is_some(),
+                                binary: false,
+                                status: Some("failed_open_or_read".into()),
+                                matched: Some(false),
+                            });
+                            missing_files += 1;
+                        }
+                        continue;
+                    }
+                };
+
+            let computed_sum = if is_b64 {
+                ct_encoding::encode(ct_encoding::Format::Base64, &decode(&sum_hex).unwrap())
+                    .unwrap()
+            } else {
+                sum_hex
+            };
+            let checksum_match = if is_b64 {
+                computed_sum == digest_str
+            } else {
+                computed_sum.eq_ignore_ascii_case(digest_str)
+            };
+
+            if checksum_match {
+                if !invocation.quiet && !invocation.status {
+                    push_stdout_line(
+                        &mut semantic.classic_text,
+                        format!("{}: {}", filename_str, t!("cksum.check.ok")),
+                    );
+                }
+            } else {
+                if !invocation.status {
+                    push_stdout_line(
+                        &mut semantic.classic_text,
+                        format!("{}: {}", filename_str, t!("cksum.check.failed")),
+                    );
+                }
+                bad_checksum += 1;
+            }
+
+            semantic.rows.push(CksumRow {
+                kind: "check".into(),
+                algorithm: current_algo_name.into(),
+                input: "manifest".into(),
+                file: Some(filename_str.into()),
+                manifest_file: Some(manifest_name.clone()),
+                checksum: digest_str.into(),
+                actual_checksum: Some(computed_sum),
+                bytes: Some(bytes),
+                reported_size: None,
+                size_kind: None,
+                block_size: None,
+                output_format: row_output_format.into(),
+                tagged: line_algo.is_some(),
+                binary: false,
+                status: Some(if checksum_match { "ok" } else { "failed" }.into()),
+                matched: Some(checksum_match),
+            });
+        }
+
+        if n_properly_formatted_this_file == 0 {
+            if show_warnings {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    format!(
+                        "{}: no properly formatted checksum lines found",
+                        f_name.display()
+                    ),
+                );
+            }
+            no_file_verified = true;
+        } else if invocation.ignore_missing && n_verified_this_file == 0 {
+            if show_warnings {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    format!(
+                        "{}: {}",
+                        f_name.display(),
+                        t!("cksum.check.no_file_verified")
+                    ),
+                );
+            }
+            no_file_verified = true;
+        }
+    }
+
+    if global_properly_formatted > 0 {
+        if bad_format > 0 && show_warnings {
+            if bad_format == 1 {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    "WARNING: 1 line is improperly formatted",
+                );
+            } else {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    format!("WARNING: {bad_format} lines are improperly formatted"),
+                );
+            }
+        }
+        if missing_files > 0 && show_warnings {
+            if missing_files == 1 {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    "WARNING: 1 listed file could not be read",
+                );
+            } else {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    format!("WARNING: {missing_files} listed files could not be read"),
+                );
+            }
+        }
+        if bad_checksum > 0 {
+            if show_warnings {
+                if bad_checksum == 1 {
+                    push_stderr_line(
+                        &mut semantic.stderr_text,
+                        "WARNING: 1 computed checksum did NOT match",
+                    );
+                } else {
+                    push_stderr_line(
+                        &mut semantic.stderr_text,
+                        format!("WARNING: {bad_checksum} computed checksums did NOT match"),
+                    );
+                }
+            }
+            semantic.exit_code = 1;
+        }
+
+        if bad_format > 0 && invocation.strict {
+            semantic.exit_code = 1;
+        }
+        if missing_files > 0 {
+            semantic.exit_code = 1;
+        }
+    } else if bad_format > 0 || missing_files > 0 || failed_open > 0 || no_file_verified {
+        semantic.exit_code = 1;
+    }
+
+    if missing_files > 0 || failed_open > 0 || no_file_verified {
+        semantic.exit_code = 1;
+    }
+
+    Ok(semantic)
+}
+
+pub fn cksum_native_semantic(args: impl ctcore::Args) -> CTResult<CksumSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    match cksum_parse_semantic_invocation(args)? {
+        CksumSemanticDispatch::Semantic(semantic) => Ok(semantic),
+        CksumSemanticDispatch::Invocation(invocation) => {
+            if invocation.check {
+                cksum_native_check(&invocation)
+            } else {
+                cksum_native_compute(&invocation)
+            }
+        }
+    }
 }
 
 /// Calculate checksum
@@ -3072,8 +4075,11 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA512;
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
-        use crate::{CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, ct_app, opt_flags};
-        use std::ffi::OsStr;
+        use crate::{
+            CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, cksum_native_semantic,
+            ct_app, opt_flags,
+        };
+        use std::ffi::{OsStr, OsString};
         use std::fs;
         use std::fs::File;
         use tempfile::Builder;
@@ -4895,6 +5901,74 @@ mod tests {
                     panic!("test_calculate_checksum_blake2b_hexadecimal error");
                 }
             };
+        }
+
+        #[test]
+        fn test_cksum_native_semantic_compute_row() {
+            let temp_dir = Builder::new()
+                .prefix("test_cksum_native_semantic_compute_row")
+                .tempdir()
+                .unwrap();
+            let test_file_path = temp_dir.path().join("sample.txt");
+            fs::write(&test_file_path, "abc").unwrap();
+
+            let semantic = cksum_native_semantic(
+                vec![
+                    OsString::from("cksum"),
+                    OsString::from(test_file_path.to_string_lossy().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].kind, "compute");
+            assert_eq!(semantic.rows[0].algorithm, "crc");
+            assert_eq!(semantic.rows[0].checksum, "1219131554");
+            assert_eq!(semantic.rows[0].bytes, Some(3));
+            assert_eq!(semantic.rows[0].reported_size, Some(3));
+            assert!(semantic.classic_text.contains("1219131554 3 "));
+        }
+
+        #[test]
+        fn test_cksum_native_semantic_check_row() {
+            let temp_dir = Builder::new()
+                .prefix("test_cksum_native_semantic_check_row")
+                .tempdir()
+                .unwrap();
+            let test_file_path = temp_dir.path().join("sample.txt");
+            let manifest_path = temp_dir.path().join("sample.ck");
+            fs::write(&test_file_path, "abc").unwrap();
+            fs::write(
+                &manifest_path,
+                format!(
+                    "SHA256 ({}) = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n",
+                    test_file_path.display()
+                ),
+            )
+            .unwrap();
+
+            let semantic = cksum_native_semantic(
+                vec![
+                    OsString::from("cksum"),
+                    OsString::from("--algorithm=sha256"),
+                    OsString::from("--check"),
+                    OsString::from(manifest_path.to_string_lossy().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].kind, "check");
+            assert_eq!(semantic.rows[0].algorithm, "sha256");
+            assert_eq!(semantic.rows[0].status.as_deref(), Some("ok"));
+            assert_eq!(semantic.rows[0].matched, Some(true));
+            assert!(semantic.classic_text.contains(": OK"));
         }
     }
 }

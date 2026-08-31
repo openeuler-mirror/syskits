@@ -62,6 +62,10 @@ fn get_workspace_dir() -> PathBuf {
     path
 }
 
+fn command_requires_serial_tests(command: &str) -> bool {
+    matches!(command, "hostname" | "more" | "stty" | "vdir")
+}
+
 /// 加载配置文件
 /// 按优先级查找配置文件:
 /// 1. 当前目录的 .compat_test.toml
@@ -204,7 +208,7 @@ fn run_tests_with_progress(
         None
     };
 
-    // 串行执行每个命令，但命令内的测试用例并行执行
+    // 串行执行每个命令；默认命令内并行，修改全局状态的命令必须串行。
     for command in commands {
         if config.verbose {
             println!("\n{}", "═".repeat(80).bold());
@@ -221,13 +225,10 @@ fn run_tests_with_progress(
             let _simple_tests: SimpleTests = serde_json::from_str(&content)
                 .map_err(|e| TestError::TestCaseError(format!("解析 JSON 测试用例失败: {e}")))?;
 
-            // 并行执行测试用例
-            let parallel = true;
-            // 串行执行测试用例
-            let results = if parallel {
-                runner.run_command_tests_parallel(command)?
-            } else {
+            let results = if command_requires_serial_tests(command) {
                 runner.run_command_tests(command)?
+            } else {
+                runner.run_command_tests_parallel(command)?
             };
 
             let passed = results.iter().filter(|r| r.passed).count();
@@ -538,6 +539,105 @@ mod tests {
     fn test_print_test_summary() {
         // 不应该panic
         print_test_summary(10, 8, 2);
+    }
+
+    #[test]
+    fn test_pty_commands_require_serial_tests() {
+        assert!(command_requires_serial_tests("more"));
+        assert!(command_requires_serial_tests("vdir"));
+    }
+
+    #[test]
+    fn test_ls_time_style_fixture_uses_fixed_timestamp() {
+        let test_cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_cases/ls.json");
+        let content = fs::read_to_string(test_cases).unwrap();
+        let simple_tests: SimpleTests = serde_json::from_str(&content).unwrap();
+        let time_style_case = simple_tests
+            .tests
+            .iter()
+            .find(|test| test.args.iter().any(|arg| arg == "test_env_time_style_std"))
+            .unwrap();
+        let setup_commands = time_style_case.setup_commands.as_ref().unwrap();
+
+        assert!(
+            setup_commands
+                .iter()
+                .any(|command| command.contains("touch -m -t "))
+        );
+    }
+
+    #[test]
+    fn test_ls_ctime_fixture_does_not_compare_current_minute() {
+        let test_cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_cases/ls.json");
+        let content = fs::read_to_string(test_cases).unwrap();
+        let simple_tests: SimpleTests = serde_json::from_str(&content).unwrap();
+        let ctime_case = simple_tests
+            .tests
+            .iter()
+            .find(|test| test.args.iter().any(|arg| arg == "test_ctime"))
+            .unwrap();
+
+        assert!(ctime_case.expectation.ignore_fields.ignore_stdout);
+        assert!(
+            ctime_case
+                .expectation
+                .verifications
+                .iter()
+                .any(|verification| verification.command.contains("test_ctime"))
+        );
+    }
+
+    #[test]
+    fn test_stat_filesystem_fixture_does_not_compare_dynamic_counts() {
+        let test_cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_cases/stat.json");
+        let content = fs::read_to_string(test_cases).unwrap();
+        let simple_tests: SimpleTests = serde_json::from_str(&content).unwrap();
+        let dynamic_statfs_cases = ["文件系统状态测试", "--cached 选项与文件系统状态结合测试"];
+
+        for description in dynamic_statfs_cases {
+            let statfs_case = simple_tests
+                .tests
+                .iter()
+                .find(|test| test.description == description)
+                .unwrap();
+
+            assert!(statfs_case.expectation.ignore_fields.ignore_stdout);
+            assert!(!statfs_case.expectation.verifications.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_vdir_time_fixtures_use_fixed_timestamps() {
+        let test_cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test_cases/vdir.json");
+        let content = fs::read_to_string(test_cases).unwrap();
+        let simple_tests: SimpleTests = serde_json::from_str(&content).unwrap();
+        let sort_time_case = simple_tests
+            .tests
+            .iter()
+            .find(|test| test.description == "vdir: -t")
+            .unwrap();
+        let directory_case = simple_tests
+            .tests
+            .iter()
+            .find(|test| test.description == "vdir: -d (directory)")
+            .unwrap();
+
+        assert!(
+            sort_time_case
+                .setup_commands
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|command| command.contains("touch -t "))
+        );
+        assert!(
+            directory_case
+                .setup_commands
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|command| command.contains("touch -t ") && command.contains("test_vdir_d"))
+        );
     }
 
     #[test]

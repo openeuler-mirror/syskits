@@ -36,7 +36,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
 use std::num::ParseIntError;
 use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
@@ -432,7 +432,7 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
     let mut offset: usize = 0;
     for filename in files {
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
-            Box::new(stdin())
+            ctcore::ct_io::stdin_reader_box()
         } else {
             Box::new(File::open(filename)?)
         });
@@ -1450,16 +1450,9 @@ fn ptx_collect_semantic_rows_from_argv(
     };
 
     if let Some(bytes) = stdin_bytes {
-        return ctcore::ct_io::with_stdin_writer(
-            "ptx",
-            move |mut stdin| match stdin.write_all(&bytes) {
-                Ok(()) => Ok(()),
-                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
-                Err(err) => Err(err),
-            },
-            move || ptx_collect_semantic_rows_from_matches(matches),
-            |err| CtSimpleError::new(1, format!("ptx: stdin write error: {err}")),
-        );
+        return ctcore::ct_io::with_injected_stdin(bytes, move || {
+            ptx_collect_semantic_rows_from_matches(matches)
+        });
     }
 
     ptx_collect_semantic_rows_from_matches(matches)

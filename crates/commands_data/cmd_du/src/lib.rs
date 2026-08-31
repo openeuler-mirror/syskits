@@ -66,12 +66,12 @@ fn run_du_with_optional_files0_stdin(
         return Ok(ct_du::du_native_semantic(intent.argv.iter().cloned()));
     }
 
-    ctcore::ct_io::with_stdin_writer(
-        "du",
-        move |stdin| write_files0_pipeline_input(input, stdin),
-        || Ok(ct_du::du_native_semantic(intent.argv.iter().cloned())),
-        |err| CtDiagnosticError::simple(format!("du: {err}")),
-    )
+    let mut stdin_bytes = Vec::new();
+    write_files0_pipeline_input(input, &mut stdin_bytes)
+        .map_err(|err| CtDiagnosticError::simple(format!("du: {err}")))?;
+    Ok(ctcore::ct_io::with_injected_stdin(stdin_bytes, || {
+        ct_du::du_native_semantic(intent.argv.iter().cloned())
+    }))
 }
 
 fn render_error_text(err: &dyn CTError) -> String {

@@ -693,31 +693,29 @@ fn extract_time(options: &clap::ArgMatches) -> LsTime {
     }
 }
 
-// 可以传递一些环境变量
-// 目前，我们只验证是否为空，并已知 TERM
 fn is_color_compatible_term() -> bool {
-    let is_term_set = std::env::var("TERM").is_ok();
-    let is_colorterm_set = std::env::var("COLORTERM").is_ok();
+    if std::env::var_os("COLORTERM").is_some_and(|value| !value.is_empty()) {
+        return true;
+    }
 
-    let term = std::env::var("TERM").unwrap_or_default();
-    let colorterm = std::env::var("COLORTERM").unwrap_or_default();
+    let Some(term) = std::env::var_os("TERM").filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let term = term.to_string_lossy();
 
     // 在 TERM 结构中使用搜索功能来管理通配符
-    let term_matches = |term: &str| -> bool {
-        ctcore::ct_colors::CT_TERMS.iter().any(|&pattern| {
-            term == pattern
-                || (pattern.ends_with('*') && term.starts_with(&pattern[..pattern.len() - 1]))
-        })
-    };
+    ctcore::ct_colors::CT_TERMS.iter().any(|&pattern| {
+        term == pattern
+            || (pattern.ends_with('*') && term.starts_with(&pattern[..pattern.len() - 1]))
+    })
+}
 
-    if is_term_set && term.is_empty() && is_colorterm_set && colorterm.is_empty() {
-        return false;
-    }
+fn has_explicit_ls_colors() -> bool {
+    std::env::var_os("LS_COLORS").is_some_and(|value| !value.is_empty())
+}
 
-    if !term.is_empty() && !term_matches(&term) {
-        return false;
-    }
-    true
+fn has_usable_ls_colors() -> bool {
+    has_explicit_ls_colors() || is_color_compatible_term()
 }
 
 /// 根据提供的选项提取要使用的颜色选项。
@@ -730,9 +728,17 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
         None => options.contains_id(ls_flags::LS_COLOR),
         Some(val) => match val.as_str() {
             "" | "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => is_color_compatible_term() && stdout().is_terminal(),
+            "auto" | "tty" | "if-tty" => has_usable_ls_colors() && stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
+    }
+}
+
+fn load_ls_colors() -> Option<LsColors> {
+    match std::env::var("LS_COLORS") {
+        Ok(value) if !value.is_empty() => Some(LsColors::from_string(&value)),
+        _ if has_usable_ls_colors() => Some(LsColors::default()),
+        _ => None,
     }
 }
 
@@ -1289,7 +1295,7 @@ impl LsConfig {
         }
 
         let color = if is_needs_color {
-            Some(LsColors::from_env().unwrap_or_default())
+            load_ls_colors()
         } else {
             None
         };
@@ -4323,6 +4329,15 @@ fn calculate_padding_collection<'a, W: Write>(
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn lock_env() -> MutexGuard<'static, ()> {
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     struct EnvVarGuard {
         name: &'static str,
@@ -4334,6 +4349,14 @@ mod tests {
             let previous = std::env::var_os(name);
             unsafe {
                 std::env::set_var(name, value);
+            }
+            Self { name, previous }
+        }
+
+        fn unset(name: &'static str) -> Self {
+            let previous = std::env::var_os(name);
+            unsafe {
+                std::env::remove_var(name);
             }
             Self { name, previous }
         }
@@ -4377,7 +4400,8 @@ mod tests {
     }
 
     #[test]
-    fn color_always_ignores_incompatible_term() {
+    fn color_always_requests_color_even_for_incompatible_term() {
+        let _env_lock = lock_env();
         let _term = EnvVarGuard::set("TERM", "dumb");
 
         let matches = ct_app()
@@ -4385,6 +4409,39 @@ mod tests {
             .unwrap();
 
         assert!(extract_color(&matches));
+    }
+
+    #[test]
+    fn default_ls_colors_require_compatible_terminal() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "");
+        let _colorterm = EnvVarGuard::set("COLORTERM", "");
+        let _term = EnvVarGuard::set("TERM", "dumb");
+
+        assert!(!is_color_compatible_term());
+        assert!(load_ls_colors().is_none());
+    }
+
+    #[test]
+    fn colorterm_enables_default_ls_colors_without_term() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::unset("LS_COLORS");
+        let _colorterm = EnvVarGuard::set("COLORTERM", "truecolor");
+        let _term = EnvVarGuard::unset("TERM");
+
+        assert!(is_color_compatible_term());
+        assert!(load_ls_colors().is_some());
+    }
+
+    #[test]
+    fn explicit_ls_colors_override_incompatible_terminal() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "ex=01;32");
+        let _colorterm = EnvVarGuard::set("COLORTERM", "");
+        let _term = EnvVarGuard::set("TERM", "dumb");
+
+        assert!(!is_color_compatible_term());
+        assert!(load_ls_colors().is_some());
     }
 
     #[test]

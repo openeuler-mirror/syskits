@@ -146,6 +146,31 @@ fn semantic_to_value(semantic: &ct_uniq::UniqSemantic) -> CtValue {
     )
 }
 
+fn display_columns_for_value(value: &CtValue) -> CtValue {
+    let show_counts = match value {
+        CtValue::List(items) => items.iter().any(|item| match item {
+            CtValue::Record(fields) => fields.iter().any(|(key, value)| {
+                key == "show_counts" && matches!(value, CtValue::Bool(true))
+            }),
+            _ => false,
+        }),
+        _ => false,
+    };
+
+    let columns = if show_counts {
+        vec!["line", "count"]
+    } else {
+        vec!["line"]
+    };
+
+    CtValue::List(
+        columns
+            .into_iter()
+            .map(|name| CtValue::String(name.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdUniq {
     fn signature(&self) -> DataSignature {
         DataSignature::new("uniq", "structured uniq output rows")
@@ -167,28 +192,30 @@ impl DataCommand for CmdUniq {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = UniqIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = UniqCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("uniq".into()),
-                ..Default::default()
+        let display_columns = display_columns_for_value(&value);
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("uniq".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns);
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{UniqIntent, semantic_to_value};
+    use super::{UniqIntent, display_columns_for_value, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -294,6 +321,39 @@ mod tests {
                     ("is_repeated".into(), CtValue::Bool(false)),
                     ("is_unique".into(), CtValue::Bool(true)),
                 ]),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_default_to_line_only() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("show_counts".into(), CtValue::Bool(false)),
+            ("line".into(), CtValue::String("alpha".into())),
+            ("count".into(), CtValue::Int(2)),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![
+                CtValue::String("line".into()),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_include_count_when_enabled() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("show_counts".into(), CtValue::Bool(true)),
+            ("line".into(), CtValue::String("alpha".into())),
+            ("count".into(), CtValue::Int(2)),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![
+                CtValue::String("line".into()),
+                CtValue::String("count".into()),
             ])
         );
     }

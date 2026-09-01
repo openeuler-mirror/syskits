@@ -114,6 +114,15 @@ fn semantic_to_value(semantic: &ct_head::HeadSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["source_name", "row_index", "line", "byte_length"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdHead {
     fn signature(&self) -> DataSignature {
         DataSignature::new("head", "structured head output rows")
@@ -135,28 +144,29 @@ impl DataCommand for CmdHead {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = HeadIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = HeadCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("head".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("head".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadIntent, semantic_to_value};
+    use super::{HeadIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -241,6 +251,19 @@ mod tests {
                     ("byte_length".into(), CtValue::Int(4)),
                     ("terminated".into(), CtValue::Bool(true)),
                 ]),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_head_rows() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("source_name".into()),
+                CtValue::String("row_index".into()),
+                CtValue::String("line".into()),
+                CtValue::String("byte_length".into()),
             ])
         );
     }

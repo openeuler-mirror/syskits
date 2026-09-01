@@ -356,7 +356,10 @@ pub fn parse_and_eval_expr(
 /// DSL 管线操作符字符集：这些字符出现在 token 中时必须引号保护。
 fn needs_dsl_quoting(s: &str) -> bool {
     s.chars().any(|c| {
-        matches!(c, ' ' | '\t' | '\n' | '|' | '"' | '\'' | '\\' | ';' | '(' | ')' | '{' | '}')
+        matches!(
+            c,
+            ' ' | '\t' | '\n' | '|' | '"' | '\'' | '\\' | ';' | '(' | ')' | '{' | '}'
+        )
     }) || s.is_empty()
 }
 
@@ -384,6 +387,10 @@ fn dsl_quote_token(s: &str) -> String {
 /// 如果包含空格/管道等字符则必须以双引号字面量形式传递，否则 DSL lexer 会
 /// 将它们解析为多个独立 token 并破坏参数边界。
 fn argv_to_dsl_expr(args: &[String]) -> String {
+    if args.len() == 1 {
+        return args[0].clone();
+    }
+
     args.iter()
         .map(|a| {
             if needs_dsl_quoting(a) {
@@ -617,6 +624,12 @@ mod tests {
     fn argv_to_dsl_expr_quotes_token_with_space() {
         let args = vec!["cat".to_string(), "/tmp/a b.txt".to_string()];
         assert_eq!(argv_to_dsl_expr(&args), r#"cat "/tmp/a b.txt""#);
+    }
+
+    #[test]
+    fn argv_to_dsl_expr_single_arg_is_raw_expression() {
+        let args = vec!["ls -a".to_string()];
+        assert_eq!(argv_to_dsl_expr(&args), "ls -a");
     }
 
     #[test]

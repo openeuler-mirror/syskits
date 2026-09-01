@@ -89,6 +89,10 @@ fn field_name(field: ct_df::DfSemanticField) -> &'static str {
 }
 
 fn field_value(row: &ct_df::DfSemanticRow, field: ct_df::DfSemanticField) -> CtValue {
+    if let Some(value) = row.display_values.get(&field) {
+        return CtValue::String(value.clone());
+    }
+
     match field {
         ct_df::DfSemanticField::Source => string_or_nothing(row.source.as_ref()),
         ct_df::DfSemanticField::Fstype => string_or_nothing(row.fstype.as_ref()),
@@ -220,6 +224,7 @@ mod tests {
                 pcent: Some(25),
                 file: None,
                 target: Some("/".into()),
+                display_values: Default::default(),
             },
             &[
                 ct_df::DfSemanticField::Source,
@@ -234,6 +239,49 @@ mod tests {
                 ("is_total".into(), CtValue::Bool(false)),
                 ("source".into(), CtValue::String("/dev/root".into())),
                 ("target".into(), CtValue::String("/".into())),
+            ])
+        );
+    }
+
+    #[test]
+    fn row_to_value_prefers_display_values_for_scaled_fields() {
+        let mut display_values = std::collections::BTreeMap::new();
+        display_values.insert(ct_df::DfSemanticField::Size, "69G".into());
+        display_values.insert(ct_df::DfSemanticField::Used, "56G".into());
+        display_values.insert(ct_df::DfSemanticField::Avail, "10G".into());
+
+        let value = row_to_value(
+            &ct_df::DfSemanticRow {
+                row_kind: ct_df::DfRowKind::Filesystem,
+                source: Some("/dev/root".into()),
+                fstype: Some("ext4".into()),
+                itotal: None,
+                iused: None,
+                iavail: None,
+                ipcent: None,
+                size: Some(73_650_106_368),
+                used: Some(60_090_609_664),
+                avail: Some(10_443_575_296),
+                pcent: Some(86),
+                file: None,
+                target: Some("/".into()),
+                display_values,
+            },
+            &[
+                ct_df::DfSemanticField::Size,
+                ct_df::DfSemanticField::Used,
+                ct_df::DfSemanticField::Avail,
+            ],
+        );
+
+        assert_eq!(
+            value,
+            CtValue::Record(vec![
+                ("row_kind".into(), CtValue::String("filesystem".into())),
+                ("is_total".into(), CtValue::Bool(false)),
+                ("size".into(), CtValue::String("69G".into())),
+                ("used".into(), CtValue::String("56G".into())),
+                ("avail".into(), CtValue::String("10G".into())),
             ])
         );
     }

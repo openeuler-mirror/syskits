@@ -16,6 +16,7 @@ mod table;
 
 use blocks::BlocksHumanReadable;
 use rust_i18n::t;
+use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -139,7 +140,7 @@ pub enum DfRowKind {
     Total,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DfSemanticField {
     Source,
     Fstype,
@@ -170,6 +171,7 @@ pub struct DfSemanticRow {
     pub pcent: Option<u64>,
     pub file: Option<String>,
     pub target: Option<String>,
+    pub display_values: BTreeMap<DfSemanticField, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -651,11 +653,11 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
     let classic_text = Table::new(&classic_options, filesystems.clone()).to_string();
     let mut rows = filesystems
         .iter()
-        .map(filesystem_to_semantic_row)
+        .map(|filesystem| filesystem_to_semantic_row(filesystem, &classic_options))
         .collect::<Vec<_>>();
 
     if classic_options.show_total {
-        rows.push(total_semantic_row(&filesystems));
+        rows.push(total_semantic_row(&filesystems, &classic_options));
     }
 
     Ok(DfSemantic {
@@ -710,7 +712,7 @@ fn semantic_field_from_column(column: Column) -> DfSemanticField {
     }
 }
 
-fn filesystem_to_semantic_row(filesystem: &Filesystem) -> DfSemanticRow {
+fn filesystem_to_semantic_row(filesystem: &Filesystem, options: &DfOptions) -> DfSemanticRow {
     let bytes_used_blocks = filesystem
         .usage
         .blocks
@@ -729,6 +731,8 @@ fn filesystem_to_semantic_row(filesystem: &Filesystem) -> DfSemanticRow {
     let iavail = u128::from(filesystem.usage.ffree);
     let iused = itotal.saturating_sub(iavail);
 
+    let row = table::TableRow::from(filesystem.clone());
+
     DfSemanticRow {
         row_kind: DfRowKind::Filesystem,
         source: Some(filesystem.mount_info.dev_name.clone()),
@@ -743,10 +747,11 @@ fn filesystem_to_semantic_row(filesystem: &Filesystem) -> DfSemanticRow {
         pcent: percent_ceil(u128::from(used), u128::from(used) + u128::from(avail)),
         file: filesystem.file.clone(),
         target: Some(filesystem.mount_info.mount_dir.clone()),
+        display_values: semantic_display_values(&row, options, false),
     }
 }
 
-fn total_semantic_row(filesystems: &[Filesystem]) -> DfSemanticRow {
+fn total_semantic_row(filesystems: &[Filesystem], options: &DfOptions) -> DfSemanticRow {
     let mut size = 0u64;
     let mut used = 0u64;
     let mut avail = 0u64;
@@ -755,13 +760,18 @@ fn total_semantic_row(filesystems: &[Filesystem]) -> DfSemanticRow {
     let mut iavail = 0u128;
 
     for filesystem in filesystems {
-        let row = filesystem_to_semantic_row(filesystem);
+        let row = filesystem_to_semantic_row(filesystem, options);
         size = size.saturating_add(row.size.unwrap_or(0));
         used = used.saturating_add(row.used.unwrap_or(0));
         avail = avail.saturating_add(row.avail.unwrap_or(0));
         itotal = itotal.saturating_add(row.itotal.unwrap_or(0));
         iused = iused.saturating_add(row.iused.unwrap_or(0));
         iavail = iavail.saturating_add(row.iavail.unwrap_or(0));
+    }
+
+    let mut total = table::TableRow::new("total");
+    for filesystem in filesystems {
+        total += table::TableRow::from(filesystem.clone());
     }
 
     DfSemanticRow {
@@ -778,7 +788,23 @@ fn total_semantic_row(filesystems: &[Filesystem]) -> DfSemanticRow {
         pcent: percent_ceil(u128::from(used), u128::from(used) + u128::from(avail)),
         file: None,
         target: Some("-".into()),
+        display_values: semantic_display_values(&total, options, true),
     }
+}
+
+fn semantic_display_values(
+    row: &table::TableRow,
+    options: &DfOptions,
+    is_total_row: bool,
+) -> BTreeMap<DfSemanticField, String> {
+    let values = table::TableRowFormatter::new(row, options, is_total_row).get_values();
+    options
+        .columns
+        .iter()
+        .copied()
+        .map(semantic_field_from_column)
+        .zip(values)
+        .collect()
 }
 
 fn percent_ceil(numerator: u128, denominator: u128) -> Option<u64> {
@@ -7545,6 +7571,33 @@ mod tests {
             let result = df_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_df_native_semantic_human_readable_preserves_display_values() {
+            let temp_dir = Builder::new()
+                .prefix("tests_df_native_semantic_file1")
+                .tempdir()
+                .unwrap();
+            let sub_dir_path = temp_dir.path().join("sub_dir");
+            fs::create_dir(&sub_dir_path).unwrap();
+
+            let df_dir = sub_dir_path.to_str().unwrap();
+            let args = [ctcore::ct_util_name(), df_dir, "--human-readable"];
+            let semantic = crate::df_native_semantic(args.iter().map(OsString::from)).unwrap();
+            let row = semantic.rows.first().expect("filesystem row");
+
+            for field in [
+                crate::DfSemanticField::Size,
+                crate::DfSemanticField::Used,
+                crate::DfSemanticField::Avail,
+            ] {
+                let display = row.display_values.get(&field).expect("display value");
+                assert!(
+                    display.chars().any(|ch| ch.is_ascii_alphabetic()),
+                    "expected human-readable suffix in {display:?}"
+                );
+            }
         }
 
         #[test]

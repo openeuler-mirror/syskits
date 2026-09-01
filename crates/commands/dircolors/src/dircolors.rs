@@ -86,71 +86,6 @@ fn dircolors_get_colors_format_strings(fmt: &DircolorsOutputFmt) -> (String, Str
     (prefix, suffix)
 }
 
-pub fn dircolors_generate_type_output(fmt: &DircolorsOutputFmt) -> String {
-    match fmt {
-        DircolorsOutputFmt::Display => CT_FILE_TYPES
-            .iter()
-            .map(|&(_, key, val)| format!("\x1b[{val}m{key}\t{val}\x1b[0m"))
-            .collect::<Vec<String>>()
-            .join("\n"),
-        _ => {
-            // Existing logic for other formats
-            CT_FILE_TYPES
-                .iter()
-                .map(|&(_, v1, v2)| format!("{v1}={v2}"))
-                .collect::<Vec<String>>()
-                .join(":")
-        }
-    }
-}
-
-/**
- * 生成用于配置ls颜色的字符串。
- *
- * 根据提供的`fmt`和`sep`参数，生成一个配置ls显示颜色的字符串。主要支持两种格式：
- * 1. `Display`格式，用于直接显示颜色样式的字符串，每个文件类型扩展名及其颜色代码会以分隔符`\n`分隔。
- * 2. 其他格式，用于生成`.bashrc`或其他配置文件中使用的`LS_COLORS`环境变量字符串格式。
- *
- */
-fn dircolors_generate_ls_colors(fmt: &DircolorsOutputFmt, sep: &str) -> String {
-    match fmt {
-        DircolorsOutputFmt::Display => {
-            // 为显示格式生成颜色配置字符串
-            let mut display_parts = vec![];
-            let type_output = dircolors_generate_type_output(fmt);
-            display_parts.push(type_output);
-            // 遍历文件类型颜色映射，生成带颜色的扩展名展示
-            for &(extension, code) in CT_FILE_COLORS {
-                let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
-                display_parts.push(formatted_extension);
-            }
-            // 用换行符连接所有部分并返回
-            display_parts.join("\n")
-        }
-        _ => {
-            // 为LS_COLORS环境变量格式生成颜色配置字符串
-            let mut parts = vec![];
-            // 格式化每个文件扩展名及其颜色代码
-            for &(extension, code) in CT_FILE_COLORS {
-                let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("{prefix}{extension}");
-                parts.push(format!("{formatted_extension}={code}"));
-            }
-            // 根据输出格式，获取前缀和后缀，并组装最终字符串
-            let (prefix, suffix) = dircolors_get_colors_format_strings(fmt);
-            let ls_colors = parts.join(sep);
-            format!(
-                "{}{}:{}:{}",
-                prefix,
-                dircolors_generate_type_output(fmt),
-                ls_colors,
-                suffix
-            )
-        }
-    }
-}
-
 /**
  * 命令行应用程序的主函数，用于解析参数并执行相应的操作，如打印目录颜色配置。
  *
@@ -162,7 +97,9 @@ fn dircolors_generate_ls_colors(fmt: &DircolorsOutputFmt, sep: &str) -> String {
  */
 pub fn dircolors_main(args: impl ctcore::Args) -> CTResult<()> {
     let semantic = dircolors_native_semantic(args)?;
-    println!("{}", semantic.output);
+    if !semantic.output.is_empty() {
+        println!("{}", semantic.output);
+    }
     Ok(())
 }
 
@@ -235,7 +172,9 @@ fn dircolors_collect_output(
     out_format: &DircolorsOutputFmt,
 ) -> CTResult<String> {
     if files.is_empty() {
-        Ok(dircolors_generate_ls_colors(out_format, ":"))
+        let default_config = generate_dircolors_config();
+        dircolors_parse(default_config.lines(), out_format, "<internal>")
+            .map_err(|s| CtSimpleError::new(1, s))
     } else if files.len() > 1 {
         return Err(CTsageError::new(
             1,
@@ -597,13 +536,20 @@ pub fn generate_dircolors_config() -> String {
 
     config.push_str(
         "\
-         # Configuration file for dircolors, a utility to help you set the\n\
-         # LS_COLORS environment variable used by GNU ls with the --color option.\n\
-         # The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the\n\
-         # slackware version of dircolors) are recognized but ignored.\n\
-         # Global config options can be specified before TERM or COLORTERM entries\n\
-         # Below are TERM or COLORTERM entries, which can be glob patterns, which\n\
-         # restrict following config to systems with matching environment variables.\n\
+        # Configuration file for dircolors, a utility to help you set the\n\
+        # LS_COLORS environment variable used by GNU ls with the --color option.\n\
+        # Copyright (C) 1996-2023 Free Software Foundation, Inc.\n\
+        # Copying and distribution of this file, with or without modification,\n\
+        # are permitted provided the copyright notice and this notice are preserved.\n\
+        #\n\
+        # The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the\n\
+        # slackware version of dircolors) are recognized but ignored.\n\
+        # Global config options can be specified before TERM or COLORTERM entries\n\
+        # ===================================================================\n\
+        # Terminal filters\n\
+        # ===================================================================\n\
+        # Below are TERM or COLORTERM entries, which can be glob patterns, which\n\
+        # restrict following config to systems with matching environment variables.\n\
         ",
     );
     config.push_str("COLORTERM ?*\n");
@@ -613,6 +559,9 @@ pub fn generate_dircolors_config() -> String {
 
     config.push_str(
         "\
+        # ===================================================================\n\
+        # Basic file attributes\n\
+        # ===================================================================\n\
         # Below are the color init strings for the basic file types.\n\
         # One can use codes for 256 or more colors supported by modern terminals.\n\
         # The default color codes use the capabilities of an 8 color terminal\n\
@@ -629,15 +578,69 @@ pub fn generate_dircolors_config() -> String {
     );
 
     for (name, _, code) in CT_FILE_TYPES {
-        config.push_str(&format!("{name} {code}\n"));
+        let comment = match *name {
+            "RESET" => " # reset to \"normal\" color",
+            "DIR" => " # directory",
+            "LINK" => {
+                " # symbolic link. (If you set this to 'target' instead of a\n # numerical value, the color is as for the file pointed to.)"
+            }
+            "MULTIHARDLINK" => " # regular file with more than one link",
+            "FIFO" => " # pipe",
+            "SOCK" => " # socket",
+            "DOOR" => " # door",
+            "BLK" => " # block device driver",
+            "CHR" => " # character device driver",
+            "ORPHAN" => " # symlink to nonexistent file, or non-stat'able file ...",
+            "MISSING" => " # ... and the files they point to",
+            "SETUID" => " # file that is setuid (u+s)",
+            "SETGID" => " # file that is setgid (g+s)",
+            "CAPABILITY" => " # file with capability (very expensive to lookup)",
+            "STICKY_OTHER_WRITABLE" => " # dir that is sticky and other-writable (+t,o+w)",
+            "OTHER_WRITABLE" => " # dir that is other-writable (o+w) and not sticky",
+            "STICKY" => " # dir with the sticky bit set (+t) and not other-writable",
+            "EXEC" => "",
+            _ => "",
+        };
+        if *name == "EXEC" {
+            config.push_str("# This is for files with execute permission:\n");
+        }
+        config.push_str(&format!("{name} {code}{comment}\n"));
     }
 
+    config.push_str("# ===================================================================\n");
+    config.push_str("# File extension attributes\n");
+    config.push_str("# ===================================================================\n");
     config.push_str("# List any file extensions like '.gz' or '.tar' that you would like ls\n");
-    config.push_str("# to color below. Put the extension, a space, and the color init string.\n");
+    config.push_str("# to color below. Put the suffix, a space, and the color init string.\n");
+    config.push_str("# (and any comments you want to add after a '#').\n");
+    config.push_str("# Suffixes are matched case insensitively, but if you define different\n");
+    config.push_str("# init strings for separate cases, those will be honored.\n");
+    config.push_str("#\n");
+    config.push_str("# If you use DOS-style suffixes, you may want to uncomment the following:\n");
+    config.push_str("#.cmd 01;32 # executables (bright green)\n");
+    config.push_str("#.exe 01;32\n");
+    config.push_str("#.com 01;32\n");
+    config.push_str("#.btm 01;32\n");
+    config.push_str("#.bat 01;32\n");
+    config.push_str("# Or if you want to color scripts even if they do not have the\n");
+    config.push_str("# executable bit actually set.\n");
+    config.push_str("#.sh 01;32\n");
+    config.push_str("#.csh 01;32\n");
+    config.push_str("# archives or compressed (bright red)\n");
 
     for (ext, color) in CT_FILE_COLORS {
+        if *ext == ".avif" {
+            config.push_str("# image formats\n");
+        } else if *ext == ".aac" {
+            config.push_str("# audio formats\n");
+        } else if *ext == "*~" {
+            config.push_str("# backup files\n");
+        } else if *ext == ".ogv" || *ext == ".oga" {
+            config.push_str("# https://wiki.xiph.org/MIME_Types_and_File_Extensions\n");
+        }
         config.push_str(&format!("{ext} {color}\n"));
     }
+    config.push_str("#\n");
     config.push_str("# Subsequent TERM or COLORTERM entries, can be used to add / override\n");
     config.push_str("# config specific to those matching environment variables.");
 

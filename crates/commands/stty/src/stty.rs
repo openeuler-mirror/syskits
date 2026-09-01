@@ -25,6 +25,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use device::Device;
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort, tcflag_t};
+use nix::sys::termios::SetArg;
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O, SpecialCharacterIndices,
     Termios, cfgetispeed, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
@@ -332,6 +333,18 @@ fn validate_setting_syntax(setting: &str) -> CTResult<()> {
     Ok(())
 }
 
+fn is_drain_setting(setting: &str) -> bool {
+    matches!(setting, "drain" | "-drain")
+}
+
+fn tcsetattr_arg_for_setting(setting: &str) -> Option<SetArg> {
+    match setting {
+        "drain" => Some(SetArg::TCSADRAIN),
+        "-drain" => Some(SetArg::TCSANOW),
+        _ => None,
+    }
+}
+
 /// 设置或打印终端的配置
 ///
 /// 此函数根据提供的`SttyFlags`参数检查、获取或设置终端属性
@@ -361,11 +374,22 @@ fn stty<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
 
     // 通过 stty_apply_setting 应用设置
     if let Some(settings) = &opts.settings {
-        let drain_only = settings
-            .iter()
-            .all(|setting| matches!(setting.as_str(), "drain" | "-drain"));
+        let mut tcsetattr_arg = SetArg::TCSADRAIN;
+        let mut has_terminal_setting = false;
 
         for setting in settings {
+            if let Some(arg) = tcsetattr_arg_for_setting(setting) {
+                tcsetattr_arg = arg;
+            } else {
+                has_terminal_setting = true;
+            }
+        }
+
+        for setting in settings {
+            if is_drain_setting(setting) {
+                continue;
+            }
+
             let applied = stty_apply_setting(&mut termios, setting, &opts.file)?;
             if matches!(
                 applied,
@@ -376,15 +400,12 @@ fn stty<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
             }
         }
 
-        if drain_only {
+        if !has_terminal_setting {
+            stty_print_settings(&termios, opts, writer)?;
             return Ok(());
         } else {
-            tcsetattr(
-                opts.file.as_fd(),
-                nix::sys::termios::SetArg::TCSANOW,
-                &termios,
-            )
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            tcsetattr(opts.file.as_fd(), tcsetattr_arg, &termios)
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             let current =
                 tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             if !termios_equal(&termios, &current) {
@@ -1880,9 +1901,11 @@ mod tests {
         }
 
         #[test]
-        fn test_stty_main_drain_only_is_silent() {
+        fn test_stty_main_drain_only_prints_settings() {
             if should_skip_tty_tests() {
-                println!("Skipping test_stty_main_drain_only_is_silent in container environment");
+                println!(
+                    "Skipping test_stty_main_drain_only_prints_settings in container environment"
+                );
                 return;
             }
 
@@ -1891,7 +1914,7 @@ mod tests {
             let result = stty_main_with_writer(args.iter().map(OsString::from), &mut out);
 
             assert!(result.is_ok());
-            assert!(out.is_empty());
+            assert!(!out.is_empty());
         }
 
         #[test]

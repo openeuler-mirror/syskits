@@ -95,6 +95,15 @@ fn semantic_to_value(semantic: &ct_numfmt::NumfmtSemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["input", "output", "status", "error"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 fn row_to_value(row: &ct_numfmt::NumfmtRow) -> CtValue {
     CtValue::Record(vec![
         (
@@ -149,28 +158,29 @@ impl DataCommand for CmdNumfmt {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = NumfmtIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = NumfmtCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("numfmt".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("numfmt".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{NumfmtIntent, semantic_to_value};
+    use super::{NumfmtIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -231,6 +241,19 @@ mod tests {
                 ("invalid_mode".into(), CtValue::String("abort".into())),
                 ("zero_terminated".into(), CtValue::Bool(false)),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_numfmt_result() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("input".into()),
+                CtValue::String("output".into()),
+                CtValue::String("status".into()),
+                CtValue::String("error".into()),
+            ])
         );
     }
 }

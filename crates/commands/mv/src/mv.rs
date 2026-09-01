@@ -636,7 +636,6 @@ fn mv_handle_two_paths(
         // 如果目标存在且源是目录
     } else if target_exists && source_is_directory {
         if mv_options.overwrite == MvOverwriteMode::NoClobber {
-            set_ct_exit_code(1);
             return Ok(());
         }
 
@@ -1024,7 +1023,6 @@ fn mv_rename_with_hardlink_tracking(
             // 检查目标文件系统是否已存在该文件（需要覆盖）
             if to_path.exists() {
                 if options.overwrite == MvOverwriteMode::NoClobber {
-                    set_ct_exit_code(1);
                     return Ok(());
                 }
 
@@ -1151,7 +1149,6 @@ fn mv_rename(
     // 如果目标路径已存在，根据更新和覆盖选项进行处理
     if to_path.exists() {
         if options.overwrite == MvOverwriteMode::NoClobber {
-            set_ct_exit_code(1);
             return Ok(());
         }
 
@@ -2030,7 +2027,7 @@ mod tests {
 
         assert_eq!(fs::read(&source).unwrap(), b"new");
         assert_eq!(fs::read(&target).unwrap(), b"old");
-        assert_eq!(get_ct_exit_code(), 1);
+        assert_eq!(get_ct_exit_code(), 0);
         set_ct_exit_code(0);
     }
 
@@ -2257,6 +2254,32 @@ mod tests {
             let result = mv_main(args.iter().map(OsString::from));
             let _ = delete_file("test_mv_main_file_to_file");
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mv_main_no_clobber_existing_file_exits_success() {
+            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
+
+            let temp_dir = Builder::new().prefix("test_mv_main_n").tempdir().unwrap();
+            let source = temp_dir.path().join("a");
+            let target = temp_dir.path().join("b");
+            fs::write(&source, b"new").unwrap();
+            fs::write(&target, b"old").unwrap();
+            set_ct_exit_code(0);
+
+            let args = [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-n"),
+                source.as_os_str().to_os_string(),
+                target.as_os_str().to_os_string(),
+            ];
+            let result = mv_main(args.into_iter());
+
+            assert!(result.is_ok());
+            assert_eq!(fs::read(&source).unwrap(), b"new");
+            assert_eq!(fs::read(&target).unwrap(), b"old");
+            assert_eq!(get_ct_exit_code(), 0);
+            set_ct_exit_code(0);
         }
 
         #[test]

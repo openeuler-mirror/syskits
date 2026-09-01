@@ -140,6 +140,23 @@ fn semantic_to_value(semantic: &ct_ptx::PtxSemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        [
+            "keyword",
+            "before",
+            "after",
+            "reference",
+            "file",
+            "line_index",
+            "rendered_text",
+        ]
+        .into_iter()
+        .map(|name| CtValue::String(name.into()))
+        .collect(),
+    )
+}
+
 fn value_to_arg(value: &CtValue) -> String {
     match value {
         CtValue::String(s) => s.clone(),
@@ -327,28 +344,29 @@ impl DataCommand for CmdPtx {
         let intent = PtxIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) =
             PtxCore::run_core(&intent, input, ctx.output_format)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("ptx".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("ptx".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PtxIntent, semantic_to_value};
+    use super::{display_columns, PtxIntent, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -436,6 +454,33 @@ mod tests {
             matches!(field(fields, "rendered_text"), CtValue::String(s) if s == " alpha   beta gamma")
         );
         assert!(matches!(field(fields, "format"), CtValue::String(s) if s == "dumb"));
+    }
+
+    #[test]
+    fn display_columns_hide_internal_fields() {
+        let CtValue::List(columns) = display_columns() else {
+            panic!("expected list value");
+        };
+        let names = columns
+            .into_iter()
+            .map(|value| match value {
+                CtValue::String(name) => name,
+                other => panic!("unexpected display column: {other:?}"),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "keyword",
+                "before",
+                "after",
+                "reference",
+                "file",
+                "line_index",
+                "rendered_text",
+            ]
+        );
     }
 
     fn field<'a>(fields: &'a [(String, CtValue)], name: &str) -> &'a CtValue {

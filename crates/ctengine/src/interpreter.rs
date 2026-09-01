@@ -1731,6 +1731,29 @@ mod tests {
     }
 
     #[test]
+    fn test_build_data_call_unknown_gnu_numeric_range_args_preserve_argv_strings() {
+        let call = parse_single_call("cut -c 1-3 input.txt");
+        let sig = DataSignature::new("cut", "cut")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible args",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true);
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        let values: Vec<&CtValue> = data_call.positionals.iter().map(|arg| &arg.value).collect();
+        assert_eq!(
+            values,
+            vec![
+                &CtValue::String("-c".into()),
+                &CtValue::String("1-3".into()),
+                &CtValue::String("input.txt".into())
+            ]
+        );
+    }
+
+    #[test]
     fn test_build_data_call_unknown_gnu_comparison_args_preserve_argv_strings() {
         let call = parse_single_call("expr 2 < 3");
         let sig = DataSignature::new("expr", "expr")

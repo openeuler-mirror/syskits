@@ -115,14 +115,14 @@ impl ExternalInputEncoder {
     ) -> std::io::Result<()> {
         match mode {
             ExternalStdinMode::Raw => {
-                crate::pipeline_stdin::write_pipeline_as_text(input, &mut writer)?;
+                crate::pipeline_stdin::write_pipeline_as_structured_text(input, &mut writer)?;
             }
             ExternalStdinMode::TextLines => match input {
                 CtPipelineData::ByteStream(mut stream) => {
                     std::io::copy(&mut stream, &mut writer)?;
                 }
                 CtPipelineData::Value(ctpipeline::CtValue::List(items), meta) => {
-                    crate::pipeline_stdin::write_pipeline_as_text(
+                    crate::pipeline_stdin::write_pipeline_as_structured_text(
                         CtPipelineData::Value(ctpipeline::CtValue::List(items), meta),
                         &mut writer,
                     )?;
@@ -132,7 +132,7 @@ impl ExternalInputEncoder {
                     writer.write_all(b"\n")?;
                 }
                 CtPipelineData::ListStream(stream) => {
-                    crate::pipeline_stdin::write_pipeline_as_text(
+                    crate::pipeline_stdin::write_pipeline_as_structured_text(
                         CtPipelineData::ListStream(stream),
                         &mut writer,
                     )?;
@@ -179,6 +179,21 @@ mod tests {
         let mut buf = Vec::new();
         ExternalInputEncoder::encode(data, ExternalStdinMode::Raw, &mut buf).unwrap();
         assert_eq!(buf, b"hello world");
+    }
+
+    #[test]
+    fn test_encode_raw_uses_structured_text_not_classic_metadata() {
+        let meta = CtPipelineMetadata {
+            classic_text: Some("classic".into()),
+            classic_append_newline: false,
+            ..Default::default()
+        };
+        let val = CtValue::Record(vec![("text".into(), CtValue::String("structured".into()))]);
+        let data = CtPipelineData::Value(val, meta);
+
+        let mut buf = Vec::new();
+        ExternalInputEncoder::encode(data, ExternalStdinMode::Raw, &mut buf).unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap(), "{\"text\":\"structured\"}");
     }
 
     #[test]

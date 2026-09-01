@@ -96,11 +96,13 @@ impl PluginHostRunner {
         };
         writeln!(stdin, "{}", serde_json::to_string(&call_req)?)?;
 
-        // 3. Send Input stream frames
-        send_input_frames(&mut stdin, input)?;
-
-        let end_req = HostFrame::End;
-        writeln!(stdin, "{}", serde_json::to_string(&end_req)?)?;
+        // 3. Send input on a writer thread while the main thread drains plugin output.
+        let input_writer = std::thread::spawn(move || -> Result<(), PluginError> {
+            send_input_frames(&mut stdin, input)?;
+            let end_req = HostFrame::End;
+            writeln!(stdin, "{}", serde_json::to_string(&end_req)?)?;
+            Ok(())
+        });
 
         // 4. Read Output stream from plugin
         let mut results = Vec::new();
@@ -122,6 +124,7 @@ impl PluginHostRunner {
                     if !accepted {
                         terminate_child(&child);
                         process_done.store(true, Ordering::Release);
+                        let _ = join_input_writer(input_writer);
                         let msg = message.unwrap_or_else(|| "unknown".to_string());
                         return Err(PluginError::PluginFailed(format!(
                             "plugin rejected call (code={code}): {msg}"
@@ -134,6 +137,7 @@ impl PluginHostRunner {
                 PluginFrame::Error { message, code: _ } => {
                     terminate_child(&child);
                     process_done.store(true, Ordering::Release);
+                    let _ = join_input_writer(input_writer);
                     return Err(PluginError::PluginFailed(message));
                 }
                 PluginFrame::End => {
@@ -142,6 +146,12 @@ impl PluginHostRunner {
                 PluginFrame::Goodbye => break,
                 _ => {}
             }
+        }
+
+        if let Err(err) = join_input_writer(input_writer) {
+            terminate_child(&child);
+            process_done.store(true, Ordering::Release);
+            return Err(err);
         }
 
         let status = {
@@ -181,6 +191,15 @@ impl PluginHostRunner {
             let stream = CtListStream::new(iter, CtPipelineMetadata::default());
             Ok(CtPipelineData::ListStream(stream))
         }
+    }
+}
+
+fn join_input_writer(
+    handle: std::thread::JoinHandle<Result<(), PluginError>>,
+) -> Result<(), PluginError> {
+    match handle.join() {
+        Ok(result) => result,
+        Err(_) => Err(PluginError::Protocol("plugin input writer panicked".into())),
     }
 }
 

@@ -139,6 +139,23 @@ fn semantic_to_value(semantic: &ct_vdir::VdirSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        [
+            "permissions",
+            "hard_links",
+            "owner",
+            "group",
+            "name",
+            "file_type",
+            "size",
+        ]
+        .into_iter()
+        .map(|name| CtValue::String(name.into()))
+        .collect(),
+    )
+}
+
 impl DataCommand for CmdVdir {
     fn signature(&self) -> DataSignature {
         DataSignature::new("vdir", "structured verbose directory listing rows")
@@ -160,28 +177,29 @@ impl DataCommand for CmdVdir {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = VdirIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = VdirCore::run_core(&intent);
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("vdir".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("vdir".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{VdirIntent, semantic_to_value};
+    use super::{VdirIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -269,6 +287,22 @@ mod tests {
                 ("is_symlink".into(), CtValue::Bool(false)),
                 ("command_line".into(), CtValue::Bool(false)),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_verbose_listing_fields() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("permissions".into()),
+                CtValue::String("hard_links".into()),
+                CtValue::String("owner".into()),
+                CtValue::String("group".into()),
+                CtValue::String("name".into()),
+                CtValue::String("file_type".into()),
+                CtValue::String("size".into()),
+            ])
         );
     }
 }

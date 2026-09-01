@@ -4,6 +4,8 @@ use std::sync::OnceLock;
 use terminal_size::{Height, Width, terminal_size};
 use unicode_width::UnicodeWidthChar;
 
+const TABLE_TAB_WIDTH: usize = 8;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ColAlign {
     Left,
@@ -57,7 +59,8 @@ fn render_table_row(
     s.push('|');
     for (idx, width) in widths.iter().enumerate() {
         let cell = cells.get(idx).map(String::as_str).unwrap_or("");
-        let mut clipped = clip_with_ellipsis(cell, *width);
+        let expanded = expand_tabs(cell, TABLE_TAB_WIDTH);
+        let mut clipped = clip_with_ellipsis(&expanded, *width);
         if use_color && header_row {
             clipped = Style::new()
                 .fg(Color::Cyan)
@@ -95,9 +98,44 @@ pub(crate) fn stripped_width(s: &str) -> usize {
             in_escape = true;
             continue;
         }
+        if ch == '\t' {
+            let next_tab_stop = ((count / TABLE_TAB_WIDTH) + 1) * TABLE_TAB_WIDTH;
+            count = next_tab_stop;
+            continue;
+        }
         count += UnicodeWidthChar::width(ch).unwrap_or(0);
     }
     count
+}
+
+fn expand_tabs(s: &str, tab_width: usize) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut col = 0usize;
+    let mut in_escape = false;
+    for ch in s.chars() {
+        if in_escape {
+            out.push(ch);
+            if ch == 'm' {
+                in_escape = false;
+            }
+            continue;
+        }
+        if ch == '\u{1b}' {
+            in_escape = true;
+            out.push(ch);
+            continue;
+        }
+        if ch == '\t' {
+            let next_tab_stop = ((col / tab_width) + 1) * tab_width;
+            let spaces = next_tab_stop.saturating_sub(col);
+            out.push_str(&" ".repeat(spaces));
+            col = next_tab_stop;
+            continue;
+        }
+        out.push(ch);
+        col += UnicodeWidthChar::width(ch).unwrap_or(0);
+    }
+    out
 }
 
 pub(crate) fn clip_with_ellipsis(s: &str, width: usize) -> String {
@@ -185,6 +223,39 @@ fn resolve_pager_enabled() -> bool {
     {
         "off" | "never" | "false" | "0" => false,
         _ => interactive_tty,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{expand_tabs, render_ascii_table, stripped_width, ColAlign};
+
+    #[test]
+    fn stripped_width_counts_tabs_by_tab_stop() {
+        assert_eq!(stripped_width("A\t1"), 9);
+        assert_eq!(stripped_width("AB\t1"), 9);
+    }
+
+    #[test]
+    fn expand_tabs_replaces_tabs_with_spaces() {
+        assert_eq!(expand_tabs("A\t1", 8), "A       1");
+        assert_eq!(expand_tabs("AB\t1", 8), "AB      1");
+    }
+
+    #[test]
+    fn render_ascii_table_aligns_cells_with_tabs() {
+        let table = render_ascii_table(
+            vec!["mode".into(), "row_index".into(), "line".into()],
+            vec![vec!["parallel".into(), "1".into(), "A\t1".into()]],
+            vec![ColAlign::Left, ColAlign::Right, ColAlign::Left],
+        );
+
+        let lines = table.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 3);
+        let header_bar = lines[0].rfind('|').expect("header bar");
+        let row_bar = lines[2].rfind('|').expect("row bar");
+        assert_eq!(header_bar, row_bar);
+        assert!(!lines[2].contains('\t'));
     }
 }
 

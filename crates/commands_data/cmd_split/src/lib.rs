@@ -131,6 +131,15 @@ fn semantic_to_value(semantic: &ct_split::SplitSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["strategy", "path", "content", "file_name", "byte_len"]
+            .into_iter()
+            .map(|name| CtValue::String(name.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdSplit {
     fn signature(&self) -> DataSignature {
         DataSignature::new("split", "structured split output rows")
@@ -152,28 +161,29 @@ impl DataCommand for CmdSplit {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = SplitIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = SplitCore::run_core(&intent);
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("split".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("split".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SplitIntent, semantic_to_value};
+    use super::{SplitIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -246,6 +256,20 @@ mod tests {
                 ("byte_len".into(), CtValue::Int(4)),
                 ("content".into(), CtValue::String("1\n2\n".into())),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_split_outputs() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("strategy".into()),
+                CtValue::String("path".into()),
+                CtValue::String("content".into()),
+                CtValue::String("file_name".into()),
+                CtValue::String("byte_len".into()),
+            ])
         );
     }
 }

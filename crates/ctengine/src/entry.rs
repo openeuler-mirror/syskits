@@ -58,7 +58,7 @@ pub fn run_data_entry_with_registry_and_legacy(
         }
     };
 
-    // 将参数转换为 String 列表
+    // 将参数转换为 String 列表（保留原始 OsString 用于文件路径）
     let args_str: Vec<String> = request
         .pipeline_argv
         .iter()
@@ -133,7 +133,7 @@ pub fn run_data_entry_with_registry_and_legacy(
         return exit_code::RUNTIME_ERROR;
     }
 
-    let input_str = args_str.join(" ");
+    let input_str = argv_to_dsl_expr(&args_str);
 
     if input_str.trim().is_empty() {
         eprintln!("syskits data: no pipeline expression given");
@@ -353,6 +353,49 @@ pub fn parse_and_eval_expr(
     eval_expr(&expr, ctx)
 }
 
+/// DSL 管线操作符字符集：这些字符出现在 token 中时必须引号保护。
+fn needs_dsl_quoting(s: &str) -> bool {
+    s.chars().any(|c| {
+        matches!(c, ' ' | '\t' | '\n' | '|' | '"' | '\'' | '\\' | ';' | '(' | ')' | '{' | '}')
+    }) || s.is_empty()
+}
+
+/// 对单个 argv token 生成 DSL 安全的双引号字符串字面量。
+/// 转义规则与 ctdsl lexer lex_string 对应：\ " \n \t。
+fn dsl_quote_token(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// 将 argv token 列表重建为 DSL 表达式字符串，对需要引号保护的 token 做转义。
+///
+/// 设计约束：argv 中的第一个 token 通常是命令名（不含特殊字符），其余 token
+/// 如果包含空格/管道等字符则必须以双引号字面量形式传递，否则 DSL lexer 会
+/// 将它们解析为多个独立 token 并破坏参数边界。
+fn argv_to_dsl_expr(args: &[String]) -> String {
+    args.iter()
+        .map(|a| {
+            if needs_dsl_quoting(a) {
+                dsl_quote_token(a)
+            } else {
+                a.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn parse_error_to_diagnostic(err: ctdsl::ParseError) -> CtDiagnosticError {
     match err {
         ctdsl::ParseError::LexError { message, span }
@@ -562,5 +605,35 @@ mod tests {
             workflow_error_exit_code(&wf_err),
             crate::execution::exit_code::TIMEOUT
         );
+    }
+
+    #[test]
+    fn argv_to_dsl_expr_plain_tokens_joined_with_space() {
+        let args = vec!["cat".to_string(), "/etc/os-release".to_string()];
+        assert_eq!(argv_to_dsl_expr(&args), "cat /etc/os-release");
+    }
+
+    #[test]
+    fn argv_to_dsl_expr_quotes_token_with_space() {
+        let args = vec!["cat".to_string(), "/tmp/a b.txt".to_string()];
+        assert_eq!(argv_to_dsl_expr(&args), r#"cat "/tmp/a b.txt""#);
+    }
+
+    #[test]
+    fn argv_to_dsl_expr_quotes_token_with_pipe() {
+        let args = vec!["echo".to_string(), "a|b".to_string()];
+        assert_eq!(argv_to_dsl_expr(&args), r#"echo "a|b""#);
+    }
+
+    #[test]
+    fn argv_to_dsl_expr_escapes_backslash_and_quote() {
+        let args = vec!["echo".to_string(), r#"a\"b"#.to_string()];
+        assert_eq!(argv_to_dsl_expr(&args), r#"echo "a\\\"b""#);
+    }
+
+    #[test]
+    fn argv_to_dsl_expr_quotes_empty_token() {
+        let args = vec!["echo".to_string(), "".to_string()];
+        assert_eq!(argv_to_dsl_expr(&args), r#"echo """#);
     }
 }

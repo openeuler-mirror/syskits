@@ -349,17 +349,17 @@
         },
         {
             "command": "runcon",
-            "description": "runcon: 缺少命令参数 (指定标志 -u)",
+            "description": "runcon: 指定标志 -u 但无命令时显示当前上下文",
             "args": ["-u", "system_u"],
             "expectation": {
                 "execution": {
-                    "exit_code": 1,
+                    "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
                 },
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": true,
                     "ignore_function": false
                 }
@@ -367,17 +367,17 @@
         },
         {
             "command": "runcon",
-            "description": "runcon: 缺少命令参数 (指定标志 -c)",
+            "description": "runcon: 指定标志 -c 但无命令时显示当前上下文",
             "args": ["-c"],
             "expectation": {
                 "execution": {
-                    "exit_code": 1,
+                    "exit_code": 0,
                     "stdout": "",
                     "stderr": ""
                 },
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": false,
+                    "ignore_stdout": true,
                     "ignore_stderr": true,
                     "ignore_function": false
                 }

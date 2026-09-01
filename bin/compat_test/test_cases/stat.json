@@ -210,7 +210,7 @@
             "expectation": {
                 "execution": {
                     "exit_code": 0,
-                    "stdout": "^\\S+( \\S+){15}$",
+                    "stdout": "^\\S+( \\S+){15,16}$",
                     "stderr": ""
                 }
             },

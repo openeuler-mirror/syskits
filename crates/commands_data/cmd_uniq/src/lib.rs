@@ -149,9 +149,9 @@ fn semantic_to_value(semantic: &ct_uniq::UniqSemantic) -> CtValue {
 fn display_columns_for_value(value: &CtValue) -> CtValue {
     let show_counts = match value {
         CtValue::List(items) => items.iter().any(|item| match item {
-            CtValue::Record(fields) => fields.iter().any(|(key, value)| {
-                key == "show_counts" && matches!(value, CtValue::Bool(true))
-            }),
+            CtValue::Record(fields) => fields
+                .iter()
+                .any(|(key, value)| key == "show_counts" && matches!(value, CtValue::Bool(true))),
             _ => false,
         }),
         _ => false,
@@ -335,9 +335,7 @@ mod tests {
 
         assert_eq!(
             display_columns_for_value(&value),
-            CtValue::List(vec![
-                CtValue::String("line".into()),
-            ])
+            CtValue::List(vec![CtValue::String("line".into()),])
         );
     }
 

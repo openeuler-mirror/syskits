@@ -366,7 +366,7 @@ impl DataCommand for CmdPtx {
 
 #[cfg(test)]
 mod tests {
-    use super::{display_columns, PtxIntent, semantic_to_value};
+    use super::{PtxIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;

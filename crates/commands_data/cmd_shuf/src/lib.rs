@@ -162,9 +162,9 @@ fn semantic_to_value(semantic: &ct_shuf::ShufSemantic) -> CtValue {
 fn display_columns_for_value(value: &CtValue) -> CtValue {
     let has_number_output = match value {
         CtValue::List(items) => items.iter().any(|item| match item {
-            CtValue::Record(fields) => fields.iter().any(|(key, value)| {
-                key == "number" && !matches!(value, CtValue::Nothing)
-            }),
+            CtValue::Record(fields) => fields
+                .iter()
+                .any(|(key, value)| key == "number" && !matches!(value, CtValue::Nothing)),
             _ => false,
         }),
         _ => false,

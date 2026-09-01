@@ -284,7 +284,10 @@ mod tests {
                 ("group".into(), CtValue::Nothing),
                 ("file_type".into(), CtValue::String("file".into())),
                 ("size".into(), CtValue::Int(6)),
-                ("last_modified".into(), CtValue::String("Jan  1 00:00".into())),
+                (
+                    "last_modified".into(),
+                    CtValue::String("Jan  1 00:00".into())
+                ),
                 ("is_dir".into(), CtValue::Bool(false)),
                 ("is_file".into(), CtValue::Bool(true)),
                 ("is_symlink".into(), CtValue::Bool(false)),

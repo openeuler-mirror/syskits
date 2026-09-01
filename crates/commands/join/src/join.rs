@@ -2278,8 +2278,7 @@ mod tests {
         #[serial]
         fn test_compare_ignore_case_with_locale() {
             let input = JoinInput::new(Sep::Whitespaces, true, CheckOrder::Disabled);
-            let _guard =
-                EnvVarGuard::set(&[("LC_ALL", None), ("LC_COLLATE", Some("en_US.UTF-8"))]);
+            let _guard = EnvVarGuard::set(&[("LC_ALL", None), ("LC_COLLATE", Some("en_US.UTF-8"))]);
 
             // 测试忽略大小写的比较
             let result = input.compare(Some(b"ABC"), Some(b"abc"));

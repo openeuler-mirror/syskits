@@ -42,7 +42,9 @@ impl HashsumIntent {
                 return true;
             }
 
-            if arg.starts_with('-') && !arg.starts_with("--") && arg[1..].chars().any(|ch| ch == 'c')
+            if arg.starts_with('-')
+                && !arg.starts_with("--")
+                && arg[1..].chars().any(|ch| ch == 'c')
             {
                 return true;
             }

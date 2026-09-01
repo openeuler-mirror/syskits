@@ -123,6 +123,15 @@ fn semantic_to_value(semantic: &ct_expand::ExpandSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["row_index", "line", "had_tabs", "tabstops"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdExpand {
     fn signature(&self) -> DataSignature {
         DataSignature::new("expand", "structured expanded line rows")
@@ -144,22 +153,23 @@ impl DataCommand for CmdExpand {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = ExpandIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = ExpandCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("expand".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("expand".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 

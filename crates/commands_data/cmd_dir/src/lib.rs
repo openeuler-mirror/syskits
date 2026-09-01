@@ -103,6 +103,10 @@ fn row_to_value(semantic: &ct_dir::DirSemantic, row: &ct_dir::DirSemanticRow) ->
         ("group".into(), opt_string_to_value(&row.group)),
         ("file_type".into(), CtValue::String(row.file_type.clone())),
         ("size".into(), opt_u64_to_value(row.size)),
+        (
+            "last_modified".into(),
+            opt_string_to_value(&row.last_modified),
+        ),
         ("is_dir".into(), CtValue::Bool(row.is_dir)),
         ("is_file".into(), CtValue::Bool(row.is_file)),
         ("is_symlink".into(), CtValue::Bool(row.is_symlink)),

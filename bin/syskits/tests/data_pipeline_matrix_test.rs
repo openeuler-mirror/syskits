@@ -229,20 +229,20 @@ fn data_phase_a_gnu_flags_match_direct_classic_output() {
     assert_data_classic_matches_direct_with_data_args(
         "date",
         &["date", "-u", "+%Y"],
-        &["date", "-u", "\"+%Y\""],
+        &["date -u \"+%Y\""],
     );
     assert_data_classic_matches_direct(&["df", "-a", "--output=source", "/"]);
     assert_data_classic_matches_direct_with_data_args(
         "env",
         &["env", "-0", "-i", "FOO=bar"],
-        &["env", "-0", "-i", "\"FOO=bar\""],
+        &["env -0 -i \"FOO=bar\""],
     );
     assert_data_classic_matches_direct(&["ls", "-a", &dir]);
     assert_data_classic_matches_direct(&["nproc", "--all"]);
     assert_data_classic_matches_direct_with_data_args(
         "printenv",
         &["printenv", "-0", "PATH"],
-        &["printenv", "-0", "\"PATH\""],
+        &["printenv -0 PATH"],
     );
     assert_data_classic_matches_direct(&["pwd", "-P"]);
     assert_data_classic_matches_direct(&["readlink", "-f", &link]);
@@ -266,7 +266,7 @@ fn data_phase_b_gnu_flags_match_direct_classic_output() {
     assert_data_classic_matches_direct_with_data_args(
         "expr",
         &["expr", "--", "1", "=", "1"],
-        &["expr", "--", "\"1\"", "\"=\"", "\"1\""],
+        &["expr -- \"1\" \"=\" \"1\""],
     );
     assert_data_classic_matches_direct(&["hostname", "-s"]);
     assert_data_classic_matches_direct(&["id", "-u"]);
@@ -276,17 +276,17 @@ fn data_phase_b_gnu_flags_match_direct_classic_output() {
     assert_data_classic_matches_direct_with_data_args(
         "printf",
         &["printf", "--", "%s", "alpha"],
-        &["printf", "--", "\"%s\"", "alpha"],
+        &["printf -- \"%s\" alpha"],
     );
     assert_data_classic_matches_direct_with_data_args(
         "seq",
         &["seq", "-s", ",", "1", "3"],
-        &["seq", "-s", "\",\"", "\"1\"", "\"3\""],
+        &["seq -s \",\" \"1\" \"3\""],
     );
     assert_data_classic_matches_direct_with_data_args(
         "stat",
         &["stat", "-c", "%s", &file],
-        &["stat", "-c", "\"%s\"", &file],
+        &[&format!("stat -c \"%s\" {}", file)],
     );
     assert_data_classic_matches_direct(&["vdir", "-d", "-a", &dir]);
     assert_data_classic_matches_direct(&["who", "-q"]);
@@ -325,15 +325,7 @@ fn data_split_classic_flagged_files_match_direct_split() {
         .expect("run direct split");
     let data = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .current_dir(data_dir.path())
-        .args([
-            "data",
-            "format=classic",
-            "split",
-            "-l",
-            "\"1\"",
-            "input.txt",
-            "chunk_",
-        ])
+        .args(["data", "format=classic", "split -l \"1\" input.txt chunk_"])
         .output()
         .expect("run data split classic");
 
@@ -1297,12 +1289,7 @@ fn data_ptx_json_zero_length_regex_error_preserves_diagnostics_without_output_fi
         .args([
             "data",
             "format=json",
-            "ptx",
-            "-G",
-            "-S",
-            "\"^\"",
-            &input,
-            &output,
+            &format!("ptx -G -S \"^\" {input} {output}"),
         ])
         .output()
         .expect("run syskits data ptx zero-length regex");

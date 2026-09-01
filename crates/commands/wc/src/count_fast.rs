@@ -207,6 +207,7 @@ pub(crate) fn count_bytes_chars_lines_from_stream<
 mod tests {
     use std::io::Cursor;
     use std::io::Error;
+    use std::io::ErrorKind;
     use std::io::Write;
     use std::os::unix::io::{FromRawFd, IntoRawFd};
 
@@ -355,5 +356,108 @@ mod tests {
         assert_eq!(count.bytes, 16);
         assert_eq!(count.chars, 16); // Excluding newline and tab characters
         assert_eq!(count.lines, 2);
+    }
+
+    #[test]
+    fn test_count_bytes_stream_retries_after_interrupt() {
+        struct InterruptThenData {
+            calls: usize,
+        }
+
+        impl Read for InterruptThenData {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                self.calls += 1;
+                match self.calls {
+                    1 => Err(io::Error::from(ErrorKind::Interrupted)),
+                    2 => {
+                        buf[..3].copy_from_slice(b"abc");
+                        Ok(3)
+                    }
+                    _ => Ok(0),
+                }
+            }
+        }
+
+        let mut reader = InterruptThenData { calls: 0 };
+        let (count, error) = count_bytes_stream(&mut reader, 0);
+        assert_eq!(count, 3);
+        assert!(error.is_none());
+    }
+
+    #[test]
+    fn test_count_bytes_stream_returns_partial_count_on_error() {
+        struct PartialThenError {
+            calls: usize,
+        }
+
+        impl Read for PartialThenError {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                self.calls += 1;
+                match self.calls {
+                    1 => {
+                        buf[..2].copy_from_slice(b"ab");
+                        Ok(2)
+                    }
+                    _ => Err(io::Error::other("boom")),
+                }
+            }
+        }
+
+        let mut reader = PartialThenError { calls: 0 };
+        let (count, error) = count_bytes_stream(&mut reader, 0);
+        assert_eq!(count, 2);
+        assert!(error.is_some());
+    }
+
+    #[test]
+    fn test_count_bytes_handle_falls_back_for_non_fd_reader() {
+        let mut reader: Box<dyn Read> = Box::new(Cursor::new(b"hello".to_vec()));
+        let (count, error) = count_bytes_handle(&mut reader);
+        assert_eq!(count, 5);
+        assert!(error.is_none());
+    }
+
+    #[test]
+    fn test_count_bytes_handle_uses_regular_file_size_shortcut() {
+        let mut file = tempfile().expect("tempfile");
+        file.write_all(b"hello").expect("write");
+        file.flush().expect("flush");
+
+        let (count, error) = count_bytes_handle(&mut file);
+        assert_eq!(count, 5);
+        assert!(error.is_none());
+    }
+
+    #[test]
+    fn test_count_bytes_chars_lines_bytes_only() {
+        let mut cursor = Cursor::new("hé\n".as_bytes());
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, false, false>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 4);
+        assert_eq!(count.chars, 0);
+        assert_eq!(count.lines, 0);
+    }
+
+    #[test]
+    fn test_count_bytes_chars_lines_chars_only() {
+        let mut cursor = Cursor::new("hé\n".as_bytes());
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, false, true, false>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 0);
+        assert_eq!(count.chars, 3);
+        assert_eq!(count.lines, 0);
+    }
+
+    #[test]
+    fn test_count_bytes_chars_lines_no_counters_enabled() {
+        let mut cursor = Cursor::new("alpha\nbeta\n".as_bytes());
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, false, false, false>(&mut cursor);
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 0);
+        assert_eq!(count.chars, 0);
+        assert_eq!(count.lines, 0);
     }
 }

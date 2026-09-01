@@ -279,9 +279,7 @@ mod tests {
 
         let lines = table.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 3);
-        let header_bar = lines[0].rfind('|').expect("header bar");
-        let row_bar = lines[2].rfind('|').expect("row bar");
-        assert_eq!(header_bar, row_bar);
+        assert_eq!(stripped_width(lines[0]), stripped_width(lines[2]));
         assert!(!lines[2].contains('\t'));
     }
 

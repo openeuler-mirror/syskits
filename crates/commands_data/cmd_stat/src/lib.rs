@@ -55,6 +55,67 @@ fn semantic_to_value(semantic: &ct_stat::StatSemantic) -> CtValue {
     )
 }
 
+fn display_columns_for_value(value: &CtValue) -> CtValue {
+    let has_formatted = list_has_nonempty_field(value, "formatted");
+    let is_filesystem = list_has_string_field(value, "row_kind", "filesystem");
+
+    let columns = if has_formatted {
+        vec!["name", "formatted"]
+    } else if is_filesystem {
+        vec![
+            "name",
+            "filesystem_type",
+            "block_size",
+            "total_blocks",
+            "free_blocks",
+            "available_blocks",
+        ]
+    } else {
+        vec![
+            "name",
+            "size",
+            "file_type",
+            "access_rights_human",
+            "user",
+            "group",
+            "modify_time",
+        ]
+    };
+
+    CtValue::List(
+        columns
+            .into_iter()
+            .map(|name| CtValue::String(name.into()))
+            .collect(),
+    )
+}
+
+fn list_has_nonempty_field(value: &CtValue, field_name: &str) -> bool {
+    match value {
+        CtValue::List(items) => items.iter().any(|item| match item {
+            CtValue::Record(fields) => fields.iter().any(|(key, value)| {
+                key == field_name
+                    && !matches!(value, CtValue::Nothing)
+                    && !matches!(value, CtValue::String(text) if text.is_empty())
+            }),
+            _ => false,
+        }),
+        _ => false,
+    }
+}
+
+fn list_has_string_field(value: &CtValue, field_name: &str, expected: &str) -> bool {
+    match value {
+        CtValue::List(items) => items.iter().any(|item| match item {
+            CtValue::Record(fields) => fields.iter().any(|(key, value)| {
+                key == field_name && matches!(value, CtValue::String(text) if text == expected)
+            }),
+            _ => false,
+        }),
+        _ => false,
+    }
+}
+
 fn row_to_value(
     row: &ct_stat::StatSemanticRow,
     selected_fields: &[ct_stat::StatSemanticField],
@@ -167,24 +228,26 @@ impl DataCommand for CmdStat {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = StatIntent::from_call(call)?;
         let (value, classic_text) = StatCore::run_core(&intent)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: intent.classic_append_newline,
-                stderr_text: None,
-                exit_code: 0,
-                source: Some("stat".into()),
-                ..Default::default()
-            },
-        ))
+        let display_columns = display_columns_for_value(&value);
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: intent.classic_append_newline,
+            stderr_text: None,
+            exit_code: 0,
+            source: Some("stat".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns);
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{StatIntent, field_name, row_kind_name, row_to_value};
+    use super::{StatIntent, display_columns_for_value, field_name, row_kind_name, row_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -258,6 +321,65 @@ mod tests {
                 ("is_filesystem".into(), CtValue::Bool(false)),
                 ("name".into(), CtValue::String("sample".into())),
                 ("size".into(), CtValue::Int(12)),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_default_file_fields() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("row_kind".into(), CtValue::String("file".into())),
+            ("name".into(), CtValue::String("sample".into())),
+            ("size".into(), CtValue::Int(12)),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![
+                CtValue::String("name".into()),
+                CtValue::String("size".into()),
+                CtValue::String("file_type".into()),
+                CtValue::String("access_rights_human".into()),
+                CtValue::String("user".into()),
+                CtValue::String("group".into()),
+                CtValue::String("modify_time".into()),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_filesystem_fields() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("row_kind".into(), CtValue::String("filesystem".into())),
+            ("name".into(), CtValue::String("/tmp/file".into())),
+            ("filesystem_type".into(), CtValue::String("tmpfs".into())),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![
+                CtValue::String("name".into()),
+                CtValue::String("filesystem_type".into()),
+                CtValue::String("block_size".into()),
+                CtValue::String("total_blocks".into()),
+                CtValue::String("free_blocks".into()),
+                CtValue::String("available_blocks".into()),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_formatted_output() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("formatted".into(), CtValue::String("6".into())),
+            ("size".into(), CtValue::Int(6)),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![
+                CtValue::String("name".into()),
+                CtValue::String("formatted".into()),
             ])
         );
     }

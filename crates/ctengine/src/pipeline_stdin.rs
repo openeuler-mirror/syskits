@@ -3,11 +3,14 @@
  *  syskits is licensed under Mulan PSL v2.
  */
 
-use ctpipeline::{CtPipelineData, CtValue};
+use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtValue};
 use std::ffi::OsString;
 use std::io::{self, Write};
 
-pub fn write_pipeline_as_text(input: CtPipelineData, mut writer: impl Write) -> io::Result<()> {
+pub fn write_pipeline_as_structured_text(
+    input: CtPipelineData,
+    mut writer: impl Write,
+) -> io::Result<()> {
     match input {
         CtPipelineData::Empty => Ok(()),
         CtPipelineData::ByteStream(mut stream) => {
@@ -16,6 +19,27 @@ pub fn write_pipeline_as_text(input: CtPipelineData, mut writer: impl Write) -> 
         }
         CtPipelineData::Value(value, _) => {
             write_value_as_text(value, &mut writer)?;
+            writer.flush()
+        }
+        CtPipelineData::ListStream(stream) => {
+            write_values_as_lines(stream, &mut writer)?;
+            writer.flush()
+        }
+    }
+}
+
+pub fn write_pipeline_as_classic_stdin(
+    input: CtPipelineData,
+    mut writer: impl Write,
+) -> io::Result<()> {
+    match input {
+        CtPipelineData::Empty => Ok(()),
+        CtPipelineData::ByteStream(mut stream) => {
+            std::io::copy(&mut stream, &mut writer)?;
+            writer.flush()
+        }
+        CtPipelineData::Value(value, metadata) => {
+            write_value_with_metadata_as_text(value, metadata, &mut writer)?;
             writer.flush()
         }
         CtPipelineData::ListStream(stream) => {
@@ -42,7 +66,7 @@ where
     }
 
     let mut stdin_bytes = Vec::new();
-    write_pipeline_as_text(input, &mut stdin_bytes).map_err(map_io_err)?;
+    write_pipeline_as_classic_stdin(input, &mut stdin_bytes).map_err(map_io_err)?;
     ctcore::ct_io::with_injected_stdin(stdin_bytes, run)
 }
 
@@ -188,6 +212,24 @@ fn write_value_as_text(value: CtValue, writer: &mut impl Write) -> io::Result<()
     }
 }
 
+fn write_value_with_metadata_as_text(
+    value: CtValue,
+    metadata: CtPipelineMetadata,
+    writer: &mut impl Write,
+) -> io::Result<()> {
+    if let Some(bytes) = metadata.classic_bytes {
+        return writer.write_all(&bytes);
+    }
+    if let Some(text) = metadata.classic_text {
+        writer.write_all(text.as_bytes())?;
+        if metadata.classic_append_newline && !text.ends_with('\n') {
+            writer.write_all(b"\n")?;
+        }
+        return Ok(());
+    }
+    write_value_as_text(value, writer)
+}
+
 fn write_line_value(value: CtValue, writer: &mut impl Write) -> io::Result<()> {
     match value {
         CtValue::List(_) | CtValue::Record(_) => write_json_value(&value, writer),
@@ -247,7 +289,7 @@ mod tests {
     use ctpipeline::{CtListStream, CtPipelineMetadata};
 
     #[test]
-    fn write_pipeline_as_text_flattens_list_values_to_lines() {
+    fn write_pipeline_as_structured_text_flattens_list_values_to_lines() {
         let input = CtPipelineData::Value(
             CtValue::List(vec![
                 CtValue::String("hello".into()),
@@ -257,31 +299,95 @@ mod tests {
         );
 
         let mut buf = Vec::new();
-        write_pipeline_as_text(input, &mut buf).expect("should serialize");
+        write_pipeline_as_structured_text(input, &mut buf).expect("should serialize");
         assert_eq!(buf, b"hello\nworld\n");
     }
 
     #[test]
-    fn write_pipeline_as_text_serializes_records_as_json() {
+    fn write_pipeline_as_structured_text_serializes_records_as_json() {
         let input = CtPipelineData::Value(
             CtValue::Record(vec![("name".into(), CtValue::String("alice".into()))]),
             CtPipelineMetadata::default(),
         );
 
         let mut buf = Vec::new();
-        write_pipeline_as_text(input, &mut buf).expect("should serialize");
+        write_pipeline_as_structured_text(input, &mut buf).expect("should serialize");
         assert_eq!(String::from_utf8(buf).unwrap(), "{\"name\":\"alice\"}");
     }
 
     #[test]
-    fn write_pipeline_as_text_handles_list_stream() {
+    fn write_pipeline_as_structured_text_ignores_classic_text() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("text".into(), CtValue::String("hello".into()))]),
+            CtPipelineMetadata {
+                classic_text: Some("hello".into()),
+                classic_append_newline: false,
+                ..Default::default()
+            },
+        );
+
+        let mut buf = Vec::new();
+        write_pipeline_as_structured_text(input, &mut buf).expect("should serialize");
+        assert_eq!(String::from_utf8(buf).unwrap(), "{\"text\":\"hello\"}");
+    }
+
+    #[test]
+    fn write_pipeline_as_classic_stdin_prefers_classic_text_for_value_stdin() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("text".into(), CtValue::String("hello".into()))]),
+            CtPipelineMetadata {
+                classic_text: Some("hello".into()),
+                classic_append_newline: false,
+                ..Default::default()
+            },
+        );
+
+        let mut buf = Vec::new();
+        write_pipeline_as_classic_stdin(input, &mut buf).expect("should serialize");
+        assert_eq!(buf, b"hello");
+    }
+
+    #[test]
+    fn write_pipeline_as_classic_stdin_honors_classic_append_newline() {
+        let input = CtPipelineData::Value(
+            CtValue::String("hello".into()),
+            CtPipelineMetadata {
+                classic_text: Some("hello".into()),
+                classic_append_newline: true,
+                ..Default::default()
+            },
+        );
+
+        let mut buf = Vec::new();
+        write_pipeline_as_classic_stdin(input, &mut buf).expect("should serialize");
+        assert_eq!(buf, b"hello\n");
+    }
+
+    #[test]
+    fn write_pipeline_as_classic_stdin_prefers_classic_bytes_for_value_stdin() {
+        let input = CtPipelineData::Value(
+            CtValue::String("ignored".into()),
+            CtPipelineMetadata {
+                classic_text: Some("ignored".into()),
+                classic_bytes: Some(vec![0, 159, 146, 150]),
+                ..Default::default()
+            },
+        );
+
+        let mut buf = Vec::new();
+        write_pipeline_as_classic_stdin(input, &mut buf).expect("should serialize");
+        assert_eq!(buf, vec![0, 159, 146, 150]);
+    }
+
+    #[test]
+    fn write_pipeline_as_structured_text_handles_list_stream() {
         let input = CtPipelineData::ListStream(CtListStream::new(
             vec![CtValue::Int(1), CtValue::Int(2)].into_iter(),
             CtPipelineMetadata::default(),
         ));
 
         let mut buf = Vec::new();
-        write_pipeline_as_text(input, &mut buf).expect("should serialize");
+        write_pipeline_as_structured_text(input, &mut buf).expect("should serialize");
         assert_eq!(buf, b"1\n2\n");
     }
 

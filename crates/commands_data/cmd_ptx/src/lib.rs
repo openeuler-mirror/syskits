@@ -102,7 +102,7 @@ fn pipeline_or_process_stdin_to_bytes(input: CtPipelineData) -> Result<Vec<u8>, 
     }
 
     let mut bytes = Vec::new();
-    ctengine::write_pipeline_as_text(input, &mut bytes)
+    ctengine::write_pipeline_as_classic_stdin(input, &mut bytes)
         .map_err(|err| CtDiagnosticError::simple(format!("ptx: {err}")))?;
     Ok(bytes)
 }

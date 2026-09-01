@@ -59,7 +59,8 @@ pub use interpreter::{eval_pipeline, print_pipeline_data, try_print_pipeline_dat
 pub use legacy_adapter::{LegacyToolAdapter, LegacyToolResolver};
 pub use pipeline_stdin::{
     argv_has_stdin_operand, argv_uses_stdin, run_with_optional_pipeline_stdin,
-    run_with_optional_pipeline_stdin_io, write_pipeline_as_text,
+    run_with_optional_pipeline_stdin_io, write_pipeline_as_classic_stdin,
+    write_pipeline_as_structured_text,
 };
 pub use reusable_input::ReusableInput;
 pub use trace::{PipelineTrace, StageTrace, TraceStatus};

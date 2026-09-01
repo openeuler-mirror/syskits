@@ -24,6 +24,27 @@ impl FactorIntent {
 
         Ok(Self { argv })
     }
+
+    fn print_exponents(&self) -> bool {
+        let mut options_done = false;
+        for arg in self.argv.iter().skip(1) {
+            let arg = arg.to_string_lossy();
+            if options_done {
+                continue;
+            }
+
+            if arg == "--" {
+                options_done = true;
+                continue;
+            }
+
+            if arg == "-h" || arg == "--exponents" {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 fn value_to_arg(value: &CtValue) -> String {
@@ -103,6 +124,21 @@ fn row_to_value(row: &ct_factor::FactorRow) -> CtValue {
     ])
 }
 
+fn display_columns(print_exponents: bool) -> CtValue {
+    let columns = if print_exponents {
+        ["number", "factor_powers"]
+    } else {
+        ["number", "factors"]
+    };
+
+    CtValue::List(
+        columns
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdFactor {
     fn signature(&self) -> DataSignature {
         DataSignature::new("factor", "structured prime factorization output")
@@ -123,29 +159,31 @@ impl DataCommand for CmdFactor {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = FactorIntent::from_call(call)?;
+        let print_exponents = intent.print_exponents();
         let (value, classic_text, stderr_text, exit_code) = FactorCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("factor".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("factor".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns(print_exponents));
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FactorIntent, semantic_to_value};
+    use super::{FactorIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -170,6 +208,7 @@ mod tests {
                 OsString::from("12"),
             ]
         );
+        assert!(intent.print_exponents());
     }
 
     #[test]
@@ -222,6 +261,37 @@ mod tests {
                 ),
                 ("print_exponents".into(), CtValue::Bool(true)),
             ])])
+        );
+    }
+
+    #[test]
+    fn print_exponents_ignores_dash_h_after_option_terminator() {
+        let intent = FactorIntent {
+            argv: vec![
+                OsString::from("factor"),
+                OsString::from("--"),
+                OsString::from("-h"),
+            ],
+        };
+
+        assert!(!intent.print_exponents());
+    }
+
+    #[test]
+    fn display_columns_switch_with_exponent_mode() {
+        assert_eq!(
+            display_columns(false),
+            CtValue::List(vec![
+                CtValue::String("number".into()),
+                CtValue::String("factors".into()),
+            ])
+        );
+        assert_eq!(
+            display_columns(true),
+            CtValue::List(vec![
+                CtValue::String("number".into()),
+                CtValue::String("factor_powers".into()),
+            ])
         );
     }
 }

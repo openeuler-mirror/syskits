@@ -159,6 +159,31 @@ fn semantic_to_value(semantic: &ct_shuf::ShufSemantic) -> CtValue {
     )
 }
 
+fn display_columns_for_value(value: &CtValue) -> CtValue {
+    let has_number_output = match value {
+        CtValue::List(items) => items.iter().any(|item| match item {
+            CtValue::Record(fields) => fields.iter().any(|(key, value)| {
+                key == "number" && !matches!(value, CtValue::Nothing)
+            }),
+            _ => false,
+        }),
+        _ => false,
+    };
+
+    let columns = if has_number_output {
+        vec!["number"]
+    } else {
+        vec!["output_text"]
+    };
+
+    CtValue::List(
+        columns
+            .into_iter()
+            .map(|name| CtValue::String(name.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdShuf {
     fn signature(&self) -> DataSignature {
         DataSignature::new("shuf", "structured shuf output rows")
@@ -180,28 +205,30 @@ impl DataCommand for CmdShuf {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = ShufIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = ShufCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("shuf".into()),
-                ..Default::default()
+        let display_columns = display_columns_for_value(&value);
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("shuf".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns);
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ShufIntent, semantic_to_value};
+    use super::{ShufIntent, display_columns_for_value, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -274,6 +301,32 @@ mod tests {
                 ("line".into(), CtValue::String("alpha".into())),
                 ("number".into(), CtValue::Nothing),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_output_text_for_line_items() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("output_text".into(), CtValue::String("alpha".into())),
+            ("number".into(), CtValue::Nothing),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![CtValue::String("output_text".into())])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_number_for_range_items() {
+        let value = CtValue::List(vec![CtValue::Record(vec![
+            ("output_text".into(), CtValue::String("3".into())),
+            ("number".into(), CtValue::Int(3)),
+        ])]);
+
+        assert_eq!(
+            display_columns_for_value(&value),
+            CtValue::List(vec![CtValue::String("number".into())])
         );
     }
 }

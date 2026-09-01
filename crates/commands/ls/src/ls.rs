@@ -181,6 +181,10 @@ pub struct LsSemanticRow {
     pub source_path: String,
     pub path: String,
     pub name: String,
+    pub mode: Option<String>,
+    pub inode: Option<String>,
+    pub user: Option<String>,
+    pub group: Option<String>,
     pub file_type: String,
     pub size: Option<u64>,
     pub is_dir: bool,
@@ -1399,6 +1403,7 @@ fn ls_semantic_row(
     path: PathBuf,
     name: OsString,
     command_line: bool,
+    config: &LsConfig,
 ) -> LsSemanticRow {
     let metadata = path.symlink_metadata().ok();
     let file_type = metadata.as_ref().map(Metadata::file_type);
@@ -1411,6 +1416,10 @@ fn ls_semantic_row(
         source_path: source_path.display().to_string(),
         path: path.display().to_string(),
         name: name.to_string_lossy().into_owned(),
+        mode: metadata.as_ref().map(|md| display_permissions(md, true)),
+        inode: metadata.as_ref().and_then(semantic_inode),
+        user: metadata.as_ref().map(|md| display_uname(md, config)),
+        group: metadata.as_ref().map(|md| display_group(md, config)),
         file_type: ls_file_type_name(file_type.as_ref()).into(),
         size: metadata.map(|md| md.len()),
         is_dir,
@@ -1418,6 +1427,16 @@ fn ls_semantic_row(
         is_symlink,
         command_line,
     }
+}
+
+#[cfg(unix)]
+fn semantic_inode(metadata: &Metadata) -> Option<String> {
+    Some(get_inode(metadata))
+}
+
+#[cfg(not(unix))]
+fn semantic_inode(_metadata: &Metadata) -> Option<String> {
+    None
 }
 
 fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSemanticRow> {
@@ -1434,7 +1453,14 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
                 .map(OsString::from)
                 .unwrap_or_else(|| path.as_os_str().to_os_string())
         };
-        return vec![ls_semantic_row(1, path, path.to_path_buf(), name, true)];
+        return vec![ls_semantic_row(
+            1,
+            path,
+            path.to_path_buf(),
+            name,
+            true,
+            config,
+        )];
     }
 
     let mut rows = Vec::new();
@@ -1446,6 +1472,7 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
             path.to_path_buf(),
             OsString::from("."),
             false,
+            config,
         ));
         rows.push(ls_semantic_row(
             rows.len() + 1,
@@ -1453,6 +1480,7 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
             path.join(".."),
             OsString::from(".."),
             false,
+            config,
         ));
     }
 
@@ -1469,6 +1497,7 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
                 entry.path(),
                 name,
                 false,
+                config,
             ));
         }
     }

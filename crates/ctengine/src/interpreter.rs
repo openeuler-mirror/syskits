@@ -966,7 +966,8 @@ fn print_pipeline_data_table(
     match data {
         CtPipelineData::Empty => {}
         CtPipelineData::Value(CtValue::List(items), metadata) => {
-            if let Some(table) = render_list_of_records_table(&items) {
+            let display_columns = display_columns_from_metadata(&metadata);
+            if let Some(table) = render_list_of_records_table(&items, display_columns.as_deref()) {
                 print_table_block(&table, use_pager);
             } else {
                 println!("{}", format_ct_value(&CtValue::List(items)));
@@ -1105,7 +1106,36 @@ pub fn print_pipeline_data_repl_with_signal(
     try_print_pipeline_data_with_profile_and_signal(data, &OutputProfile::for_repl(), Some(signal))
 }
 
-fn render_list_of_records_table(items: &[CtValue]) -> Option<String> {
+fn display_columns_from_metadata(metadata: &ctpipeline::CtPipelineMetadata) -> Option<Vec<String>> {
+    let custom = metadata.custom.lock().ok()?;
+    match custom.get("display.columns") {
+        Some(CtValue::List(columns)) => {
+            let columns = columns
+                .iter()
+                .filter_map(|value| match value {
+                    CtValue::String(column) if !column.is_empty() => Some(column.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            (!columns.is_empty()).then_some(columns)
+        }
+        Some(CtValue::String(raw)) => {
+            let columns = raw
+                .split(',')
+                .map(str::trim)
+                .filter(|column| !column.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            (!columns.is_empty()).then_some(columns)
+        }
+        _ => None,
+    }
+}
+
+fn render_list_of_records_table(
+    items: &[CtValue],
+    display_columns: Option<&[String]>,
+) -> Option<String> {
     if items.is_empty() {
         // Keep empty list rendering consistent with format_ct_value => "[]".
         return None;
@@ -1114,16 +1144,32 @@ fn render_list_of_records_table(items: &[CtValue]) -> Option<String> {
         return None;
     }
 
-    let mut headers: Vec<String> = Vec::new();
+    let mut available_headers: Vec<String> = Vec::new();
     for item in items {
         if let CtValue::Record(fields) = item {
             for (k, _) in fields {
-                if !headers.iter().any(|h| h == k) {
-                    headers.push(k.clone());
+                if !available_headers.iter().any(|h| h == k) {
+                    available_headers.push(k.clone());
                 }
             }
         }
     }
+
+    let headers = match display_columns {
+        Some(columns) => {
+            let filtered = columns
+                .iter()
+                .filter(|column| available_headers.iter().any(|header| header == *column))
+                .cloned()
+                .collect::<Vec<_>>();
+            if filtered.is_empty() {
+                available_headers
+            } else {
+                filtered
+            }
+        }
+        None => available_headers,
+    };
 
     let mut rows: Vec<Vec<String>> = Vec::with_capacity(items.len());
     let mut aligns: Vec<ColAlign> = vec![ColAlign::Right; headers.len()];
@@ -1385,7 +1431,7 @@ mod tests {
                 ("size".into(), CtValue::Int(20)),
             ]),
         ];
-        let table = render_list_of_records_table(&items).expect("table expected");
+        let table = render_list_of_records_table(&items, None).expect("table expected");
         println!("RENDERED TABLE:\n{table}");
         assert!(table.contains("name"));
         assert!(table.contains("size"));
@@ -1394,15 +1440,33 @@ mod tests {
     }
 
     #[test]
+    fn test_render_list_of_records_table_uses_display_columns() {
+        let items = vec![CtValue::Record(vec![
+            ("command".into(), CtValue::String("ls".into())),
+            ("name".into(), CtValue::String("a".into())),
+            ("file_type".into(), CtValue::String("file".into())),
+            ("size".into(), CtValue::Int(10)),
+        ])];
+        let columns = vec!["name".into(), "file_type".into(), "size".into()];
+
+        let table = render_list_of_records_table(&items, Some(&columns)).expect("table expected");
+
+        assert!(table.contains("name"));
+        assert!(table.contains("file_type"));
+        assert!(table.contains("size"));
+        assert!(!table.contains("command"));
+    }
+
+    #[test]
     fn test_render_list_of_records_table_none_for_non_record() {
         let items = vec![CtValue::Int(1), CtValue::Int(2)];
-        assert!(render_list_of_records_table(&items).is_none());
+        assert!(render_list_of_records_table(&items, None).is_none());
     }
 
     #[test]
     fn test_render_list_of_records_table_none_for_empty_list() {
         let items: Vec<CtValue> = vec![];
-        assert!(render_list_of_records_table(&items).is_none());
+        assert!(render_list_of_records_table(&items, None).is_none());
     }
 
     #[test]

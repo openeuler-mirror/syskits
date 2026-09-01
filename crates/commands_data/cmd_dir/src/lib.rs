@@ -63,6 +63,13 @@ fn opt_u64_to_value(value: Option<u64>) -> CtValue {
     }
 }
 
+fn opt_string_to_value(value: &Option<String>) -> CtValue {
+    match value {
+        Some(value) => CtValue::String(value.clone()),
+        None => CtValue::Nothing,
+    }
+}
+
 fn row_to_value(semantic: &ct_dir::DirSemantic, row: &ct_dir::DirSemanticRow) -> CtValue {
     CtValue::Record(vec![
         ("command".into(), CtValue::String(semantic.command.clone())),
@@ -90,6 +97,10 @@ fn row_to_value(semantic: &ct_dir::DirSemantic, row: &ct_dir::DirSemanticRow) ->
         ),
         ("path".into(), CtValue::String(row.path.clone())),
         ("name".into(), CtValue::String(row.name.clone())),
+        ("mode".into(), opt_string_to_value(&row.mode)),
+        ("inode".into(), opt_string_to_value(&row.inode)),
+        ("user".into(), opt_string_to_value(&row.user)),
+        ("group".into(), opt_string_to_value(&row.group)),
         ("file_type".into(), CtValue::String(row.file_type.clone())),
         ("size".into(), opt_u64_to_value(row.size)),
         ("is_dir".into(), CtValue::Bool(row.is_dir)),
@@ -107,6 +118,46 @@ fn semantic_to_value(semantic: &ct_dir::DirSemantic) -> CtValue {
             .map(|row| row_to_value(semantic, row))
             .collect(),
     )
+}
+
+fn display_columns_for_format(display_format: Option<&str>) -> CtValue {
+    let columns = if display_format == Some("long") {
+        vec![
+            "mode",
+            "inode",
+            "user",
+            "group",
+            "name",
+            "file_type",
+            "size",
+        ]
+    } else {
+        vec!["name", "file_type", "size"]
+    };
+    CtValue::List(
+        columns
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
+fn display_columns_for_value(value: &CtValue) -> CtValue {
+    let display_format = match value {
+        CtValue::List(items) => items.iter().find_map(|item| {
+            let CtValue::Record(fields) = item else {
+                return None;
+            };
+            fields
+                .iter()
+                .find_map(|(key, value)| match (key.as_str(), value) {
+                    ("display_format", CtValue::String(format)) => Some(format.as_str()),
+                    _ => None,
+                })
+        }),
+        _ => None,
+    };
+    display_columns_for_format(display_format)
 }
 
 impl DataCommand for CmdDir {
@@ -130,28 +181,30 @@ impl DataCommand for CmdDir {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = DirIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = DirCore::run_core(&intent);
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("dir".into()),
-                ..Default::default()
+        let display_columns = display_columns_for_value(&value);
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("dir".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns);
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DirIntent, semantic_to_value};
+    use super::{DirIntent, display_columns_for_format, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -222,6 +275,10 @@ mod tests {
                 ("source_path".into(), CtValue::String(".".into())),
                 ("path".into(), CtValue::String("./alpha.txt".into())),
                 ("name".into(), CtValue::String("alpha.txt".into())),
+                ("mode".into(), CtValue::Nothing),
+                ("inode".into(), CtValue::Nothing),
+                ("user".into(), CtValue::Nothing),
+                ("group".into(), CtValue::Nothing),
                 ("file_type".into(), CtValue::String("file".into())),
                 ("size".into(), CtValue::Int(6)),
                 ("is_dir".into(), CtValue::Bool(false)),
@@ -229,6 +286,34 @@ mod tests {
                 ("is_symlink".into(), CtValue::Bool(false)),
                 ("command_line".into(), CtValue::Bool(false)),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_directory_entry_identity() {
+        assert_eq!(
+            display_columns_for_format(None),
+            CtValue::List(vec![
+                CtValue::String("name".into()),
+                CtValue::String("file_type".into()),
+                CtValue::String("size".into()),
+            ])
+        );
+    }
+
+    #[test]
+    fn long_display_columns_include_long_listing_fields() {
+        assert_eq!(
+            display_columns_for_format(Some("long")),
+            CtValue::List(vec![
+                CtValue::String("mode".into()),
+                CtValue::String("inode".into()),
+                CtValue::String("user".into()),
+                CtValue::String("group".into()),
+                CtValue::String("name".into()),
+                CtValue::String("file_type".into()),
+                CtValue::String("size".into()),
+            ])
         );
     }
 }

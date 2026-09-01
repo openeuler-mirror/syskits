@@ -20,9 +20,12 @@ use clap::{ArgMatches, Command};
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_fs::display_permissions;
 use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
 use ctcore::ct_version_cmp::ct_version_cmp;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -167,6 +170,7 @@ fn dir_semantic_row(
     path: PathBuf,
     name: OsString,
     command_line: bool,
+    numeric_uid_gid: bool,
 ) -> DirSemanticRow {
     let metadata = path.symlink_metadata().ok();
     let file_type = metadata.as_ref().map(Metadata::file_type);
@@ -179,10 +183,14 @@ fn dir_semantic_row(
         source_path: source_path.display().to_string(),
         path: path.display().to_string(),
         name: name.to_string_lossy().into_owned(),
-        mode: None,
-        inode: None,
-        user: None,
-        group: None,
+        mode: metadata.as_ref().map(|md| display_permissions(md, true)),
+        inode: metadata.as_ref().and_then(dir_semantic_inode),
+        user: metadata
+            .as_ref()
+            .map(|md| dir_display_uname(md, numeric_uid_gid)),
+        group: metadata
+            .as_ref()
+            .map(|md| dir_display_group(md, numeric_uid_gid)),
         file_type: dir_file_type_name(file_type.as_ref()).into(),
         size: metadata.map(|md| md.len()),
         is_dir,
@@ -190,6 +198,44 @@ fn dir_semantic_row(
         is_symlink,
         command_line,
     }
+}
+
+#[cfg(unix)]
+fn dir_semantic_inode(metadata: &Metadata) -> Option<String> {
+    Some(metadata.ino().to_string())
+}
+
+#[cfg(not(unix))]
+fn dir_semantic_inode(_metadata: &Metadata) -> Option<String> {
+    None
+}
+
+#[cfg(unix)]
+fn dir_display_uname(metadata: &Metadata, numeric_uid_gid: bool) -> String {
+    if numeric_uid_gid {
+        metadata.uid().to_string()
+    } else {
+        ctcore::ct_entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
+    }
+}
+
+#[cfg(not(unix))]
+fn dir_display_uname(_metadata: &Metadata, _numeric_uid_gid: bool) -> String {
+    "somebody".to_string()
+}
+
+#[cfg(unix)]
+fn dir_display_group(metadata: &Metadata, numeric_uid_gid: bool) -> String {
+    if numeric_uid_gid {
+        metadata.gid().to_string()
+    } else {
+        ctcore::ct_entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
+    }
+}
+
+#[cfg(not(unix))]
+fn dir_display_group(_metadata: &Metadata, _numeric_uid_gid: bool) -> String {
+    "somegroup".to_string()
 }
 
 fn dir_row_mtime_nanos(row: &DirSemanticRow) -> u128 {
@@ -202,7 +248,11 @@ fn dir_row_mtime_nanos(row: &DirSemanticRow) -> u128 {
         .unwrap_or(0)
 }
 
-fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<DirSemanticRow> {
+fn dir_collect_semantic_rows_for_path(
+    path: &Path,
+    matches: &ArgMatches,
+    numeric_uid_gid: bool,
+) -> Vec<DirSemanticRow> {
     let metadata = match path.symlink_metadata() {
         Ok(metadata) => metadata,
         Err(_) => return Vec::new(),
@@ -216,7 +266,14 @@ fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<
                 .map(OsString::from)
                 .unwrap_or_else(|| path.as_os_str().to_os_string())
         };
-        return vec![dir_semantic_row(1, path, path.to_path_buf(), name, true)];
+        return vec![dir_semantic_row(
+            1,
+            path,
+            path.to_path_buf(),
+            name,
+            true,
+            numeric_uid_gid,
+        )];
     }
 
     let include_hidden = matches.get_flag(ls_flags::files::LS_ALL);
@@ -229,6 +286,7 @@ fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<
             path.to_path_buf(),
             OsString::from("."),
             false,
+            numeric_uid_gid,
         ));
         rows.push(dir_semantic_row(
             rows.len() + 1,
@@ -236,6 +294,7 @@ fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<
             path.join(".."),
             OsString::from(".."),
             false,
+            numeric_uid_gid,
         ));
     }
 
@@ -252,6 +311,7 @@ fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<
                 entry.path(),
                 name,
                 false,
+                numeric_uid_gid,
             ));
         }
     }
@@ -291,10 +351,18 @@ fn dir_collect_semantic_rows_for_path(path: &Path, matches: &ArgMatches) -> Vec<
     rows
 }
 
-fn dir_collect_semantic_rows(paths: &[&Path], matches: &ArgMatches) -> Vec<DirSemanticRow> {
+fn dir_collect_semantic_rows(
+    paths: &[&Path],
+    matches: &ArgMatches,
+    numeric_uid_gid: bool,
+) -> Vec<DirSemanticRow> {
     let mut rows = Vec::new();
     for path in paths {
-        rows.extend(dir_collect_semantic_rows_for_path(path, matches));
+        rows.extend(dir_collect_semantic_rows_for_path(
+            path,
+            matches,
+            numeric_uid_gid,
+        ));
     }
     for (index, row) in rows.iter_mut().enumerate() {
         row.row_index = index + 1;
@@ -337,7 +405,11 @@ pub fn dir_native_semantic(args: impl ctcore::Args) -> CTResult<DirSemantic> {
         .iter()
         .map(|path| path.display().to_string())
         .collect();
-    let rows = dir_collect_semantic_rows(&paths_from_args, &matches);
+    let rows = dir_collect_semantic_rows(
+        &paths_from_args,
+        &matches,
+        matches.get_flag(ls_flags::format::LS_LONG_NUMERIC_UID_GID),
+    );
 
     Ok(DirSemantic {
         command: "dir".into(),

@@ -197,7 +197,7 @@ impl<'s> Lexer<'s> {
                     self.advance();
                     Ok(Token::Eq)
                 } else {
-                    Err(self.current_err("expected `==`, got single `=`"))
+                    Ok(Token::Ident("=".into()))
                 }
             }
 
@@ -207,7 +207,7 @@ impl<'s> Lexer<'s> {
                     self.advance();
                     Ok(Token::Ne)
                 } else {
-                    Err(self.current_err("expected `!=`, got single `!`"))
+                    Ok(Token::Ident("!".into()))
                 }
             }
 
@@ -233,6 +233,11 @@ impl<'s> Lexer<'s> {
 
             '"' => self.lex_string('"'),
             '\'' => self.lex_string('\''),
+
+            '+' | '*' | '%' | ':' | '(' | ')' | '&' => {
+                self.advance();
+                Ok(Token::Ident(ch.to_string()))
+            }
 
             '-' => {
                 if self.peek2() == Some('-') {
@@ -796,6 +801,17 @@ mod tests {
         assert_eq!(toks[3], Token::Ge);
         assert_eq!(toks[4], Token::Lt);
         assert_eq!(toks[5], Token::Le);
+    }
+
+    #[test]
+    fn test_lex_expr_operator_positionals() {
+        let toks = lex("expr 10 + 1 * 2 % 3 = 1 & 1");
+        assert_eq!(toks[0], Token::Ident("expr".into()));
+        assert_eq!(toks[2], Token::Ident("+".into()));
+        assert_eq!(toks[4], Token::Ident("*".into()));
+        assert_eq!(toks[6], Token::Ident("%".into()));
+        assert_eq!(toks[8], Token::Ident("=".into()));
+        assert_eq!(toks[10], Token::Ident("&".into()));
     }
 
     #[test]

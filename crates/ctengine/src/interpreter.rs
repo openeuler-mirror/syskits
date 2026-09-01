@@ -525,13 +525,28 @@ fn build_data_call(
                 rhs,
                 span,
             } => {
-                // where 命令的比较表达式：打包为 Record 位置参数
-                let record = CtValue::Record(vec![
-                    ("field".into(), CtValue::String(field.clone())),
-                    ("op".into(), CtValue::String(op.symbol().to_string())),
-                    ("rhs".into(), lit_to_ct_value(rhs)),
-                ]);
-                positionals.push(BoundArg::new(record, Some(span.clone())));
+                if sig.is_some_and(DataSignature::allows_unknown) {
+                    positionals.push(BoundArg::new(
+                        CtValue::String(field.clone()),
+                        Some(span.clone()),
+                    ));
+                    positionals.push(BoundArg::new(
+                        CtValue::String(op.symbol().to_string()),
+                        Some(span.clone()),
+                    ));
+                    positionals.push(BoundArg::new(
+                        lit_to_unknown_argv_ct_value(rhs),
+                        Some(span.clone()),
+                    ));
+                } else {
+                    // where 命令的比较表达式：打包为 Record 位置参数
+                    let record = CtValue::Record(vec![
+                        ("field".into(), CtValue::String(field.clone())),
+                        ("op".into(), CtValue::String(op.symbol().to_string())),
+                        ("rhs".into(), lit_to_ct_value(rhs)),
+                    ]);
+                    positionals.push(BoundArg::new(record, Some(span.clone())));
+                }
             }
             Arg::WhereExpr {
                 conditions,
@@ -1712,6 +1727,32 @@ mod tests {
                 .map(|arg| &arg.value)
                 .collect::<Vec<_>>(),
             vec![&CtValue::String("-5".into())]
+        );
+    }
+
+    #[test]
+    fn test_build_data_call_unknown_gnu_comparison_args_preserve_argv_strings() {
+        let call = parse_single_call("expr 2 < 3");
+        let sig = DataSignature::new("expr", "expr")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible args",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true);
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        assert_eq!(
+            data_call
+                .positionals
+                .iter()
+                .map(|arg| &arg.value)
+                .collect::<Vec<_>>(),
+            vec![
+                &CtValue::String("2".into()),
+                &CtValue::String("<".into()),
+                &CtValue::String("3".into())
+            ]
         );
     }
 

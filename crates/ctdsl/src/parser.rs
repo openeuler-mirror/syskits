@@ -335,6 +335,12 @@ fn token_to_lit(token: &Token, span: &CtSpan) -> Result<Lit, ParseError> {
         Token::DurationLit(ns) => Lit::Duration(*ns),
         Token::DateTimeLit(ns) => Lit::DateTime(*ns),
         Token::Ident(s) => Lit::Ident(s.clone()),
+        Token::Eq => Lit::Ident("==".into()),
+        Token::Ne => Lit::Ident("!=".into()),
+        Token::Gt => Lit::Ident(">".into()),
+        Token::Ge => Lit::Ident(">=".into()),
+        Token::Lt => Lit::Ident("<".into()),
+        Token::Le => Lit::Ident("<=".into()),
         other => {
             return Err(ParseError::syntax(
                 format!("expected literal, got `{other}`"),
@@ -529,6 +535,40 @@ mod tests {
         let expr = parse("ls -l");
         let args = &expr.stages()[0].args;
         assert!(matches!(&args[0], Arg::ShortFlag { name: 'l', .. }));
+    }
+
+    #[test]
+    fn test_parse_expr_operator_positionals() {
+        let expr = parse("expr 10 + 1 * 2 % 3");
+        let args = &expr.stages()[0].args;
+        assert!(matches!(
+            &args[0],
+            Arg::Positional {
+                value: Lit::Int(10),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &args[1],
+            Arg::Positional {
+                value: Lit::Ident(op),
+                ..
+            } if op == "+"
+        ));
+        assert!(matches!(
+            &args[3],
+            Arg::Positional {
+                value: Lit::Ident(op),
+                ..
+            } if op == "*"
+        ));
+        assert!(matches!(
+            &args[5],
+            Arg::Positional {
+                value: Lit::Ident(op),
+                ..
+            } if op == "%"
+        ));
     }
 
     #[test]

@@ -86,6 +86,10 @@ fn semantic_to_value(semantic: &ct_dircolors::DircolorsSemantic) -> CtValue {
     ])
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(vec![CtValue::String("output".into())])
+}
+
 impl DataCommand for CmdDircolors {
     fn signature(&self) -> DataSignature {
         DataSignature::new("dircolors", "structured dircolors output")
@@ -108,28 +112,29 @@ impl DataCommand for CmdDircolors {
         let intent = DircolorsIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) =
             DircolorsCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("dircolors".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("dircolors".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DircolorsIntent, semantic_to_value};
+    use super::{DircolorsIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -165,6 +170,14 @@ mod tests {
                     CtValue::String("LS_COLORS='di=01;34:';\nexport LS_COLORS".into())
                 ),
             ])
+        );
+    }
+
+    #[test]
+    fn display_columns_hide_output_kind_by_default() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![CtValue::String("output".into())])
         );
     }
 }

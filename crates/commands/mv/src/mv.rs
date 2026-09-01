@@ -1246,18 +1246,7 @@ fn mv_rename(
 pub fn set_default_context(path: &Path) -> io::Result<()> {
     #[cfg(feature = "selinux")]
     {
-        // 获取文件的默认安全上下文
-        let default_context = match selinux::Context::from_path(path) {
-            Ok(ctx) => ctx,
-            Err(e) => return Err(io::Error::other(e)),
-        };
-
-        // 设置文件的安全上下文
-        if let Err(e) = selinux::set_context(path, &default_context) {
-            return Err(io::Error::other(e));
-        }
-
-        Ok(())
+        selinux::SecurityContext::set_default_for_path(path).map_err(io::Error::other)
     }
 
     #[cfg(not(feature = "selinux"))]

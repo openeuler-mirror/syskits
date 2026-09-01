@@ -993,18 +993,28 @@ fn read_name_from_file(progname: &str, path: &str, boot: bool) -> CTResult<Optio
 
 #[cfg(test)]
 mod tests {
-    use super::{NameType, check_name, default_type};
+    use super::{
+        NameType, c_string, check_name, default_type, emit_getopt_style_error, program_name,
+        read_name_from_file, resolve_name_type,
+    };
+    use std::ffi::OsString;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_check_name() {
         assert!(check_name("host"));
         assert!(check_name("host.example"));
         assert!(check_name("host-1"));
+        assert!(check_name("a.b-c.d"));
         assert!(!check_name(""));
         assert!(!check_name("-host"));
         assert!(!check_name("host-"));
+        assert!(!check_name(".host"));
+        assert!(!check_name("host."));
         assert!(!check_name("host..example"));
         assert!(!check_name("host.-example"));
+        assert!(!check_name("host-.example"));
         assert!(!check_name("host#.example"));
     }
 
@@ -1015,5 +1025,144 @@ mod tests {
         assert_eq!(default_type("domainname"), NameType::Nis);
         assert_eq!(default_type("ypdomainname"), NameType::NisDef);
         assert_eq!(default_type("nisdomainname"), NameType::NisDef);
+    }
+
+    #[test]
+    fn test_program_name_from_argv() {
+        assert_eq!(program_name(&[]), "hostname");
+        assert_eq!(program_name(&[OsString::from("")]), "hostname");
+        assert_eq!(
+            program_name(&[OsString::from("/usr/bin/hostname")]),
+            "hostname"
+        );
+        assert_eq!(
+            program_name(&[OsString::from("dnsdomainname")]),
+            "dnsdomainname"
+        );
+    }
+
+    #[test]
+    fn test_resolve_name_type_from_long_and_short_flags() {
+        assert_eq!(
+            resolve_name_type(
+                NameType::Default,
+                &[OsString::from("hostname"), OsString::from("--domain")],
+            ),
+            NameType::Dns
+        );
+        assert_eq!(
+            resolve_name_type(
+                NameType::Default,
+                &[OsString::from("hostname"), OsString::from("-f")],
+            ),
+            NameType::Fqdn
+        );
+        assert_eq!(
+            resolve_name_type(
+                NameType::Default,
+                &[OsString::from("hostname"), OsString::from("-I")],
+            ),
+            NameType::AllIps
+        );
+        assert_eq!(
+            resolve_name_type(
+                NameType::Default,
+                &[OsString::from("hostname"), OsString::from("--nis")],
+            ),
+            NameType::NisDef
+        );
+    }
+
+    #[test]
+    fn test_resolve_name_type_skips_file_argument_and_stops_at_double_dash() {
+        assert_eq!(
+            resolve_name_type(
+                NameType::Default,
+                &[
+                    OsString::from("hostname"),
+                    OsString::from("-F"),
+                    OsString::from("/tmp/name"),
+                    OsString::from("-s"),
+                ],
+            ),
+            NameType::Short
+        );
+        assert_eq!(
+            resolve_name_type(
+                NameType::Default,
+                &[
+                    OsString::from("hostname"),
+                    OsString::from("--"),
+                    OsString::from("-f"),
+                ],
+            ),
+            NameType::Default
+        );
+    }
+
+    #[test]
+    fn test_emit_getopt_style_error_variants() {
+        assert!(emit_getopt_style_error(
+            "hostname",
+            &[OsString::from("hostname"), OsString::from("--bogus")]
+        ));
+        assert!(emit_getopt_style_error(
+            "hostname",
+            &[OsString::from("hostname"), OsString::from("--domain=value")]
+        ));
+        assert!(emit_getopt_style_error(
+            "hostname",
+            &[OsString::from("hostname"), OsString::from("--file")]
+        ));
+        assert!(emit_getopt_style_error(
+            "hostname",
+            &[OsString::from("hostname"), OsString::from("-Z")]
+        ));
+        assert!(!emit_getopt_style_error(
+            "hostname",
+            &[
+                OsString::from("hostname"),
+                OsString::from("--"),
+                OsString::from("--bogus")
+            ]
+        ));
+        assert!(!emit_getopt_style_error(
+            "hostname",
+            &[
+                OsString::from("hostname"),
+                OsString::from("-F"),
+                OsString::from("/tmp/name"),
+                OsString::from("-s"),
+            ]
+        ));
+    }
+
+    #[test]
+    fn test_c_string_rejects_nul() {
+        assert!(c_string("ok", "hostname").is_ok());
+        assert!(c_string("bad\0name", "hostname").is_err());
+    }
+
+    #[test]
+    fn test_read_name_from_file_behaviors() {
+        let dir = TempDir::new().expect("tempdir");
+        let file = dir.path().join("hostname.txt");
+        fs::write(&file, "#comment\n\nhost-from-file\n").expect("write fixture");
+
+        let value = read_name_from_file("hostname", file.to_str().unwrap(), false)
+            .expect("read should succeed");
+        assert_eq!(value.as_deref(), Some("host-from-file"));
+
+        let empty = dir.path().join("empty.txt");
+        fs::write(&empty, "").expect("write empty fixture");
+        let value =
+            read_name_from_file("hostname", empty.to_str().unwrap(), false).expect("read empty");
+        assert_eq!(value.as_deref(), Some(""));
+
+        let missing = dir.path().join("missing.txt");
+        let value =
+            read_name_from_file("hostname", missing.to_str().unwrap(), true).expect("boot mode");
+        assert_eq!(value, None);
+        assert!(read_name_from_file("hostname", missing.to_str().unwrap(), false).is_err());
     }
 }

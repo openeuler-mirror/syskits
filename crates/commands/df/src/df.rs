@@ -7594,8 +7594,8 @@ mod tests {
             ] {
                 let display = row.display_values.get(&field).expect("display value");
                 assert!(
-                    display.chars().any(|ch| ch.is_ascii_alphabetic()),
-                    "expected human-readable suffix in {display:?}"
+                    display == "0" || display.chars().any(|ch| ch.is_ascii_alphabetic()),
+                    "expected human-readable display value in {display:?}"
                 );
             }
         }

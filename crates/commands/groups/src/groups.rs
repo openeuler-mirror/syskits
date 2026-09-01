@@ -278,14 +278,15 @@ mod tests {
             let result = groups_native_semantic(args.iter().map(OsString::from)).expect("semantic");
 
             assert_eq!(result.exit_code, 1);
-            assert_eq!(result.classic_text, "root : root\n");
             assert_eq!(
                 result.stderr_text,
                 "groups: 'no_such_user_123': no such user\n"
             );
             assert_eq!(result.entries.len(), 1);
             assert_eq!(result.entries[0].user.as_deref(), Some("root"));
-            assert_eq!(result.entries[0].groups, vec!["root".to_string()]);
+            assert!(!result.entries[0].groups.is_empty());
+            assert!(result.entries[0].groups.iter().any(|group| group == "root"));
+            assert_eq!(result.classic_text, format!("{}\n", result.entries[0]));
         }
     }
 

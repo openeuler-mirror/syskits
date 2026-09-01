@@ -24,7 +24,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write, stdout};
+use std::io::{BufRead, BufReader, Read, Write, stdout};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -36,7 +36,10 @@ mod paste_flags {
 }
 
 /// 表示一个输入源，可以是文件或标准输入
-type InputSource = Option<BufReader<File>>;
+enum InputSource {
+    File(BufReader<File>),
+    Stdin,
+}
 
 /// 存储粘贴操作的配置参数
 #[derive(Debug)]
@@ -71,6 +74,7 @@ pub struct PasteSemantic {
 /// 表示粘贴操作的上下文
 struct PasteContext<W: Write> {
     files: Vec<InputSource>,
+    stdin: BufReader<Box<dyn Read>>,
     delimiters: Vec<char>,
     line_ending: CtLineEnding,
     output: Vec<u8>,
@@ -124,17 +128,18 @@ impl<W: Write> PasteContext<W> {
         let mut files = Vec::with_capacity(flags.files.len());
         for name in &flags.files {
             let file = if name == "-" {
-                None
+                InputSource::Stdin
             } else {
                 let path = Path::new(name);
                 let r = File::open(path).map_err_context(String::new)?;
-                Some(BufReader::new(r))
+                InputSource::File(BufReader::new(r))
             };
             files.push(file);
         }
 
         Ok(Self {
             files,
+            stdin: BufReader::new(ctcore::ct_io::stdin_reader_box()),
             delimiters: paste_unescape(&flags.delimiters).chars().collect(),
             line_ending: flags.line_ending,
             output: Vec::new(),
@@ -160,51 +165,60 @@ impl<W: Write> PasteContext<W> {
         Ok(())
     }
 
-    fn process_line(&mut self, file: &mut InputSource) -> CTResult<bool> {
-        let line_ending = self.line_ending as u8;
+    fn process_stream(
+        reader: &mut dyn BufRead,
+        output: &mut Vec<u8>,
+        writer: &mut W,
+        line_ending: u8,
+    ) -> CTResult<bool> {
         let mut has_content = false;
 
-        let mut process_stream = |reader: &mut dyn BufRead| -> CTResult<bool> {
-            loop {
-                let buf = reader
-                    .fill_buf()
+        loop {
+            let buf = reader
+                .fill_buf()
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            if buf.is_empty() {
+                return Ok(has_content);
+            }
+            let (consumed, hit_eol) = match buf.iter().position(|&b| b == line_ending) {
+                Some(i) => (i + 1, true),
+                None => (buf.len(), false),
+            };
+            output.extend_from_slice(&buf[..consumed]);
+            reader.consume(consumed);
+            has_content = true;
+
+            // 一旦缓冲区超过 64KB，强制提前刷入底层 writer。
+            // 如果底层是 /dev/full，会立即在此处触发 ENOSPC 错误并安全退出。
+            if output.len() > 65536 {
+                writer
+                    .write_all(output)
                     .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-                if buf.is_empty() {
-                    return Ok(has_content);
-                }
-                let (consumed, hit_eol) = match buf.iter().position(|&b| b == line_ending) {
-                    Some(i) => (i + 1, true),
-                    None => (buf.len(), false),
-                };
-                self.output.extend_from_slice(&buf[..consumed]);
-                reader.consume(consumed);
-                has_content = true;
-
-                // 一旦缓冲区超过 64KB，强制提前刷入底层 writer。
-                // 如果底层是 /dev/full，会立即在此处触发 ENOSPC 错误并安全退出。
-                if self.output.len() > 65536 {
-                    self.writer
-                        .write_all(&self.output)
-                        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-                    self.output.clear();
-                }
-
-                if hit_eol {
-                    if self.output.ends_with(&[line_ending]) {
-                        self.output.pop();
-                    }
-                    break;
-                }
+                output.clear();
             }
-            Ok(has_content)
-        };
 
-        match file {
-            Some(reader) => process_stream(reader),
-            None => {
-                let mut stdin = std::io::BufReader::new(ctcore::ct_io::stdin_reader_box());
-                process_stream(&mut stdin)
+            if hit_eol {
+                if output.ends_with(&[line_ending]) {
+                    output.pop();
+                }
+                break;
             }
+        }
+        Ok(has_content)
+    }
+
+    fn process_line_at(&mut self, index: usize) -> CTResult<bool> {
+        let line_ending = self.line_ending as u8;
+        match &mut self.files[index] {
+            InputSource::File(reader) => {
+                Self::process_stream(reader, &mut self.output, &mut self.writer, line_ending)
+            }
+            InputSource::Stdin => Self::process_stream(
+                &mut self.stdin,
+                &mut self.output,
+                &mut self.writer,
+                line_ending,
+            ),
         }
     }
 
@@ -232,11 +246,10 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn paste_serial(&mut self) -> CTResult<()> {
-        let files = std::mem::take(&mut self.files);
-        for mut file in files {
+        for i in 0..self.files.len() {
             self.output.clear();
             let mut delim_length = 1;
-            while self.process_line(&mut file)? {
+            while self.process_line_at(i)? {
                 delim_length = self.add_delimiter(0);
             }
             self.write_output(delim_length)?;
@@ -264,14 +277,12 @@ impl<W: Write> PasteContext<W> {
                     continue;
                 }
 
-                let mut current_file = self.files[i].take();
-                if !self.process_line(&mut current_file)? {
+                if !self.process_line_at(i)? {
                     *eof_item = true;
                     eof_count += 1;
                 } else {
                     has_content = true;
                 }
-                self.files[i] = current_file;
             }
 
             if self.files.len() == eof_count {
@@ -504,15 +515,14 @@ mod tests {
 
             let mut output = Vec::new();
             let mut context = PasteContext::new(&flags, &mut output)?;
-            let mut file = context.files.pop().unwrap();
 
-            assert!(context.process_line(&mut file)?);
+            assert!(context.process_line_at(0)?);
             assert_eq!(String::from_utf8_lossy(&context.output), "test");
 
-            assert!(context.process_line(&mut file)?);
+            assert!(context.process_line_at(0)?);
             assert_eq!(String::from_utf8_lossy(&context.output), "testline");
 
-            assert!(!context.process_line(&mut file)?);
+            assert!(!context.process_line_at(0)?);
             Ok(())
         }
 
@@ -563,9 +573,18 @@ mod tests {
 
             let mut output = Vec::new();
             let mut context = PasteContext::new(&flags, &mut output)?;
-            let mut _file = context.files.pop().unwrap();
 
-            // 注意：这个测试需要模拟标准输入，可能需要特殊处理
+            ctcore::ct_io::with_injected_stdin(b"1\n2\n".to_vec(), || -> CTResult<()> {
+                context.stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
+                assert!(context.process_line_at(0)?);
+                assert_eq!(String::from_utf8_lossy(&context.output), "1");
+
+                assert!(context.process_line_at(0)?);
+                assert_eq!(String::from_utf8_lossy(&context.output), "12");
+
+                assert!(!context.process_line_at(0)?);
+                Ok(())
+            })?;
             Ok(())
         }
 
@@ -581,9 +600,8 @@ mod tests {
 
             let mut output = Vec::new();
             let mut context = PasteContext::new(&flags, &mut output)?;
-            let mut file = context.files.pop().unwrap();
 
-            assert!(context.process_line(&mut file)?);
+            assert!(context.process_line_at(0)?);
             assert_eq!(String::from_utf8_lossy(&context.output), "test");
             Ok(())
         }

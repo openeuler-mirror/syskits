@@ -158,6 +158,10 @@ fn semantic_to_value(semantic: &ct_sort::SortSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(vec![CtValue::String("line".into())])
+}
+
 impl DataCommand for CmdSort {
     fn signature(&self) -> DataSignature {
         DataSignature::new("sort", "structured sort output rows")
@@ -179,28 +183,29 @@ impl DataCommand for CmdSort {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = SortIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = SortCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("sort".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("sort".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SortIntent, semantic_to_value};
+    use super::{SortIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -305,6 +310,14 @@ mod tests {
                     ("line".into(), CtValue::String("beta".into())),
                 ]),
             ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_sorted_line() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![CtValue::String("line".into())])
         );
     }
 }

@@ -102,6 +102,15 @@ fn semantic_to_value(semantic: &ct_more::MoreSemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["file", "line_index", "text"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdMore {
     fn signature(&self) -> DataSignature {
         DataSignature::new("more", "structured more visible-output rows")
@@ -123,28 +132,29 @@ impl DataCommand for CmdMore {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = MoreIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = MoreCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("more".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("more".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{MoreIntent, semantic_to_value};
+    use super::{MoreIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -218,6 +228,18 @@ mod tests {
                     ("source".into(), CtValue::String("stdout".into())),
                     ("terminated".into(), CtValue::Bool(true)),
                 ]),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_visible_output() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("file".into()),
+                CtValue::String("line_index".into()),
+                CtValue::String("text".into()),
             ])
         );
     }

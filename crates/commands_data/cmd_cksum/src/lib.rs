@@ -122,6 +122,15 @@ fn row_to_value(row: &ct_cksum::CksumRow) -> CtValue {
     ])
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["file", "checksum", "bytes", "status", "matched"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdCksum {
     fn signature(&self) -> DataSignature {
         DataSignature::new("cksum", "structured checksum output")
@@ -143,28 +152,29 @@ impl DataCommand for CmdCksum {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = CksumIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = CksumCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("cksum".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("cksum".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CksumIntent, semantic_to_value};
+    use super::{CksumIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -240,6 +250,20 @@ mod tests {
                 ("status".into(), CtValue::Nothing),
                 ("matched".into(), CtValue::Nothing),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_checksum_result() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("file".into()),
+                CtValue::String("checksum".into()),
+                CtValue::String("bytes".into()),
+                CtValue::String("status".into()),
+                CtValue::String("matched".into()),
+            ])
         );
     }
 }

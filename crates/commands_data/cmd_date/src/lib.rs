@@ -76,6 +76,20 @@ fn semantic_to_value(semantic: &ct_date::DateSemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        [
+            "formatted",
+            "unix_seconds",
+            "timezone_offset",
+            "source_kind",
+        ]
+        .into_iter()
+        .map(|column| CtValue::String(column.into()))
+        .collect(),
+    )
+}
+
 impl DataCommand for CmdDate {
     fn signature(&self) -> DataSignature {
         DataSignature::new("date", "structured date and time output")
@@ -97,24 +111,25 @@ impl DataCommand for CmdDate {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = DateIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = DateCore::run_core(&intent)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: Some(stderr_text),
-                exit_code,
-                source: Some("date".into()),
-                ..Default::default()
-            },
-        ))
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: Some(stderr_text),
+            exit_code,
+            source: Some("date".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DateIntent, semantic_to_value};
+    use super::{DateIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -186,6 +201,19 @@ mod tests {
                 ("second".into(), CtValue::Int(56)),
                 ("nanosecond".into(), CtValue::Int(0)),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_readable_date_result() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("formatted".into()),
+                CtValue::String("unix_seconds".into()),
+                CtValue::String("timezone_offset".into()),
+                CtValue::String("source_kind".into()),
+            ])
         );
     }
 }

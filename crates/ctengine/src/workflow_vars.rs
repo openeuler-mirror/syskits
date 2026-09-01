@@ -29,8 +29,11 @@ impl WorkflowVars {
         self.inner.remove(name)
     }
 
-    /// Expands variable references (e.g. `$var_name`) in the expression
-    /// using their stringified values.
+    /// 将表达式字符串中的 `$var` 引用替换为对应变量值的 DSL 安全字面量。
+    ///
+    /// 字符串值会被包裹为双引号字面量（同 ctdsl lexer 规则转义），以阻止
+    /// 变量值中的空格、`|`、命令名等字符改变管线语义（命令注入）。
+    /// 数值 / 布尔值不含特殊字符，直接内联。
     pub fn expand_in_expr(&self, expr: &str) -> String {
         let mut out = String::with_capacity(expr.len());
         let chars: Vec<char> = expr.chars().collect();
@@ -62,7 +65,7 @@ impl WorkflowVars {
 
             let var_name: String = chars[i + 1..j].iter().collect();
             if let Some(v) = self.get(&var_name) {
-                out.push_str(&ct_value_to_inline_text(v));
+                out.push_str(&ct_value_to_dsl_literal(v));
             } else {
                 out.push('$');
                 out.push_str(&var_name);
@@ -81,14 +84,36 @@ fn is_var_continue(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
-fn ct_value_to_inline_text(v: &CtValue) -> String {
+/// 将 CtValue 序列化为 DSL 安全的内联字面量。
+///
+/// 字符串值用双引号包裹并按 ctdsl lexer 规则转义，确保无论变量值内容
+/// 如何都不会被 DSL 解析为命令名、管道符或其他语法结构。
+/// 数值和布尔值不含特殊字符，直接转为字符串。
+fn ct_value_to_dsl_literal(v: &CtValue) -> String {
     match v {
-        CtValue::String(s) => s.clone(),
+        CtValue::String(s) => dsl_quote_string(s),
         CtValue::Int(i) => i.to_string(),
         CtValue::Float(f) => f.to_string(),
         CtValue::Bool(b) => b.to_string(),
-        _ => format!("{v:?}"),
+        _ => dsl_quote_string(&format!("{v:?}")),
     }
+}
+
+/// 对字符串内容生成 DSL 双引号字面量，转义与 ctdsl lexer lex_string 对应。
+fn dsl_quote_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[cfg(test)]
@@ -96,12 +121,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_workflow_vars_expand() {
+    fn test_workflow_vars_expand_string_quoted() {
         let mut vars = WorkflowVars::new();
         vars.set("target".into(), CtValue::String("prod".into()));
         vars.set("count".into(), CtValue::Int(5));
 
-        let expr = "from json '{\"env\": \"$target\", \"limit\": $count}'";
+        // 字符串变量被展开为双引号字面量，数值直接内联
+        let expr = "from json '{\"env\": $target, \"limit\": $count}'";
         let expanded = vars.expand_in_expr(expr);
         assert_eq!(expanded, "from json '{\"env\": \"prod\", \"limit\": 5}'");
     }
@@ -111,7 +137,7 @@ mod tests {
         let mut vars = WorkflowVars::new();
         vars.set("a".into(), CtValue::String("X".into()));
         vars.set("ab".into(), CtValue::String("Y".into()));
-        assert_eq!(vars.expand_in_expr("$ab + $a"), "Y + X");
+        assert_eq!(vars.expand_in_expr("$ab + $a"), r#""Y" + "X""#);
     }
 
     #[test]
@@ -124,6 +150,33 @@ mod tests {
     fn test_expand_supports_dollar_escape() {
         let mut vars = WorkflowVars::new();
         vars.set("name".into(), CtValue::String("alice".into()));
-        assert_eq!(vars.expand_in_expr("$$HOME $name"), "$HOME alice");
+        assert_eq!(vars.expand_in_expr("$$HOME $name"), r#"$HOME "alice""#);
+    }
+
+    #[test]
+    fn test_expand_string_with_pipe_cannot_inject_pipeline() {
+        let mut vars = WorkflowVars::new();
+        vars.set(
+            "payload".into(),
+            CtValue::String("foo | run-external rm -rf /".into()),
+        );
+        let expanded = vars.expand_in_expr("echo $payload");
+        // 注入内容被包裹为字面量，| 不再是管道符
+        assert_eq!(expanded, r#"echo "foo | run-external rm -rf /""#);
+    }
+
+    #[test]
+    fn test_expand_string_escapes_backslash_and_quote() {
+        let mut vars = WorkflowVars::new();
+        vars.set("p".into(), CtValue::String(r#"a\"b"#.into()));
+        assert_eq!(vars.expand_in_expr("$p"), r#""a\\\"b""#);
+    }
+
+    #[test]
+    fn test_expand_int_and_bool_inline() {
+        let mut vars = WorkflowVars::new();
+        vars.set("n".into(), CtValue::Int(42));
+        vars.set("flag".into(), CtValue::Bool(true));
+        assert_eq!(vars.expand_in_expr("$n $flag"), "42 true");
     }
 }

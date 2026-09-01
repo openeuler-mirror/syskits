@@ -551,6 +551,37 @@ impl CTError for DuError {
     }
 }
 
+#[derive(Debug)]
+struct DuClapError {
+    code: i32,
+    error: clap::Error,
+}
+
+impl DuClapError {
+    fn new(error: clap::Error) -> Self {
+        let code = match error.kind() {
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
+            _ => 1,
+        };
+        Self { code, error }
+    }
+}
+
+impl Display for DuClapError {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _ = self.error.print();
+        Ok(())
+    }
+}
+
+impl Error for DuClapError {}
+
+impl CTError for DuClapError {
+    fn code(&self) -> i32 {
+        self.code
+    }
+}
+
 /**
  * 将文件内容读取到一个String类型的vector中。
  *
@@ -977,7 +1008,9 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 从命令行参数中解析匹配项
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = ct_app()
+        .try_get_matches_from(args)
+        .map_err(|error| Box::new(DuClapError::new(error)) as Box<dyn CTError>)?;
 
     // 解析是否需要汇总信息
     let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);

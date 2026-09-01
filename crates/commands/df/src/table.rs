@@ -281,7 +281,7 @@ impl<'a> TableRowFormatter<'a> {
     ///
     /// # 返回值
     /// 返回一个包含格式化后数据的字符串向量。
-    fn get_values(&self) -> Vec<String> {
+    pub(crate) fn get_values(&self) -> Vec<String> {
         let mut strings = Vec::new();
 
         for column in &self.options.columns {

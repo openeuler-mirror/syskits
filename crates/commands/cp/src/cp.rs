@@ -2621,7 +2621,8 @@ fn copy_file(
 
     if cp_file_or_link_exists(dest_path) && cp_opts.overwrite == CpOverwriteMode::NoClobber {
         cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
-        return Ok(());
+        ct_show_error!("not replacing {}", dest_path.quote());
+        return Err(CpError::NotAllFilesCopied);
     }
 
     if cp_file_or_link_exists(dest_path) {
@@ -3303,7 +3304,8 @@ mod tests {
         }
 
         #[test]
-        fn test_cp_no_clobber_existing_dest_skips_successfully() {
+        fn test_cp_no_clobber_existing_dest_reports_failure() {
+            use crate::EXIT_ERR;
             use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
 
             let dir = Builder::new()
@@ -3325,11 +3327,13 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let opts = CpOptions::cp_from_matches(&matches).unwrap();
 
-            cp_copy(std::slice::from_ref(&source), &dest, &opts)
-                .expect("no-clobber should silently skip an existing destination");
+            match cp_copy(std::slice::from_ref(&source), &dest, &opts) {
+                Err(CpError::NotAllFilesCopied) => {}
+                other => panic!("expected NotAllFilesCopied, got {other:?}"),
+            }
 
             assert_eq!(fs::read(&dest).unwrap(), b"old");
-            assert_eq!(get_ct_exit_code(), 0);
+            assert_eq!(get_ct_exit_code(), EXIT_ERR);
             set_ct_exit_code(0);
         }
 

@@ -250,6 +250,8 @@ mod tests {
                 inode: None,
                 user: None,
                 group: None,
+                modified_unix_seconds: None,
+                size_display: None,
                 file_type: "file".into(),
                 size: Some(6),
                 last_modified: Some("Jan  1 00:00".into()),

@@ -51,7 +51,11 @@ impl DircolorsCore {
         )?;
         Ok(match result {
             Ok(semantic) => {
-                let classic_text = format!("{}\n", semantic.output);
+                let classic_text = if semantic.output.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}\n", semantic.output)
+                };
                 (semantic_to_value(&semantic), classic_text, String::new(), 0)
             }
             Err(err) => (

@@ -42,6 +42,15 @@ fn semantic_to_value(semantic: &ct_readlink::ReadlinkSemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["input", "resolved_path", "resolution_mode"]
+            .into_iter()
+            .map(|name| CtValue::String(name.into()))
+            .collect(),
+    )
+}
+
 fn row_to_value(row: &ct_readlink::ReadlinkSemanticRow) -> CtValue {
     CtValue::Record(vec![
         ("input".into(), CtValue::String(row.input.clone())),
@@ -93,24 +102,25 @@ impl DataCommand for CmdReadlink {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = ReadlinkIntent::from_call(call)?;
         let (value, classic_text) = ReadlinkCore::run_core(&intent)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: None,
-                exit_code: 0,
-                source: Some("readlink".into()),
-                ..Default::default()
-            },
-        ))
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: None,
+            exit_code: 0,
+            source: Some("readlink".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ReadlinkIntent, mode_name, semantic_to_value};
+    use super::{ReadlinkIntent, display_columns, mode_name, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -187,5 +197,21 @@ mod tests {
                 ("verbose".into(), CtValue::Bool(false)),
             ])])
         );
+    }
+
+    #[test]
+    fn display_columns_hide_flag_state_columns() {
+        let CtValue::List(columns) = display_columns() else {
+            panic!("expected list value");
+        };
+        let names = columns
+            .into_iter()
+            .map(|value| match value {
+                CtValue::String(name) => name,
+                other => panic!("unexpected display column: {other:?}"),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(names, vec!["input", "resolved_path", "resolution_mode"]);
     }
 }

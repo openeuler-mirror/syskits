@@ -1322,7 +1322,9 @@ impl Stater {
                 t!("default_format.fs_normal")
             }
         } else if terse {
-            t!("default_format.file_terse")
+            default_file_terse_format(
+                selinux::kernel_support() != selinux::KernelSupport::Unsupported,
+            )
         } else {
             let part2 = if show_dev_type {
                 t!("default_format.file_part2_dev")
@@ -1338,6 +1340,19 @@ impl Stater {
             )
         }
     }
+}
+
+fn default_file_terse_format(include_context: bool) -> String {
+    let mut format = t!("default_format.file_terse");
+    if include_context {
+        if format.ends_with('\n') {
+            format.pop();
+            format.push_str(" %C\n");
+        } else {
+            format.push_str(" %C");
+        }
+    }
+    format
 }
 
 fn security_context_error_description(err: &impl std::fmt::Display) -> String {
@@ -1630,7 +1645,7 @@ fn rich_file_fields() -> Vec<StatSemanticField> {
 }
 
 fn terse_file_fields() -> Vec<StatSemanticField> {
-    vec![
+    let mut fields = vec![
         StatSemanticField::Name,
         StatSemanticField::Size,
         StatSemanticField::Blocks,
@@ -1647,7 +1662,11 @@ fn terse_file_fields() -> Vec<StatSemanticField> {
         StatSemanticField::ChangeEpoch,
         StatSemanticField::BirthEpoch,
         StatSemanticField::IoBlock,
-    ]
+    ];
+    if selinux::kernel_support() != selinux::KernelSupport::Unsupported {
+        fields.push(StatSemanticField::Context);
+    }
+    fields
 }
 
 fn rich_filesystem_fields() -> Vec<StatSemanticField> {

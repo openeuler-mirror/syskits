@@ -69,6 +69,15 @@ fn semantic_to_value(semantic: &ct_echo::EchoSemantic) -> CtValue {
     ])
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["text", "trailing_newline"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdEcho {
     fn signature(&self) -> DataSignature {
         DataSignature::new("echo", "structured echo output")
@@ -90,24 +99,25 @@ impl DataCommand for CmdEcho {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = EchoIntent::from_call(call)?;
         let (value, classic_text) = EchoCore::run_core(&intent)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: None,
-                exit_code: 0,
-                source: Some("echo".into()),
-                ..Default::default()
-            },
-        ))
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: None,
+            exit_code: 0,
+            source: Some("echo".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{EchoIntent, semantic_to_value};
+    use super::{EchoIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -159,6 +169,17 @@ mod tests {
                 ("trailing_newline".into(), CtValue::Bool(true)),
                 ("escape_mode".into(), CtValue::String("literal".into())),
                 ("terminated_early".into(), CtValue::Bool(false)),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_echo_result() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("text".into()),
+                CtValue::String("trailing_newline".into()),
             ])
         );
     }

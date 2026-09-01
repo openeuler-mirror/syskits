@@ -3136,6 +3136,14 @@ fn tabify_grid_output(rendered: &str, tab_size: usize) -> String {
     output
 }
 
+fn format_grid_output(rendered: &str, tab_size: usize, preserve_spaces: bool) -> String {
+    if preserve_spaces {
+        rendered.to_owned()
+    } else {
+        tabify_grid_output(rendered, tab_size)
+    }
+}
+
 fn display_grid<W: Write>(
     names: impl Iterator<Item = Cell>,
     width: u16,
@@ -3178,14 +3186,18 @@ fn display_grid<W: Write>(
 
         match grid.fit_into_width(width as usize) {
             Some(out) => {
-                write!(output, "{}", tabify_grid_output(&out.to_string(), 8))?;
+                write!(
+                    output,
+                    "{}",
+                    format_grid_output(&out.to_string(), 8, quoted)
+                )?;
             }
             // Width is too small for the grid, so we fit it in one column
             None => {
                 write!(
                     output,
                     "{}",
-                    tabify_grid_output(&grid.fit_into_columns(1).to_string(), 8)
+                    format_grid_output(&grid.fit_into_columns(1).to_string(), 8, quoted)
                 )?;
             }
         }
@@ -4453,6 +4465,17 @@ mod tests {
         assert_eq!(
             tabify_grid_output("a.txt  b.txt  subdir\n", 8),
             "a.txt  b.txt  subdir\n"
+        );
+    }
+
+    #[test]
+    fn quoted_grid_output_preserves_alignment_spaces() {
+        let rendered = "'a b'   \x1b[0m\x1b[42;31mc.foo\x1b[0m\n";
+
+        assert_eq!(format_grid_output(rendered, 8, true), rendered);
+        assert_eq!(
+            format_grid_output(rendered, 8, false),
+            "'a b'\t\x1b[0m\x1b[42;31mc.foo\x1b[0m\n"
         );
     }
 

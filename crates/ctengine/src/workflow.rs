@@ -74,12 +74,28 @@ pub fn run_workflow(
         return Err(WorkflowError::EmptyScript);
     }
 
+    // 每次 goto 或 stage 推进都消耗一次配额，防止配置错误导致无限循环。
+    // 上限 = stage 数 * 10，给足 on_failure goto 重试空间同时拒绝死循环。
+    let max_transitions = script.stages.len().saturating_mul(10).max(100);
+    let mut transition_count: usize = 0;
+
     let mut current_data = input;
     let mut vars = crate::workflow_vars::WorkflowVars::new();
     let checkpoint_run_id = new_checkpoint_run_id();
 
     let mut stage_idx = 0;
     while stage_idx < script.stages.len() {
+        transition_count += 1;
+        if transition_count > max_transitions {
+            return Err(WorkflowError::RunStage {
+                stage: script.stages[stage_idx].name.clone(),
+                err: CtDiagnosticError::simple(format!(
+                    "workflow exceeded maximum stage transitions ({max_transitions}); \
+                     possible infinite loop via on_failure: goto"
+                )),
+            });
+        }
+
         let stage = &script.stages[stage_idx];
         let needs_input_recovery = !matches!(stage.on_failure, OnFailure::Fail);
 
@@ -2308,5 +2324,75 @@ mod tests {
         assert_ne!(paths[0], paths[1]);
 
         remove_matching_checkpoints(&stage_name);
+    }
+
+    #[test]
+    fn test_goto_self_loop_is_terminated_by_transition_limit() {
+        let ctx = workflow_var_test_ctx();
+        // expr 引用不存在的命令，stage 每次都会报错并 goto 自身 → 无限循环。
+        let script = WorkflowScript {
+            stages: vec![WorkflowStage {
+                name: "looping-stage".into(),
+                expr: Some("wf-nonexistent-cmd".into()),
+                if_cond: None,
+                else_expr: None,
+                foreach: None,
+                var: None,
+                timeout_ms: None,
+                retry: None,
+                on_failure: OnFailure::Goto("looping-stage".into()),
+                checkpoint: false,
+            }],
+        };
+
+        let result = run_workflow(&script, CtPipelineData::Empty, &ctx);
+        assert!(result.is_err(), "expected error from infinite goto loop");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("maximum stage transitions"),
+            "error message should mention transition limit: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_goto_back_to_earlier_stage_is_terminated_by_transition_limit() {
+        let ctx = workflow_var_test_ctx();
+        // 两个阶段互相 goto，均执行失败的命令，形成死循环。
+        let script = WorkflowScript {
+            stages: vec![
+                WorkflowStage {
+                    name: "stage-a".into(),
+                    expr: Some("wf-nonexistent-cmd".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: OnFailure::Goto("stage-b".into()),
+                    checkpoint: false,
+                },
+                WorkflowStage {
+                    name: "stage-b".into(),
+                    expr: Some("wf-nonexistent-cmd".into()),
+                    if_cond: None,
+                    else_expr: None,
+                    foreach: None,
+                    var: None,
+                    timeout_ms: None,
+                    retry: None,
+                    on_failure: OnFailure::Goto("stage-a".into()),
+                    checkpoint: false,
+                },
+            ],
+        };
+
+        let result = run_workflow(&script, CtPipelineData::Empty, &ctx);
+        assert!(result.is_err(), "expected error from cycle goto");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("maximum stage transitions"),
+            "error message should mention transition limit: {msg}"
+        );
     }
 }

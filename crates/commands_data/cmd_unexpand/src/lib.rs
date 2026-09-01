@@ -122,6 +122,15 @@ fn semantic_to_value(semantic: &ct_unexpand::UnexpandSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["line", "has_tabs", "tabstops"]
+            .into_iter()
+            .map(|name| CtValue::String(name.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdUnexpand {
     fn signature(&self) -> DataSignature {
         DataSignature::new("unexpand", "structured unexpanded line rows")
@@ -143,28 +152,29 @@ impl DataCommand for CmdUnexpand {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = UnexpandIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = UnexpandCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("unexpand".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("unexpand".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{UnexpandIntent, semantic_to_value};
+    use super::{UnexpandIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -238,6 +248,18 @@ mod tests {
                     ("line".into(), CtValue::String("beta gamma".into())),
                     ("has_tabs".into(), CtValue::Bool(false)),
                 ]),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_unexpanded_output() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("line".into()),
+                CtValue::String("has_tabs".into()),
+                CtValue::String("tabstops".into()),
             ])
         );
     }

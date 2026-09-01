@@ -52,6 +52,15 @@ fn semantic_to_value(semantic: &ct_pinky::PinkySemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["user", "full_name", "tty_device", "idle", "login_time", "host"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 fn row_to_value(row: &ct_pinky::PinkyRow) -> CtValue {
     CtValue::Record(vec![
         ("kind".into(), CtValue::String(row.kind.clone())),
@@ -90,28 +99,29 @@ impl DataCommand for CmdPinky {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = PinkyIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = PinkyCore::run_core(&intent)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("pinky".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("pinky".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PinkyIntent, semantic_to_value};
+    use super::{PinkyIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -177,6 +187,21 @@ mod tests {
                 ("project_text".into(), CtValue::Nothing),
                 ("plan_text".into(), CtValue::Nothing),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_default_pinky_summary() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("user".into()),
+                CtValue::String("full_name".into()),
+                CtValue::String("tty_device".into()),
+                CtValue::String("idle".into()),
+                CtValue::String("login_time".into()),
+                CtValue::String("host".into()),
+            ])
         );
     }
 }

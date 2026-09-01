@@ -197,6 +197,15 @@ fn semantic_to_value(semantic: &ct_du::DuSemantic) -> CtValue {
     CtValue::List(semantic.rows.iter().map(row_to_value).collect())
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["display_size", "path", "kind", "depth"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdDu {
     fn signature(&self) -> DataSignature {
         DataSignature::new("du", "structured disk usage output")
@@ -218,24 +227,25 @@ impl DataCommand for CmdDu {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = DuIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = DuCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: Some(stderr_text),
-                exit_code,
-                source: Some("du".into()),
-                ..Default::default()
-            },
-        ))
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: Some(stderr_text),
+            exit_code,
+            source: Some("du".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DuIntent, semantic_to_value};
+    use super::{DuIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -300,6 +310,19 @@ mod tests {
                 ("path".into(), CtValue::String("/tmp/a".into())),
                 ("label".into(), CtValue::Nothing),
             ])])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_disk_usage_result() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("display_size".into()),
+                CtValue::String("path".into()),
+                CtValue::String("kind".into()),
+                CtValue::String("depth".into()),
+            ])
         );
     }
 }

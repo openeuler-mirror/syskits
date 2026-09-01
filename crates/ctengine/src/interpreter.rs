@@ -975,7 +975,9 @@ fn print_pipeline_data_table(
             write_stderr_if_present(metadata.stderr_text.as_deref())?;
         }
         CtPipelineData::Value(CtValue::Record(fields), metadata) => {
-            let rows = fields
+            let display_columns = display_columns_from_metadata(&metadata);
+            let display_fields = record_fields_for_display(&fields, display_columns.as_deref());
+            let rows = display_fields
                 .iter()
                 .map(|(k, v)| vec![k.clone(), format_ct_value(v)])
                 .collect::<Vec<_>>();
@@ -1104,6 +1106,26 @@ pub fn print_pipeline_data_repl_with_signal(
     signal: &SignalHandle,
 ) -> Result<(), CtDiagnosticError> {
     try_print_pipeline_data_with_profile_and_signal(data, &OutputProfile::for_repl(), Some(signal))
+}
+
+fn record_fields_for_display<'a>(
+    fields: &'a [(String, CtValue)],
+    display_columns: Option<&[String]>,
+) -> Vec<&'a (String, CtValue)> {
+    match display_columns {
+        Some(columns) => {
+            let filtered = columns
+                .iter()
+                .filter_map(|column| fields.iter().find(|(key, _)| key == column))
+                .collect::<Vec<_>>();
+            if filtered.is_empty() {
+                fields.iter().collect()
+            } else {
+                filtered
+            }
+        }
+        None => fields.iter().collect(),
+    }
 }
 
 fn display_columns_from_metadata(metadata: &ctpipeline::CtPipelineMetadata) -> Option<Vec<String>> {
@@ -1455,6 +1477,20 @@ mod tests {
         assert!(table.contains("file_type"));
         assert!(table.contains("size"));
         assert!(!table.contains("command"));
+    }
+
+    #[test]
+    fn test_record_fields_for_display_uses_display_columns() {
+        let fields = vec![
+            ("output_kind".into(), CtValue::String("shell".into())),
+            ("output".into(), CtValue::String("LS_COLORS=''".into())),
+        ];
+        let columns = vec!["output".into()];
+
+        let display_fields = record_fields_for_display(&fields, Some(&columns));
+
+        assert_eq!(display_fields.len(), 1);
+        assert_eq!(display_fields[0].0, "output");
     }
 
     #[test]

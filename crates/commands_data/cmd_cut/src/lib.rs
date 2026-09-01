@@ -146,6 +146,15 @@ fn semantic_to_value(semantic: &ct_cut::CutSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["row_index", "line", "mode", "range_specs"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdCut {
     fn signature(&self) -> DataSignature {
         DataSignature::new("cut", "structured cut output rows")
@@ -167,28 +176,29 @@ impl DataCommand for CmdCut {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = CutIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = CutCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("cut".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("cut".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CutIntent, semantic_to_value};
+    use super::{CutIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -281,6 +291,19 @@ mod tests {
                     ("line".into(), CtValue::String(String::new())),
                     ("byte_length".into(), CtValue::Int(0)),
                 ]),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_focus_on_cut_result() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("row_index".into()),
+                CtValue::String("line".into()),
+                CtValue::String("mode".into()),
+                CtValue::String("range_specs".into()),
             ])
         );
     }

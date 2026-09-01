@@ -94,6 +94,15 @@ fn row_to_value(row: &ct_base32::Base32SemanticRow) -> CtValue {
     ])
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["line", "output_text", "byte_len"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 fn value_to_arg(value: &CtValue) -> String {
     match value {
         CtValue::String(s) => s.clone(),
@@ -156,28 +165,29 @@ impl DataCommand for CmdBase32 {
         let intent = Base32Intent::from_call(call)?;
         let (value, classic_text, classic_bytes, stderr_text, exit_code) =
             Base32Core::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: Some(classic_bytes),
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("base32".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: Some(classic_bytes),
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("base32".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Base32Intent, semantic_to_value};
+    use super::{Base32Intent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -244,6 +254,18 @@ mod tests {
         assert!(matches!(field(fields, "line"), CtValue::Int(1)));
         assert!(matches!(field(fields, "output_text"), CtValue::String(s) if s == "MFRGG==="));
         assert!(matches!(field(fields, "byte_len"), CtValue::Int(8)));
+    }
+
+    #[test]
+    fn display_columns_hide_invocation_options_by_default() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("line".into()),
+                CtValue::String("output_text".into()),
+                CtValue::String("byte_len".into()),
+            ])
+        );
     }
 
     fn field<'a>(fields: &'a [(String, CtValue)], name: &str) -> &'a CtValue {

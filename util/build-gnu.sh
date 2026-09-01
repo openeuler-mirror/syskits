@@ -635,9 +635,6 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 # 修复 ANSI 颜色代码顺序差异：GNU ls 盲目拼接字符串输出 30;41，
 # 而 Rust lscolors 解析后统一规范输出为等价的 41;30 (先背景后前景)。修改测试脚本以匹配此顺序。
 "${SED}" -i "s/code='30;41'/code='41;30'/" tests/ls/capability.sh
-# 忽略 GNU ls 老旧的制表符压缩优化（将多个空格转为 \t 以节省字节）。
-# Rust 的 term_grid 库采用现代做法直接输出精确数量的空格，视觉对齐效果完全一致。
-"${SED}" -i "s/printf 'a2345\/\\\\tb\/\\\\n'/printf 'a2345\/  b\/\\\\n'/" tests/ls/stat-dtype.sh
 # 修复底层库颜色代码规范化后的顺序差异 (31;42 -> 42;31)
 "${SED}" -i "s/color_code='31;42'/color_code='42;31'/" tests/ls/color-clear-to-eol.sh
 # 移除针对老旧终端折行背景色溢出的 \e[K 期望值，接受现代渲染输出

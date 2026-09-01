@@ -59,7 +59,8 @@ fn render_table_row(
     s.push('|');
     for (idx, width) in widths.iter().enumerate() {
         let cell = cells.get(idx).map(String::as_str).unwrap_or("");
-        let expanded = expand_tabs(cell, TABLE_TAB_WIDTH);
+        let normalized = normalize_table_cell(cell);
+        let expanded = expand_tabs(&normalized, TABLE_TAB_WIDTH);
         let mut clipped = clip_with_ellipsis(&expanded, *width);
         if use_color && header_row {
             clipped = Style::new()
@@ -82,6 +83,26 @@ fn render_table_row(
         s.push('|');
     }
     s
+}
+
+fn normalize_table_cell(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut pending_space = false;
+    for ch in s.chars() {
+        match ch {
+            '\r' | '\n' => {
+                pending_space = !out.is_empty();
+            }
+            _ => {
+                if pending_space && !matches!(ch, ' ' | '\t') {
+                    out.push(' ');
+                }
+                pending_space = false;
+                out.push(ch);
+            }
+        }
+    }
+    out
 }
 
 pub(crate) fn stripped_width(s: &str) -> usize {
@@ -228,7 +249,7 @@ fn resolve_pager_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_tabs, render_ascii_table, stripped_width, ColAlign};
+    use super::{expand_tabs, normalize_table_cell, render_ascii_table, stripped_width, ColAlign};
 
     #[test]
     fn stripped_width_counts_tabs_by_tab_stop() {
@@ -240,6 +261,12 @@ mod tests {
     fn expand_tabs_replaces_tabs_with_spaces() {
         assert_eq!(expand_tabs("A\t1", 8), "A       1");
         assert_eq!(expand_tabs("AB\t1", 8), "AB      1");
+    }
+
+    #[test]
+    fn normalize_table_cell_flattens_newlines() {
+        assert_eq!(normalize_table_cell("a\nb\n"), "a b");
+        assert_eq!(normalize_table_cell("a\r\nb"), "a b");
     }
 
     #[test]
@@ -256,6 +283,20 @@ mod tests {
         let row_bar = lines[2].rfind('|').expect("row bar");
         assert_eq!(header_bar, row_bar);
         assert!(!lines[2].contains('\t'));
+    }
+
+    #[test]
+    fn render_ascii_table_flattens_multiline_cells() {
+        let table = render_ascii_table(
+            vec!["line_index".into(), "format_string".into()],
+            vec![vec!["1".into(), "a\nb\n".into()]],
+            vec![ColAlign::Right, ColAlign::Left],
+        );
+
+        let lines = table.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[2].contains("a b"));
+        assert!(!lines[2].contains('\n'));
     }
 }
 

@@ -24,6 +24,32 @@ impl HashsumIntent {
 
         Ok(Self { argv })
     }
+
+    fn is_check_mode(&self) -> bool {
+        let mut options_done = false;
+        for arg in self.argv.iter().skip(1) {
+            let arg = arg.to_string_lossy();
+            if options_done {
+                continue;
+            }
+
+            if arg == "--" {
+                options_done = true;
+                continue;
+            }
+
+            if arg == "--check" || arg.starts_with("--check=") {
+                return true;
+            }
+
+            if arg.starts_with('-') && !arg.starts_with("--") && arg[1..].chars().any(|ch| ch == 'c')
+            {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 fn value_to_arg(value: &CtValue) -> String {
@@ -138,6 +164,21 @@ fn row_to_value(row: &ct_hashsum::HashsumRow) -> CtValue {
     ])
 }
 
+fn display_columns(is_check_mode: bool) -> CtValue {
+    let columns: &[&str] = if is_check_mode {
+        &["file", "status", "matched", "algorithm"]
+    } else {
+        &["file", "digest_hex", "algorithm"]
+    };
+
+    CtValue::List(
+        columns
+            .iter()
+            .map(|column| CtValue::String((*column).into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdHashsum {
     fn signature(&self) -> DataSignature {
         DataSignature::new("hashsum", "structured digest output")
@@ -158,29 +199,31 @@ impl DataCommand for CmdHashsum {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = HashsumIntent::from_call(call)?;
+        let is_check_mode = intent.is_check_mode();
         let (value, classic_text, stderr_text, exit_code) = HashsumCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("hashsum".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("hashsum".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns(is_check_mode));
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{HashsumIntent, semantic_to_value};
+    use super::{HashsumIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -205,6 +248,7 @@ mod tests {
                 OsString::from("sample.txt"),
             ]
         );
+        assert!(!intent.is_check_mode());
     }
 
     #[test]
@@ -260,6 +304,53 @@ mod tests {
                 ("ignored_missing".into(), CtValue::Bool(false)),
                 ("binary_check".into(), CtValue::Nothing),
             ])])
+        );
+    }
+
+    #[test]
+    fn is_check_mode_detects_check_flag() {
+        let intent = HashsumIntent {
+            argv: vec![
+                OsString::from("hashsum"),
+                OsString::from("-cq"),
+                OsString::from("manifest.txt"),
+            ],
+        };
+
+        assert!(intent.is_check_mode());
+    }
+
+    #[test]
+    fn is_check_mode_ignores_dash_c_after_option_terminator() {
+        let intent = HashsumIntent {
+            argv: vec![
+                OsString::from("hashsum"),
+                OsString::from("--"),
+                OsString::from("-c"),
+            ],
+        };
+
+        assert!(!intent.is_check_mode());
+    }
+
+    #[test]
+    fn display_columns_focus_on_key_hashsum_fields() {
+        assert_eq!(
+            display_columns(false),
+            CtValue::List(vec![
+                CtValue::String("file".into()),
+                CtValue::String("digest_hex".into()),
+                CtValue::String("algorithm".into()),
+            ])
+        );
+        assert_eq!(
+            display_columns(true),
+            CtValue::List(vec![
+                CtValue::String("file".into()),
+                CtValue::String("status".into()),
+                CtValue::String("matched".into()),
+                CtValue::String("algorithm".into()),
+            ])
         );
     }
 }

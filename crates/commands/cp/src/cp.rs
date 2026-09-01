@@ -1245,9 +1245,8 @@ fn cp_parse_path_args(
  */
 fn show_error_if_needed(err: &CpError) {
     match err {
-        // 当使用--no-clobber选项时，即使复制不完全也不显示错误消息
+        // 非致命错误已经在发生处打印过，这里只传播失败退出码。
         CpError::NotAllFilesCopied => {
-            // GNU coreutils 9.4: --no-clobber skip is silent but exits non-zero.
             set_ct_exit_code(EXIT_ERR);
         }
         // 如果文件复制被跳过（例如，因为使用了交互式模式且用户拒绝了覆盖），则记录此情况
@@ -2622,6 +2621,7 @@ fn copy_file(
 
     if cp_file_or_link_exists(dest_path) && cp_opts.overwrite == CpOverwriteMode::NoClobber {
         cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
+        return Ok(());
     }
 
     if cp_file_or_link_exists(dest_path) {
@@ -3303,8 +3303,7 @@ mod tests {
         }
 
         #[test]
-        fn test_cp_no_clobber_existing_dest_sets_failure_exit_code() {
-            use crate::EXIT_ERR;
+        fn test_cp_no_clobber_existing_dest_skips_successfully() {
             use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
 
             let dir = Builder::new()
@@ -3326,13 +3325,11 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let opts = CpOptions::cp_from_matches(&matches).unwrap();
 
-            match cp_copy(std::slice::from_ref(&source), &dest, &opts) {
-                Err(CpError::NotAllFilesCopied) => {}
-                other => panic!("expected NotAllFilesCopied, got {other:?}"),
-            }
+            cp_copy(std::slice::from_ref(&source), &dest, &opts)
+                .expect("no-clobber should silently skip an existing destination");
 
             assert_eq!(fs::read(&dest).unwrap(), b"old");
-            assert_eq!(get_ct_exit_code(), EXIT_ERR);
+            assert_eq!(get_ct_exit_code(), 0);
             set_ct_exit_code(0);
         }
 

@@ -105,6 +105,15 @@ fn semantic_to_value(semantic: &ct_cat::CatSemantic) -> CtValue {
     )
 }
 
+fn display_columns() -> CtValue {
+    CtValue::List(
+        ["row_index", "line", "is_blank"]
+            .into_iter()
+            .map(|column| CtValue::String(column.into()))
+            .collect(),
+    )
+}
+
 impl DataCommand for CmdCat {
     fn signature(&self) -> DataSignature {
         DataSignature::new("cat", "structured cat output rows")
@@ -126,28 +135,29 @@ impl DataCommand for CmdCat {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = CatIntent::from_call(call)?;
         let (value, classic_text, stderr_text, exit_code) = CatCore::run_core(&intent, input)?;
-        Ok(CtPipelineData::Value(
-            value,
-            CtPipelineMetadata {
-                classic_text: Some(classic_text),
-                classic_bytes: None,
-                classic_append_newline: false,
-                stderr_text: if stderr_text.is_empty() {
-                    None
-                } else {
-                    Some(stderr_text)
-                },
-                exit_code,
-                source: Some("cat".into()),
-                ..Default::default()
+        let metadata = CtPipelineMetadata {
+            classic_text: Some(classic_text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: if stderr_text.is_empty() {
+                None
+            } else {
+                Some(stderr_text)
             },
-        ))
+            exit_code,
+            source: Some("cat".into()),
+            ..Default::default()
+        };
+        if let Ok(mut custom) = metadata.custom.lock() {
+            custom.insert("display.columns".into(), display_columns());
+        }
+        Ok(CtPipelineData::Value(value, metadata))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CatIntent, semantic_to_value};
+    use super::{CatIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -222,6 +232,18 @@ mod tests {
                     ("line".into(), CtValue::String(String::new())),
                     ("is_blank".into(), CtValue::Bool(true)),
                 ]),
+            ])
+        );
+    }
+
+    #[test]
+    fn display_columns_hide_invocation_options_by_default() {
+        assert_eq!(
+            display_columns(),
+            CtValue::List(vec![
+                CtValue::String("row_index".into()),
+                CtValue::String("line".into()),
+                CtValue::String("is_blank".into()),
             ])
         );
     }

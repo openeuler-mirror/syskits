@@ -249,7 +249,7 @@ fn resolve_pager_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_tabs, normalize_table_cell, render_ascii_table, stripped_width, ColAlign};
+    use super::{ColAlign, expand_tabs, normalize_table_cell, render_ascii_table, stripped_width};
 
     #[test]
     fn stripped_width_counts_tabs_by_tab_stop() {

@@ -231,12 +231,7 @@ mod tests {
 
         assert_eq!(
             names,
-            vec![
-                "input",
-                "resolved_path",
-                "output_path",
-                "resolution_mode",
-            ]
+            vec!["input", "resolved_path", "output_path", "resolution_mode",]
         );
     }
 }

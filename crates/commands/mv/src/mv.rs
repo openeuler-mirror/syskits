@@ -28,7 +28,7 @@ use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
@@ -161,14 +161,22 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
         .cloned()
         .collect();
 
-    if arg_files.len() == 1 && !args_match.contains_id(OPT_TARGET_DIRECTORY) {
-        command.error(
-            ErrorKind::TooFewValues,
+    if arg_files.is_empty() {
+        return Err(CTsageError::new(1, "missing file operand"));
+    }
+
+    if arg_files.len() == 1
+        && args_match
+            .get_one::<OsString>(OPT_TARGET_DIRECTORY)
+            .is_none()
+    {
+        return Err(CTsageError::new(
+            1,
             format!(
-                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
+                "missing destination file operand after {}",
+                arg_files[0].quote()
             ),
-        )
-            .exit();
+        ));
     }
 
     let (mv_overwrite_mode, ct_backup_mode, ct_update_mode) = mv_modes_process(&args_match)?;
@@ -313,7 +321,6 @@ fn mv_args_init() -> Vec<Arg> {
         Arg::new(ARG_FILES)
             .action(ArgAction::Append)
             .num_args(1..)
-            .required(true)
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath),
     ];
@@ -2151,6 +2158,27 @@ mod tests {
             let result = mv_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_mv_main_missing_file_operand_with_target_dir() {
+            let args = [ctcore::ct_util_name(), "--target=."];
+            let err = mv_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(err.to_string(), "missing file operand");
+            assert!(err.usage());
+        }
+
+        #[test]
+        fn test_mv_main_missing_destination_operand() {
+            let args = [ctcore::ct_util_name(), "no-file"];
+            let err = mv_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(
+                err.to_string(),
+                "missing destination file operand after 'no-file'"
+            );
+            assert!(err.usage());
         }
 
         #[test]

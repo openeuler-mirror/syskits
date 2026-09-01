@@ -54,10 +54,17 @@ fn semantic_to_value(semantic: &ct_pinky::PinkySemantic) -> CtValue {
 
 fn display_columns() -> CtValue {
     CtValue::List(
-        ["user", "full_name", "tty_device", "idle", "login_time", "host"]
-            .into_iter()
-            .map(|column| CtValue::String(column.into()))
-            .collect(),
+        [
+            "user",
+            "full_name",
+            "tty_device",
+            "idle",
+            "login_time",
+            "host",
+        ]
+        .into_iter()
+        .map(|column| CtValue::String(column.into()))
+        .collect(),
     )
 }
 

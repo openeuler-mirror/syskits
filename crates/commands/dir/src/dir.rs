@@ -192,7 +192,10 @@ fn dir_semantic_row(
             .as_ref()
             .map(|md| dir_display_group(md, numeric_uid_gid)),
         file_type: dir_file_type_name(file_type.as_ref()).into(),
-        size: metadata.map(|md| md.len()),
+        size: metadata.as_ref().map(Metadata::len),
+        size_display: None,
+        last_modified: None,
+        modified_unix_seconds: None,
         is_dir,
         is_file,
         is_symlink,

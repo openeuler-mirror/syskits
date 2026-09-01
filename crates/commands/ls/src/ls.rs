@@ -187,6 +187,9 @@ pub struct LsSemanticRow {
     pub group: Option<String>,
     pub file_type: String,
     pub size: Option<u64>,
+    pub size_display: Option<String>,
+    pub last_modified: Option<String>,
+    pub modified_unix_seconds: Option<i64>,
     pub is_dir: bool,
     pub is_file: bool,
     pub is_symlink: bool,
@@ -1410,6 +1413,18 @@ fn ls_semantic_row(
     let is_dir = file_type.as_ref().is_some_and(FileType::is_dir);
     let is_file = file_type.as_ref().is_some_and(FileType::is_file);
     let is_symlink = file_type.as_ref().is_some_and(FileType::is_symlink);
+    let size = metadata.as_ref().map(Metadata::len);
+    let size_display = metadata
+        .as_ref()
+        .map(|md| match display_len_or_rdev(md, config) {
+            SizeOrDeviceId::Size(size) => size,
+            SizeOrDeviceId::Device(major, minor) => format!("{major},{minor}"),
+        });
+    let modified_unix_seconds = metadata
+        .as_ref()
+        .and_then(|md| get_system_time(md, config))
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok());
 
     LsSemanticRow {
         row_index,
@@ -1421,7 +1436,10 @@ fn ls_semantic_row(
         user: metadata.as_ref().map(|md| display_uname(md, config)),
         group: metadata.as_ref().map(|md| display_group(md, config)),
         file_type: ls_file_type_name(file_type.as_ref()).into(),
-        size: metadata.map(|md| md.len()),
+        size,
+        size_display,
+        last_modified: metadata.as_ref().map(|md| display_date(md, config)),
+        modified_unix_seconds,
         is_dir,
         is_file,
         is_symlink,
@@ -1506,6 +1524,13 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
         rows.sort_by(|a, b| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false));
     } else if config.sort == LsSort::Size {
         rows.sort_by_key(|row| Reverse(row.size.unwrap_or(0)));
+    } else if config.sort == LsSort::Time {
+        rows.sort_by(|a, b| {
+            b.modified_unix_seconds
+                .unwrap_or(i64::MIN)
+                .cmp(&a.modified_unix_seconds.unwrap_or(i64::MIN))
+                .then_with(|| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false))
+        });
     } else if config.sort == LsSort::Extension {
         rows.sort_by(|a, b| {
             Path::new(&a.name)
@@ -4424,6 +4449,40 @@ mod tests {
             .map(|entry| entry.display_name.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         assert_eq!(sorted_names, ["a.txt", "b.txt", "c.txt", "subdir"]);
+
+        fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn semantic_rows_follow_time_sort_order() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!(
+            "syskits-ls-semantic-time-sort-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let old_path = temp_dir.join("old.txt");
+        let new_path = temp_dir.join("new.txt");
+        std::fs::File::create(&old_path).unwrap();
+        std::fs::File::create(&new_path).unwrap();
+
+        let old_time = filetime::FileTime::from_unix_time(1_600_000_000, 0);
+        let new_time = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+        filetime::set_file_times(&old_path, old_time, old_time).unwrap();
+        filetime::set_file_times(&new_path, new_time, new_time).unwrap();
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-t", temp_dir.to_str().unwrap()])
+            .unwrap();
+        let config = LsConfig::from(&matches).unwrap();
+        let rows = ls_collect_semantic_rows(&[temp_dir.as_path()], &config);
+        let names = rows.into_iter().map(|row| row.name).collect::<Vec<_>>();
+
+        assert_eq!(names, ["new.txt", "old.txt"]);
 
         fs::remove_dir_all(temp_dir).unwrap();
     }

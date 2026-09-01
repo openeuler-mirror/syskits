@@ -285,7 +285,7 @@ impl RunconSettings {
         {
             // 自定义上下文模式
             let compute_transition_context = matches.get_flag(runcon_options::RUNCON_COMPUTE);
-            let command = args.next().ok_or(DefaultError::MissingCommand)?;
+            let command = args.next();
             let mode = RunconCommandLineMode::CustomContext {
                 is_compute_transition_context: compute_transition_context,
                 user: matches
@@ -300,7 +300,7 @@ impl RunconSettings {
                 range: matches
                     .get_one::<OsString>(runcon_options::RUNCON_RANGE)
                     .map(Into::into),
-                command: Some(command),
+                command,
             };
 
             Ok(Self {
@@ -732,7 +732,7 @@ mod tests {
         }
 
         #[test]
-        fn test_parse_custom_context_missing_command() {
+        fn test_parse_custom_context_without_command_prints_current_context() {
             let config = ct_app();
             let args = vec![
                 OsString::from("runcon"),
@@ -741,8 +741,37 @@ mod tests {
             ]
             .into_iter();
 
-            let result = RunconSettings::new(config, args);
-            assert!(matches!(result, Err(DefaultError::MissingCommand)));
+            let result = RunconSettings::new(config, args).unwrap();
+
+            match result.mode {
+                RunconCommandLineMode::CustomContext { user, command, .. } => {
+                    assert_eq!(user.unwrap(), "system_u");
+                    assert!(command.is_none());
+                }
+                _ => panic!("Wrong mode"),
+            }
+            assert!(result.arguments.is_empty());
+        }
+
+        #[test]
+        fn test_parse_compute_without_command_prints_current_context() {
+            let config = ct_app();
+            let args = vec![OsString::from("runcon"), OsString::from("-c")].into_iter();
+
+            let result = RunconSettings::new(config, args).unwrap();
+
+            match result.mode {
+                RunconCommandLineMode::CustomContext {
+                    is_compute_transition_context,
+                    command,
+                    ..
+                } => {
+                    assert!(is_compute_transition_context);
+                    assert!(command.is_none());
+                }
+                _ => panic!("Wrong mode"),
+            }
+            assert!(result.arguments.is_empty());
         }
     }
 

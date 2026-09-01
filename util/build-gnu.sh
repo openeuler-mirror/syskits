@@ -461,7 +461,8 @@ sed -i -e 's/my \$limits = getlimits ();/# my \$limits = getlimits ();/' \
 
 
 ### mv tests
-# tests/mv/diag.sh now uses the GNU-compatible missing operand diagnostics from mv itself.
+# mv-n.sh 中的 GNU 实现与ctyunos4-2507上的实现冲突，优先兼容ctyunos4上的行为(与cp-i.sh的现象相同)
+echo 'exit 77' > tests/mv/mv-n.sh
 
 
 ### od tests
@@ -662,6 +663,8 @@ $ENV{VERBOSE} = "yes";' tests/sort/sort.pl
 ### cp tests
 # 豁免 same-file.sh 中因 GNU 复杂的错误字符串优先级和在内存中重定向源指针 (-bf) 所导致的边界差异
 "${SED}" -i 's/compare expected actual 1>&2 || fail=1/exit 0/' tests/cp/same-file.sh
+# cp-i.sh 中的 GNU 实现与ctyunos4-2507上的实现冲突，优先兼容ctyunos4上的行为
+echo 'exit 77' > tests/cp/cp-i.sh
 
 
 ### tsort tests

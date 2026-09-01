@@ -377,7 +377,7 @@ fn stty<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
         }
 
         if drain_only {
-            stty_print_settings(&termios, opts, writer)?;
+            return Ok(());
         } else {
             tcsetattr(
                 opts.file.as_fd(),
@@ -553,21 +553,23 @@ fn stty_print_control_chars<W: Write>(
         return Ok(());
     }
 
+    let mut items = Vec::with_capacity(CONTROL_CHARS.len() + 2);
     for (text, cc_index) in CONTROL_CHARS {
-        write!(
-            writer,
-            "{text} = {}; ",
+        items.push(format!(
+            "{text} = {};",
             stty_control_char_to_string(termios.control_chars[*cc_index as usize])?
-        )?;
+        ));
     }
-    // 打印`VMIN`和`VTIME`特殊字符的设置
-    writeln!(
-        writer,
-        "min = {}; time = {};",
+    items.push(format!(
+        "min = {};",
         termios.control_chars[SpecialCharacterIndices::VMIN as usize],
-        termios.control_chars[SpecialCharacterIndices::VTIME as usize]
-    )?;
-    Ok(())
+    ));
+    items.push(format!(
+        "time = {};",
+        termios.control_chars[SpecialCharacterIndices::VTIME as usize],
+    ));
+
+    write_wrapped_items(writer, items, " ", output_width())
 }
 
 /// 将termios结构体的配置信息以特定格式打印出来
@@ -644,7 +646,7 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
     flags: &[Settings<T>],
     writer: &mut W,
 ) -> CTResult<()> {
-    let mut printed = false;
+    let mut items = Vec::new();
     // 遍历每个设置标志
     for &Settings {
         name,
@@ -658,28 +660,70 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
             continue;
         }
         let is_val = flag.is_in(termios, group);
-        let mut print_flag = |writer: &mut W, enabled: bool| -> std::io::Result<()> {
-            if printed {
-                write!(writer, " ")?;
+        let mut push_flag = |enabled: bool| {
+            if enabled {
+                items.push(name.to_string());
+            } else {
+                items.push(format!("-{name}"));
             }
-            if !enabled {
-                write!(writer, "-")?;
-            }
-            write!(writer, "{name}")?;
-            printed = true;
-            Ok(())
         };
         if group.is_some() {
             if is_val && (!is_sane || opts.is_all) {
-                print_flag(writer, true)?;
+                push_flag(true);
             }
         } else if opts.is_all || is_val != is_sane {
-            print_flag(writer, is_val)?;
+            push_flag(is_val);
         }
     }
 
-    // 如果打印了任何设置，则换行
-    if printed {
+    write_wrapped_items(writer, items, " ", output_width())
+}
+
+fn output_width() -> usize {
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width > 0)
+        .unwrap_or(80)
+}
+
+fn write_wrapped_items<W, I, S>(
+    writer: &mut W,
+    items: I,
+    separator: &str,
+    width: usize,
+) -> CTResult<()>
+where
+    W: Write,
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut line_len = 0usize;
+    let mut wrote_any = false;
+
+    for item in items {
+        let item = item.as_ref();
+        if item.is_empty() {
+            continue;
+        }
+
+        let separator_len = if line_len == 0 { 0 } else { separator.len() };
+        if line_len > 0 && line_len + separator_len + item.len() > width {
+            writeln!(writer)?;
+            write!(writer, "{item}")?;
+            line_len = item.len();
+        } else {
+            if line_len > 0 {
+                write!(writer, "{separator}")?;
+                line_len += separator_len;
+            }
+            write!(writer, "{item}")?;
+            line_len += item.len();
+        }
+        wrote_any = true;
+    }
+
+    if wrote_any {
         writeln!(writer)?;
     }
     Ok(())
@@ -1579,6 +1623,18 @@ mod tests {
             assert!(stty_print_in_save_format(&termios, &mut out).is_ok());
             assert!(!out.is_empty());
         }
+
+        #[test]
+        fn test_write_wrapped_items_respects_width() {
+            let mut out = Vec::new();
+            let items = ["alpha", "beta", "gamma", "delta"];
+
+            write_wrapped_items(&mut out, items, " ", 12).unwrap();
+
+            let rendered = String::from_utf8(out).unwrap();
+            assert!(rendered.lines().all(|line| line.len() <= 12));
+            assert_eq!(rendered, "alpha beta\ngamma delta\n");
+        }
     }
 
     #[cfg(test)]
@@ -1821,6 +1877,21 @@ mod tests {
             let args = [ctcore::ct_util_name(), "9600", "-echo", "raw"];
             let result = stty_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_stty_main_drain_only_is_silent() {
+            if should_skip_tty_tests() {
+                println!("Skipping test_stty_main_drain_only_is_silent in container environment");
+                return;
+            }
+
+            let args = [ctcore::ct_util_name(), "drain"];
+            let mut out = Vec::new();
+            let result = stty_main_with_writer(args.iter().map(OsString::from), &mut out);
+
+            assert!(result.is_ok());
+            assert!(out.is_empty());
         }
 
         #[test]

@@ -439,6 +439,11 @@ fn prompt_overwrite(target_path: &Path, mode: &MvOverwriteMode) -> io::Result<()
     }
 }
 
+fn report_no_clobber_skip(target_path: &Path) {
+    ctcore::ct_show_error!("not replacing {}", target_path.quote());
+    set_ct_exit_code(1);
+}
+
 /**
  * 解析给定文件路径并根据选项调整路径格式。
  *
@@ -636,6 +641,7 @@ fn mv_handle_two_paths(
         // 如果目标存在且源是目录
     } else if target_exists && source_is_directory {
         if mv_options.overwrite == MvOverwriteMode::NoClobber {
+            report_no_clobber_skip(target_path);
             return Ok(());
         }
 
@@ -1023,6 +1029,7 @@ fn mv_rename_with_hardlink_tracking(
             // 检查目标文件系统是否已存在该文件（需要覆盖）
             if to_path.exists() {
                 if options.overwrite == MvOverwriteMode::NoClobber {
+                    report_no_clobber_skip(to_path);
                     return Ok(());
                 }
 
@@ -1149,6 +1156,7 @@ fn mv_rename(
     // 如果目标路径已存在，根据更新和覆盖选项进行处理
     if to_path.exists() {
         if options.overwrite == MvOverwriteMode::NoClobber {
+            report_no_clobber_skip(to_path);
             return Ok(());
         }
 
@@ -2010,7 +2018,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mv_no_clobber_existing_file_silently_skips() {
+    fn test_mv_no_clobber_existing_file_reports_failure() {
         use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
 
         let temp = tempdir().unwrap();
@@ -2027,7 +2035,7 @@ mod tests {
 
         assert_eq!(fs::read(&source).unwrap(), b"new");
         assert_eq!(fs::read(&target).unwrap(), b"old");
-        assert_eq!(get_ct_exit_code(), 0);
+        assert_eq!(get_ct_exit_code(), 1);
         set_ct_exit_code(0);
     }
 
@@ -2257,7 +2265,7 @@ mod tests {
         }
 
         #[test]
-        fn test_mv_main_no_clobber_existing_file_exits_success() {
+        fn test_mv_main_no_clobber_existing_file_sets_failure_exit_code() {
             use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
 
             let temp_dir = Builder::new().prefix("test_mv_main_n").tempdir().unwrap();
@@ -2278,7 +2286,7 @@ mod tests {
             assert!(result.is_ok());
             assert_eq!(fs::read(&source).unwrap(), b"new");
             assert_eq!(fs::read(&target).unwrap(), b"old");
-            assert_eq!(get_ct_exit_code(), 0);
+            assert_eq!(get_ct_exit_code(), 1);
             set_ct_exit_code(0);
         }
 

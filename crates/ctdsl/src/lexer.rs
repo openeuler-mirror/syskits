@@ -177,6 +177,22 @@ impl<'s> Lexer<'s> {
                 || bytes[10] == b't')
     }
 
+    fn looks_like_numeric_range_arg(&self) -> bool {
+        let bytes = self.src.as_bytes();
+        let mut i = self.pos;
+
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+
+        if i >= bytes.len() || bytes[i] != b'-' {
+            return false;
+        }
+
+        let next = i + 1;
+        next < bytes.len() && bytes[next].is_ascii_digit()
+    }
+
     // ── 词元识别 ─────────────────────────────────────────
 
     fn next_token(&mut self) -> Result<Token, ParseError> {
@@ -279,7 +295,7 @@ impl<'s> Lexer<'s> {
 
             c if c.is_ascii_digit() => {
                 // 前瞻检测 datetime: YYYY-MM-DD 模式
-                if self.looks_like_datetime() {
+                if self.looks_like_datetime() || self.looks_like_numeric_range_arg() {
                     self.lex_ident_or_keyword()
                 } else {
                     self.lex_number()
@@ -720,6 +736,12 @@ mod tests {
     fn test_lex_float() {
         let toks = lex("2.5");
         assert_eq!(toks[0], Token::FloatLit(2.5));
+    }
+
+    #[test]
+    fn test_lex_numeric_range_arg_as_ident() {
+        let toks = lex("1-3");
+        assert_eq!(toks[0], Token::Ident("1-3".into()));
     }
 
     #[test]

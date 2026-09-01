@@ -27,13 +27,26 @@ impl LsIntent {
 
         Ok(Self { argv })
     }
+
+    fn human_readable(&self) -> bool {
+        self.argv
+            .iter()
+            .skip(1)
+            .any(|arg| matches_human_readable_flag(&arg.to_string_lossy()))
+    }
+}
+
+fn matches_human_readable_flag(arg: &str) -> bool {
+    arg == "--human-readable"
+        || arg == "--block-size=human-readable"
+        || (arg.starts_with('-') && !arg.starts_with("--") && arg[1..].chars().any(|ch| ch == 'h'))
 }
 
 impl LsCore {
     fn run_core(intent: &LsIntent) -> (CtValue, String, String, i32) {
         match ct_ls::ls_native_semantic(intent.argv.iter().cloned()) {
             Ok(semantic) => (
-                semantic_to_value(&semantic),
+                semantic_to_value(&semantic, intent.human_readable()),
                 semantic.classic_text,
                 semantic.stderr_text,
                 semantic.exit_code,
@@ -63,6 +76,17 @@ fn opt_u64_to_value(value: Option<u64>) -> CtValue {
     }
 }
 
+fn size_to_value(row: &ct_ls::LsSemanticRow, human_readable: bool) -> CtValue {
+    if human_readable {
+        match row.size {
+            Some(size) => CtValue::Size(size),
+            None => CtValue::Nothing,
+        }
+    } else {
+        opt_u64_to_value(row.size)
+    }
+}
+
 fn opt_string_to_value(value: &Option<String>) -> CtValue {
     match value {
         Some(value) => CtValue::String(value.clone()),
@@ -70,7 +94,11 @@ fn opt_string_to_value(value: &Option<String>) -> CtValue {
     }
 }
 
-fn row_to_value(semantic: &ct_ls::LsSemantic, row: &ct_ls::LsSemanticRow) -> CtValue {
+fn row_to_value(
+    semantic: &ct_ls::LsSemantic,
+    row: &ct_ls::LsSemanticRow,
+    human_readable: bool,
+) -> CtValue {
     CtValue::Record(vec![
         ("command".into(), CtValue::String(semantic.command.clone())),
         (
@@ -102,7 +130,11 @@ fn row_to_value(semantic: &ct_ls::LsSemantic, row: &ct_ls::LsSemanticRow) -> CtV
         ("user".into(), opt_string_to_value(&row.user)),
         ("group".into(), opt_string_to_value(&row.group)),
         ("file_type".into(), CtValue::String(row.file_type.clone())),
-        ("size".into(), opt_u64_to_value(row.size)),
+        ("size".into(), size_to_value(row, human_readable)),
+        (
+            "last_modified".into(),
+            opt_string_to_value(&row.last_modified),
+        ),
         ("is_dir".into(), CtValue::Bool(row.is_dir)),
         ("is_file".into(), CtValue::Bool(row.is_file)),
         ("is_symlink".into(), CtValue::Bool(row.is_symlink)),
@@ -110,12 +142,12 @@ fn row_to_value(semantic: &ct_ls::LsSemantic, row: &ct_ls::LsSemanticRow) -> CtV
     ])
 }
 
-fn semantic_to_value(semantic: &ct_ls::LsSemantic) -> CtValue {
+fn semantic_to_value(semantic: &ct_ls::LsSemantic, human_readable: bool) -> CtValue {
     CtValue::List(
         semantic
             .rows
             .iter()
-            .map(|row| row_to_value(semantic, row))
+            .map(|row| row_to_value(semantic, row, human_readable))
             .collect(),
     )
 }
@@ -130,9 +162,10 @@ fn display_columns_for_format(display_format: Option<&str>) -> CtValue {
             "name",
             "file_type",
             "size",
+            "last_modified",
         ]
     } else {
-        vec!["name", "file_type", "size"]
+        vec!["name", "file_type", "size", "last_modified"]
     };
     CtValue::List(
         columns
@@ -252,6 +285,9 @@ mod tests {
                 group: Some("root".into()),
                 file_type: "file".into(),
                 size: Some(6),
+                size_display: Some("6".into()),
+                last_modified: Some("Jan  1 00:00".into()),
+                modified_unix_seconds: Some(1_704_067_200),
                 is_dir: false,
                 is_file: true,
                 is_symlink: false,
@@ -260,7 +296,7 @@ mod tests {
             classic_text: "alpha.txt\n".into(),
             stderr_text: String::new(),
             exit_code: 0,
-        });
+        }, false);
 
         assert_eq!(
             value,
@@ -281,12 +317,68 @@ mod tests {
                 ("group".into(), CtValue::String("root".into())),
                 ("file_type".into(), CtValue::String("file".into())),
                 ("size".into(), CtValue::Int(6)),
+                ("last_modified".into(), CtValue::String("Jan  1 00:00".into())),
                 ("is_dir".into(), CtValue::Bool(false)),
                 ("is_file".into(), CtValue::Bool(true)),
                 ("is_symlink".into(), CtValue::Bool(false)),
                 ("command_line".into(), CtValue::Bool(false)),
             ])])
         );
+    }
+
+    #[test]
+    fn semantic_to_value_uses_size_type_for_human_readable_mode() {
+        let value = semantic_to_value(&ct_ls::LsSemantic {
+            command: "ls".into(),
+            display_format: "one-line".into(),
+            include_hidden: false,
+            almost_all: false,
+            directory_mode: false,
+            recursive: false,
+            paths: vec![".".into()],
+            rows: vec![ct_ls::LsSemanticRow {
+                row_index: 1,
+                source_path: ".".into(),
+                path: "./alpha.txt".into(),
+                name: "alpha.txt".into(),
+                mode: None,
+                inode: None,
+                user: None,
+                group: None,
+                file_type: "file".into(),
+                size: Some(2048),
+                size_display: Some("2.0K".into()),
+                last_modified: Some("Jan  1 00:00".into()),
+                modified_unix_seconds: Some(1_704_067_200),
+                is_dir: false,
+                is_file: true,
+                is_symlink: false,
+                command_line: false,
+            }],
+            classic_text: "alpha.txt\n".into(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        }, true);
+
+        let CtValue::List(rows) = value else {
+            panic!("expected list");
+        };
+        let CtValue::Record(fields) = &rows[0] else {
+            panic!("expected record");
+        };
+        assert!(matches!(
+            fields.iter().find(|(k, _)| k == "size").map(|(_, v)| v),
+            Some(CtValue::Size(2048))
+        ));
+    }
+
+    #[test]
+    fn human_readable_detects_h_flag() {
+        let intent = LsIntent {
+            argv: vec![OsString::from("ls"), OsString::from("-lh")],
+        };
+
+        assert!(intent.human_readable());
     }
 
     #[test]
@@ -297,6 +389,7 @@ mod tests {
                 CtValue::String("name".into()),
                 CtValue::String("file_type".into()),
                 CtValue::String("size".into()),
+                CtValue::String("last_modified".into()),
             ])
         );
     }
@@ -313,6 +406,7 @@ mod tests {
                 CtValue::String("name".into()),
                 CtValue::String("file_type".into()),
                 CtValue::String("size".into()),
+                CtValue::String("last_modified".into()),
             ])
         );
     }

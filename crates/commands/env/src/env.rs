@@ -374,13 +374,9 @@ impl EnvAppData {
     }
 
     fn run_env(&mut self, source_args: impl ctcore::Args) -> CTResult<()> {
-        let (sources_args, matches) = self.parse_arguments(source_args)?;
+        let (_sources_args, matches) = self.parse_arguments(source_args)?;
 
-        let is_debug_printing_before = self.do_debug_printing;
         let is_debug_printing = self.do_debug_printing || matches.get_flag("debug");
-        if is_debug_printing && !is_debug_printing_before {
-            env_debug_print_args(&sources_args);
-        }
 
         let mut options = env_make_options(&matches)?;
 

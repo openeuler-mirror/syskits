@@ -190,12 +190,11 @@ pub fn run_repl(
                     continue;
                 }
 
+                push_history_line(&mut history_lines, trimmed);
+
                 match handle_control_command(trimmed, &mut debug_enabled, &texts, &history_lines) {
                     ControlAction::Exit => break,
-                    ControlAction::Continue => {
-                        push_history_line(&mut history_lines, trimmed);
-                        continue;
-                    }
+                    ControlAction::Continue => continue,
                     ControlAction::NotControl => {}
                 }
 
@@ -224,7 +223,6 @@ pub fn run_repl(
                 if !precheck_diags.is_empty() {
                     print_precheck_diagnostics(&precheck_diags, &texts);
                     if has_precheck_error(&precheck_diags) {
-                        push_history_line(&mut history_lines, trimmed);
                         continue;
                     }
                 }
@@ -255,8 +253,6 @@ pub fn run_repl(
                 // Clear one-shot interrupt state at REPL command boundary.
                 // During command execution, ctengine checks the signal non-destructively.
                 let _ = ctx.signal.take_interrupted();
-
-                push_history_line(&mut history_lines, trimmed);
             }
             Ok(Signal::CtrlD) => {
                 println!("{}", texts.exit_hint);

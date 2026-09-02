@@ -697,6 +697,22 @@ fn mv_handle_multiple_paths(paths: &[PathBuf], opts: &MvOpts) -> CTResult<()> {
     move_files_into_dir(sources, target_dir, opts)
 }
 
+fn strip_trailing_symlink_source_requires_directory_target(
+    raw_source: &OsStr,
+    target_path: &Path,
+    mv_options: &MvOpts,
+) -> bool {
+    if !mv_options.strip_slashes || !path_ends_with_terminator(Path::new(raw_source)) {
+        return false;
+    }
+
+    let stripped_source = PathBuf::from(strip_trailing_slashes(raw_source));
+    stripped_source
+        .symlink_metadata()
+        .is_ok_and(|meta| meta.file_type().is_symlink())
+        && !target_path.is_dir()
+}
+
 /// 执行mv命令。此命令将'source'移动到'target'，其中'target'是一个目录。如果'target'不存在，
 /// 并且'source'是一个单个文件或目录，则'source'将被重命名为'target'。
 pub fn mv(files: &[OsString], mv_options: &MvOpts) -> CTResult<()> {
@@ -706,6 +722,23 @@ pub fn mv(files: &[OsString], mv_options: &MvOpts) -> CTResult<()> {
     // 如果指定了目标目录，则将文件移动到该目录下
     if let Some(ref name) = mv_options.target_dir {
         return move_files_into_dir(&file_paths, &PathBuf::from(name), mv_options);
+    }
+
+    if files.len() == 2
+        && strip_trailing_symlink_source_requires_directory_target(
+            &files[0],
+            &file_paths[1],
+            mv_options,
+        )
+    {
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "cannot move {} to {}: Not a directory",
+                file_paths[0].quote(),
+                file_paths[1].quote()
+            ),
+        ));
     }
 
     // 根据路径数量，分别处理两个路径或多个路径的情况
@@ -2992,7 +3025,7 @@ mod tests {
 
         #[cfg(unix)]
         #[test]
-        fn test_mv_symlink_with_trailing_slash() {
+        fn test_mv_strip_trailing_symlink_to_new_target_fails() {
             use std::os::unix::fs::symlink;
 
             let temp = tempdir().unwrap();
@@ -3008,16 +3041,49 @@ mod tests {
             let dest_path = base.join("testfile2");
             let dest_operand = dest_path.clone().into_os_string();
 
-            let mut opts = create_test_opts(MvOverwriteMode::Force, true);
-            opts.strip_slashes = true;
+            let opts = create_test_opts(MvOverwriteMode::Force, true);
 
-            let args = vec![source_operand, dest_operand.clone()];
-            assert!(mv(&args, &opts).is_ok());
+            let args = vec![source_operand, dest_operand];
+            let err = mv(&args, &opts).expect_err("symlink source with slash must fail");
+            assert!(format!("{err}").contains("Not a directory"));
+            assert!(
+                fs::symlink_metadata(&source_link)
+                    .unwrap()
+                    .file_type()
+                    .is_symlink()
+            );
+            assert!(!dest_path.exists());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_mv_strip_trailing_symlink_to_existing_dir_moves_link() {
+            use std::os::unix::fs::symlink;
+
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let real_dir = base.join("testdir");
+            fs::create_dir(&real_dir).unwrap();
+            let dest_dir = base.join("destdir");
+            fs::create_dir(&dest_dir).unwrap();
+
+            let source_link = base.join("testdir1");
+            symlink(&real_dir, &source_link).unwrap();
+
+            let mut source_operand = source_link.clone().into_os_string();
+            source_operand.push("/");
+            let dest_operand = dest_dir.clone().into_os_string();
+
+            let opts = create_test_opts(MvOverwriteMode::Force, true);
+
+            let args = vec![source_operand, dest_operand];
+            mv(&args, &opts).unwrap();
             assert!(!source_link.exists());
 
-            let symlink_meta = fs::symlink_metadata(&dest_path).unwrap();
+            let moved_link = dest_dir.join("testdir1");
+            let symlink_meta = fs::symlink_metadata(&moved_link).unwrap();
             assert!(symlink_meta.file_type().is_symlink());
-            assert_eq!(fs::read_link(&dest_path).unwrap(), real_dir);
+            assert_eq!(fs::read_link(&moved_link).unwrap(), real_dir);
         }
 
         #[test]

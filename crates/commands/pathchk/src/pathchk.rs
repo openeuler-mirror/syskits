@@ -19,6 +19,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
+use ctcore::ct_locale::{LcCategory, hard_locale};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
@@ -58,6 +59,14 @@ pub struct PathchkSemantic {
 // a few global constants as used in the GNU implementation
 const PATHCHK_POSIX_PATH_MAX: usize = 256;
 const PATHCHK_POSIX_NAME_MAX: usize = 14;
+
+fn locale_quote_name(name: &str) -> String {
+    if hard_locale(LcCategory::LcMessages) {
+        format!("‘{name}’")
+    } else {
+        format!("'{name}'")
+    }
+}
 
 /// PathchkFlags 结构体用于存储和管理 pathchk 命令的运行参数
 struct PathchkFlags {
@@ -288,9 +297,10 @@ fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
         // Only check length after character validation
         let component_len = p.len();
         if component_len > PATHCHK_POSIX_NAME_MAX {
+            let quoted = locale_quote_name(p);
             writeln!(
                 writer,
-                "pathchk: limit {PATHCHK_POSIX_NAME_MAX} exceeded by length {component_len} of file name component '{p}'"
+                "pathchk: limit {PATHCHK_POSIX_NAME_MAX} exceeded by length {component_len} of file name component {quoted}"
             )?;
             return Ok(false);
         }
@@ -298,9 +308,10 @@ fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
 
     // Finally check total path length
     if total_len > PATHCHK_POSIX_PATH_MAX {
+        let quoted = locale_quote_name(&joined_path);
         writeln!(
             writer,
-            "pathchk: limit {PATHCHK_POSIX_PATH_MAX} exceeded by length {total_len} of file name '{joined_path}'"
+            "pathchk: limit {PATHCHK_POSIX_PATH_MAX} exceeded by length {total_len} of file name {quoted}"
         )?;
         return Ok(false);
     }
@@ -357,12 +368,13 @@ fn check_default<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
 
     // Then check path length
     if total_len > libc::PATH_MAX as usize {
+        let quoted = locale_quote_name(&joined_path);
         writeln!(
             writer,
-            "pathchk: limit {} exceeded by length {} of file name ‘{}’",
+            "pathchk: limit {} exceeded by length {} of file name {}",
             libc::PATH_MAX,
             total_len,
-            joined_path
+            quoted
         )?;
         return Ok(false);
     }
@@ -371,12 +383,13 @@ fn check_default<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
     for p in path {
         let component_len = p.len();
         if component_len > libc::FILENAME_MAX as usize {
+            let quoted = locale_quote_name(p);
             writeln!(
                 writer,
-                "pathchk: limit {} exceeded by length {} of file name component ‘{}’",
+                "pathchk: limit {} exceeded by length {} of file name component {}",
                 libc::FILENAME_MAX,
                 component_len,
-                p
+                quoted
             )?;
             return Ok(false);
         }
@@ -431,9 +444,10 @@ fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResul
     for (i, ch) in path_segment.as_bytes().iter().enumerate() {
         if !VALID_CHARS.contains(ch) {
             let invalid = path_segment[i..].chars().next().unwrap();
+            let quoted = locale_quote_name(path_segment);
             writeln!(
                 writer,
-                "pathchk: non-portable character ‘{invalid}’ in file name '{path_segment}'"
+                "pathchk: non-portable character ‘{invalid}’ in file name {quoted}"
             )?;
             return Ok(false);
         }
@@ -533,7 +547,7 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(
                 output_str
-                    .contains("pathchk: non-portable character ‘#’ in file name 'special#file'")
+                    .contains("pathchk: non-portable character ‘#’ in file name ‘special#file’")
             );
         }
 

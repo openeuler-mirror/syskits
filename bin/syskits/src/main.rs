@@ -126,12 +126,17 @@ impl SysKits {
     /// 1. 如果参数以工具名称结尾，则使用工具名称
     /// 2. 如果参数不以工具名称结尾，则视为多态并获取下一个参数
     fn preprocess_args(context: &mut ExecutionContext) -> Option<OsString> {
-        // data 多态二进制入口（`data -> syskits`）
-        if context.binary_name.ends_with("data")
-            && !context.binary_name[..context.binary_name.len().saturating_sub("data".len())]
-                .ends_with(char::is_alphanumeric)
-        {
-            return Some(OsString::from("data"));
+        // data/shell 多态二进制入口（`data -> syskits`, `shell -> syskits`）
+        for special_entry in ["data", "shell"] {
+            if context.binary_name.ends_with(special_entry)
+                && !context.binary_name[..context
+                    .binary_name
+                    .len()
+                    .saturating_sub(special_entry.len())]
+                    .ends_with(char::is_alphanumeric)
+            {
+                return Some(OsString::from(special_entry));
+            }
         }
 
         // 使用更高效的字符串匹配
@@ -640,6 +645,14 @@ mod tests {
         };
         let result = SysKits::preprocess_args(&mut context);
         assert_eq!(result, Some(OsString::from("data")));
+
+        // 测试 shell 多态入口
+        let mut context = ExecutionContext {
+            binary_name: "shell".to_string(),
+            args: vec![],
+        };
+        let result = SysKits::preprocess_args(&mut context);
+        assert_eq!(result, Some(OsString::from("shell")));
 
         // 测试多态模式
         let mut context = ExecutionContext {

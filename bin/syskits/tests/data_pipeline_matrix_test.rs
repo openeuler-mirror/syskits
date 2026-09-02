@@ -676,6 +676,41 @@ fn data_ssv_transpose_round_trip() {
 }
 
 #[test]
+fn data_to_empty_record_outputs_empty_text_for_plain_text_formats() {
+    for format in ["yaml", "csv", "toml", "text"] {
+        let expr = format!("from json \"{{}}\" | to {format}");
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args(["data", "format=raw", &expr])
+            .output()
+            .unwrap_or_else(|_| panic!("run data empty record to {format}"));
+
+        assert!(
+            output.status.success(),
+            "{format} stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stderr, b"", "{format}");
+        assert_eq!(output.stdout, b"\n", "{format}");
+    }
+}
+
+#[test]
+fn data_to_toml_empty_list_outputs_empty_text() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=raw", "from json \"[]\" | to toml"])
+        .output()
+        .expect("run data empty list to toml");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"\n");
+}
+
+#[test]
 fn shell_tilde_prefix_forces_external_for_direct_only_command() {
     let expected = Command::new("chroot")
         .arg("--help")

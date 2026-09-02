@@ -82,11 +82,23 @@ impl DataCommand for CmdTo {
             "ssv" => to_ssv(input)?,
             "yaml" => {
                 let value = consume_to_value(input)?;
+                if is_empty_record_value(&value) {
+                    return Ok(CtPipelineData::Value(
+                        CtValue::String(String::new()),
+                        CtPipelineMetadata::default(),
+                    ));
+                }
                 serde_yaml::to_string(&ct_to_json(&value))
                     .map_err(|e| CtDiagnosticError::simple(format!("to yaml: {e}")))?
             }
             "toml" => {
                 let value = consume_to_value(input)?;
+                if is_empty_record_or_list_value(&value) {
+                    return Ok(CtPipelineData::Value(
+                        CtValue::String(String::new()),
+                        CtPipelineMetadata::default(),
+                    ));
+                }
                 let tv = ct_to_toml(&value);
                 tv.to_string()
             }
@@ -180,6 +192,9 @@ fn to_csv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
     let rows = normalize_rows_for_csv(data)?;
     validate_csv_record_field_names(&rows)?;
     let columns = collect_csv_columns(&rows);
+    if columns.is_empty() {
+        return Ok(String::new());
+    }
 
     let mut wtr = csv::WriterBuilder::new()
         .has_headers(true)
@@ -213,6 +228,9 @@ fn to_csv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> 
     let rows = normalize_rows_for_csv(data)?;
     validate_csv_record_field_names(&rows)?;
     let columns = collect_csv_columns(&rows);
+    if columns.is_empty() {
+        return Ok(String::new());
+    }
 
     let mut wtr = csv::WriterBuilder::new()
         .has_headers(false)
@@ -447,6 +465,17 @@ fn consume_to_value(data: CtPipelineData) -> Result<CtValue, CtDiagnosticError> 
     }
 }
 
+fn is_empty_record_value(value: &CtValue) -> bool {
+    matches!(value, CtValue::Record(fields) if fields.is_empty())
+}
+
+fn is_empty_record_or_list_value(value: &CtValue) -> bool {
+    matches!(
+        value,
+        CtValue::Record(fields) if fields.is_empty()
+    ) || matches!(value, CtValue::List(items) if items.is_empty())
+}
+
 fn consume_to_lines(data: CtPipelineData) -> Result<Vec<String>, CtDiagnosticError> {
     match data {
         CtPipelineData::Empty => Ok(vec![]),
@@ -463,6 +492,7 @@ fn consume_to_lines(data: CtPipelineData) -> Result<Vec<String>, CtDiagnosticErr
         CtPipelineData::Value(CtValue::String(s), _) => {
             Ok(s.lines().map(|l| l.to_string()).collect())
         }
+        CtPipelineData::Value(CtValue::Record(fields), _) if fields.is_empty() => Ok(vec![]),
         CtPipelineData::Value(v, _) => Ok(vec![format!("{v:?}")]),
         CtPipelineData::ListStream(s) => Ok(s
             .map(|v| {
@@ -500,6 +530,10 @@ mod tests {
         let mut c = fmt_call(fmt);
         c.flags.insert("transpose".to_string(), None);
         c
+    }
+
+    fn empty_record_input() -> CtPipelineData {
+        CtPipelineData::Value(CtValue::Record(vec![]), CtPipelineMetadata::default())
     }
 
     #[test]
@@ -575,6 +609,17 @@ mod tests {
     }
 
     #[test]
+    fn test_to_csv_empty_record_outputs_empty_text() {
+        let r = CmdTo
+            .run(&fmt_call("csv"), empty_record_input(), &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(csv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(csv, "");
+    }
+
+    #[test]
     fn test_to_csv_rejects_empty_field_name() {
         let input = CtPipelineData::Value(
             CtValue::Record(vec![("".into(), CtValue::String("a".into()))]),
@@ -642,6 +687,17 @@ mod tests {
             panic!("string");
         };
         assert_eq!(csv, "name,a,b\nage,,11\n");
+    }
+
+    #[test]
+    fn test_to_csv_transpose_empty_record_outputs_empty_text() {
+        let r = CmdTo
+            .run(&fmt_call_transpose("csv"), empty_record_input(), &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(csv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(csv, "");
     }
 
     #[test]
@@ -828,6 +884,17 @@ mod tests {
     }
 
     #[test]
+    fn test_to_yaml_empty_record_outputs_empty_text() {
+        let r = CmdTo
+            .run(&fmt_call("yaml"), empty_record_input(), &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(y), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(y, "");
+    }
+
+    #[test]
     fn test_to_toml_record() {
         let input = CtPipelineData::Value(
             CtValue::Record(vec![("a".into(), CtValue::Int(1))]),
@@ -838,6 +905,27 @@ mod tests {
             panic!("string");
         };
         assert!(t.contains("a = 1"));
+    }
+
+    #[test]
+    fn test_to_toml_empty_record_outputs_empty_text() {
+        let r = CmdTo
+            .run(&fmt_call("toml"), empty_record_input(), &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(t), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(t, "");
+    }
+
+    #[test]
+    fn test_to_toml_empty_list_outputs_empty_text() {
+        let input = CtPipelineData::Value(CtValue::List(vec![]), CtPipelineMetadata::default());
+        let r = CmdTo.run(&fmt_call("toml"), input, &ctx()).unwrap();
+        let CtPipelineData::Value(CtValue::String(t), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(t, "");
     }
 
     #[test]
@@ -856,6 +944,17 @@ mod tests {
         } else {
             panic!();
         }
+    }
+
+    #[test]
+    fn test_to_text_empty_record_outputs_empty_text() {
+        let r = CmdTo
+            .run(&fmt_call("text"), empty_record_input(), &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(s), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(s, "");
     }
 
     #[test]

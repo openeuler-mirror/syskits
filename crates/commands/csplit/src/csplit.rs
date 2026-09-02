@@ -226,13 +226,16 @@ where
                         ),
                         max,
                     ) {
-                        (Err(CsplitError::MatchNotFound(_)), None) => {
+                        (Err(err), None) if err.is_match_not_found() => {
+                            err.emit_deferred_stdout();
                             return Ok(false); // {*} 读到 EOF，告诉外层不用补充尾随文件了
                         }
-                        (Err(CsplitError::MatchNotFound(_)), Some(m)) if m != 1 && ith != 1 => {
-                            return Err(CsplitError::MatchNotFoundOnRepetition(
-                                pattern_as_str.to_string(),
-                                ith - 1,
+                        (Err(err), Some(m)) if err.is_match_not_found() && m != 1 && ith != 1 => {
+                            return Err(err.replace_source_preserving_deferred(
+                                CsplitError::MatchNotFoundOnRepetition(
+                                    pattern_as_str.to_string(),
+                                    ith - 1,
+                                ),
                             ));
                         }
                         (Err(err), _) => return Err(err),
@@ -372,10 +375,17 @@ impl SplitWriter<'_> {
     ///
     /// Some [`io::Error`] if the split could not be removed in case it should be elided.
     fn finish_split(&mut self) -> Result<(), CsplitError> {
+        if let Some(line) = self.finish_split_output()? {
+            println!("{line}");
+        }
+        Ok(())
+    }
+
+    fn finish_split_output(&mut self) -> Result<Option<String>, CsplitError> {
         if self.dev_null {
             self.current_writer = None;
             self.current_filename = None;
-            return Ok(());
+            return Ok(None);
         }
 
         self.close_current_writer()?;
@@ -385,10 +395,12 @@ impl SplitWriter<'_> {
             }
             self.counter = self.counter.saturating_sub(1);
         } else if !self.options.quiet {
-            println!("{}", self.size);
+            let size = self.size.to_string();
+            self.current_filename = None;
+            return Ok(Some(size));
         }
         self.current_filename = None;
-        Ok(())
+        Ok(None)
     }
 
     /// Removes all the split files that were created.
@@ -532,8 +544,11 @@ impl SplitWriter<'_> {
             }
         }
 
-        self.finish_split()?;
-        Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
+        let deferred_stdout = self.finish_split_output()?.into_iter().collect();
+        Err(CsplitError::with_deferred_stdout(
+            CsplitError::MatchNotFound(pattern_as_str.to_string()),
+            deferred_stdout,
+        ))
     }
 }
 
@@ -656,6 +671,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         let stdin = io::stdin();
         csplit(&csplit_opts, patterns, stdin.lock()).map_err(|err| {
             eprintln!("{}: {err}", ctcore::ct_util_name());
+            err.emit_deferred_stdout();
             1 // 错误时返回状态码 1
         })?;
     } else {
@@ -666,6 +682,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {
             eprintln!("{}: {err}", ctcore::ct_util_name());
+            err.emit_deferred_stdout();
             1 // 错误时返回状态码 1
         })?;
     }

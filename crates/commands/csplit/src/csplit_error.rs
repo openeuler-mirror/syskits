@@ -19,6 +19,11 @@ use ctcore::ct_error::CTError;
 pub enum CsplitError {
     #[error("IO error: {}", _0)]
     IoError(io::Error),
+    #[error("{source}")]
+    DeferredOutput {
+        source: Box<CsplitError>,
+        stdout_lines: Vec<String>,
+    },
     #[error("{}: {}", _0, _1)]
     WriteError(String, String),
     #[error("{}: line number out of range", ._0.quote())]
@@ -43,6 +48,44 @@ pub enum CsplitError {
     SuffixFormatTooManyPercents,
     // #[error("{} is not a regular file", ._0.quote())]
     // NotRegularFile(String),
+}
+
+impl CsplitError {
+    pub fn with_deferred_stdout(source: Self, stdout_lines: Vec<String>) -> Self {
+        if stdout_lines.is_empty() {
+            source
+        } else {
+            Self::DeferredOutput {
+                source: Box::new(source),
+                stdout_lines,
+            }
+        }
+    }
+
+    pub fn is_match_not_found(&self) -> bool {
+        match self {
+            Self::MatchNotFound(_) => true,
+            Self::DeferredOutput { source, .. } => source.is_match_not_found(),
+            _ => false,
+        }
+    }
+
+    pub fn emit_deferred_stdout(&self) {
+        if let Self::DeferredOutput { stdout_lines, .. } = self {
+            for line in stdout_lines {
+                println!("{line}");
+            }
+        }
+    }
+
+    pub fn replace_source_preserving_deferred(self, new_source: Self) -> Self {
+        match self {
+            Self::DeferredOutput { stdout_lines, .. } => {
+                Self::with_deferred_stdout(new_source, stdout_lines)
+            }
+            _ => new_source,
+        }
+    }
 }
 
 impl From<io::Error> for CsplitError {

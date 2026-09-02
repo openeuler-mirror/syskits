@@ -5,7 +5,7 @@
   "repl.exit_hint": "exit",
   "repl.help_intro": "可直接输入 DSL 管线，例如：",
   "repl.help_example": "  kubectl get pods -o json | from json | select metadata.name status.phase",
-  "repl.help_builtins": "内建命令：help, exit, quit, cd, pwd, clear, history, trace on/off/status, ast <expr>, debug on/off/status。输出格式：format=auto|text|table|json|classic <expr>",
+  "repl.help_builtins": "内建命令：help, exit, quit, cd, clear, history, trace on/off/status, ast <expr>, debug on/off/status。输出格式：format=auto|text|table|json|classic <expr>",
   "repl.debug_enabled": "调试追踪已开启",
   "repl.debug_disabled": "调试追踪已关闭",
   "repl.debug_status_enabled": "调试追踪当前为开启",

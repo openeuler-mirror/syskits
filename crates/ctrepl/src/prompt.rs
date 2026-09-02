@@ -436,7 +436,6 @@ pub(crate) fn build_completion_candidates(
         command_candidate("history", "show REPL history"),
         command_candidate("ast", "print AST for expression"),
         command_candidate("cd", "change current directory"),
-        command_candidate("pwd", "print current directory"),
         command_candidate("clear", "clear terminal screen"),
     ]);
 

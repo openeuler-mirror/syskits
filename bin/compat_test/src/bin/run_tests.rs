@@ -22,11 +22,21 @@ use compat_test::{Result, TestConfig, TestError, TestRunner};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-const DEFAULT_CONFIG_FILE: &str = "bin/compat_test/conf/default.toml";
-const TEST_CASES_DIR: &str = "bin/compat_test/test_cases";
+const DEFAULT_CONFIG_FILE: &str = "conf/default.toml";
+const TEST_CASES_DIR: &str = "test_cases";
 const SYSKITS_BIN_PATH: &str = "target/debug/syskits";
+const INSTALLED_COMPAT_TEST_HOME: &str = "/usr/share/syskits/compat_test";
+const INSTALLED_SYSKITS_BIN_PATH: &str = "/usr/bin/syskits";
+
+#[derive(Debug, Clone)]
+struct RuntimeLayout {
+    default_config_path: PathBuf,
+    default_test_cases_dir: PathBuf,
+    default_syskits_path: PathBuf,
+    config_base_dir: PathBuf,
+}
 
 /// 简化的测试用例集合
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,15 +61,57 @@ struct SimpleTest {
     tty: Option<bool>,                     // 是否使用伪终端
 }
 
-/// 获取工作空间根目录
-fn get_workspace_dir() -> PathBuf {
-    let current_exe = std::env::current_exe().unwrap();
-    let mut path = current_exe.parent().unwrap().to_path_buf();
-    // 从 target/debug 或 target/release 向上找到工作空间根目录
-    while !path.join("Cargo.toml").exists() {
-        path = path.parent().unwrap().to_path_buf();
+fn find_workspace_dir_from(mut path: PathBuf) -> Option<PathBuf> {
+    loop {
+        if path.join("Cargo.toml").exists() {
+            return Some(path);
+        }
+        path = path.parent()?.to_path_buf();
     }
-    path
+}
+
+/// 获取工作空间根目录
+fn get_workspace_dir() -> Option<PathBuf> {
+    let current_exe = std::env::current_exe().ok()?;
+    let exe_dir = current_exe.parent()?.to_path_buf();
+    find_workspace_dir_from(exe_dir)
+}
+
+fn resolve_runtime_layout() -> RuntimeLayout {
+    if let Some(workspace_dir) = get_workspace_dir() {
+        let compat_home = workspace_dir.join("bin/compat_test");
+        return RuntimeLayout {
+            default_config_path: compat_home.join(DEFAULT_CONFIG_FILE),
+            default_test_cases_dir: compat_home.join(TEST_CASES_DIR),
+            default_syskits_path: workspace_dir.join(SYSKITS_BIN_PATH),
+            config_base_dir: workspace_dir,
+        };
+    }
+
+    let compat_home = PathBuf::from(INSTALLED_COMPAT_TEST_HOME);
+    let config_base_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    RuntimeLayout {
+        default_config_path: compat_home.join(DEFAULT_CONFIG_FILE),
+        default_test_cases_dir: compat_home.join(TEST_CASES_DIR),
+        default_syskits_path: PathBuf::from(INSTALLED_SYSKITS_BIN_PATH),
+        config_base_dir,
+    }
+}
+
+fn resolve_path_from_cwd(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(std::env::current_dir()?.join(path))
+    }
+}
+
+fn resolve_path_from_base(path: &Path, base_dir: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base_dir.join(path)
+    }
 }
 
 fn command_requires_serial_tests(command: &str) -> bool {
@@ -71,14 +123,13 @@ fn command_requires_serial_tests(command: &str) -> bool {
 /// 1. 当前目录的 .compat_test.toml
 /// 2. 用户主目录的 .compat_test.toml
 /// 3. crate内的默认配置文件 conf/default.toml
-fn load_config() -> Result<Config> {
-    let workspace_dir = get_workspace_dir();
+fn load_config(layout: &RuntimeLayout) -> Result<Config> {
     let config_paths = vec![
         PathBuf::from(".compat_test.toml"),
         dirs::home_dir()
             .map(|p| p.join(".compat_test.toml"))
             .unwrap_or_default(),
-        workspace_dir.join(DEFAULT_CONFIG_FILE),
+        layout.default_config_path.clone(),
     ];
 
     for path in config_paths {
@@ -294,7 +345,7 @@ fn run_tests_with_progress(
     let report_dir = if config.report_dir.is_absolute() {
         config.report_dir.clone()
     } else {
-        get_workspace_dir().join(&config.report_dir)
+        resolve_path_from_cwd(&config.report_dir)?
     };
 
     if !report_dir.exists() {
@@ -322,9 +373,10 @@ fn run_tests_with_progress(
 
 /// 主函数
 fn main() -> Result<()> {
+    let runtime = resolve_runtime_layout();
+
     // 加载配置文件
-    let config = load_config()?;
-    let workspace_dir = get_workspace_dir();
+    let config = load_config(&runtime)?;
 
     let matches = Command::new("compat_test")
         .about("Compatibility test runner for syskits")
@@ -396,29 +448,31 @@ fn main() -> Result<()> {
     let test_config = TestConfig::new(
         matches
             .get_one::<String>("syskits-path")
-            .map(|s| workspace_dir.join(s))
+            .map(|s| resolve_path_from_cwd(Path::new(s)))
+            .transpose()?
             .or_else(|| {
                 config
                     .syskits
                     .syskits_path
-                    .as_ref() // 如果 config.syskits.syskits_path 是 Option<String> 或 Option<PathBuf>
-                    .map(|p| workspace_dir.join(p))
+                    .as_ref()
+                    .map(|p| resolve_path_from_base(p, &runtime.config_base_dir))
             })
-            .or_else(|| Some(workspace_dir.join(SYSKITS_BIN_PATH))), // 默认值
+            .or_else(|| Some(runtime.default_syskits_path.clone())),
         matches
             .get_one::<String>("coreutils-path")
             .map(PathBuf::from),
         matches
             .get_one::<String>("test-cases-dir")
-            .map(|s| workspace_dir.join(s))
+            .map(|s| resolve_path_from_cwd(Path::new(s)))
+            .transpose()?
             .or_else(|| {
                 config
                     .test
                     .test_cases_dir
-                    .as_ref() // 如果 config.test.test_cases_dir 是 Option<String> 或 Option<PathBuf>
-                    .map(|p| workspace_dir.join(p))
+                    .as_ref()
+                    .map(|p| resolve_path_from_base(p, &runtime.config_base_dir))
             })
-            .or_else(|| Some(workspace_dir.join(TEST_CASES_DIR))), // 默认值
+            .or_else(|| Some(runtime.default_test_cases_dir.clone())),
         matches.get_flag("no-progress"),
         matches.get_flag("no-cleanup"),
         matches
@@ -477,7 +531,7 @@ mod tests {
 
     #[test]
     fn test_get_workspace_dir() {
-        let workspace_dir = get_workspace_dir();
+        let workspace_dir = get_workspace_dir().expect("应该能找到工作空间根目录");
         assert!(
             workspace_dir.join("Cargo.toml").exists(),
             "应该能找到工作空间的Cargo.toml文件"
@@ -691,7 +745,7 @@ mod tests {
     #[test]
     fn test_load_config_default() {
         // 测试默认配置加载
-        let config = load_config().unwrap();
+        let config = load_config(&resolve_runtime_layout()).unwrap();
         assert!(config.test.env.show_progress);
         assert!(config.test.env.cleanup);
     }
@@ -700,7 +754,7 @@ mod tests {
     fn test_load_config_custom() {
         // 这个测试可能无法在CI环境中正常工作，因为它需要读取配置文件
         // 我们只进行基本测试
-        let result = load_config();
+        let result = load_config(&resolve_runtime_layout());
         match result {
             Ok(config) => {
                 // 检查加载的配置是否有效
@@ -923,7 +977,7 @@ mod tests {
     // 测试get_workspace_dir函数的特性
     #[test]
     fn test_get_workspace_dir_structure() {
-        let workspace_dir = get_workspace_dir();
+        let workspace_dir = get_workspace_dir().expect("应该能找到工作空间根目录");
 
         // 检查返回的目录是绝对路径
         assert!(workspace_dir.is_absolute());

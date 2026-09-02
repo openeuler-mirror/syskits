@@ -17,7 +17,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use bigdecimal::BigDecimal;
 use std::env;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
@@ -42,7 +42,7 @@ use ctcore::ct_error::{
     CTError, CTResult, CTsageError, CtSimpleError, set_ct_exit_code, strip_errno,
 };
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::ct_locale::{hard_locale_time, strcoll_compare};
+use ctcore::ct_locale::{LcCategory, hard_locale, hard_locale_time, strcoll_compare};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_version_cmp::ct_version_cmp;
 use sys_locale::get_locale;
@@ -459,6 +459,41 @@ impl Default for SortGlobalConfigs {
             precomputed: SortPrecomputed::default(),
         }
     }
+}
+
+fn current_collate_locale_name() -> String {
+    unsafe {
+        let locale = ctcore::libc::setlocale(ctcore::libc::LC_COLLATE, std::ptr::null());
+        if locale.is_null() {
+            "C".to_string()
+        } else {
+            CStr::from_ptr(locale).to_string_lossy().into_owned()
+        }
+    }
+}
+
+fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
+    if !settings.is_debug {
+        return String::new();
+    }
+
+    if hard_locale(LcCategory::LcCollate) {
+        let locale = current_collate_locale_name();
+        format!(
+            "{}: text ordering performed using ‘{}’ sorting rules\n",
+            ctcore::ct_util_name(),
+            locale
+        )
+    } else {
+        format!(
+            "{}: text ordering performed using simple byte comparison\n",
+            ctcore::ct_util_name()
+        )
+    }
+}
+
+fn print_sort_debug_diagnostic(settings: &SortGlobalConfigs) {
+    eprint!("{}", sort_debug_diagnostic_text(settings));
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -1174,6 +1209,7 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let (settings, mut files, mut tmp_dir, output) = sort_handle_settings(matches)?;
     sort_validate_inputs(&files, &output)?;
+    print_sort_debug_diagnostic(&settings);
 
     let result = sort_exec(&mut files, &settings, output, &mut tmp_dir);
     //Wait here if `SIGINT` was received、
@@ -2021,6 +2057,7 @@ pub fn sort_native_semantic(args: impl ctcore::Args) -> CTResult<SortSemantic> {
     let output_file = output.as_output_name().map(str::to_owned);
     let buffer_stdout = output_file.is_none();
     let source_count = files.len();
+    let stderr_text = sort_debug_diagnostic_text(&settings);
 
     let (result, stdout) = if buffer_stdout {
         sort_with_buffered_stdout(|| sort_exec(&mut files, &settings, output, &mut tmp_dir))
@@ -2056,7 +2093,7 @@ pub fn sort_native_semantic(args: impl ctcore::Args) -> CTResult<SortSemantic> {
         output_file,
         rows: sort_rows_from_output(&stdout, separator),
         classic_text,
-        stderr_text: String::new(),
+        stderr_text,
         exit_code: 0,
     })
 }

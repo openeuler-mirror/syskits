@@ -63,3 +63,28 @@ fn csplit_matches_ascii_regex_inside_invalid_utf8_line() {
     assert_eq!(fs::read(temp_dir.path().join("keep00")).unwrap(), b"");
     assert_eq!(fs::read(temp_dir.path().join("keep01")).unwrap(), data);
 }
+
+#[test]
+fn csplit_prints_match_error_before_kept_byte_count() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let data = vec![0; 1024];
+    fs::write(temp_dir.path().join("testfile"), &data).expect("write fixture");
+
+    let syskits = env!("CARGO_BIN_EXE_syskits");
+    let output = Command::new("sh")
+        .current_dir(temp_dir.path())
+        .arg("-c")
+        .arg(format!(
+            "{syskits} csplit -k -f keep testfile /nomatch/ 2>&1"
+        ))
+        .output()
+        .expect("run syskits csplit");
+
+    assert!(!output.status.success());
+    let combined = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        combined.starts_with("csplit: '/nomatch/': match not found\n1024\n"),
+        "combined output: {combined:?}"
+    );
+}

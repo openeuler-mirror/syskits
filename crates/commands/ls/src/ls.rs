@@ -3068,6 +3068,12 @@ fn display_grid_by_format_long_type<W: Write>(
 ) -> Result<(), Box<dyn CTError>> {
     let padding_collection =
         padding.unwrap_or_else(|| calculate_padding_collection(items.iter(), config, out));
+    let any_has_acl_or_context = items.iter().any(|item| {
+        ls_has_context(item)
+            || item
+                .get_metadata(out)
+                .is_some_and(|_| ls_has_acl(item.display_name.as_os_str()))
+    });
 
     for item in items {
         #[cfg(unix)]
@@ -3091,6 +3097,7 @@ fn display_grid_by_format_long_type<W: Write>(
             dired,
             style_manager,
             quoted,
+            any_has_acl_or_context,
         )?;
     }
     Ok(())
@@ -3296,7 +3303,7 @@ fn display_grid<W: Write>(
 }
 
 fn ls_has_context(item: &PathData) -> bool {
-    item.security_context.len() > 1
+    !item.security_context.is_empty() && item.security_context != "?"
 }
 
 #[allow(unused_variables)]
@@ -3383,6 +3390,7 @@ fn display_item_long<W: Write>(
     dired_output: &mut DiredOutput,
     style_manager: &mut StyleManager,
     quoted: bool,
+    any_has_acl_or_context: bool,
 ) -> CTResult<()> {
     let mut output_display: String = String::new();
     if ls_config.is_dired {
@@ -3398,6 +3406,8 @@ fn display_item_long<W: Write>(
         let mut out_acl = if ls_has_context(item) {
             // GNU `ls` 使用". "字符来表示具有安全上下文的文件
             "."
+        } else if any_has_acl_or_context {
+            " "
         } else {
             ""
         };
@@ -3548,10 +3558,12 @@ fn display_item_long<W: Write>(
             output_display,
             "{}{} {}",
             format_args!("{leading_char}?????????"),
-            if item.security_context.len() > 1 {
+            if ls_has_context(item) {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
                 "."
+            } else if any_has_acl_or_context {
+                " "
             } else {
                 ""
             },

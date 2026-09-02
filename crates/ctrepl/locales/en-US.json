@@ -5,7 +5,7 @@
   "repl.exit_hint": "exit",
   "repl.help_intro": "Use DSL pipeline directly, for example:",
   "repl.help_example": "  kubectl get pods -o json | from json | select metadata.name status.phase",
-  "repl.help_builtins": "Built-ins: help, exit, quit, cd, pwd, clear, history, trace on/off/status, ast <expr>, debug on/off/status",
+  "repl.help_builtins": "Built-ins: help, exit, quit, cd, pwd, clear, history, trace on/off/status, ast <expr>, debug on/off/status. Output: format=auto|text|table|json|classic <expr>",
   "repl.debug_enabled": "debug tracing enabled",
   "repl.debug_disabled": "debug tracing disabled",
   "repl.debug_status_enabled": "debug tracing is enabled",

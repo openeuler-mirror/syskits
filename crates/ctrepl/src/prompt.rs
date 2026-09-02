@@ -1,4 +1,5 @@
 use crate::config::{ReplConfig, ReplTexts};
+use crate::eval::resolve_repl_line_format;
 use ctsig::DataSignature;
 use nu_ansi_term::{Color, Style};
 use reedline::{
@@ -59,10 +60,15 @@ impl Highlighter for ReplHighlighter {
         let base = Style::new();
         out.push((base, line.to_string()));
 
-        let trimmed = line.trim();
+        let resolved = match resolve_repl_line_format(line) {
+            Ok(resolved) => resolved,
+            Err(_) => return out,
+        };
+        let trimmed = resolved.expr_src.trim();
         if trimmed.is_empty() {
             return out;
         }
+        let expr_offset = trimmed.as_ptr() as usize - line.as_ptr() as usize;
 
         match ctdsl::parse(trimmed) {
             Ok(expr) => {
@@ -73,8 +79,8 @@ impl Highlighter for ReplHighlighter {
                 {
                     if let Some(span) = &err.span {
                         out.style_range(
-                            span.start.min(line.len()),
-                            span.end.min(line.len()),
+                            (expr_offset + span.start).min(line.len()),
+                            (expr_offset + span.end).min(line.len()),
                             Style::new().fg(Color::Red),
                         );
                     } else {
@@ -91,14 +97,14 @@ impl Highlighter for ReplHighlighter {
             Err(ctdsl::ParseError::LexError { span, .. })
             | Err(ctdsl::ParseError::SyntaxError { span, .. }) => {
                 out.style_range(
-                    span.start.min(line.len()),
-                    span.end.min(line.len()),
+                    (expr_offset + span.start).min(line.len()),
+                    (expr_offset + span.end).min(line.len()),
                     Style::new().fg(Color::Red),
                 );
                 out
             }
             Err(ctdsl::ParseError::UnexpectedEof) => {
-                out.style_range(0, line.len(), Style::new().fg(Color::Yellow));
+                out.style_range(expr_offset, line.len(), Style::new().fg(Color::Yellow));
                 out
             }
         }
@@ -166,10 +172,16 @@ impl ReplCompleter {
         } else {
             return filesystem_suggestions(prefix, token_start, pos);
         };
+        let line_prefix_position = before_cursor[..token_start].trim().is_empty();
 
         candidates
             .iter()
-            .filter(|item| prefix.is_empty() || item.value.starts_with(prefix))
+            .filter(|item| {
+                if item.value.starts_with("format=") && !line_prefix_position {
+                    return false;
+                }
+                prefix.is_empty() || item.value.starts_with(prefix)
+            })
             .map(|item| Suggestion {
                 value: item.value.clone(),
                 description: item.description.clone(),
@@ -290,7 +302,10 @@ pub(crate) fn format_prompt_path(path: &Path, depth: usize) -> String {
 }
 
 pub(crate) fn line_is_incomplete(line: &str) -> bool {
-    let trimmed = line.trim_end();
+    let Ok(resolved) = resolve_repl_line_format(line) else {
+        return false;
+    };
+    let trimmed = resolved.expr_src.trim_end();
     if trimmed.is_empty() {
         return false;
     }
@@ -405,6 +420,14 @@ pub(crate) fn build_completion_candidates(
     }
 
     out.extend([
+        command_candidate(
+            "format=auto",
+            "render this expression with automatic output",
+        ),
+        command_candidate("format=text", "render this expression as text"),
+        command_candidate("format=table", "render this expression as a table"),
+        command_candidate("format=json", "render this expression as JSON"),
+        command_candidate("format=classic", "render this expression as classic stdout"),
         command_candidate("help", "show REPL help"),
         command_candidate("exit", "exit REPL"),
         command_candidate("quit", "exit REPL"),
@@ -450,6 +473,11 @@ mod tests {
                 kind: CompletionKind::Command,
             },
             CompletionCandidate {
+                value: "format=table".to_string(),
+                description: Some("format table desc".to_string()),
+                kind: CompletionKind::Command,
+            },
+            CompletionCandidate {
                 value: "--format".to_string(),
                 description: Some("format desc".to_string()),
                 kind: CompletionKind::Flag,
@@ -483,6 +511,7 @@ mod tests {
         assert!(got.iter().any(|s| s.value == "from"));
         assert!(got.iter().any(|s| s.value == "select"));
         assert!(got.iter().any(|s| s.value == "help"));
+        assert!(got.iter().any(|s| s.value == "format=table"));
         assert!(!got.iter().any(|s| s.value == "--format"));
     }
 
@@ -493,6 +522,7 @@ mod tests {
         let got = c.complete(line, line.len());
         assert!(got.iter().any(|s| s.value == "from"));
         assert!(got.iter().any(|s| s.value == "select"));
+        assert!(!got.iter().any(|s| s.value == "format=table"));
     }
 
     #[test]

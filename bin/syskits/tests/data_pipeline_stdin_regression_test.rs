@@ -464,6 +464,30 @@ fn run_external_raw_stdin_flattens_structured_text_lines() {
     assert_eq!(output.stdout, b"alpha\nbeta\n");
 }
 
+#[test]
+fn data_pipeline_rejects_denied_interactive_external_commands() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "vim hello.py"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn syskits");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("external command `vim` is denied in syskits data pipelines"),
+        "stderr: {stderr}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn forced_external_inherits_process_stdin_without_pipeline_input() {

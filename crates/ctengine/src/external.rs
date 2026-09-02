@@ -292,8 +292,31 @@ const AUTO_DECODE_MAX_BYTES: usize = 1024 * 1024;
 /// 用于格式嗅探的初始探测窗口。足够识别 JSON/CSV/SSV 特征，同时避免等待 EOF。
 const AUTO_PROBE_BYTES: usize = 8 * 1024;
 const MAX_CAPTURED_STDERR_BYTES: usize = 64 * 1024;
+const INTERACTIVE_COMMAND_DENYLIST: &[&str] = &["vim", "vi", "top", "nano", "htop"];
 
 type MetadataCustom = std::sync::Arc<std::sync::Mutex<BTreeMap<String, ctpipeline::CtValue>>>;
+
+fn denied_interactive_command_name(cmd: &str) -> Option<&'static str> {
+    let name = cmd
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(cmd);
+    INTERACTIVE_COMMAND_DENYLIST
+        .iter()
+        .copied()
+        .find(|blocked| name == *blocked)
+}
+
+fn ensure_external_command_allowed(cmd: &str) -> Result<(), crate::error::CtDiagnosticError> {
+    if let Some(blocked) = denied_interactive_command_name(cmd) {
+        return Err(crate::error::CtDiagnosticError::simple(format!(
+            "external command `{blocked}` is denied in syskits data pipelines because it requires an interactive terminal"
+        ))
+        .with_code(crate::execution::exit_code::USAGE_ERROR));
+    }
+    Ok(())
+}
 
 fn decode_error(
     message: impl Into<String>,
@@ -1462,6 +1485,28 @@ mod decoder_tests {
         );
     }
 
+    #[test]
+    fn test_denied_interactive_command_matches_basename() {
+        assert_eq!(denied_interactive_command_name("vim"), Some("vim"));
+        assert_eq!(denied_interactive_command_name("/usr/bin/top"), Some("top"));
+        assert_eq!(denied_interactive_command_name("preview"), None);
+    }
+
+    #[test]
+    fn test_external_executor_rejects_denied_interactive_command_before_spawn() {
+        let spec = ExternalCallSpec::quick("vi", &[]);
+        let ctx = crate::context::DataEngineContext::empty_for_test();
+        let err = ExternalExecutor::run(spec, CtPipelineData::Empty, &ctx)
+            .expect_err("interactive command should be denied");
+
+        assert_eq!(err.code, crate::execution::exit_code::USAGE_ERROR);
+        assert!(
+            err.to_string()
+                .contains("external command `vi` is denied in syskits data pipelines"),
+            "unexpected error: {err}"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_resolve_external_program_skips_priority_dir() {
@@ -1785,6 +1830,7 @@ impl ExternalExecutor {
         input: ctpipeline::pipeline_data::CtPipelineData,
         ctx: &crate::context::DataEngineContext,
     ) -> Result<ctpipeline::pipeline_data::CtPipelineData, crate::error::CtDiagnosticError> {
+        ensure_external_command_allowed(&spec.cmd)?;
         let path_env = spec
             .env_overrides
             .get("PATH")

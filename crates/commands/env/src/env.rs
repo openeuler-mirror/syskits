@@ -382,13 +382,13 @@ impl EnvAppData {
 
         env_apply_change_directory(&options)?;
 
-        apply_removal_of_all_env_vars(&options);
+        apply_removal_of_all_env_vars(&options, is_debug_printing);
 
         env_load_config_file(&mut options)?;
 
         env_apply_unset_env_vars(&options)?;
 
-        env_apply_specified_env_vars(&options);
+        env_apply_specified_env_vars(&options, is_debug_printing);
 
         // --- 应用和打印信号处理状态 ---
         #[cfg(unix)]
@@ -464,8 +464,11 @@ impl EnvAppData {
     }
 }
 
-fn apply_removal_of_all_env_vars(options: &EnvOptions<'_>) {
+fn apply_removal_of_all_env_vars(options: &EnvOptions<'_>, is_debug_printing: bool) {
     if options.ignore_env {
+        if is_debug_printing {
+            eprintln!("cleaning environ");
+        }
         for (ref name, _) in env::vars_os() {
             unsafe { env::remove_var(name) };
         }
@@ -729,11 +732,18 @@ fn env_apply_change_directory(options: &EnvOptions<'_>) -> Result<(), Box<dyn CT
     Ok(())
 }
 
-fn env_apply_specified_env_vars(options: &EnvOptions<'_>) {
+fn env_apply_specified_env_vars(options: &EnvOptions<'_>, is_debug_printing: bool) {
     for (name, val) in &options.sets {
         if name.is_empty() {
             ct_show_warning!("no name specified for value {}", val.quote());
             continue;
+        }
+        if is_debug_printing {
+            eprintln!(
+                "setenv:   {}={}",
+                name.to_string_lossy(),
+                val.to_string_lossy()
+            );
         }
         unsafe { env::set_var(name, val) };
     }

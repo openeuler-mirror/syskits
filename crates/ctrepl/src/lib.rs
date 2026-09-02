@@ -237,6 +237,16 @@ mod tests {
     }
 
     #[test]
+    fn test_cursor_position_timeout_is_recoverable() {
+        assert!(super::eval::is_recoverable_cursor_position_error(
+            "The cursor position could not be read within a normal duration"
+        ));
+        assert!(!super::eval::is_recoverable_cursor_position_error(
+            "some other readline error"
+        ));
+    }
+
+    #[test]
     fn test_filter_precheck_diags_keeps_non_unknown() {
         let expr = ctdsl::parse("from json | select name").expect("parse");
         let diags = vec![ctdsl::PrecheckDiagnostic {

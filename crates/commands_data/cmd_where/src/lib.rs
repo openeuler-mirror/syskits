@@ -10,10 +10,30 @@ use ctengine::compare::{compare_values, resolve_field_path};
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 
 #[derive(Default)]
 pub struct CmdWhere;
+
+const WHERE_HELP: &str = r#"syskits data where
+
+This is the syskits structured data pipeline where command.
+It filters Record or List<Record> input by a field comparison expression.
+
+Usage:
+  where <field> <op> <value>
+  where <cond> and <cond>
+  where <cond> or <cond>
+  where --help
+  where --version
+
+Operators:
+  ==  !=  >  >=  <  <=
+
+Examples:
+  ps | where cpu > 1
+  ps | where status == "S" and cpu < 1
+"#;
 
 #[derive(Debug, Clone)]
 struct Predicate {
@@ -36,6 +56,16 @@ impl DataCommand for CmdWhere {
                 "comparison expr as Record {field, op, rhs}",
                 CtType::Record,
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data where",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data where version",
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -46,6 +76,16 @@ impl DataCommand for CmdWhere {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(WHERE_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data where {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let cond: CtValue = call
             .req::<CtValue>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("where: {e}")))?;
@@ -79,6 +119,20 @@ impl DataCommand for CmdWhere {
             )),
         }
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("where".into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn extract_condition(cond: CtValue) -> Result<ConditionExpr, CtDiagnosticError> {
@@ -267,6 +321,12 @@ mod tests {
         DataEngineContext::new(CommandRegistry::empty(), None, None)
     }
 
+    fn flag_call(name: &str) -> DataCall {
+        let mut call = DataCall::named("where");
+        call.flags.insert(name.to_string(), None);
+        call
+    }
+
     fn rec(fields: Vec<(&str, CtValue)>) -> CtPipelineData {
         CtPipelineData::Value(
             CtValue::Record(
@@ -414,5 +474,29 @@ mod tests {
             )
             .unwrap();
         assert!(matches!(r, CtPipelineData::Value(_, _)));
+    }
+
+    #[test]
+    fn test_where_help_output() {
+        let out = CmdWhere
+            .run(&flag_call("help"), CtPipelineData::Empty, &ctx())
+            .expect("help should not require input");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected help text");
+        };
+        assert!(text.contains("syskits structured data pipeline where command"));
+        assert_eq!(meta.exit_code, 0);
+    }
+
+    #[test]
+    fn test_where_version_output() {
+        let out = CmdWhere
+            .run(&flag_call("version"), CtPipelineData::Empty, &ctx())
+            .expect("version should not require input");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected version text");
+        };
+        assert!(text.starts_with("syskits data where "));
+        assert_eq!(meta.exit_code, 0);
     }
 }

@@ -10,11 +10,26 @@ use ctengine::{
         ExternalStderrMode, ExternalStdinMode,
     },
 };
-use ctpipeline::{CtPipelineData, CtType, CtValue};
+use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
 use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 
 #[derive(Default)]
 pub struct CmdRunExternal;
+
+const RUN_EXTERNAL_HELP: &str = r#"syskits data run-external
+
+This is the syskits structured data pipeline run-external command.
+It explicitly runs an external command from PATH while skipping syskits priority shims.
+
+Usage:
+  run-external <cmd> [args...]
+  run-external --help
+  run-external --version
+
+Examples:
+  run-external whoami
+  run-external echo --help
+"#;
 
 impl DataCommand for CmdRunExternal {
     fn signature(&self) -> DataSignature {
@@ -56,6 +71,16 @@ impl DataCommand for CmdRunExternal {
             "Timeout for execution in milliseconds",
             CtType::Int,
         ))
+        .flag(CtFlag::switch(
+            "help",
+            Some('h'),
+            "show help for syskits data run-external",
+        ))
+        .flag(CtFlag::switch(
+            "version",
+            None,
+            "show syskits data run-external version",
+        ))
         .input(CtType::Any)
         .output(CtType::Any)
     }
@@ -66,9 +91,33 @@ impl DataCommand for CmdRunExternal {
         input: CtPipelineData,
         ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(RUN_EXTERNAL_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data run-external {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let spec = build_spec(call)?;
         ExternalExecutor::run(spec, input, ctx)
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("run-external".into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn build_spec(call: &DataCall) -> Result<ExternalCallSpec, CtDiagnosticError> {
@@ -167,6 +216,16 @@ mod tests {
         call
     }
 
+    fn meta_call(name: &str) -> DataCall {
+        let mut call = DataCall::named("run-external");
+        call.flags.insert(name.to_string(), None);
+        call
+    }
+
+    fn ctx() -> DataEngineContext {
+        DataEngineContext::new(ctengine::CommandRegistry::empty(), None, None)
+    }
+
     #[test]
     fn parses_known_modes_and_timeout() {
         let call = call_with_flags(vec![
@@ -217,5 +276,30 @@ mod tests {
         let spec = build_spec(&call).unwrap();
         assert_eq!(spec.cmd, "echo");
         assert_eq!(spec.args, vec!["-n".to_string(), "hi".to_string()]);
+    }
+
+    #[test]
+    fn run_external_help_output_does_not_require_command() {
+        let out = CmdRunExternal
+            .run(&meta_call("help"), CtPipelineData::Empty, &ctx())
+            .expect("help should not require an external command");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected help text");
+        };
+        assert!(text.contains("syskits structured data pipeline run-external command"));
+        assert!(text.contains("run-external echo --help"));
+        assert_eq!(meta.exit_code, 0);
+    }
+
+    #[test]
+    fn run_external_version_output() {
+        let out = CmdRunExternal
+            .run(&meta_call("version"), CtPipelineData::Empty, &ctx())
+            .expect("version should not require an external command");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected version text");
+        };
+        assert!(text.starts_with("syskits data run-external "));
+        assert_eq!(meta.exit_code, 0);
     }
 }

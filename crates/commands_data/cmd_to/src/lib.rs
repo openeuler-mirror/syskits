@@ -9,6 +9,7 @@
 //! - `json`
 //! - `jsonl`/`jsonlines`
 //! - `csv`
+//! - `ssv`
 //! - `yaml`/`yml`
 //! - `toml`
 //! - `text`
@@ -27,7 +28,7 @@ impl DataCommand for CmdTo {
         DataSignature::new("to", "serialize CtPipelineData to text formats")
             .positional(CtPositionalArg::optional(
                 "format",
-                "json | jsonl | csv | yaml | toml | text",
+                "json | jsonl | csv | ssv | yaml | toml | text",
                 CtType::String,
             ))
             .flag(CtFlag::switch(
@@ -62,7 +63,7 @@ impl DataCommand for CmdTo {
         };
         let format = normalize_format(&format).ok_or_else(|| {
             CtDiagnosticError::simple(format!(
-                "to: unsupported format `{format}`; supported: json, jsonl, csv, yaml, toml, text"
+                "to: unsupported format `{format}`; supported: json, jsonl, csv, ssv, yaml, toml, text"
             ))
         })?;
 
@@ -77,6 +78,7 @@ impl DataCommand for CmdTo {
             "jsonl" => to_jsonl(input)?,
             "csv" if csv_transpose => to_csv_transposed(input)?,
             "csv" => to_csv(input)?,
+            "ssv" => to_ssv(input)?,
             "yaml" => {
                 let value = consume_to_value(input)?;
                 serde_yaml::to_string(&ct_to_json(&value))
@@ -106,6 +108,7 @@ fn normalize_format(input: &str) -> Option<&'static str> {
         "json" => Some("json"),
         "jsonl" | "jsonlines" => Some("jsonl"),
         "csv" => Some("csv"),
+        "ssv" => Some("ssv"),
         "yaml" | "yml" => Some("yaml"),
         "toml" => Some("toml"),
         "text" => Some("text"),
@@ -124,6 +127,7 @@ fn help_output() -> CtPipelineData {
         "  json                serialize to pretty JSON text",
         "  jsonl | jsonlines   serialize list items as JSON lines",
         "  csv                 serialize Record/List<Record> to CSV",
+        "  ssv                 serialize Record/List<Record> to space-separated values",
         "  yaml | yml          serialize to YAML text",
         "  toml                serialize to TOML text",
         "  text                flatten values to plain text lines",
@@ -135,6 +139,7 @@ fn help_output() -> CtPipelineData {
         "  [1,2,3] | to json",
         "  [{a:1},{a:2}] | to jsonl",
         "  [{name:'alice',age:30}] | to csv",
+        "  [{name:'alice',age:30}] | to ssv",
     ]
     .join("\n");
     CtPipelineData::Value(CtValue::String(help), CtPipelineMetadata::default())
@@ -235,6 +240,32 @@ fn to_csv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> 
         .map_err(|e| CtDiagnosticError::simple(format!("to csv: utf8 error: {e}")))
 }
 
+fn to_ssv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
+    let rows = normalize_rows_for_csv(data)?;
+    validate_csv_record_field_names(&rows)?;
+    let columns = collect_csv_columns(&rows);
+    if columns.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut lines = Vec::with_capacity(rows.len() + 1);
+    lines.push(columns.join(" "));
+    for row in rows {
+        let record = columns
+            .iter()
+            .map(|col| {
+                row.iter()
+                    .find(|(key, _)| key == col)
+                    .map(|(_, v)| ct_to_ssv_cell(v))
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+        lines.push(record.join(" "));
+    }
+
+    Ok(lines.join("\n"))
+}
+
 fn validate_csv_record_field_names(
     rows: &[Vec<(String, CtValue)>],
 ) -> Result<(), CtDiagnosticError> {
@@ -256,6 +287,13 @@ fn validate_csv_record_field_names(
         }
     }
     Ok(())
+}
+
+fn ct_to_ssv_cell(v: &CtValue) -> String {
+    ct_to_text_cell(v)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("_")
 }
 
 fn normalize_rows_for_csv(
@@ -603,6 +641,85 @@ mod tests {
         let err = CmdTo
             .run(&fmt_call_transpose("csv"), input, &ctx())
             .unwrap_err();
+        assert!(err.to_string().contains("duplicate field"));
+    }
+
+    #[test]
+    fn test_to_ssv_list_records() {
+        let input = CtPipelineData::Value(
+            CtValue::List(vec![
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("alice".into())),
+                    ("age".into(), CtValue::Int(30)),
+                ]),
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("bob".into())),
+                    ("age".into(), CtValue::Int(20)),
+                ]),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let r = CmdTo.run(&fmt_call("ssv"), input, &ctx()).unwrap();
+        let CtPipelineData::Value(CtValue::String(ssv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(ssv, "name age\nalice 30\nbob 20");
+    }
+
+    #[test]
+    fn test_to_ssv_list_stream() {
+        let stream = CtListStream::new(
+            vec![
+                CtValue::Record(vec![("name".into(), CtValue::String("alice".into()))]),
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("bob".into())),
+                    ("age".into(), CtValue::Int(20)),
+                ]),
+            ]
+            .into_iter(),
+            CtPipelineMetadata::default(),
+        );
+        let input = CtPipelineData::ListStream(stream);
+        let r = CmdTo.run(&fmt_call("ssv"), input, &ctx()).unwrap();
+        let CtPipelineData::Value(CtValue::String(ssv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(ssv, "name age\nalice \nbob 20");
+    }
+
+    #[test]
+    fn test_to_ssv_sanitizes_whitespace_cells() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("name".into(), CtValue::String("Alice Smith".into()))]),
+            CtPipelineMetadata::default(),
+        );
+        let r = CmdTo.run(&fmt_call("ssv"), input, &ctx()).unwrap();
+        let CtPipelineData::Value(CtValue::String(ssv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(ssv, "name\nAlice_Smith");
+    }
+
+    #[test]
+    fn test_to_ssv_rejects_empty_field_name() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("".into(), CtValue::String("a".into()))]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo.run(&fmt_call("ssv"), input, &ctx()).unwrap_err();
+        assert!(err.to_string().contains("field name is empty"));
+    }
+
+    #[test]
+    fn test_to_ssv_rejects_duplicate_field_name() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![
+                ("name".into(), CtValue::String("a".into())),
+                ("name".into(), CtValue::String("b".into())),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo.run(&fmt_call("ssv"), input, &ctx()).unwrap_err();
         assert!(err.to_string().contains("duplicate field"));
     }
 

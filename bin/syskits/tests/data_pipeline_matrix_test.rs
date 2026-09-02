@@ -272,6 +272,29 @@ fn data_pipeline_internal_help_and_version_for_structural_commands() {
     }
 }
 
+#[test]
+fn data_agg_alias_example_accepts_split_equals_token() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=json",
+            "from json \"[{\\\"cpu\\\":1},{\\\"cpu\\\":3}]\" | agg count avg:cpu=max_avg",
+        ])
+        .output()
+        .expect("run agg alias example");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stderr, b"");
+
+    let stdout = String::from_utf8(output.stdout).expect("json stdout");
+    assert!(stdout.contains(r#""count":2"#), "stdout: {stdout}");
+    assert!(stdout.contains(r#""max_avg":2.0"#), "stdout: {stdout}");
+}
+
 fn split_chunks(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     let mut chunks = fs::read_dir(dir)
         .expect("read split output dir")

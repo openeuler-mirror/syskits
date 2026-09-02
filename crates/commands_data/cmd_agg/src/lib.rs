@@ -154,7 +154,61 @@ fn parse_ops(call: &DataCall) -> Result<Vec<AggOp>, CtDiagnosticError> {
         ));
     }
 
-    specs.into_iter().map(|spec| parse_spec(&spec)).collect()
+    normalize_alias_specs(specs)?
+        .into_iter()
+        .map(|spec| parse_spec(&spec))
+        .collect()
+}
+
+fn normalize_alias_specs(specs: Vec<String>) -> Result<Vec<String>, CtDiagnosticError> {
+    let mut normalized = Vec::with_capacity(specs.len());
+    let mut iter = specs.into_iter().peekable();
+
+    while let Some(spec) = iter.next() {
+        let spec = spec.trim().to_string();
+        if spec == "=" {
+            return Err(CtDiagnosticError::simple(
+                "agg: alias marker `=` must follow an aggregation spec",
+            ));
+        }
+
+        if spec.contains('=') {
+            normalized.push(spec);
+            continue;
+        }
+
+        let Some(next) = iter.peek().map(|value| value.trim().to_string()) else {
+            normalized.push(spec);
+            continue;
+        };
+
+        if next == "=" {
+            iter.next();
+            let alias = iter.next().ok_or_else(|| {
+                CtDiagnosticError::simple(format!("agg: missing alias after `{spec} =`"))
+            })?;
+            let alias = alias.trim();
+            if alias.is_empty() || alias == "=" {
+                return Err(CtDiagnosticError::simple(format!(
+                    "agg: missing alias after `{spec} =`"
+                )));
+            }
+            normalized.push(format!("{spec}={alias}"));
+        } else if let Some(alias) = next.strip_prefix('=') {
+            iter.next();
+            let alias = alias.trim();
+            if alias.is_empty() {
+                return Err(CtDiagnosticError::simple(format!(
+                    "agg: missing alias after `{spec} =`"
+                )));
+            }
+            normalized.push(format!("{spec}={alias}"));
+        } else {
+            normalized.push(spec);
+        }
+    }
+
+    Ok(normalized)
 }
 
 fn parse_spec(raw: &str) -> Result<AggOp, CtDiagnosticError> {
@@ -608,6 +662,25 @@ mod tests {
             get_field(&fields, "total_bytes"),
             CtValue::Int(15)
         ));
+    }
+
+    #[test]
+    fn test_agg_split_alias_tokens_supported() {
+        let data = list(vec![
+            vec![("cpu", CtValue::Int(1))],
+            vec![("cpu", CtValue::Int(3))],
+        ]);
+        let out = CmdAgg
+            .run(&call(&["count", "avg:cpu", "=", "max_avg"]), data, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::Record(fields), _) = out else {
+            panic!("record");
+        };
+        assert!(matches!(get_field(&fields, "count"), CtValue::Int(2)));
+        match get_field(&fields, "max_avg") {
+            CtValue::Float(v) => assert!((*v - 2.0).abs() < 1e-9),
+            _ => panic!("avg must be float"),
+        }
     }
 
     #[test]

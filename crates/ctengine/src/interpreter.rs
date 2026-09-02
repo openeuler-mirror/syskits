@@ -1066,40 +1066,13 @@ fn print_pipeline_data_json(
                 .map_err(|e| CtDiagnosticError::simple(format!("json render failed: {e}")))?;
             println!();
         }
-        CtPipelineData::ByteStream(bs) => {
-            let json = ct_byte_stream_to_json(bs, signal)?;
-            serde_json::to_writer(&mut stdout, &json)
-                .map_err(|e| CtDiagnosticError::simple(format!("json render failed: {e}")))?;
-            println!();
+        CtPipelineData::ByteStream(_) => {
+            return Err(CtDiagnosticError::simple(
+                "cannot render ByteStream as json; convert it first with `from`",
+            ));
         }
     }
     Ok(())
-}
-
-fn ct_byte_stream_to_json(
-    mut bs: ctpipeline::CtByteStream,
-    signal: Option<&SignalHandle>,
-) -> Result<serde_json::Value, CtDiagnosticError> {
-    let mut bytes = Vec::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        if signal.is_some_and(|s| s.interrupted()) {
-            return Err(interrupted_error());
-        }
-        let n = bs
-            .read(&mut buf)
-            .map_err(|e| CtDiagnosticError::simple(format!("json render failed: {e}")))?;
-        if n == 0 {
-            break;
-        }
-        bytes.extend_from_slice(&buf[..n]);
-    }
-    Ok(serde_json::Value::Array(
-        bytes
-            .into_iter()
-            .map(|b| serde_json::Value::Number((b as u64).into()))
-            .collect(),
-    ))
 }
 
 fn ct_value_to_json(v: &CtValue) -> serde_json::Value {
@@ -1715,14 +1688,15 @@ mod tests {
     }
 
     #[test]
-    fn test_ct_byte_stream_to_json_is_numeric_array() {
-        let stream = ctpipeline::CtByteStream::new(
+    fn test_json_output_rejects_byte_stream() {
+        let data = CtPipelineData::ByteStream(ctpipeline::CtByteStream::new(
             std::io::Cursor::new(vec![0_u8, 255_u8, 16_u8]),
             CtPipelineMetadata::default(),
-        );
-        let json =
-            ct_byte_stream_to_json(stream, None).expect("byte stream should serialize to json");
-        assert_eq!(json, serde_json::json!([0, 255, 16]));
+        ));
+        let err = print_pipeline_data_json(data, None).expect_err("ByteStream json should fail");
+        assert!(err.to_string().contains("ByteStream"));
+        assert!(err.to_string().contains("json"));
+        assert!(err.to_string().contains("from"));
     }
 
     #[test]

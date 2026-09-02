@@ -324,7 +324,12 @@ fn dir_collect_semantic_rows_for_path(
             rows.sort_by(|a, b| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false));
         }
         DirSemanticSort::Size => {
-            rows.sort_by_key(|row| Reverse(row.size.unwrap_or(0)));
+            rows.sort_by(|a, b| {
+                b.size
+                    .unwrap_or(0)
+                    .cmp(&a.size.unwrap_or(0))
+                    .then_with(|| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false))
+            });
         }
         DirSemanticSort::Time => {
             rows.sort_by_key(|row| Reverse(dir_row_mtime_nanos(row)));

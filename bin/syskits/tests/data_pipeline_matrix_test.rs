@@ -603,6 +603,39 @@ fn external_csv_is_decoded_with_from_csv() {
 }
 
 #[test]
+fn external_awk_reads_builtin_classic_stdout() {
+    let first = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "printf \"CTyunOS 4\\n\" | awk \"{print $1}\" | from text",
+        ])
+        .output()
+        .expect("run builtin printf through external awk print first field");
+    assert!(
+        first.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(first.stderr, b"");
+    assert_eq!(String::from_utf8_lossy(&first.stdout), "[CTyunOS]\n");
+
+    let second = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "printf \"CTyunOS 4\\n\" | awk \"{print $2}\" | from text",
+        ])
+        .output()
+        .expect("run builtin printf through external awk print second field");
+    assert!(
+        second.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert_eq!(second.stderr, b"");
+    assert_eq!(String::from_utf8_lossy(&second.stdout), "[4]\n");
+}
+
+#[test]
 fn data_csv_transpose_round_trip() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args([

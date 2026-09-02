@@ -295,12 +295,17 @@ const MAX_CAPTURED_STDERR_BYTES: usize = 64 * 1024;
 
 type MetadataCustom = std::sync::Arc<std::sync::Mutex<BTreeMap<String, ctpipeline::CtValue>>>;
 
-fn decode_error(message: impl Into<String>, timed_out: bool) -> crate::error::CtDiagnosticError {
+fn decode_error(
+    message: impl Into<String>,
+    io_kind: Option<std::io::ErrorKind>,
+) -> crate::error::CtDiagnosticError {
     let err = crate::error::CtDiagnosticError::simple(message.into());
-    if timed_out {
-        err.with_code(crate::execution::exit_code::TIMEOUT)
-    } else {
-        err
+    match io_kind {
+        Some(std::io::ErrorKind::TimedOut) => err.with_code(crate::execution::exit_code::TIMEOUT),
+        Some(std::io::ErrorKind::Interrupted) => {
+            err.with_code(crate::execution::exit_code::INTERRUPTED)
+        }
+        _ => err,
     }
 }
 
@@ -308,33 +313,25 @@ fn decode_io_error(
     message: impl Into<String>,
     err: std::io::Error,
 ) -> crate::error::CtDiagnosticError {
-    decode_error(
-        format!("{}: {err}", message.into()),
-        err.kind() == std::io::ErrorKind::TimedOut,
-    )
+    decode_error(format!("{}: {err}", message.into()), Some(err.kind()))
 }
 
 fn decode_json_error(
     message: impl Into<String>,
     err: serde_json::Error,
 ) -> crate::error::CtDiagnosticError {
-    decode_error(
-        format!("{}: {err}", message.into()),
-        matches!(err.io_error_kind(), Some(std::io::ErrorKind::TimedOut)),
-    )
+    decode_error(format!("{}: {err}", message.into()), err.io_error_kind())
 }
 
 fn decode_csv_error(
     message: impl Into<String>,
     err: csv::Error,
 ) -> crate::error::CtDiagnosticError {
-    decode_error(
-        format!("{}: {err}", message.into()),
-        matches!(
-            err.kind(),
-            csv::ErrorKind::Io(io_err) if io_err.kind() == std::io::ErrorKind::TimedOut
-        ),
-    )
+    let io_kind = match err.kind() {
+        csv::ErrorKind::Io(io_err) => Some(io_err.kind()),
+        _ => None,
+    };
+    decode_error(format!("{}: {err}", message.into()), io_kind)
 }
 
 fn json_to_ctvalue(v: serde_json::Value) -> ctpipeline::value::CtValue {
@@ -1198,6 +1195,54 @@ mod decoder_tests {
         assert!(matches!(data, CtPipelineData::ByteStream(_)));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_external_blocking_read_exits_on_interrupt_signal() {
+        let args = vec!["60".to_string()];
+        let spec = ExternalCallSpec::quick("sleep", &args);
+        let signal = crate::context::SignalHandle::noop();
+        let ctx = crate::context::DataEngineContext::empty_for_test().with_signal(signal.clone());
+
+        let mut data = ExternalExecutor::run(spec, CtPipelineData::Empty, &ctx)
+            .expect("external run should produce a stream before process exit");
+        let CtPipelineData::ByteStream(ref mut stream) = data else {
+            panic!("expected ByteStream");
+        };
+        let custom = stream.metadata.custom.clone();
+
+        let trigger = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            signal.trigger();
+        });
+
+        let started = std::time::Instant::now();
+        let mut buf = [0u8; 1];
+        let err = stream
+            .read(&mut buf)
+            .expect_err("interrupt should terminate the external stream");
+        trigger
+            .join()
+            .expect("interrupt trigger thread should finish");
+
+        assert_eq!(err.kind(), std::io::ErrorKind::Other);
+        assert!(
+            err.to_string().contains("interrupted by user"),
+            "unexpected interrupt error: {err}"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(3),
+            "interrupt should stop blocking external read quickly"
+        );
+
+        let exit_code = custom.lock().unwrap().get("external.exit_code").cloned();
+        assert_eq!(
+            exit_code,
+            Some(ctpipeline::CtValue::Int(
+                crate::execution::exit_code::INTERRUPTED as i64
+            ))
+        );
+    }
+
     #[test]
     fn test_decode_auto_non_tabular_text_not_ssv() {
         let meta = CtPipelineMetadata::default();
@@ -1472,6 +1517,7 @@ struct ExternalStream {
     spec: ExternalCallSpec,
     start_time: std::time::Instant,
     timeout_abort: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    interrupt_abort: std::sync::Arc<std::sync::atomic::AtomicBool>,
     process_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     stderr_buf: Option<std::io::Cursor<Vec<u8>>>,
     stdin_handle: Option<std::thread::JoinHandle<()>>,
@@ -1531,6 +1577,9 @@ impl Read for ExternalStream {
                 if self
                     .timeout_abort
                     .load(std::sync::atomic::Ordering::Acquire)
+                    || self
+                        .interrupt_abort
+                        .load(std::sync::atomic::Ordering::Acquire)
                 {
                     let mut child = self
                         .child
@@ -1545,6 +1594,9 @@ impl Read for ExternalStream {
             let timed_out = self
                 .timeout_abort
                 .load(std::sync::atomic::Ordering::Acquire);
+            let interrupted = self
+                .interrupt_abort
+                .load(std::sync::atomic::Ordering::Acquire);
 
             let stderr_bytes = if let Some(th) = self.stderr_thread.take() {
                 th.join().unwrap_or_default()
@@ -1555,7 +1607,11 @@ impl Read for ExternalStream {
             let stderr_summary =
                 String::from_utf8_lossy(&stderr_bytes[..stderr_bytes.len().min(64 * 1024)])
                     .into_owned();
-            let exit_code = status.code().unwrap_or(-1);
+            let exit_code = if interrupted {
+                crate::execution::exit_code::INTERRUPTED
+            } else {
+                status.code().unwrap_or(-1)
+            };
 
             if let Some(custom) = &self.meta_custom {
                 let mut entries = vec![
@@ -1584,6 +1640,13 @@ impl Read for ExternalStream {
                         "External command '{}' timed out after {}ms\nStderr:\n{}",
                         self.spec.cmd, duration_ms, stderr_summary
                     ),
+                ));
+            }
+
+            if interrupted {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("External command '{}' interrupted by user", self.spec.cmd),
                 ));
             }
 
@@ -1720,7 +1783,7 @@ impl ExternalExecutor {
     pub fn run(
         spec: ExternalCallSpec,
         input: ctpipeline::pipeline_data::CtPipelineData,
-        _ctx: &crate::context::DataEngineContext,
+        ctx: &crate::context::DataEngineContext,
     ) -> Result<ctpipeline::pipeline_data::CtPipelineData, crate::error::CtDiagnosticError> {
         let path_env = spec
             .env_overrides
@@ -1788,6 +1851,7 @@ impl ExternalExecutor {
         })?;
 
         let timeout_abort = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let interrupt_abort = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let process_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let stdin_mode = spec.stdin_mode;
@@ -1840,6 +1904,30 @@ impl ExternalExecutor {
                 terminate_process_tree(&mut child);
             });
         }
+
+        let signal = ctx.signal.clone();
+        let interrupt_abort_clone = interrupt_abort.clone();
+        let process_done_clone = process_done.clone();
+        let child_for_interrupt = child.clone();
+        std::thread::spawn(move || {
+            loop {
+                if process_done_clone.load(std::sync::atomic::Ordering::Acquire) {
+                    return;
+                }
+                if signal.interrupted() {
+                    interrupt_abort_clone.store(true, std::sync::atomic::Ordering::Release);
+                    let mut child = child_for_interrupt
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    if process_done_clone.load(std::sync::atomic::Ordering::Acquire) {
+                        return;
+                    }
+                    terminate_process_tree(&mut child);
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        });
 
         let meta = ctpipeline::metadata::CtPipelineMetadata {
             data_source: ctpipeline::metadata::CtDataSource::ExternalCommand {
@@ -1896,6 +1984,7 @@ impl ExternalExecutor {
             spec: spec.clone(),
             start_time,
             timeout_abort,
+            interrupt_abort,
             process_done,
             stderr_buf: None,
             stdin_handle,

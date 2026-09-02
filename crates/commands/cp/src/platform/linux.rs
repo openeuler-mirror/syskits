@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use std::fs::{File, OpenOptions};
-use std::io::Read;
+use std::io::{self, Read};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
@@ -41,26 +41,90 @@ enum CloneFallback {
     FSCopy,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CloneOutcome {
+    Reflink,
+    CopyOffload,
+    Unknown,
+}
+
+fn copy_file_range_all(src_file: &File, dst_file: &File) -> std::io::Result<CloneOutcome> {
+    const COPY_FILE_RANGE_LEN: usize = 1 << 30;
+
+    let src_fd = src_file.as_raw_fd();
+    let dst_fd = dst_file.as_raw_fd();
+    let mut used_offload = false;
+
+    loop {
+        let copied = unsafe {
+            libc::copy_file_range(
+                src_fd,
+                std::ptr::null_mut(),
+                dst_fd,
+                std::ptr::null_mut(),
+                COPY_FILE_RANGE_LEN,
+                0,
+            )
+        };
+
+        if copied > 0 {
+            used_offload = true;
+            continue;
+        }
+
+        if copied == 0 {
+            return Ok(if used_offload {
+                CloneOutcome::CopyOffload
+            } else {
+                CloneOutcome::Unknown
+            });
+        }
+
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        return Err(err);
+    }
+}
+
+fn no_offload_copy<P>(source: P, dest: P) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let mut src_file = File::open(source)?;
+    let mut dst_file = File::create(dest)?;
+    io::copy(&mut src_file, &mut dst_file).map(|_| ())
+}
+
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
 /// `fallback` controls what to do if the system call fails.
 #[cfg(target_os = "linux")]
-fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
+fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<CloneOutcome>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let source = source.as_ref();
+    let dest = dest.as_ref();
+    let src_file = File::open(source)?;
+    let dst_file = File::create(dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, CT_FICLONE!(), src_fd) };
     if result == 0 {
-        return Ok(());
+        return Ok(CloneOutcome::Reflink);
     }
     if fallback == CloneFallback::Error {
         Err(std::io::Error::last_os_error())
     } else {
-        std::fs::copy(source, dest).map(|_| ())
+        let copy_file_range_result = copy_file_range_all(&src_file, &dst_file);
+        drop(dst_file);
+        drop(src_file);
+        match copy_file_range_result {
+            Ok(outcome) => Ok(outcome),
+            Err(_) => no_offload_copy(source, dest).map(|_| CloneOutcome::Unknown),
+        }
     }
 }
 
@@ -169,14 +233,21 @@ pub(crate) fn copy_on_write(
         }
         (CpReflinkMode::Never, _) => {
             copy_debug.sparse_detection = CpSparseDebug::No;
+            copy_debug.offload = CpOffloadReflinkDebug::Avoided;
             copy_debug.reflink = CpOffloadReflinkDebug::No;
-            std::fs::copy(source, dest).map(|_| ())
+            no_offload_copy(source, dest)
         }
         (CpReflinkMode::Auto, CpSparseMode::Always) => {
             copy_debug.offload = CpOffloadReflinkDebug::Avoided;
             copy_debug.sparse_detection = CpSparseDebug::Zeros;
             copy_debug.reflink = CpOffloadReflinkDebug::Unsupported;
             sparse_copy(source, dest)
+        }
+        (CpReflinkMode::Auto, CpSparseMode::Never) => {
+            copy_debug.offload = CpOffloadReflinkDebug::Avoided;
+            copy_debug.sparse_detection = CpSparseDebug::No;
+            copy_debug.reflink = CpOffloadReflinkDebug::No;
+            no_offload_copy(source, dest)
         }
 
         (CpReflinkMode::Auto, _) => {
@@ -185,14 +256,25 @@ pub(crate) fn copy_on_write(
             if source_is_fifo {
                 copy_fifo_contents(source, dest).map(|_| ())
             } else {
-                clone(source, dest, CloneFallback::FSCopy)
+                match clone(source, dest, CloneFallback::FSCopy) {
+                    Ok(CloneOutcome::Reflink) => {
+                        copy_debug.reflink = CpOffloadReflinkDebug::Yes;
+                        Ok(())
+                    }
+                    Ok(CloneOutcome::CopyOffload) => {
+                        copy_debug.offload = CpOffloadReflinkDebug::Yes;
+                        Ok(())
+                    }
+                    Ok(CloneOutcome::Unknown) => Ok(()),
+                    Err(err) => Err(err),
+                }
             }
         }
         (CpReflinkMode::Always, CpSparseMode::Auto) => {
             copy_debug.sparse_detection = CpSparseDebug::No;
             copy_debug.reflink = CpOffloadReflinkDebug::Yes;
 
-            clone(source, dest, CloneFallback::Error)
+            clone(source, dest, CloneFallback::Error).map(|_| ())
         }
         (CpReflinkMode::Always, _) => {
             return Err("`--reflink=always` can be used only with --sparse=auto".into());
@@ -252,9 +334,7 @@ mod tests {
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 panic!("Error: {err:#?}")
             }
@@ -289,13 +369,11 @@ mod tests {
         let expected_copy_debug = CopyDebug {
             offload: CpOffloadReflinkDebug::Avoided,
             reflink: CpOffloadReflinkDebug::No,
-            sparse_detection: CpSparseDebug::Zeros,
+            sparse_detection: CpSparseDebug::No,
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 panic!("Error: {err:#?}")
             }
@@ -328,15 +406,13 @@ mod tests {
         );
 
         let expected_copy_debug = CopyDebug {
-            offload: CpOffloadReflinkDebug::Unknown,
+            offload: CpOffloadReflinkDebug::Avoided,
             reflink: CpOffloadReflinkDebug::No,
             sparse_detection: CpSparseDebug::No,
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 panic!("Error: {err:#?}")
             }
@@ -375,9 +451,7 @@ mod tests {
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 panic!("Error: {err:#?}")
             }
@@ -410,15 +484,13 @@ mod tests {
         );
 
         let expected_copy_debug = CopyDebug {
-            offload: CpOffloadReflinkDebug::Avoided,
+            offload: CpOffloadReflinkDebug::Unknown,
             reflink: CpOffloadReflinkDebug::Unsupported,
-            sparse_detection: CpSparseDebug::Zeros,
+            sparse_detection: CpSparseDebug::No,
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 panic!("Error: {err:#?}")
             }
@@ -451,15 +523,13 @@ mod tests {
         );
 
         let expected_copy_debug = CopyDebug {
-            offload: CpOffloadReflinkDebug::Unknown,
-            reflink: CpOffloadReflinkDebug::Unsupported,
+            offload: CpOffloadReflinkDebug::Avoided,
+            reflink: CpOffloadReflinkDebug::No,
             sparse_detection: CpSparseDebug::No,
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 panic!("Error: {err:#?}")
             }
@@ -492,15 +562,13 @@ mod tests {
         );
 
         let expected_copy_debug = CopyDebug {
-            offload: CpOffloadReflinkDebug::Avoided,
+            offload: CpOffloadReflinkDebug::Unknown,
             reflink: CpOffloadReflinkDebug::Yes,
-            sparse_detection: CpSparseDebug::Zeros,
+            sparse_detection: CpSparseDebug::No,
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 assert_eq!(err.code(), 1);
                 // panic!("Error: {:#?}", err)
@@ -534,15 +602,13 @@ mod tests {
         );
 
         let expected_copy_debug = CopyDebug {
-            offload: CpOffloadReflinkDebug::Avoided,
+            offload: CpOffloadReflinkDebug::Unknown,
             reflink: CpOffloadReflinkDebug::Yes,
-            sparse_detection: CpSparseDebug::Zeros,
+            sparse_detection: CpSparseDebug::No,
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 assert_eq!(err.code(), 1);
 
@@ -583,9 +649,7 @@ mod tests {
         };
 
         match result {
-            Ok(_copy_debug) => {
-                assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-            }
+            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
             Err(err) => {
                 assert_eq!(err.code(), 1);
 
@@ -629,7 +693,7 @@ mod tests {
                 CpSparseMode::Never,
                 false,
                 CopyDebug {
-                    offload: CpOffloadReflinkDebug::Unknown,
+                    offload: CpOffloadReflinkDebug::Avoided,
                     reflink: CpOffloadReflinkDebug::No,
                     sparse_detection: CpSparseDebug::No,
                 },
@@ -641,7 +705,7 @@ mod tests {
                 CopyDebug {
                     offload: CpOffloadReflinkDebug::Avoided,
                     reflink: CpOffloadReflinkDebug::Unsupported,
-                    sparse_detection: CpSparseDebug::No,
+                    sparse_detection: CpSparseDebug::Zeros,
                 },
             ),
             (
@@ -649,8 +713,8 @@ mod tests {
                 CpSparseMode::Never,
                 false,
                 CopyDebug {
-                    offload: CpOffloadReflinkDebug::Unknown,
-                    reflink: CpOffloadReflinkDebug::Unsupported,
+                    offload: CpOffloadReflinkDebug::Avoided,
+                    reflink: CpOffloadReflinkDebug::No,
                     sparse_detection: CpSparseDebug::No,
                 },
             ),
@@ -700,9 +764,7 @@ mod tests {
             // println!("Result: {:#?}", result);
 
             match result {
-                Ok(_copy_debug) => {
-                    assert_eq!(_copy_debug.reflink, expected_copy_debug.reflink)
-                }
+                Ok(_copy_debug) => assert_eq!(_copy_debug, *expected_copy_debug),
                 Err(err) => {
                     assert_eq!(err.code(), 1);
 

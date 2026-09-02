@@ -21,6 +21,25 @@ use ctcore::ct_error::CTResult;
 
 use crate::numbers::{SuffixType, to_magnitude_and_suffix};
 
+fn format_duration(duration: f64) -> String {
+    if duration > 0.0 && duration < 0.0001 {
+        let duration_str = format!("{duration:.4e}");
+        let Some((mantissa, exponent)) = duration_str.split_once('e') else {
+            return duration_str;
+        };
+        let exponent_value = exponent.parse::<i32>().unwrap_or(0);
+        return format!("{mantissa}e{exponent_value:+03}");
+    }
+
+    let mut digits = 0;
+    let mut num = duration;
+    while num < 1.0 && num > 0.0 {
+        num *= 10.0;
+        digits += 1;
+    }
+    format!("{duration:.precision$}", precision = digits + 5)
+}
+
 // On Linux, we register a signal handler that prints progress updates.
 #[cfg(target_os = "linux")]
 use signal_hook::consts::signal;
@@ -159,16 +178,7 @@ impl ProgUpdate {
         // (`\n`) at the end.
         let (carriage_return, newline) = if rewrite { ("\r", "") } else { ("", "\n") };
 
-        // Format duration with 6 significant digits
-        let duration_str = {
-            let mut digits = 0;
-            let mut num = duration;
-            while num < 1.0 && num > 0.0 {
-                num *= 10.0;
-                digits += 1;
-            }
-            format!("{:.precision$}", duration, precision = digits + 5)
-        };
+        let duration_str = format_duration(duration);
 
         // If the number of bytes written is sufficiently large, then
         // print a more concise representation of the number, like
@@ -685,9 +695,25 @@ mod tests {
         let mut cursor = Cursor::new(vec![]);
         let rewrite = false;
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.2300e-07 s, 0.0 B/s\n");
+    }
+
+    #[test]
+    fn test_duration_scientific_notation_for_small_values() {
+        let prog_update = prog_update_duration(Duration::from_nanos(54_874));
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, false).unwrap();
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 5.4874e-05 s, 0.0 B/s\n");
+    }
+
+    #[test]
+    fn test_duration_fixed_notation_at_threshold() {
+        let prog_update = prog_update_duration(Duration::from_nanos(100_000));
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, false).unwrap();
         assert_eq!(
             cursor.get_ref(),
-            b"0 bytes copied, 0.000000123000 s, 0.0 B/s\n"
+            b"0 bytes copied, 0.000100000 s, 0.0 B/s\n"
         );
     }
 }

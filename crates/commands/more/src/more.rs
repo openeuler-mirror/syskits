@@ -417,11 +417,9 @@ fn collect_file_noninteractive_semantic(file: &str, semantic: &mut MoreSemantic)
 
 /// Interactive mode with files
 fn interactive_mode_files(files: Vec<String>, options: PagerOptions) -> CTResult<()> {
-    let mut tty_input = TtyInput::new();
-    tty_input.enable_raw_mode()?;
-
-    let mut command_parser = CommandParser::new();
     let (cols, rows) = terminal::size()?;
+    let mut tty_input = TtyInput::new();
+    let mut command_parser = CommandParser::new();
 
     let mut file_index = 0;
 
@@ -449,10 +447,21 @@ fn interactive_mode_files(files: Vec<String>, options: PagerOptions) -> CTResult
             next_file.map(|s| s.to_string()),
         );
 
-        // Paging loop
-        let result = paging_loop(&mut pager, &mut tty_input, &mut command_parser)?;
+        if files.len() == 1
+            && maybe_print_single_screen_content(&content, &mut pager, &options, rows)?
+        {
+            return Ok(());
+        }
 
-        match result {
+        tty_input.enable_raw_mode()?;
+
+        // Paging loop
+        let result = paging_loop(&mut pager, &mut tty_input, &mut command_parser);
+        if result.is_ok() {
+            tty_input.disable_raw_mode()?;
+        }
+
+        match result? {
             LoopResult::Quit => break,
             LoopResult::NextFile(skip) => {
                 file_index += skip;
@@ -480,36 +489,11 @@ fn interactive_mode_stdin(options: PagerOptions) -> CTResult<()> {
     }
 
     let (cols, rows) = terminal::size()?;
-    let content_rows = rows.saturating_sub(1);
 
     // Create pager first to handle start_pattern
     let mut pager = Pager::new(&content, rows, cols, options.clone(), None, None);
 
-    // Count lines in content
-    let line_count = content.lines().count();
-
-    // If content fits on one screen, display with proper handling of start_pattern and squeeze
-    if line_count <= content_rows as usize {
-        let mut stdout = stdout();
-
-        // If we started from a pattern match, show the skipping message
-        if options.start_pattern.is_some() && pager.current_line() > 0 {
-            writeln!(stdout, "\n{}", t!("more.skipping"))?;
-        }
-
-        // Display content from current line with squeeze logic
-        let mut prev_blank = false;
-        for line in content.lines().skip(pager.current_line()) {
-            let is_blank = line.is_empty();
-
-            if options.squeeze && is_blank && prev_blank {
-                // Skip consecutive blank lines
-                continue;
-            }
-
-            writeln!(stdout, "{line}")?;
-            prev_blank = is_blank;
-        }
+    if maybe_print_single_screen_content(&content, &mut pager, &options, rows)? {
         return Ok(());
     }
 
@@ -528,6 +512,41 @@ fn interactive_mode_stdin(options: PagerOptions) -> CTResult<()> {
         | LoopResult::NextFile(_)
         | LoopResult::PrevFile(_) => Ok(()),
     }
+}
+
+fn maybe_print_single_screen_content(
+    content: &str,
+    pager: &mut Pager,
+    options: &PagerOptions,
+    rows: u16,
+) -> CTResult<bool> {
+    let content_rows = rows.saturating_sub(1);
+    if content.lines().count() > content_rows as usize {
+        return Ok(false);
+    }
+
+    let mut stdout = stdout();
+
+    // If we started from a pattern match, show the skipping message
+    if options.start_pattern.is_some() && pager.current_line() > 0 {
+        writeln!(stdout, "\n{}", t!("more.skipping"))?;
+    }
+
+    // Display content from current line with squeeze logic
+    let mut prev_blank = false;
+    for line in content.lines().skip(pager.current_line()) {
+        let is_blank = line.is_empty();
+
+        if options.squeeze && is_blank && prev_blank {
+            // Skip consecutive blank lines
+            continue;
+        }
+
+        writeln!(stdout, "{line}")?;
+        prev_blank = is_blank;
+    }
+
+    Ok(true)
 }
 
 /// Main paging loop

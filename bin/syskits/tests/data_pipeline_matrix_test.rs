@@ -547,6 +547,38 @@ fn shell_tilde_prefix_forces_external_for_native_command() {
 }
 
 #[test]
+fn external_path_policy_skips_priority_syskits_for_tilde_and_run_external() {
+    let priority_dir = std::path::Path::new("/usr/local/priority_syskits");
+    if !priority_dir.is_dir() {
+        return;
+    }
+
+    let expected = Command::new("/usr/bin/uname")
+        .arg("--version")
+        .output()
+        .expect("run /usr/bin/uname --version");
+
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![priority_dir.to_path_buf()];
+    paths.extend(std::env::split_paths(&original_path));
+    let path = std::env::join_paths(paths).expect("join PATH");
+
+    let tilde = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("PATH", &path)
+        .args(["data", "format=classic", "~uname", "--version"])
+        .output()
+        .expect("run syskits data ~uname --version classic");
+    assert_same_process_output(&tilde, &expected);
+
+    let run_external = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("PATH", &path)
+        .args(["data", "format=classic", "run-external uname --version"])
+        .output()
+        .expect("run syskits data run-external uname --version classic");
+    assert_same_process_output(&run_external, &expected);
+}
+
+#[test]
 fn shell_tilde_prefix_forces_external_for_direct_only_command() {
     let expected = Command::new("chroot")
         .arg("--help")

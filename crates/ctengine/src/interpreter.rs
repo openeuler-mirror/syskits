@@ -284,6 +284,7 @@ fn eval_call(
         let ext_args = external_args_from_call(call);
         let mut spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
         spec.exit_policy = crate::external::ExternalExitPolicy::AllowNonZero;
+        spec.path_policy = crate::external::ExternalPathPolicy::SkipSyskitsPriority;
         return crate::external::ExternalExecutor::run(spec, input, ctx);
     }
 
@@ -348,7 +349,8 @@ fn eval_call(
 
     // 3rd fallback: treat as external binary
     let ext_args = external_args_from_call(call);
-    let spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
+    let mut spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
+    spec.path_policy = crate::external::ExternalPathPolicy::SkipSyskitsPriority;
     crate::external::ExternalExecutor::run(spec, input, ctx)
 }
 

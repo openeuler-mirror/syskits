@@ -628,6 +628,30 @@ fn data_csv_transpose_round_trip() {
 }
 
 #[test]
+fn data_to_ssv_round_trip() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=json",
+            "from json \"[{\\\"name\\\":\\\"alice\\\",\\\"age\\\":30},{\\\"name\\\":\\\"bob\\\",\\\"age\\\":20}]\" | to ssv | from ssv",
+        ])
+        .output()
+        .expect("run data to ssv round trip");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stderr, b"");
+
+    let stdout = String::from_utf8(output.stdout).expect("json stdout");
+    assert!(stdout.contains(r#""name":"alice""#), "stdout: {stdout}");
+    assert!(stdout.contains(r#""age":30"#), "stdout: {stdout}");
+    assert!(stdout.contains(r#""name":"bob""#), "stdout: {stdout}");
+}
+
+#[test]
 fn shell_tilde_prefix_forces_external_for_direct_only_command() {
     let expected = Command::new("chroot")
         .arg("--help")

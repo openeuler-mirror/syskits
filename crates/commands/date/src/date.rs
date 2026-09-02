@@ -314,6 +314,12 @@ fn format_date_output(date: &DateTime<FixedOffset>, format_string: &str) -> CTRe
     }
 }
 
+fn print_formatted_date(date: &DateTime<FixedOffset>, format_string: &str) -> CTResult<()> {
+    let s = format_date_output(date, format_string)?;
+    println!("{s}");
+    Ok(())
+}
+
 fn date_row_from_datetime(
     date: &DateTime<FixedOffset>,
     source_kind: &str,
@@ -647,14 +653,21 @@ fn date_processing(
 
     // 根据日期设置来设置系统日期时间或者显示当前日期时间
     if let Some(date) = date_set.set_to {
-        // 如果需要设置时间，首先确保是UTC格式
-        let date: DateTime<Utc> = if date_set.utc {
+        let display_date: DateTime<FixedOffset> = if date_set.utc {
+            date.with_timezone(&Utc).into()
+        } else {
+            date
+        };
+        let system_date: DateTime<Utc> = if date_set.utc {
             date.with_timezone(&Utc)
         } else {
             date.into()
         };
 
-        set_system_datetime(date)
+        if let Err(err) = set_system_datetime(system_date) {
+            ct_show!(err);
+        }
+        print_formatted_date(&display_date, &make_format_string(&date_set))
     } else {
         let format_string = make_format_string(&date_set);
 
@@ -671,8 +684,7 @@ fn date_processing(
                     if date_set.debug {
                         emit_date_debug(&input_str, &date, &format_string);
                     }
-                    let s = format_date_output(&date, &format_string)?;
-                    println!("{s}");
+                    print_formatted_date(&date, &format_string)?;
                 }
                 Err(_) => {
                     ct_show!(CtSimpleError::new(
@@ -756,8 +768,7 @@ fn date_processing(
         for date in dates_iterator {
             match date {
                 Ok(date) => {
-                    let s = format_date_output(&date, &format_string)?;
-                    println!("{s}");
+                    print_formatted_date(&date, &format_string)?;
                 }
                 Err(err) => ct_show!(err),
             }

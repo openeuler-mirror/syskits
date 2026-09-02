@@ -310,7 +310,7 @@ fn hashsum_error_line(message: &str) -> String {
 }
 
 fn hashsum_warning_line(message: &str) -> String {
-    format!("{NAME}: warning: {message}\n")
+    format!("{NAME}: WARNING: {message}\n")
 }
 
 fn render_check_row_classic(prefix: &str, file: &str, status: &str) -> String {
@@ -553,17 +553,18 @@ where
                         binary_check,
                         is_escaped,
                     )?;
-                    if row.status.as_deref() == Some("missing") && row.ignored_missing {
+                    let ignored_missing =
+                        row.status.as_deref() == Some("missing") && row.ignored_missing;
+                    if ignored_missing {
                         // ignored
                     } else {
                         matched_files += 1;
                     }
-                    if !matched {
-                        failed_cksum += 1;
-                        exit_code = 1;
-                    }
                     if open_failed {
                         failed_open_file += 1;
+                        exit_code = 1;
+                    } else if !matched && !ignored_missing {
+                        failed_cksum += 1;
                         exit_code = 1;
                     }
                     classic_text.push_str(&classic);
@@ -1729,7 +1730,7 @@ fn check_hash_file<W: Write>(
                     &mut matched_files, // <--- 传入
                 )?;
 
-                if !verify_result {
+                if verify_result == Some(false) {
                     local_failed_cksum += 1;
                 }
             }
@@ -1883,7 +1884,7 @@ fn verify_file_hash<W: Write>(
     writer: &mut W,
     failed_open_file: &mut usize,
     matched_files: &mut usize,
-) -> CTResult<bool> {
+) -> CTResult<Option<bool>> {
     if flags.algoname == "BLAKE2" {
         // 根据文件中读取到的哈希字符串的长度推断出字节数 (2 个十六进制字符 = 1 字节)
         let mut expected_bytes = expected_sum.len() / 2;
@@ -1908,7 +1909,7 @@ fn verify_file_hash<W: Write>(
     let f = match File::open(&ck_filename_unescaped) {
         Err(e) => {
             if flags.is_ignore_missing && e.kind() == std::io::ErrorKind::NotFound {
-                return Ok(true);
+                return Ok(None);
             }
             *failed_open_file += 1;
             let err_msg = e.to_string();
@@ -1923,7 +1924,7 @@ fn verify_file_hash<W: Write>(
                     t!("hashsum.check.failed_open_or_read")
                 )?;
             }
-            return Ok(false);
+            return Ok(None);
         }
         Ok(file) => file,
     };
@@ -1951,7 +1952,7 @@ fn verify_file_hash<W: Write>(
                     t!("hashsum.check.failed_open_or_read")
                 )?;
             }
-            return Ok(false);
+            return Ok(None);
         }
     };
 
@@ -1959,7 +1960,7 @@ fn verify_file_hash<W: Write>(
         if !flags.is_quiet {
             writeln!(writer, "{prefix}{ck_filename}: {}", t!("hashsum.check.ok"))?;
         }
-        Ok(true)
+        Ok(Some(true))
     } else {
         if !flags.is_status {
             writeln!(
@@ -1968,7 +1969,7 @@ fn verify_file_hash<W: Write>(
                 t!("hashsum.check.failed")
             )?;
         }
-        Ok(false)
+        Ok(Some(false))
     }
 }
 
@@ -2036,15 +2037,15 @@ fn compute_and_output_hash<W: Write>(
 fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usize) -> CTResult<()> {
     // 根据错误统计输出最终摘要信息
     match bad_format.cmp(&1) {
-        Ordering::Equal => ct_show_warning!(
-            "{}",
+        Ordering::Equal => ctcore::ct_show_error!(
+            "WARNING: {}",
             t!(
                 "hashsum.check.line_improperly_formatted",
                 count = bad_format
             )
         ),
-        Ordering::Greater => ct_show_warning!(
-            "{}",
+        Ordering::Greater => ctcore::ct_show_error!(
+            "WARNING: {}",
             t!(
                 "hashsum.check.lines_improperly_formatted",
                 count = bad_format
@@ -2054,12 +2055,12 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
     };
 
     match failed_cksum.cmp(&1) {
-        Ordering::Equal => ct_show_warning!(
-            "{}",
+        Ordering::Equal => ctcore::ct_show_error!(
+            "WARNING: {}",
             t!("hashsum.check.checksum_did_not_match", count = failed_cksum)
         ),
-        Ordering::Greater => ct_show_warning!(
-            "{}",
+        Ordering::Greater => ctcore::ct_show_error!(
+            "WARNING: {}",
             t!(
                 "hashsum.check.checksums_did_not_match",
                 count = failed_cksum
@@ -2069,15 +2070,15 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
     }
 
     match failed_open_file.cmp(&1) {
-        Ordering::Equal => ct_show_warning!(
-            "{}",
+        Ordering::Equal => ctcore::ct_show_error!(
+            "WARNING: {}",
             t!(
                 "hashsum.check.file_could_not_be_read",
                 count = failed_open_file
             )
         ),
-        Ordering::Greater => ct_show_warning!(
-            "{}",
+        Ordering::Greater => ctcore::ct_show_error!(
+            "WARNING: {}",
             t!(
                 "hashsum.check.files_could_not_be_read",
                 count = failed_open_file

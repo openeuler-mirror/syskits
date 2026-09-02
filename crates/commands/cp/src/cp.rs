@@ -291,9 +291,8 @@ pub struct CpOptions {
 }
 
 /// Enum representing various debug states of the offload and reflink actions.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(dead_code)] // 所有这些都在 Linux 上使用
-#[derive(PartialEq)]
 enum CpOffloadReflinkDebug {
     Unknown,
     No,
@@ -303,7 +302,7 @@ enum CpOffloadReflinkDebug {
 }
 
 /// Enum representing various debug states of the sparse detection.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(dead_code)] // 目前保持静默，直到我们使用它们
 enum CpSparseDebug {
     Unknown,
@@ -315,7 +314,7 @@ enum CpSparseDebug {
 }
 
 /// Struct that contains the debug state for each action in a file copy operation.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct CopyDebug {
     offload: CpOffloadReflinkDebug,
     reflink: CpOffloadReflinkDebug,

@@ -11,7 +11,7 @@
 
 use crate::csplit_error::CsplitError;
 use ctcore::ct_show_warning;
-use regex::Regex;
+use regex::{Regex, bytes::Regex as BytesRegex};
 
 /// The definition of a pattern to match on a line.
 #[derive(Debug)]
@@ -23,11 +23,11 @@ pub enum CsplitPattern {
     /// integer is an offset relative to the matched line of what to include (if positive) or
     /// to exclude (if negative). The number of times the pattern is executed is detailed in
     /// [`CsplitExecutePattern`].
-    UpToMatch(Regex, i32, CsplitExecutePattern),
+    UpToMatch(BytesRegex, i32, CsplitExecutePattern),
     /// Skip the file's content up to, not including, the line matching the regex. The integer
     /// is an offset relative to the matched line of what to include (if positive) or to exclude
     /// (if negative). The number of times the pattern is executed is detailed in [`CsplitExecutePattern`].
-    SkipToMatch(Regex, i32, CsplitExecutePattern),
+    SkipToMatch(BytesRegex, i32, CsplitExecutePattern),
 }
 
 #[allow(clippy::to_string_trait_impl)]
@@ -163,11 +163,11 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
             };
             // 根据匹配的类型，构建相应的模式
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = Regex::new(&bre_to_rust_regex(up_to_match.as_str()))
+                let pattern = BytesRegex::new(&bre_to_rust_regex(up_to_match.as_str()))
                     .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = Regex::new(&bre_to_rust_regex(skip_to_match.as_str()))
+                let pattern = BytesRegex::new(&bre_to_rust_regex(skip_to_match.as_str()))
                     .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
                 csplit_patterns.push(CsplitPattern::SkipToMatch(pattern, offset, execute_n_times));
             }
@@ -419,8 +419,8 @@ mod tests {
         let patterns = get_patterns(input.as_slice()).unwrap();
         match patterns.first() {
             Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
-                assert!(!reg.is_match("aaab"));
-                assert!(reg.is_match("a+b"));
+                assert!(!reg.is_match(b"aaab"));
+                assert!(reg.is_match(b"a+b"));
                 assert_eq!(format!("{reg}"), r"a\+b");
             }
             _ => panic!("expected UpToMatch pattern"),
@@ -433,8 +433,8 @@ mod tests {
         let patterns = get_patterns(input.as_slice()).unwrap();
         match patterns.first() {
             Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
-                assert!(reg.is_match("aaab"));
-                assert!(!reg.is_match("a+b"));
+                assert!(reg.is_match(b"aaab"));
+                assert!(!reg.is_match(b"a+b"));
                 assert_eq!(format!("{reg}"), "a+b");
             }
             _ => panic!("expected UpToMatch pattern"),

@@ -27,6 +27,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::fs::{self, File};
+use std::io;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -84,6 +85,44 @@ fn touch_filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
     Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TouchTime {
+    Now,
+    Omit,
+    Timestamp(FileTime),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TouchTimes {
+    access: TouchTime,
+    modification: TouchTime,
+}
+
+impl TouchTimes {
+    fn now() -> Self {
+        Self {
+            access: TouchTime::Now,
+            modification: TouchTime::Now,
+        }
+    }
+
+    fn timestamps(access: FileTime, modification: FileTime) -> Self {
+        Self {
+            access: TouchTime::Timestamp(access),
+            modification: TouchTime::Timestamp(modification),
+        }
+    }
+
+    fn as_timestamps(self) -> Option<(FileTime, FileTime)> {
+        match (self.access, self.modification) {
+            (TouchTime::Timestamp(access), TouchTime::Timestamp(modification)) => {
+                Some((access, modification))
+            }
+            _ => None,
+        }
+    }
+}
+
 pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -126,7 +165,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 3. 将可能存在的 obs_time 传入
-    let (a_time, m_time) = touch_determine_times(&arg_matches, obs_time)?;
+    let times = touch_determine_times(&arg_matches, obs_time)?;
 
     // 4. 注意这里的循环变量改为借用引用 &files
     for filename in &files {
@@ -176,7 +215,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
             }
         }
 
-        touch_update_times(&arg_matches, path, a_time, m_time, filename)?;
+        touch_update_times(&arg_matches, path, times, filename)?;
     }
     Ok(())
 }
@@ -270,10 +309,7 @@ pub fn ct_app() -> Command {
 }
 
 // 确定访问和修改时间
-fn touch_determine_times(
-    matches: &ArgMatches,
-    obs_time: Option<FileTime>,
-) -> CTResult<(FileTime, FileTime)> {
+fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CTResult<TouchTimes> {
     match (
         matches.get_one::<OsString>(touch_flags::sources::TOUCH_REFERENCE),
         matches.get_one::<String>(touch_flags::sources::TOUCH_DATE),
@@ -289,41 +325,170 @@ fn touch_determine_times(
             let mtime = touch_filetime_to_datetime(&m_time).ok_or_else(|| {
                 CtSimpleError::new(1, "Could not process the reference modification time")
             })?;
-            Ok((
+            Ok(TouchTimes::timestamps(
                 touch_parse_date(atime, date)?,
                 touch_parse_date(mtime, date)?,
             ))
         }
-        (Some(reference), None) => touch_stat(
-            Path::new(&reference),
-            !matches.get_flag(touch_flags::TOUCH_NO_DEREF),
-        ),
+        (Some(reference), None) => {
+            let (a_time, m_time) = touch_stat(
+                Path::new(&reference),
+                !matches.get_flag(touch_flags::TOUCH_NO_DEREF),
+            )?;
+            Ok(TouchTimes::timestamps(a_time, m_time))
+        }
         (None, Some(date)) => {
+            if touch_is_now_date(date) {
+                return Ok(TouchTimes::now());
+            }
             let timestamp = touch_parse_date(Local::now(), date)?;
-            Ok((timestamp, timestamp))
+            Ok(TouchTimes::timestamps(timestamp, timestamp))
         }
         (None, None) => {
-            let timestamp = if let Some(ts) =
-                matches.get_one::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
-            {
-                parse_timestamp(ts)?
-            } else if let Some(t) = obs_time {
-                // 如果命中过时的时间戳格式，则使用它
-                t
-            } else {
-                touch_datetime_to_filetime(&Local::now())
-            };
-            Ok((timestamp, timestamp))
+            if let Some(ts) = matches.get_one::<String>(touch_flags::sources::TOUCH_TIMESTAMP) {
+                let timestamp = parse_timestamp(ts)?;
+                return Ok(TouchTimes::timestamps(timestamp, timestamp));
+            }
+
+            if let Some(t) = obs_time {
+                return Ok(TouchTimes::timestamps(t, t));
+            }
+
+            Ok(TouchTimes::now())
         }
     }
+}
+
+fn touch_is_now_date(date: &str) -> bool {
+    date.trim().eq_ignore_ascii_case("now")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn touch_time_to_filetime(
+    time: TouchTime,
+    existing: Option<(FileTime, FileTime)>,
+    is_access: bool,
+    now: FileTime,
+) -> FileTime {
+    match time {
+        TouchTime::Now => now,
+        TouchTime::Omit => {
+            let (access, modification) = existing.expect("omitted time requires existing metadata");
+            if is_access { access } else { modification }
+        }
+        TouchTime::Timestamp(time) => time,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn touch_times_to_filetimes(
+    path: &Path,
+    is_follow: bool,
+    times: TouchTimes,
+) -> CTResult<(FileTime, FileTime)> {
+    let existing = if times.access == TouchTime::Omit || times.modification == TouchTime::Omit {
+        Some(touch_stat(path, is_follow)?)
+    } else {
+        None
+    };
+    let now = touch_datetime_to_filetime(&Local::now());
+    Ok((
+        touch_time_to_filetime(times.access, existing, true, now),
+        touch_time_to_filetime(times.modification, existing, false, now),
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn touch_timespec(time: TouchTime) -> ctcore::libc::timespec {
+    match time {
+        TouchTime::Now => ctcore::libc::timespec {
+            tv_sec: 0,
+            tv_nsec: ctcore::libc::UTIME_NOW as _,
+        },
+        TouchTime::Omit => ctcore::libc::timespec {
+            tv_sec: 0,
+            tv_nsec: ctcore::libc::UTIME_OMIT as _,
+        },
+        TouchTime::Timestamp(time) => ctcore::libc::timespec {
+            tv_sec: time.unix_seconds() as ctcore::libc::time_t,
+            tv_nsec: time.nanoseconds() as _,
+        },
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn touch_set_times_with_utimensat(
+    path: &Path,
+    times: TouchTimes,
+    no_follow: bool,
+) -> io::Result<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains interior NUL"))?;
+    let times = [
+        touch_timespec(times.access),
+        touch_timespec(times.modification),
+    ];
+    let flags = if no_follow {
+        ctcore::libc::AT_SYMLINK_NOFOLLOW
+    } else {
+        0
+    };
+
+    let result = unsafe {
+        ctcore::libc::utimensat(ctcore::libc::AT_FDCWD, path.as_ptr(), times.as_ptr(), flags)
+    };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+fn touch_set_times(
+    arg_matches: &ArgMatches,
+    path: &Path,
+    times: TouchTimes,
+    file_name: &OsString,
+) -> CTResult<()> {
+    let no_follow = file_name != "-" && arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF);
+    let result = if let Some((a_time, m_time)) = times.as_timestamps() {
+        if file_name == "-" {
+            filetime::set_file_times(path, a_time, m_time)
+        } else if no_follow {
+            set_symlink_file_times(path, a_time, m_time)
+        } else {
+            set_file_times(path, a_time, m_time)
+        }
+    } else {
+        #[cfg(target_os = "linux")]
+        {
+            touch_set_times_with_utimensat(path, times, no_follow)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let (a_time, m_time) = touch_times_to_filetimes(path, !no_follow, times)?;
+            if file_name == "-" {
+                filetime::set_file_times(path, a_time, m_time)
+            } else if no_follow {
+                set_symlink_file_times(path, a_time, m_time)
+            } else {
+                set_file_times(path, a_time, m_time)
+            }
+        }
+    };
+
+    result.map_err_context(|| format!("setting times of {}", path.quote()))
 }
 
 // 根据用户指定的选项更新文件访问和修改时间
 fn touch_update_times(
     arg_matches: &ArgMatches,
     path: &Path,
-    mut a_time: FileTime,
-    mut m_time: FileTime,
+    mut times: TouchTimes,
     file_name: &OsString,
 ) -> CTResult<()> {
     // 如果仅更改atime或mtime，则获取另一个的现有值。
@@ -332,7 +497,6 @@ fn touch_update_times(
         || arg_matches.get_flag(touch_flags::TOUCH_MODIFICATION)
         || arg_matches.contains_id(touch_flags::TOUCH_TIME)
     {
-        let st = touch_stat(path, !arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF))?;
         let time = arg_matches
             .get_one::<String>(touch_flags::TOUCH_TIME)
             .map(|s| s.as_str())
@@ -343,44 +507,18 @@ fn touch_update_times(
             || time.contains(&"atime".to_owned())
             || time.contains(&"use".to_owned()))
         {
-            a_time = st.0;
+            times.access = TouchTime::Omit;
         }
 
         if !(arg_matches.get_flag(touch_flags::TOUCH_MODIFICATION)
             || time.contains(&"modify".to_owned())
             || time.contains(&"mtime".to_owned()))
         {
-            m_time = st.1;
+            times.modification = TouchTime::Omit;
         }
     }
 
-    // 设置文件或符号链接的访问和修改时间, 提供文件名、访问时间（atime）和修改时间（mtime）作为输入。
-    // 如果文件名不是"-"，表示touch -h -的特殊情况，
-    // 代码检查是否设置了NO_DEREF标志，这意味着用户想要为符号链接本身设置时间，而不是它指向的文件。
-    if file_name == "-" {
-        filetime::set_file_times(path, a_time, m_time)
-    } else if arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF) {
-        set_symlink_file_times(path, a_time, m_time)
-    } else {
-        set_file_times(path, a_time, m_time)
-    }
-    .map_err_context(|| format!("setting times of {}", path.quote()))
-}
-
-// 获取提供路径的元数据
-// 如果`follow`为`true`，函数将尝试跟随符号链接
-// 如果`follow`为`false`或符号链接损坏，函数将返回符号链接本身的元数据
-fn touch_stat(path: &Path, is_follow: bool) -> CTResult<(FileTime, FileTime)> {
-    let md = match is_follow {
-        true => fs::metadata(path).or_else(|_| fs::symlink_metadata(path)),
-        false => fs::symlink_metadata(path),
-    }
-    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
-
-    Ok((
-        FileTime::from_last_access_time(&md),
-        FileTime::from_last_modification_time(&md),
-    ))
+    touch_set_times(arg_matches, path, times, file_name)
 }
 
 fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
@@ -436,6 +574,22 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
     }
 
     Err(CtSimpleError::new(1, format!("Unable to parse date: {s}")))
+}
+
+// 获取提供路径的元数据
+// 如果`follow`为`true`，函数将尝试跟随符号链接
+// 如果`follow`为`false`或符号链接损坏，函数将返回符号链接本身的元数据
+fn touch_stat(path: &Path, is_follow: bool) -> CTResult<(FileTime, FileTime)> {
+    let md = match is_follow {
+        true => fs::metadata(path).or_else(|_| fs::symlink_metadata(path)),
+        false => fs::symlink_metadata(path),
+    }
+    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
+
+    Ok((
+        FileTime::from_last_access_time(&md),
+        FileTime::from_last_modification_time(&md),
+    ))
 }
 
 fn parse_timestamp(s: &str) -> CTResult<FileTime> {
@@ -639,17 +793,30 @@ mod tests {
             ct_app().try_get_matches_from(argv).expect("参数解析失败")
         }
 
+        fn timestamp_pair(times: TouchTimes) -> (FileTime, FileTime) {
+            times.as_timestamps().expect("expected explicit timestamps")
+        }
+
         #[test]
         fn determine_times_defaults_to_now() {
             let matches = build_matches(&["dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
-            assert_eq!(atime, mtime);
+            let times = touch_determine_times(&matches, None).unwrap();
+            assert_eq!(times.access, TouchTime::Now);
+            assert_eq!(times.modification, TouchTime::Now);
+        }
+
+        #[test]
+        fn determine_times_date_now_uses_current_time_semantics() {
+            let matches = build_matches(&["-d", "now", "dummy"]);
+            let times = touch_determine_times(&matches, None).unwrap();
+            assert_eq!(times.access, TouchTime::Now);
+            assert_eq!(times.modification, TouchTime::Now);
         }
 
         #[test]
         fn determine_times_with_timestamp_argument() {
             let matches = build_matches(&["-t", "202406150830", "dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
             let expected = Local.with_ymd_and_hms(2024, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(atime.unix_seconds(), expected.timestamp());
             assert_eq!(mtime, atime);
@@ -658,7 +825,7 @@ mod tests {
         #[test]
         fn determine_times_with_date_argument() {
             let matches = build_matches(&["-d", "2024-06-15 08:30:00", "dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
             let expected = Local.with_ymd_and_hms(2024, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(atime.unix_seconds(), expected.timestamp());
             assert_eq!(mtime, atime);
@@ -673,7 +840,7 @@ mod tests {
             set_file_times(&file_path, custom_time, custom_time).unwrap();
 
             let matches = build_matches(&["-r", file_path.to_str().unwrap(), "dummy"]);
-            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
             assert_eq!(atime.unix_seconds(), custom_time.unix_seconds());
             assert_eq!(mtime.unix_seconds(), custom_time.unix_seconds());
         }
@@ -693,7 +860,7 @@ mod tests {
                 "2024-06-15 08:30:00",
                 "dummy",
             ]);
-            let (atime, mtime) = touch_determine_times(&matches, None).unwrap();
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
             let expected = Local
                 .with_ymd_and_hms(2024, 6, 15, 8, 30, 0)
                 .unwrap()

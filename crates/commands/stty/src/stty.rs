@@ -24,7 +24,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use device::Device;
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort, tcflag_t};
+use nix::libc::{O_NONBLOCK, STDOUT_FILENO, TIOCGWINSZ, TIOCSWINSZ, c_ushort, tcflag_t};
 use nix::sys::termios::SetArg;
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O, SpecialCharacterIndices,
@@ -34,7 +34,7 @@ use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
 use std::ffi::OsString;
-use std::io::{Write, stdin};
+use std::io::{IsTerminal, Write, stdin};
 use std::ops::ControlFlow;
 use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
@@ -52,6 +52,7 @@ mod stty_flags {
 struct SttyFlags {
     is_all: bool,
     is_save: bool,
+    stdout_is_terminal: bool,
     file_name: Option<String>,
     file: Device,
     settings: Option<Vec<String>>,
@@ -135,6 +136,7 @@ impl SttyFlags {
             is_all: matches.get_flag(stty_flags::STTY_ALL),
             // 是否保存当前设置的标志
             is_save: matches.get_flag(stty_flags::STTY_SAVE),
+            stdout_is_terminal: std::io::stdout().is_terminal(),
             file_name,
             file,
             settings,
@@ -568,29 +570,25 @@ fn stty_print_control_chars<W: Write>(
     opts: &SttyFlags,
     writer: &mut W,
 ) -> CTResult<()> {
-    // 如果`opts.is_all`为`false`，则不打印任何信息直接返回
-    // 未来的工作是实现一个逻辑来比较并打印与默认值不同的设置
-    if !opts.is_all {
-        return Ok(());
-    }
-
     let mut items = Vec::with_capacity(CONTROL_CHARS.len() + 2);
     for (text, cc_index) in CONTROL_CHARS {
-        items.push(format!(
-            "{text} = {};",
-            stty_control_char_to_string(termios.control_chars[*cc_index as usize])?
-        ));
+        let value = termios.control_chars[*cc_index as usize];
+        if opts.is_all || sane_control_char_value(text).is_some_and(|sane| value != sane) {
+            items.push(format!("{text} = {};", stty_control_char_to_string(value)?));
+        }
     }
-    items.push(format!(
-        "min = {};",
-        termios.control_chars[SpecialCharacterIndices::VMIN as usize],
-    ));
-    items.push(format!(
-        "time = {};",
-        termios.control_chars[SpecialCharacterIndices::VTIME as usize],
-    ));
 
-    write_wrapped_items(writer, items, " ", output_width())
+    let min = termios.control_chars[SpecialCharacterIndices::VMIN as usize];
+    if opts.is_all || min != 1 {
+        items.push(format!("min = {min};"));
+    }
+
+    let time = termios.control_chars[SpecialCharacterIndices::VTIME as usize];
+    if opts.is_all || time != 0 {
+        items.push(format!("time = {time};"));
+    }
+
+    write_wrapped_items(writer, items, " ", output_width(opts))
 }
 
 /// 将termios结构体的配置信息以特定格式打印出来
@@ -688,6 +686,10 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
                 items.push(format!("-{name}"));
             }
         };
+        if name == "hupcl" && !opts.is_all {
+            continue;
+        }
+
         if group.is_some() {
             if is_val && (!is_sane || opts.is_all) {
                 push_flag(true);
@@ -697,15 +699,27 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
         }
     }
 
-    write_wrapped_items(writer, items, " ", output_width())
+    write_wrapped_items(writer, items, " ", output_width(opts))
 }
 
-fn output_width() -> usize {
+fn output_width(opts: &SttyFlags) -> usize {
     std::env::var("COLUMNS")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|width| *width > 0)
+        .or_else(|| {
+            opts.stdout_is_terminal
+                .then(terminal_width_stdout)
+                .flatten()
+        })
         .unwrap_or(80)
+}
+
+fn terminal_width_stdout() -> Option<usize> {
+    let mut size = TermSize::default();
+    unsafe { tiocgwinsz(STDOUT_FILENO, &mut size as *mut _).ok()? };
+    let width = usize::from(size.columns);
+    (width > 0).then_some(width)
 }
 
 fn write_wrapped_items<W, I, S>(
@@ -1529,6 +1543,7 @@ mod tests {
             let flags = SttyFlags {
                 is_all: true,
                 is_save: true,
+                stdout_is_terminal: false,
                 file_name: None,
                 file: Device::Stdin(stdin()),
                 settings: None,
@@ -1598,6 +1613,7 @@ mod tests {
             let opts = SttyFlags {
                 is_all: true,
                 is_save: false,
+                stdout_is_terminal: true,
                 file_name: None,
                 file: device,
                 settings: None,
@@ -1617,6 +1633,7 @@ mod tests {
             let opts = SttyFlags {
                 is_all: true,
                 is_save: false,
+                stdout_is_terminal: true,
                 file_name: None,
                 file: Device::Stdin(stdin()),
                 settings: None,
@@ -1655,6 +1672,131 @@ mod tests {
             let rendered = String::from_utf8(out).unwrap();
             assert!(rendered.lines().all(|line| line.len() <= 12));
             assert_eq!(rendered, "alpha beta\ngamma delta\n");
+        }
+
+        #[test]
+        fn test_default_output_prints_non_sane_control_chars() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            for (name, index) in CONTROL_CHARS {
+                if let Some(value) = sane_control_char_value(name) {
+                    termios.control_chars[*index as usize] = value;
+                }
+            }
+            termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
+            termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+            termios.control_chars[SpecialCharacterIndices::VEOL as usize] = 0xff;
+            termios.control_chars[SpecialCharacterIndices::VEOL2 as usize] = 0xff;
+
+            let opts = SttyFlags {
+                is_all: false,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+            let mut out = Vec::new();
+            stty_print_control_chars(&termios, &opts, &mut out).unwrap();
+
+            let rendered = String::from_utf8(out).unwrap();
+            assert_eq!(rendered, "eol = M-^?; eol2 = M-^?;\n");
+        }
+
+        #[test]
+        fn test_all_output_includes_gnu_legacy_flags_without_tandem_alias() {
+            let termios = unsafe { std::mem::zeroed::<Termios>() };
+            let opts = SttyFlags {
+                is_all: true,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+
+            let old_columns = std::env::var_os("COLUMNS");
+            unsafe {
+                std::env::set_var("COLUMNS", "200");
+            }
+
+            let mut input_out = Vec::new();
+            let mut output_out = Vec::new();
+            let mut local_out = Vec::new();
+            let input_result = stty_print_flags(&termios, &opts, INPUT_SETTINGS, &mut input_out);
+            let output_result = stty_print_flags(&termios, &opts, OUTPUT_SETTINGS, &mut output_out);
+            let local_result = stty_print_flags(&termios, &opts, LOCAL_SETTINGS, &mut local_out);
+
+            unsafe {
+                match old_columns {
+                    Some(value) => std::env::set_var("COLUMNS", value),
+                    None => std::env::remove_var("COLUMNS"),
+                }
+            }
+
+            input_result.unwrap();
+            output_result.unwrap();
+            local_result.unwrap();
+
+            let input_rendered = String::from_utf8(input_out).unwrap();
+            let output_rendered = String::from_utf8(output_out).unwrap();
+            let local_rendered = String::from_utf8(local_out).unwrap();
+
+            assert!(input_rendered.contains("-iuclc"));
+            assert!(!input_rendered.contains("tandem"));
+            assert!(output_rendered.contains("-ofill"));
+            assert!(local_rendered.contains("-xcase"));
+        }
+
+        #[test]
+        fn test_redirected_output_falls_back_to_eighty_columns() {
+            let opts = SttyFlags {
+                is_all: true,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+
+            let old_columns = std::env::var_os("COLUMNS");
+            unsafe {
+                std::env::remove_var("COLUMNS");
+            }
+            let width = output_width(&opts);
+            unsafe {
+                match old_columns {
+                    Some(value) => std::env::set_var("COLUMNS", value),
+                    None => std::env::remove_var("COLUMNS"),
+                }
+            }
+
+            assert_eq!(width, 80);
+        }
+
+        #[test]
+        fn test_columns_overrides_redirected_output_width() {
+            let opts = SttyFlags {
+                is_all: true,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+
+            let old_columns = std::env::var_os("COLUMNS");
+            unsafe {
+                std::env::set_var("COLUMNS", "120");
+            }
+            let width = output_width(&opts);
+            unsafe {
+                match old_columns {
+                    Some(value) => std::env::set_var("COLUMNS", value),
+                    None => std::env::remove_var("COLUMNS"),
+                }
+            }
+
+            assert_eq!(width, 120);
         }
     }
 

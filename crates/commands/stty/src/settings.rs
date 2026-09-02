@@ -76,7 +76,7 @@ pub const CONTROL_SETTINGS: &[Settings<C>] = &[
     Settings::new_grouped("cs6", C::CS6, C::CSIZE),
     Settings::new_grouped("cs7", C::CS7, C::CSIZE),
     Settings::new_grouped("cs8", C::CS8, C::CSIZE).sane(),
-    Settings::new("hupcl", C::HUPCL),
+    Settings::new("hupcl", C::HUPCL).sane(),
     Settings::new("hup", C::HUPCL).hidden(),
     Settings::new("cstopb", C::CSTOPB),
     Settings::new("cread", C::CREAD).sane(),
@@ -94,11 +94,11 @@ pub const INPUT_SETTINGS: &[Settings<I>] = &[
     Settings::new("inlcr", I::INLCR),
     Settings::new("igncr", I::IGNCR),
     Settings::new("icrnl", I::ICRNL).sane(),
-    Settings::new("ixoff", I::IXOFF),
-    Settings::new("tandem", I::IXOFF),
     Settings::new("ixon", I::IXON).sane(),
-    // not supported by nix
-    // Settings::new("iuclc", I::IUCLC),
+    Settings::new("ixoff", I::IXOFF),
+    Settings::new("tandem", I::IXOFF).hidden(),
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    Settings::new("iuclc", I::from_bits_retain(crate::IUCLC_RAW_BIT)),
     Settings::new("ixany", I::IXANY),
     Settings::new("imaxbel", I::IMAXBEL).sane(),
     Settings::new("iutf8", I::IUTF8),
@@ -111,6 +111,8 @@ pub const OUTPUT_SETTINGS: &[Settings<O>] = &[
     Settings::new("onlcr", O::ONLCR).sane(),
     Settings::new("onocr", O::ONOCR),
     Settings::new("onlret", O::ONLRET),
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    Settings::new("ofill", O::from_bits_retain(crate::OFILL_RAW_BIT)),
     Settings::new("ofdel", O::OFDEL),
     Settings::new_grouped("nl0", O::NL0, O::NLDLY).sane(),
     Settings::new_grouped("nl1", O::NL1, O::NLDLY),
@@ -140,8 +142,8 @@ pub const LOCAL_SETTINGS: &[Settings<L>] = &[
     Settings::new("echok", L::ECHOK).sane(),
     Settings::new("echonl", L::ECHONL),
     Settings::new("noflsh", L::NOFLSH),
-    // Not supported by nix
-    // Flag::new("xcase", L::XCASE),
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    Settings::new("xcase", L::from_bits_retain(crate::XCASE_RAW_BIT)),
     Settings::new("tostop", L::TOSTOP),
     Settings::new("echoprt", L::ECHOPRT),
     Settings::new("prterase", L::ECHOPRT).hidden(),

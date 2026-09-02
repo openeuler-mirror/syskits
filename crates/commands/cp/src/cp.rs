@@ -1819,6 +1819,9 @@ pub(crate) fn copy_attributes_with_deref(
         fs::symlink_metadata(source_path).context(str)?
     };
 
+    #[cfg(unix)]
+    let ownership_preserved = std::cell::Cell::new(true);
+
     // 必须先更改所有权以避免干扰模式更改。
     #[cfg(unix)]
     cp_handle_preserve(&attr.ownership, || -> CopyResult<()> {
@@ -1850,6 +1853,7 @@ pub(crate) fn copy_attributes_with_deref(
                     err_str.contains("Operation not permitted") || err_str.contains("EPERM");
 
                 if is_perm {
+                    ownership_preserved.set(false);
                     // 降级策略——尝试仅保留 GID
                     // 如果 GID 是进程的附加组，即使无法保留 UID，也应保留 GID
                     let _ = wrap_chown(
@@ -1995,7 +1999,14 @@ pub(crate) fn copy_attributes_with_deref(
 
     cp_handle_preserve(&attr.mode, || -> CopyResult<()> {
         if !dest_path.is_symlink() {
-            fs::set_permissions(dest_path, sour_metadata.permissions()).context(str)?;
+            let mut permissions = sour_metadata.permissions();
+            #[cfg(unix)]
+            if !ownership_preserved.get() {
+                permissions.set_mode(
+                    permissions.mode() & !(libc::S_ISUID | libc::S_ISGID | libc::S_ISVTX),
+                );
+            }
+            fs::set_permissions(dest_path, permissions).context(str)?;
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source_path, None)
                 .and_then(|acl| exacl::setfacl(&[dest_path], &acl, None))

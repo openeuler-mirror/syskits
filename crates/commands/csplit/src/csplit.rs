@@ -16,8 +16,9 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_lines;
 use ctcore::{Tool, ct_crash_if_err};
-use regex::Regex;
+use regex::bytes::Regex;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader};
@@ -142,7 +143,7 @@ where
 {
     #[cfg(test)]
     let _lock = acquire_test_lock();
-    let mut input_iter = InputSplitter::new(input_info.lines().enumerate());
+    let mut input_iter = InputSplitter::new(ct_lines::lines(input_info, b'\n').enumerate());
     let mut split_writer = SplitWriter::new(csplit_opts);
     let patterns: Vec<patterns::CsplitPattern> = patterns::get_patterns(&csplit_patterns[..])?;
 
@@ -157,7 +158,7 @@ where
                 (|| -> Result<(), CsplitError> {
                     split_writer.new_writer()?;
                     for (_, line) in input_iter {
-                        split_writer.writeln(&line?)?;
+                        split_writer.write_line(&line?)?;
                     }
                     split_writer.finish_split()?;
                     Ok(())
@@ -183,7 +184,7 @@ fn do_csplit<I>(
     input_iter: &mut InputSplitter<I>,
 ) -> Result<bool, CsplitError>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, io::Result<Vec<u8>>)>,
 {
     #[cfg(test)]
     let _lock = acquire_test_lock();
@@ -251,6 +252,14 @@ fn trim_os_error_suffix(message: String) -> String {
         }
     }
     message
+}
+
+fn line_for_match(line: &[u8]) -> &[u8] {
+    if let Some(without_lf) = line.strip_suffix(b"\n") {
+        without_lf.strip_suffix(b"\r").unwrap_or(without_lf)
+    } else {
+        line
+    }
 }
 
 /// Write a portion of the input file into a split which filename is based on an incrementing
@@ -321,13 +330,13 @@ impl SplitWriter<'_> {
         self.dev_null = true;
     }
 
-    /// Writes the line to the current split, appending a newline character.
+    /// Writes the line to the current split preserving its original bytes.
     /// If [`self.dev_null`] is true, then the line is discarded.
     ///
     /// # Errors
     ///
     /// Some [`io::Error`] may occur when attempting to write the line.
-    fn writeln(&mut self, line: &str) -> Result<(), CsplitError> {
+    fn write_line(&mut self, line: &[u8]) -> Result<(), CsplitError> {
         // 【执行拦截】：悄悄把这行丢掉，深藏功与名
         if self.suppress_next_write {
             self.suppress_next_write = false;
@@ -337,21 +346,17 @@ impl SplitWriter<'_> {
         if !self.dev_null {
             match self.current_writer {
                 Some(ref mut current_writer) => {
-                    let bytes = line.as_bytes();
                     let filename = self
                         .current_filename
                         .clone()
                         .unwrap_or_else(|| "<unknown>".to_string());
-                    current_writer.write_all(bytes).map_err(|err| {
+                    current_writer.write_all(line).map_err(|err| {
                         CsplitError::WriteError(
                             filename.clone(),
                             trim_os_error_suffix(err.to_string()),
                         )
                     })?;
-                    current_writer.write_all(b"\n").map_err(|err| {
-                        CsplitError::WriteError(filename, trim_os_error_suffix(err.to_string()))
-                    })?;
-                    self.size += bytes.len() + 1;
+                    self.size += line.len();
                 }
                 None => panic!("trying to write to a split that was not created"),
             }
@@ -419,7 +424,7 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, io::Result<String>)>,
+        I: Iterator<Item = (usize, io::Result<Vec<u8>>)>,
     {
         input_iter.csplit_rewind_buffer();
         input_iter.csplit_set_size_of_buffer(1);
@@ -446,7 +451,7 @@ impl SplitWriter<'_> {
                 }
                 Ordering::Greater => (),
             }
-            self.writeln(&l)?;
+            self.write_line(&l)?;
         }
         self.finish_split()?;
         result
@@ -461,28 +466,28 @@ impl SplitWriter<'_> {
         input_splitter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, io::Result<String>)>,
+        I: Iterator<Item = (usize, io::Result<Vec<u8>>)>,
     {
         if offset >= 0 {
             for line_string in input_splitter.csplit_drain_buffer() {
-                self.writeln(&line_string)?;
+                self.write_line(&line_string)?;
             }
             input_splitter.csplit_set_size_of_buffer(1);
 
             while let Some((ln, line)) = input_splitter.next() {
                 let l = line?;
-                if regex.is_match(&l) {
+                if regex.is_match(line_for_match(&l)) {
                     if offset == 0 {
                         assert!(
                             input_splitter.csplit_add_line_to_buffer(ln, l).is_none(),
                             "the buffer is big enough to contain 1 line"
                         );
                     } else {
-                        self.writeln(&l)?;
+                        self.write_line(&l)?;
                         let mut remaining = offset - 1;
                         while remaining > 0 {
                             match input_splitter.next() {
-                                Some((_, line)) => self.writeln(&line?)?,
+                                Some((_, line)) => self.write_line(&line?)?,
                                 None => {
                                     self.finish_split()?;
                                     return Err(CsplitError::LineOutOfRange(
@@ -496,19 +501,19 @@ impl SplitWriter<'_> {
                     self.finish_split()?;
                     return Ok(());
                 }
-                self.writeln(&l)?;
+                self.write_line(&l)?;
             }
         } else {
             let f_usize = -offset as usize;
             input_splitter.csplit_set_size_of_buffer(f_usize);
             while let Some((ln, line)) = input_splitter.next() {
                 let l = line?;
-                if regex.is_match(&l) {
+                if regex.is_match(line_for_match(&l)) {
                     if input_splitter.csplit_buffer_len() < f_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                     }
                     for line in input_splitter.csplit_shrink_buffer_to_size() {
-                        self.writeln(&line)?;
+                        self.write_line(&line)?;
                     }
                     input_splitter.csplit_set_size_of_buffer(f_usize + 1);
                     assert!(
@@ -519,11 +524,11 @@ impl SplitWriter<'_> {
                     return Ok(());
                 }
                 if let Some(line) = input_splitter.csplit_add_line_to_buffer(ln, l) {
-                    self.writeln(&line)?;
+                    self.write_line(&line)?;
                 }
             }
             for line in input_splitter.csplit_drain_buffer() {
-                self.writeln(&line)?;
+                self.write_line(&line)?;
             }
         }
 
@@ -536,7 +541,7 @@ impl SplitWriter<'_> {
 /// This is used to pass matching lines to the next split and to support patterns with a negative offset.
 struct InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, io::Result<Vec<u8>>)>,
 {
     iter: I,
     buffer: Vec<<I as Iterator>::Item>,
@@ -549,7 +554,7 @@ where
 
 impl<I> InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, io::Result<Vec<u8>>)>,
 {
     fn new(iter: I) -> Self {
         Self {
@@ -567,7 +572,7 @@ where
 
     /// Shrink the buffer so that its length is equal to the set size, returning an iterator for
     /// the elements that were too much.
-    fn csplit_shrink_buffer_to_size(&mut self) -> impl Iterator<Item = String> + '_ {
+    fn csplit_shrink_buffer_to_size(&mut self) -> impl Iterator<Item = Vec<u8>> + '_ {
         let shrink_offset = if self.buffer.len() > self.size {
             self.buffer.len() - self.size
         } else {
@@ -579,7 +584,7 @@ where
     }
 
     /// Drain the content of the buffer.
-    fn csplit_drain_buffer(&mut self) -> impl Iterator<Item = String> + '_ {
+    fn csplit_drain_buffer(&mut self) -> impl Iterator<Item = Vec<u8>> + '_ {
         self.buffer.drain(..).map(|(_, line)| line.unwrap())
     }
 
@@ -591,7 +596,7 @@ where
     /// Add a line to the buffer. If the buffer has [`self.size`] elements, then its head is removed and
     /// the new line is pushed to the buffer. The removed head is then available in the returned
     /// option.
-    fn csplit_add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {
+    fn csplit_add_line_to_buffer(&mut self, ln: usize, line: Vec<u8>) -> Option<Vec<u8>> {
         if self.rewind {
             self.buffer.insert(0, (ln, Ok(line)));
             None
@@ -613,7 +618,7 @@ where
 
 impl<I> Iterator for InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, io::Result<Vec<u8>>)>,
 {
     type Item = <I as Iterator>::Item;
 
@@ -5383,10 +5388,10 @@ mod tests {
         #[allow(clippy::cognitive_complexity)]
         fn input_splitter() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5395,7 +5400,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5404,7 +5409,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 2);
                 }
@@ -5413,10 +5418,10 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(
                         input_splitter.csplit_add_line_to_buffer(2, line),
-                        Some(String::from("aaa"))
+                        Some(Vec::from("aaa"))
                     );
                     assert_eq!(input_splitter.csplit_buffer_len(), 2);
                 }
@@ -5427,7 +5432,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5435,7 +5440,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5443,7 +5448,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((3, Ok(line))) => {
-                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(line, Vec::from("ddd"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5455,10 +5460,10 @@ mod tests {
         #[test]
         fn test_input_splitter_initialization_and_buffer_setting() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5469,16 +5474,16 @@ mod tests {
         #[test]
         fn test_input_splitter_next_for_first_items() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5489,17 +5494,17 @@ mod tests {
         #[test]
         fn test_input_splitter_next_for_two_items() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
             input_splitter.next();
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5510,10 +5515,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_for_third_item_and_buffer_overflow() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5523,7 +5528,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(2, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5534,10 +5539,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_after_rewind_buffer_and_remaining_items() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5549,7 +5554,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
                 _item => {
@@ -5559,7 +5564,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 _item => {
@@ -5569,7 +5574,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((3, Ok(line))) => {
-                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(line, Vec::from("ddd"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 // item => panic!("wrong item: {item:?}"),
@@ -5585,10 +5590,10 @@ mod tests {
         #[allow(clippy::cognitive_complexity)]
         fn input_splitter_interrupt_rewind() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5597,7 +5602,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5606,7 +5611,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 2);
                 }
@@ -5615,7 +5620,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(2, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 3);
                 }
@@ -5626,7 +5631,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 3);
                 }
@@ -5635,7 +5640,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 2);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5643,7 +5648,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5651,7 +5656,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5659,7 +5664,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((3, Ok(line))) => {
-                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(line, Vec::from("ddd"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 item => panic!("wrong item: {item:?}"),
@@ -5671,10 +5676,10 @@ mod tests {
         #[test]
         fn test_input_signal_splitter_initialization_and_buffer_setting() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5684,16 +5689,16 @@ mod tests {
         #[test]
         fn test_input_splitter_next_and_add_line_to_buffer_for_first_item() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5706,10 +5711,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_and_add_line_to_buffer_for_second_item() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5718,7 +5723,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((1, Ok(line))) => {
-                    assert_eq!(line, String::from("bbb"));
+                    assert_eq!(line, Vec::from("bbb"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(1, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5731,10 +5736,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_and_add_line_to_buffer_for_third_item() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5744,7 +5749,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((2, Ok(line))) => {
-                    assert_eq!(line, String::from("ccc"));
+                    assert_eq!(line, Vec::from("ccc"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(2, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 1);
                 }
@@ -5757,10 +5762,10 @@ mod tests {
         #[test]
         fn test_input_splitter_rewind_buffer() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5776,10 +5781,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_and_add_line_to_buffer_after_rewind_for_first_item() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5791,7 +5796,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_add_line_to_buffer(0, line), None);
                     assert_eq!(input_splitter.csplit_buffer_len(), 3);
                 }
@@ -5804,10 +5809,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_for_first_item_again_after_rewind_and_add_line_to_buffer() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5817,11 +5822,11 @@ mod tests {
             input_splitter.next();
             input_splitter.csplit_rewind_buffer();
             input_splitter.next();
-            input_splitter.csplit_add_line_to_buffer(0, String::from("aaa"));
+            input_splitter.csplit_add_line_to_buffer(0, Vec::from("aaa"));
 
             match input_splitter.next() {
                 Some((0, Ok(line))) => {
-                    assert_eq!(line, String::from("aaa"));
+                    assert_eq!(line, Vec::from("aaa"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 2);
                 }
                 // item => panic!("wrong item: {item:?}"),
@@ -5833,10 +5838,10 @@ mod tests {
         #[test]
         fn test_input_splitter_next_for_remaining_items_after_rewind_and_multiple_next_calls() {
             let input = vec![
-                Ok(String::from("aaa")),
-                Ok(String::from("bbb")),
-                Ok(String::from("ccc")),
-                Ok(String::from("ddd")),
+                Ok(Vec::from("aaa")),
+                Ok(Vec::from("bbb")),
+                Ok(Vec::from("ccc")),
+                Ok(Vec::from("ddd")),
             ];
             let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
 
@@ -5851,7 +5856,7 @@ mod tests {
 
             match input_splitter.next() {
                 Some((3, Ok(line))) => {
-                    assert_eq!(line, String::from("ddd"));
+                    assert_eq!(line, Vec::from("ddd"));
                     assert_eq!(input_splitter.csplit_buffer_len(), 0);
                 }
                 // item => panic!("wrong item: {item:?}"),
@@ -9605,7 +9610,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -9666,7 +9672,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -9726,7 +9733,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -9785,7 +9793,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -9844,7 +9853,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -9903,7 +9913,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -9962,7 +9973,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10021,7 +10033,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10080,7 +10093,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10139,7 +10153,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10198,7 +10213,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10257,7 +10273,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10316,7 +10333,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10375,7 +10393,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10434,7 +10453,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10494,7 +10514,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10553,7 +10574,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10612,7 +10634,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10671,7 +10694,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10730,7 +10754,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10789,7 +10814,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10848,7 +10874,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10907,7 +10934,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -10966,7 +10994,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11025,7 +11054,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11084,7 +11114,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11143,7 +11174,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11202,7 +11234,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11261,7 +11294,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11320,7 +11354,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11379,7 +11414,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11438,7 +11474,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11497,7 +11534,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11556,7 +11594,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11615,7 +11654,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11674,7 +11714,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11733,7 +11774,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11792,7 +11834,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11851,7 +11894,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11910,7 +11954,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -11969,7 +12014,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12028,7 +12074,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12093,7 +12140,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12158,7 +12206,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12223,7 +12272,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12289,7 +12339,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12354,7 +12405,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12420,7 +12472,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12485,7 +12538,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12544,7 +12598,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12602,7 +12657,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12666,7 +12722,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12731,7 +12788,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12796,7 +12854,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12855,7 +12914,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12914,7 +12974,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -12973,7 +13034,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13032,7 +13094,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13091,7 +13154,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13150,7 +13214,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13209,7 +13274,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13268,7 +13334,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13327,7 +13394,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();
@@ -13391,7 +13459,8 @@ mod tests {
                 eprintln!("not a regular file");
             }
 
-            let mut input_iter = InputSplitter::new(BufReader::new(binding).lines().enumerate());
+            let mut input_iter =
+                InputSplitter::new(ct_lines::lines(BufReader::new(binding), b'\n').enumerate());
             let mut split_writer = SplitWriter::new(&options);
             let patterns: Vec<patterns::CsplitPattern> =
                 patterns::get_patterns(&patterns[..]).unwrap();

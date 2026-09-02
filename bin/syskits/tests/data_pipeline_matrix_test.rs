@@ -1440,6 +1440,32 @@ fn data_ptx_classic_format_matches_direct_ptx() {
 }
 
 #[test]
+fn data_cut_allows_empty_output_delimiter_long_flag_value() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("cut.txt");
+    fs::write(&input, "Lf8e\n").expect("write cut fixture");
+    let input = input.display().to_string();
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["cut", "-c1-2,3-4", "--output-delimiter=", &input])
+        .output()
+        .expect("run direct syskits cut empty output delimiter");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=classic",
+            &format!("cut -c1-2,3-4 --output-delimiter= {input}"),
+        ])
+        .output()
+        .expect("run syskits data cut empty output delimiter");
+
+    assert_eq!(out.status.code(), expected.status.code());
+    assert_eq!(out.stdout, expected.stdout);
+    assert_eq!(out.stderr, expected.stderr);
+}
+
+#[test]
 fn data_ptx_classic_stdin_matches_direct_ptx() {
     let stdin = b"alpha beta gamma\n";
 

@@ -203,7 +203,11 @@ impl Parser {
             _ => unreachable!(),
         };
         let value_span = st.span.clone();
-        let value = parse_lit_fragment(&value, &value_span)?;
+        let value = if value.is_empty() {
+            Lit::String(String::new())
+        } else {
+            parse_lit_fragment(&value, &value_span)?
+        };
         Ok(Arg::LongFlagValue {
             name: flag_name,
             value,
@@ -474,6 +478,20 @@ mod tests {
                 value: Lit::Ident(value),
                 ..
             } if name == "to" && value == "si"
+        ));
+    }
+
+    #[test]
+    fn test_parse_long_flag_equals_empty_value() {
+        let expr = parse("cut --output-delimiter=");
+        let args = &expr.stages()[0].args;
+        assert!(matches!(
+            &args[0],
+            Arg::LongFlagValue {
+                name,
+                value: Lit::String(value),
+                ..
+            } if name == "output-delimiter" && value.is_empty()
         ));
     }
 

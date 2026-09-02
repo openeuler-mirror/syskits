@@ -1929,6 +1929,32 @@ mod tests {
     }
 
     #[test]
+    fn test_build_data_call_unknown_gnu_empty_long_flag_value_preserves_argv_string() {
+        let call = parse_single_call("cut -c1-2,3-4 --output-delimiter= input.txt");
+        let sig = DataSignature::new("cut", "cut")
+            .rest(CtPositionalArg::optional(
+                "arg",
+                "GNU-compatible args",
+                CtType::Any,
+            ))
+            .allow_unknown_args(true);
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        assert_eq!(
+            data_call
+                .positionals
+                .iter()
+                .map(|arg| &arg.value)
+                .collect::<Vec<_>>(),
+            vec![
+                &CtValue::String("-c1-2,3-4".into()),
+                &CtValue::String("--output-delimiter=".into()),
+                &CtValue::String("input.txt".into())
+            ]
+        );
+    }
+
+    #[test]
     fn test_build_data_call_unknown_gnu_comparison_args_preserve_argv_strings() {
         let call = parse_single_call("expr 2 < 3");
         let sig = DataSignature::new("expr", "expr")

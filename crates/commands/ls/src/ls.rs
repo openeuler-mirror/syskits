@@ -10,7 +10,6 @@
  */
 
 extern crate rust_i18n;
-use std::cmp::Reverse;
 use std::os::unix::ffi::OsStrExt;
 
 #[cfg(unix)]
@@ -1529,7 +1528,12 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
     if config.sort == LsSort::Name {
         rows.sort_by(|a, b| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false));
     } else if config.sort == LsSort::Size {
-        rows.sort_by_key(|row| Reverse(row.size.unwrap_or(0)));
+        rows.sort_by(|a, b| {
+            b.size
+                .unwrap_or(0)
+                .cmp(&a.size.unwrap_or(0))
+                .then_with(|| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false))
+        });
     } else if config.sort == LsSort::Time {
         rows.sort_by(|a, b| {
             b.modified_unix_seconds
@@ -2572,7 +2576,14 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
             })
         })
     } else if config.sort == LsSort::Size {
-        entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)))
+        entries.sort_by(|a, b| {
+            let a_size = a.get_metadata(out).map(|md| md.len()).unwrap_or(0);
+            let b_size = b.get_metadata(out).map(|md| md.len()).unwrap_or(0);
+
+            b_size.cmp(&a_size).then_with(|| {
+                strcoll_compare(a.display_name.as_bytes(), b.display_name.as_bytes(), false)
+            })
+        })
     } else if config.sort == LsSort::Name {
         entries.sort_by(|a, b| {
             strcoll_compare(a.display_name.as_bytes(), b.display_name.as_bytes(), false)

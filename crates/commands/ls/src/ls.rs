@@ -3201,7 +3201,7 @@ fn grid_required_width(widths: &[usize]) -> usize {
 fn grid_columns_that_fit(cells: &[Cell], width: usize, direction: Direction) -> usize {
     for columns in (1..=cells.len()).rev() {
         let widths = grid_column_widths(cells, columns, direction);
-        if grid_required_width(&widths) < width {
+        if grid_required_width(&widths) <= width {
             return columns;
         }
     }
@@ -4588,12 +4588,30 @@ mod tests {
             },
         ];
 
-        assert_eq!(grid_columns_that_fit(&cells, 26, Direction::TopToBottom), 2);
+        assert_eq!(grid_columns_that_fit(&cells, 25, Direction::TopToBottom), 2);
+        assert_eq!(grid_columns_that_fit(&cells, 26, Direction::TopToBottom), 3);
         assert_eq!(grid_columns_that_fit(&cells, 27, Direction::TopToBottom), 3);
         assert_eq!(
             render_grid(&cells, 27, Direction::TopToBottom),
             "aaaaaaaaaa  cc  ee\nbb          dd  ffffffffff\n"
         );
+    }
+
+    #[test]
+    fn grid_exact_terminal_width_still_fits() {
+        let cells = [
+            Cell {
+                contents: "a".into(),
+                width: 1,
+            },
+            Cell {
+                contents: "b".into(),
+                width: 1,
+            },
+        ];
+
+        assert_eq!(grid_columns_that_fit(&cells, 4, Direction::LeftToRight), 2);
+        assert_eq!(render_grid(&cells, 4, Direction::LeftToRight), "a  b\n");
     }
 
     #[test]

@@ -54,35 +54,93 @@ fn render_table_row(
     aligns: &[ColAlign],
     header_row: bool,
 ) -> String {
-    let mut s = String::new();
     let use_color = use_color_output();
-    s.push('|');
+    let mut wrapped_cells: Vec<Vec<String>> = Vec::with_capacity(widths.len());
     for (idx, width) in widths.iter().enumerate() {
         let cell = cells.get(idx).map(String::as_str).unwrap_or("");
         let normalized = normalize_table_cell(cell);
         let expanded = expand_tabs(&normalized, TABLE_TAB_WIDTH);
-        let mut clipped = clip_with_ellipsis(&expanded, *width);
+        let mut lines = wrap_table_cell(&expanded, *width);
         if use_color && header_row {
-            clipped = Style::new()
-                .fg(Color::Cyan)
-                .bold()
-                .paint(clipped)
-                .to_string();
+            lines = lines
+                .into_iter()
+                .map(|line| Style::new().fg(Color::Cyan).bold().paint(line).to_string())
+                .collect();
         }
-        let cell_len = stripped_width(&clipped);
-        let padding = width.saturating_sub(cell_len);
-        s.push(' ');
-        if aligns.get(idx) == Some(&ColAlign::Right) {
-            s.push_str(&" ".repeat(padding));
-            s.push_str(&clipped);
-            s.push(' ');
-        } else {
-            s.push_str(&clipped);
-            s.push_str(&" ".repeat(padding + 1));
+        wrapped_cells.push(lines);
+    }
+
+    let row_height = wrapped_cells.iter().map(Vec::len).max().unwrap_or(1).max(1);
+
+    let mut rows = Vec::with_capacity(row_height);
+    for line_idx in 0..row_height {
+        let mut s = String::new();
+        for (idx, width) in widths.iter().enumerate() {
+            let cell_line = wrapped_cells
+                .get(idx)
+                .and_then(|lines| lines.get(line_idx))
+                .map(String::as_str)
+                .unwrap_or("");
+            push_padded_cell(&mut s, cell_line, *width, aligns.get(idx).copied());
         }
         s.push('|');
+        rows.push(s);
     }
-    s
+    rows.join("\n")
+}
+
+fn push_padded_cell(s: &mut String, cell: &str, width: usize, align: Option<ColAlign>) {
+    let cell_len = stripped_width(cell);
+    let padding = width.saturating_sub(cell_len);
+    s.push('|');
+    s.push(' ');
+    if align == Some(ColAlign::Right) {
+        s.push_str(&" ".repeat(padding));
+        s.push_str(cell);
+        s.push(' ');
+    } else {
+        s.push_str(cell);
+        s.push_str(&" ".repeat(padding + 1));
+    }
+}
+
+fn wrap_table_cell(s: &str, width: usize) -> Vec<String> {
+    if s.is_empty() {
+        return vec![String::new()];
+    }
+    if width == 0 {
+        return vec![String::new()];
+    }
+
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut current_width = 0usize;
+
+    for ch in s.chars() {
+        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if ch_width > width {
+            if !current.is_empty() {
+                lines.push(std::mem::take(&mut current));
+                current_width = 0;
+            }
+            lines.push(ch.to_string());
+            continue;
+        }
+        if current_width > 0 && current_width + ch_width > width {
+            lines.push(std::mem::take(&mut current));
+            current_width = 0;
+        }
+        current.push(ch);
+        current_width += ch_width;
+    }
+
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
 }
 
 fn normalize_table_cell(s: &str) -> String {
@@ -159,6 +217,7 @@ fn expand_tabs(s: &str, tab_width: usize) -> String {
     out
 }
 
+#[cfg(test)]
 pub(crate) fn clip_with_ellipsis(s: &str, width: usize) -> String {
     if stripped_width(s) <= width {
         return s.to_string();
@@ -249,7 +308,10 @@ fn resolve_pager_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{ColAlign, expand_tabs, normalize_table_cell, render_ascii_table, stripped_width};
+    use super::{
+        ColAlign, expand_tabs, normalize_table_cell, render_ascii_table, render_table_row,
+        stripped_width, wrap_table_cell,
+    };
 
     #[test]
     fn stripped_width_counts_tabs_by_tab_stop() {
@@ -295,6 +357,40 @@ mod tests {
         assert_eq!(lines.len(), 3);
         assert!(lines[2].contains("a b"));
         assert!(!lines[2].contains('\n'));
+    }
+
+    #[test]
+    fn wrap_table_cell_wraps_long_plain_text() {
+        assert_eq!(
+            wrap_table_cell("abcdefghijklmnopqrstuvwxyz", 8),
+            vec!["abcdefgh", "ijklmnop", "qrstuvwx", "yz"]
+        );
+    }
+
+    #[test]
+    fn wrap_table_cell_respects_wide_char_width() {
+        assert_eq!(wrap_table_cell("中文测试abc", 6), vec!["中文测", "试abc"]);
+    }
+
+    #[test]
+    fn render_ascii_table_wraps_long_cells_without_ellipsis() {
+        let row = render_table_row(
+            &["x".into(), "abcdefghijklmnopqrstuvwxyz".into()],
+            &[1, 8],
+            &[ColAlign::Left, ColAlign::Left],
+            false,
+        );
+
+        let lines = row.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("abcdefgh"));
+        assert!(lines[1].contains("ijklmnop"));
+        assert!(lines[2].contains("qrstuvwx"));
+        assert!(lines[3].contains("yz"));
+        assert!(!row.contains("..."));
+        for line in lines {
+            assert_eq!(stripped_width(line), stripped_width("| x | abcdefgh |"));
+        }
     }
 }
 

@@ -82,8 +82,17 @@ impl Parser {
 
         let mut args = Vec::new();
 
-        // where 命令优先解析逻辑条件表达式
-        if name == "where" && !matches!(self.peek_token(), Token::Eof | Token::Pipe) {
+        // where 命令优先解析逻辑条件表达式，但保留 --help/--version 等元操作为普通 flag。
+        if name == "where"
+            && !matches!(
+                self.peek_token(),
+                Token::Eof
+                    | Token::Pipe
+                    | Token::LongFlag(_)
+                    | Token::LongFlagValue(_, _)
+                    | Token::ShortFlag(_)
+            )
+        {
             args.push(self.parse_where_expr()?);
             return Ok(Call {
                 name,
@@ -623,6 +632,22 @@ mod tests {
             Arg::Comparison { field, op: CompOp::Ge, rhs: Lit::Int(18), .. }
             if field == "$it.user.age"
         ));
+    }
+
+    #[test]
+    fn test_parse_where_help_as_flag() {
+        let expr = parse("where --help");
+        let args = &expr.stages()[0].args;
+        assert_eq!(args.len(), 1);
+        assert!(matches!(&args[0], Arg::LongFlag { name, .. } if name == "help"));
+    }
+
+    #[test]
+    fn test_parse_where_version_as_flag() {
+        let expr = parse("where --version");
+        let args = &expr.stages()[0].args;
+        assert_eq!(args.len(), 1);
+        assert!(matches!(&args[0], Arg::LongFlag { name, .. } if name == "version"));
     }
 
     #[test]

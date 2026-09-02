@@ -9,10 +9,25 @@ use ctengine::command::DataCommand;
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 
 #[derive(Default)]
 pub struct CmdGet;
+
+const GET_HELP: &str = r#"syskits data get
+
+This is the syskits structured data pipeline get command.
+It extracts a field value from a structured Record input.
+
+Usage:
+  get <field>
+  get --help
+  get --version
+
+Examples:
+  whoami | get username
+  from json '{"name":"alice","age":30}' | get name
+"#;
 
 impl DataCommand for CmdGet {
     fn signature(&self) -> DataSignature {
@@ -21,6 +36,16 @@ impl DataCommand for CmdGet {
                 "field",
                 "field name to extract",
                 CtType::String,
+            ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data get",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data get version",
             ))
             .input(CtType::Record)
             .output(CtType::Any)
@@ -32,6 +57,16 @@ impl DataCommand for CmdGet {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(GET_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data get {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let field: String = call
             .req::<String>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("get: {e}")))?;
@@ -58,6 +93,20 @@ impl DataCommand for CmdGet {
             )),
         }
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("get".into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn type_name_of(v: &CtValue) -> &'static str {
@@ -90,6 +139,11 @@ mod tests {
         let mut c = DataCall::empty();
         c.positionals
             .push(ctsig::BoundArg::new(CtValue::String(f.to_string()), None));
+        c
+    }
+    fn flag_call(name: &str) -> DataCall {
+        let mut c = DataCall::named("get");
+        c.flags.insert(name.to_string(), None);
         c
     }
     fn rec(fields: Vec<(&str, CtValue)>) -> CtPipelineData {
@@ -145,5 +199,29 @@ mod tests {
             .run(&field_call("f"), CtPipelineData::Empty, &ctx())
             .unwrap_err();
         assert!(e.to_string().contains("empty input"));
+    }
+
+    #[test]
+    fn test_get_help_output() {
+        let out = CmdGet
+            .run(&flag_call("help"), CtPipelineData::Empty, &ctx())
+            .expect("help should not require input");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected help text");
+        };
+        assert!(text.contains("syskits structured data pipeline get command"));
+        assert_eq!(meta.exit_code, 0);
+    }
+
+    #[test]
+    fn test_get_version_output() {
+        let out = CmdGet
+            .run(&flag_call("version"), CtPipelineData::Empty, &ctx())
+            .expect("version should not require input");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected version text");
+        };
+        assert!(text.starts_with("syskits data get "));
+        assert_eq!(meta.exit_code, 0);
     }
 }

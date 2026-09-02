@@ -295,7 +295,10 @@ fn eval_call(
 
     if let Some(cmd) = ctx.registry.get(&call.name) {
         let sig = cmd.signature();
+        let data_call = build_data_call(call, Some(&sig))?;
+        let is_meta_action = is_declared_data_meta_action(&data_call, &sig);
         if let Some(expected) = sig.input_type
+            && !is_meta_action
             && !pipeline_data_matches_type(&input, expected)
         {
             return Err(CtDiagnosticError::with_span(
@@ -308,8 +311,7 @@ fn eval_call(
                 call.span.clone(),
             ));
         }
-        let data_call = build_data_call(call, Some(&sig))?;
-        validate_data_call_against_signature(call, &data_call, &sig)?;
+        validate_data_call_against_signature(call, &data_call, &sig, is_meta_action)?;
         let core = DataAdapter::new(cmd.as_ref());
         let out = CommandRunner::run(&core, &data_call, input, ctx)?;
         if let Some(expected) = sig.output_type
@@ -332,7 +334,8 @@ fn eval_call(
         if let Some(cmd) = registry.get_command(&call.name) {
             let sig = cmd.signature();
             let data_call = build_data_call(call, Some(&sig))?;
-            validate_data_call_against_signature(call, &data_call, &sig)?;
+            let is_meta_action = is_declared_data_meta_action(&data_call, &sig);
+            validate_data_call_against_signature(call, &data_call, &sig, is_meta_action)?;
             return cmd.run(&data_call, input, ctx);
         }
     }
@@ -583,7 +586,8 @@ fn build_data_call(
                 positionals.push(BoundArg::new(value, Some(span.clone())));
             }
             Arg::LongFlag { name, span } => {
-                if (is_run_external && !is_run_external_control_flag(name))
+                if (is_run_external
+                    && should_treat_run_external_long_flag_as_external(name, &positionals))
                     || sig.is_some_and(|sig| sig.allows_unknown() && !signature_has_flag(sig, name))
                 {
                     positionals.push(BoundArg::new(
@@ -613,7 +617,9 @@ fn build_data_call(
                 value_span,
                 span,
             } => {
-                if is_run_external && !is_run_external_control_flag(name) {
+                if is_run_external
+                    && should_treat_run_external_long_flag_as_external(name, &positionals)
+                {
                     positionals.push(BoundArg::new(
                         CtValue::String(format!("--{name}")),
                         Some(span.clone()),
@@ -648,7 +654,8 @@ fn build_data_call(
                 }
             }
             Arg::ShortFlag { name, span } => {
-                if is_run_external
+                if (is_run_external
+                    && should_treat_run_external_short_flag_as_external(*name, &positionals))
                     || sig.is_some_and(|sig| {
                         sig.allows_unknown() && !signature_has_flag(sig, &name.to_string())
                     })
@@ -745,6 +752,7 @@ fn validate_data_call_against_signature(
     call: &Call,
     data_call: &DataCall,
     sig: &DataSignature,
+    allow_missing_positionals: bool,
 ) -> Result<(), CtDiagnosticError> {
     if !sig.allows_unknown() {
         for flag_name in data_call.flags.keys() {
@@ -763,7 +771,7 @@ fn validate_data_call_against_signature(
     let optional = sig.optional_positionals().len();
     let actual = data_call.positionals.len();
 
-    if actual < required {
+    if actual < required && !allow_missing_positionals {
         let missing_name = sig
             .required_positionals()
             .get(actual)
@@ -796,6 +804,24 @@ fn validate_data_call_against_signature(
     }
 
     Ok(())
+}
+
+fn is_declared_data_meta_action(data_call: &DataCall, sig: &DataSignature) -> bool {
+    (data_call.has_flag("help") && signature_has_flag(sig, "help"))
+        || (data_call.has_flag("version") && signature_has_flag(sig, "version"))
+        || (data_call.has_flag("h")
+            && sig
+                .flags
+                .iter()
+                .any(|flag| flag.long == "help" && flag.short == Some('h')))
+}
+
+fn should_treat_run_external_long_flag_as_external(name: &str, positionals: &[BoundArg]) -> bool {
+    !is_run_external_data_flag(name) || (is_run_external_meta_flag(name) && !positionals.is_empty())
+}
+
+fn should_treat_run_external_short_flag_as_external(name: char, positionals: &[BoundArg]) -> bool {
+    name != 'h' || !positionals.is_empty()
 }
 
 fn render_flag_name(name: &str) -> String {
@@ -844,6 +870,14 @@ fn is_run_external_control_flag(name: &str) -> bool {
         name,
         "stderr-mode" | "stdin-mode" | "exit-policy" | "timeout-ms"
     )
+}
+
+fn is_run_external_meta_flag(name: &str) -> bool {
+    matches!(name, "help" | "version")
+}
+
+fn is_run_external_data_flag(name: &str) -> bool {
+    is_run_external_control_flag(name) || is_run_external_meta_flag(name)
 }
 
 /// 将 AST 字面量转为 CtValue
@@ -1835,6 +1869,8 @@ mod tests {
                 "stderr mode",
                 CtType::String,
             ))
+            .flag(CtFlag::switch("help", Some('h'), "help"))
+            .flag(CtFlag::switch("version", None, "version"))
     }
 
     #[test]
@@ -1852,6 +1888,32 @@ mod tests {
             positionals,
             vec!["echo", "-n", "hi", "--stdout-mode", "text"]
         );
+    }
+
+    #[test]
+    fn test_build_data_call_run_external_top_level_help_is_meta_flag() {
+        let call = parse_single_call("run-external --help");
+        let sig = run_external_signature();
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        assert!(data_call.has_flag("help"));
+        assert!(data_call.positionals.is_empty());
+        assert!(is_declared_data_meta_action(&data_call, &sig));
+    }
+
+    #[test]
+    fn test_build_data_call_run_external_passes_post_command_help_to_external() {
+        let call = parse_single_call("run-external echo --help");
+        let sig = run_external_signature();
+        let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
+
+        assert!(!data_call.has_flag("help"));
+        let positionals: Vec<String> = data_call
+            .positionals
+            .iter()
+            .map(|arg| arg.value.to_text())
+            .collect();
+        assert_eq!(positionals, vec!["echo", "--help"]);
     }
 
     #[test]
@@ -2037,8 +2099,8 @@ mod tests {
             ))
             .flag(CtFlag::switch("help", Some('h'), "help"));
         let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
-        let err =
-            validate_data_call_against_signature(&call, &data_call, &sig).expect_err("must fail");
+        let err = validate_data_call_against_signature(&call, &data_call, &sig, false)
+            .expect_err("must fail");
         assert_eq!(err.code, crate::execution::exit_code::USAGE_ERROR);
         assert!(err.to_string().contains("unknown flag"));
     }
@@ -2058,8 +2120,8 @@ mod tests {
                 CtType::String,
             ));
         let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
-        let err =
-            validate_data_call_against_signature(&call, &data_call, &sig).expect_err("must fail");
+        let err = validate_data_call_against_signature(&call, &data_call, &sig, false)
+            .expect_err("must fail");
         assert_eq!(err.code, crate::execution::exit_code::USAGE_ERROR);
         assert!(err.to_string().contains("unexpected positional argument"));
     }
@@ -2071,7 +2133,7 @@ mod tests {
             .positional(CtPositionalArg::required("cmd", "command", CtType::String))
             .rest(CtPositionalArg::optional("args", "args", CtType::String));
         let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
-        validate_data_call_against_signature(&call, &data_call, &sig).expect("must pass");
+        validate_data_call_against_signature(&call, &data_call, &sig, false).expect("must pass");
     }
 
     struct BrokenReader;

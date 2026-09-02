@@ -293,6 +293,39 @@ fn data_phase_b_gnu_flags_match_direct_classic_output() {
 }
 
 #[test]
+fn data_whoami_json_is_username_record() {
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .arg("whoami")
+        .output()
+        .expect("run direct syskits whoami");
+    assert!(
+        expected.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&expected.stderr)
+    );
+    let expected_username = String::from_utf8_lossy(&expected.stdout)
+        .trim_end_matches(['\r', '\n'])
+        .to_string();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", "whoami"])
+        .output()
+        .expect("run syskits data whoami json");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.trim_start().starts_with('{'), "stdout: {stdout:?}");
+    assert!(
+        stdout.contains(&format!("\"username\":\"{expected_username}\"")),
+        "stdout: {stdout:?}"
+    );
+}
+
+#[test]
 fn direct_printf_warns_about_excess_arguments() {
     let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["printf", "we", "are", "ok."])

@@ -61,13 +61,20 @@ impl WhoamiCore {
             ct_whoami::whoami_exec().map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
         let username = username.to_string_lossy().into_owned();
         Ok(WhoamiOutput {
-            value: CtValue::String(username.clone()),
+            value: username_value(&username),
             classic_text: username,
             classic_append_newline: true,
             stderr_text: None,
             exit_code: 0,
         })
     }
+}
+
+fn username_value(username: &str) -> CtValue {
+    CtValue::Record(vec![(
+        "username".into(),
+        CtValue::String(username.to_string()),
+    )])
 }
 
 impl DataCommand for CmdWhoami {
@@ -103,5 +110,36 @@ impl DataCommand for CmdWhoami {
                 ..Default::default()
             },
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WhoamiIntent, username_value};
+    use ctpipeline::CtValue;
+    use ctsig::{BoundArg, DataCall};
+    use std::ffi::OsString;
+
+    #[test]
+    fn from_call_builds_argv_from_positionals() {
+        let call = DataCall {
+            positionals: vec![BoundArg::new(CtValue::String("--help".into()), None)],
+            ..DataCall::named("whoami")
+        };
+
+        let intent = WhoamiIntent::from_call(&call).expect("intent");
+
+        assert_eq!(
+            intent.argv,
+            vec![OsString::from("whoami"), OsString::from("--help")]
+        );
+    }
+
+    #[test]
+    fn username_value_renders_structured_record() {
+        assert_eq!(
+            username_value("root"),
+            CtValue::Record(vec![("username".into(), CtValue::String("root".into()))])
+        );
     }
 }

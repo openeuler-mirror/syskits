@@ -481,6 +481,29 @@ fn shell_entry_accepts_gnu_flags_like_data_entry() {
 }
 
 #[test]
+fn shell_multicall_binary_name_enters_data_shell_entry() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let shell_path = temp_dir.path().join("shell");
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_syskits"), &shell_path)
+        .expect("create shell symlink");
+    #[cfg(not(unix))]
+    fs::copy(env!("CARGO_BIN_EXE_syskits"), &shell_path).expect("copy shell binary");
+
+    let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["uname", "-m"])
+        .output()
+        .expect("run direct syskits uname -m");
+    let actual = Command::new(&shell_path)
+        .args(["format=classic", "uname", "-m"])
+        .output()
+        .expect("run shell multicall entry uname -m classic");
+
+    assert_same_process_output(&actual, &expected);
+}
+
+#[test]
 fn shell_direct_only_command_prefers_internal_tool_before_external_path() {
     let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["chroot", "--help"])

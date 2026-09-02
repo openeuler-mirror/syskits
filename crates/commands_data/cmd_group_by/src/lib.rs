@@ -10,11 +10,29 @@ use ctengine::compare::resolve_field_path;
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct CmdGroupBy;
+
+const GROUP_BY_HELP: &str = r#"syskits data group-by
+
+This is the syskits structured data pipeline group-by command.
+It groups List<Record> input by one or more field paths.
+
+Usage:
+  group-by <key> [keys...]
+  group-by --help
+  group-by --version
+
+Output:
+  List<Record{group: Record, rows: List<Record>}>
+
+Examples:
+  ps | group-by status
+  ps | group-by status name
+"#;
 
 impl DataCommand for CmdGroupBy {
     fn signature(&self) -> DataSignature {
@@ -29,6 +47,16 @@ impl DataCommand for CmdGroupBy {
                 "additional field paths to group by",
                 CtType::String,
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data group-by",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data group-by version",
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -39,6 +67,16 @@ impl DataCommand for CmdGroupBy {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(GROUP_BY_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data group-by {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let keys = call
             .rest::<String>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("group-by: {e}")))?;
@@ -102,6 +140,20 @@ impl DataCommand for CmdGroupBy {
             CtPipelineMetadata::default(),
         ))
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("group-by".into()),
+            ..Default::default()
+        },
+    )
 }
 
 struct GroupBucket {

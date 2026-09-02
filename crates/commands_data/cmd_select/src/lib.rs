@@ -9,11 +9,26 @@ use ctengine::command::DataCommand;
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct CmdSelect;
+
+const SELECT_HELP: &str = r#"syskits data select
+
+This is the syskits structured data pipeline select command.
+It projects fields from a Record or each Record in a List<Record>.
+
+Usage:
+  select <column> [columns...]
+  select --help
+  select --version
+
+Examples:
+  ps | select pid name cpu
+  whoami | select username
+"#;
 
 impl DataCommand for CmdSelect {
     fn signature(&self) -> DataSignature {
@@ -28,6 +43,16 @@ impl DataCommand for CmdSelect {
                 "additional column names to keep",
                 CtType::String,
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data select",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data select version",
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -38,6 +63,16 @@ impl DataCommand for CmdSelect {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(SELECT_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data select {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let cols: Vec<String> = call
             .rest::<String>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("select: {e}")))?;
@@ -70,6 +105,20 @@ impl DataCommand for CmdSelect {
             _ => Err(CtDiagnosticError::simple("select: expected Record or List")),
         }
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("select".into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn project(fields: Vec<(String, CtValue)>, cols: &[String]) -> Vec<(String, CtValue)> {

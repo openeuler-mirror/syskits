@@ -10,12 +10,28 @@ use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctengine::execution::{CommandCore, CommandRunner};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 
 #[derive(Default)]
 pub struct CmdHttp;
 
 struct HttpCore;
+
+const HTTP_HELP: &str = r#"syskits data http
+
+This is the syskits structured data pipeline http command.
+It performs a blocking structured HTTP request. The current implementation supports GET.
+
+Usage:
+  http <url>
+  http get <url>
+  http --help
+  http --version
+
+Examples:
+  http https://example.com
+  http get https://example.com/api/status
+"#;
 
 impl DataCommand for CmdHttp {
     fn signature(&self) -> DataSignature {
@@ -33,6 +49,16 @@ impl DataCommand for CmdHttp {
             "request url (required when method is provided)",
             CtType::String,
         ))
+        .flag(CtFlag::switch(
+            "help",
+            Some('h'),
+            "show help for syskits data http",
+        ))
+        .flag(CtFlag::switch(
+            "version",
+            None,
+            "show syskits data http version",
+        ))
         .input(CtType::Nothing)
         .output(CtType::Any)
     }
@@ -43,8 +69,32 @@ impl DataCommand for CmdHttp {
         input: CtPipelineData,
         ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(HTTP_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data http {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         CommandRunner::run(&HttpCore, call, input, ctx)
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("http".into()),
+            ..Default::default()
+        },
+    )
 }
 
 impl CommandCore for HttpCore {

@@ -222,6 +222,56 @@ fn data_pipeline_internal_help_and_version_for_get_where_run_external() {
     }
 }
 
+#[test]
+fn data_pipeline_internal_help_and_version_for_structural_commands() {
+    for cmd in [
+        "from",
+        "to",
+        "parse",
+        "select",
+        "sort-by",
+        "group-by",
+        "agg",
+        "assert",
+        "wait-until",
+        "retry",
+        "http",
+    ] {
+        let expr = format!("{cmd} --help");
+        let help = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args(["data", "format=classic", &expr])
+            .output()
+            .unwrap_or_else(|_| panic!("run syskits data {expr}"));
+        assert!(
+            help.status.success(),
+            "{expr} stderr: {}",
+            String::from_utf8_lossy(&help.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&help.stdout);
+        assert!(
+            stdout.starts_with(&format!("syskits data {cmd}")),
+            "{expr} stdout: {stdout:?}"
+        );
+        assert!(stdout.contains("Usage:"), "{expr} stdout: {stdout:?}");
+
+        let expr = format!("{cmd} --version");
+        let version = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args(["data", "format=classic", &expr])
+            .output()
+            .unwrap_or_else(|_| panic!("run syskits data {expr}"));
+        assert!(
+            version.status.success(),
+            "{expr} stderr: {}",
+            String::from_utf8_lossy(&version.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&version.stdout);
+        assert!(
+            stdout.starts_with(&format!("syskits data {cmd} ")),
+            "{expr} stdout: {stdout:?}"
+        );
+    }
+}
+
 fn split_chunks(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     let mut chunks = fs::read_dir(dir)
         .expect("read split output dir")

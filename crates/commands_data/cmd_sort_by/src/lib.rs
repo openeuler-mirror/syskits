@@ -16,6 +16,23 @@ use std::cmp::Ordering;
 #[derive(Default)]
 pub struct CmdSortBy;
 
+const SORT_BY_HELP: &str = r#"syskits data sort-by
+
+This is the syskits structured data pipeline sort-by command.
+It sorts List<Record> input by one or more field paths.
+
+Usage:
+  sort-by <key> [keys...]
+  sort-by --desc <key> [keys...]
+  sort-by --nulls-last <key> [keys...]
+  sort-by --help
+  sort-by --version
+
+Examples:
+  ps | sort-by cpu --desc
+  ps | sort-by status cpu --nulls-last
+"#;
+
 impl DataCommand for CmdSortBy {
     fn signature(&self) -> DataSignature {
         DataSignature::new("sort-by", "sort List<Record> by one or more field paths")
@@ -39,6 +56,16 @@ impl DataCommand for CmdSortBy {
                 None,
                 "place null/missing values at the end",
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data sort-by",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data sort-by version",
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -49,6 +76,16 @@ impl DataCommand for CmdSortBy {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(SORT_BY_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data sort-by {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let keys: Vec<String> = call
             .rest::<String>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("sort-by: {e}")))?;
@@ -85,6 +122,20 @@ impl DataCommand for CmdSortBy {
             CtPipelineMetadata::default(),
         ))
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("sort-by".into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn compare_records(

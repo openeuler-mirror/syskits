@@ -37,6 +37,11 @@ impl DataCommand for CmdTo {
                 "show help for `to` formats",
             ))
             .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data to version",
+            ))
+            .flag(CtFlag::switch(
                 "transpose",
                 None,
                 "for csv/ssv: serialize records as field-oriented data",
@@ -53,6 +58,12 @@ impl DataCommand for CmdTo {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         if call.has_flag("help") || call.has_flag("h") {
             return Ok(help_output());
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(
+                "to",
+                format!("syskits data to {}", env!("CARGO_PKG_VERSION")),
+            ));
         }
 
         let format = call
@@ -131,7 +142,10 @@ fn normalize_format(input: &str) -> Option<&'static str> {
 
 fn help_output() -> CtPipelineData {
     let help = [
-        "to: serialize structured data into text formats",
+        "syskits data to",
+        "",
+        "This is the syskits structured data pipeline to command.",
+        "It serializes structured data into text formats.",
         "",
         "Usage:",
         "  to <format>",
@@ -155,7 +169,21 @@ fn help_output() -> CtPipelineData {
         "  [{name:'alice',age:30}] | to ssv",
     ]
     .join("\n");
-    CtPipelineData::Value(CtValue::String(help), CtPipelineMetadata::default())
+    meta_text_output("to", help)
+}
+
+fn meta_text_output(source: &str, text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some(source.into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn to_jsonl(data: CtPipelineData) -> Result<String, CtDiagnosticError> {

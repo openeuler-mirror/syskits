@@ -639,7 +639,7 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         if settings.verbose {
             let pass_name = pass_name(&pass_type);
             ct_show_error!(
-                "{}: pass {:2}/{} ({})...",
+                "{}: pass {}/{} ({})...",
                 path.maybe_quote(),
                 i + 1,
                 total_passes,

@@ -199,7 +199,6 @@ mod tests {
         assert!(words.binary_search(&"trace".to_string()).is_ok());
         assert!(words.binary_search(&"ast".to_string()).is_ok());
         assert!(words.binary_search(&"cd".to_string()).is_ok());
-        assert!(words.binary_search(&"pwd".to_string()).is_ok());
         assert!(words.binary_search(&"format=auto".to_string()).is_ok());
         assert!(words.binary_search(&"format=text".to_string()).is_ok());
         assert!(words.binary_search(&"format=table".to_string()).is_ok());

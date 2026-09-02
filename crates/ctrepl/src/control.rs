@@ -92,13 +92,6 @@ pub(crate) fn handle_control_command(
             let _ = execute!(io::stdout(), Clear(ClearType::All), MoveTo(0, 0));
             ControlAction::Continue
         }
-        "pwd" => {
-            match env::current_dir() {
-                Ok(path) => println!("{}", path.display()),
-                Err(e) => eprintln!("pwd: {e}"),
-            }
-            ControlAction::Continue
-        }
         "history" => {
             if history.is_empty() {
                 println!("{}", texts.history_empty);

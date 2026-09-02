@@ -20,7 +20,7 @@ mod tests {
     use crate::config::{parse_history_persistence, texts_for_current_locale};
     use crate::control::{
         ControlAction, REPL_HISTORY_LINES_LIMIT, cd_target_from_input, handle_control_command,
-        push_history_line,
+        load_history_lines_from_file, push_history_line,
     };
     use crate::eval::{
         filter_precheck_diags_for_repl, filter_precheck_diags_for_repl_with_known_command,
@@ -263,6 +263,45 @@ mod tests {
         assert_eq!(history.len(), REPL_HISTORY_LINES_LIMIT);
         assert_eq!(history.front().map(String::as_str), Some("cmd-3"));
         assert_eq!(history.back().map(String::as_str), Some("cmd-502"));
+    }
+
+    #[test]
+    fn test_load_history_lines_from_file_missing_is_empty() {
+        let dir = unique_test_dir("missing-history");
+        std::fs::create_dir_all(&dir).expect("create tempdir");
+        let history = load_history_lines_from_file(&dir.join("missing-history"))
+            .expect("missing history is ok");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn test_load_history_lines_from_file_keeps_tail_capacity() {
+        let dir = unique_test_dir("tail-history");
+        std::fs::create_dir_all(&dir).expect("create tempdir");
+        let path = dir.join("history");
+        let content = (0..(REPL_HISTORY_LINES_LIMIT + 3))
+            .map(|idx| format!("cmd-{idx}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, content).expect("write history");
+
+        let history = load_history_lines_from_file(&path).expect("load history");
+        assert_eq!(history.len(), REPL_HISTORY_LINES_LIMIT);
+        assert_eq!(history.front().map(String::as_str), Some("cmd-3"));
+        assert_eq!(history.back().map(String::as_str), Some("cmd-502"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn unique_test_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "ctrepl-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time ok")
+                .as_nanos()
+        ))
     }
 
     #[test]

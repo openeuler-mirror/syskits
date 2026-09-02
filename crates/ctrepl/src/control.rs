@@ -3,8 +3,8 @@ use crate::eval::parse_pipeline_expr;
 use crossterm::{cursor::MoveTo, execute, terminal::Clear, terminal::ClearType};
 use std::collections::VecDeque;
 use std::env;
-use std::io;
-use std::path::PathBuf;
+use std::io::{self, BufRead};
+use std::path::{Path, PathBuf};
 
 pub(crate) const REPL_HISTORY_LINES_LIMIT: usize = 500;
 
@@ -142,4 +142,19 @@ pub(crate) fn push_history_line(history_lines: &mut VecDeque<String>, line: &str
         let _ = history_lines.pop_front();
     }
     history_lines.push_back(line.to_string());
+}
+
+pub(crate) fn load_history_lines_from_file(path: &Path) -> io::Result<VecDeque<String>> {
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(VecDeque::new()),
+        Err(err) => return Err(err),
+    };
+
+    let mut history = VecDeque::new();
+    for line in io::BufReader::new(file).lines() {
+        let line = line?;
+        push_history_line(&mut history, &line);
+    }
+    Ok(history)
 }

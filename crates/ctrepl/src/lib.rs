@@ -24,11 +24,12 @@ mod tests {
     };
     use crate::eval::{
         filter_precheck_diags_for_repl, filter_precheck_diags_for_repl_with_known_command,
-        has_precheck_error, parse_pipeline_expr,
+        has_precheck_error, parse_pipeline_expr, resolve_repl_line_format,
     };
     use crate::prompt::{
         ReplPrompt, build_completion_candidates, format_prompt_path, line_is_incomplete,
     };
+    use ctengine::OutputFormat;
     use reedline::Prompt;
     use std::collections::{HashMap, VecDeque};
     use std::path::PathBuf;
@@ -112,6 +113,57 @@ mod tests {
     }
 
     #[test]
+    fn test_repl_line_format_prefix_supports_public_formats() {
+        let cases = [
+            ("format=auto ls", OutputFormat::Auto, "ls"),
+            ("format=text ls", OutputFormat::Text, "ls"),
+            ("format=table ls", OutputFormat::Table, "ls"),
+            ("format=json ls", OutputFormat::Json, "ls"),
+            ("format=classic ls", OutputFormat::Classic, "ls"),
+        ];
+
+        for (line, expected_format, expected_expr) in cases {
+            let resolved = resolve_repl_line_format(line).expect("line format");
+            assert_eq!(resolved.profile.format, expected_format);
+            assert_eq!(resolved.expr_src, expected_expr);
+            assert!(resolved.profile.stdout_is_tty);
+            assert!(resolved.profile.use_pager);
+        }
+    }
+
+    #[test]
+    fn test_repl_line_format_prefix_supports_cli_flag_forms() {
+        let resolved = resolve_repl_line_format("--format json ls").expect("long flag");
+        assert_eq!(resolved.profile.format, OutputFormat::Json);
+        assert_eq!(resolved.expr_src, "ls");
+
+        let resolved = resolve_repl_line_format("--format=classic ls").expect("equals flag");
+        assert_eq!(resolved.profile.format, OutputFormat::Classic);
+        assert_eq!(resolved.expr_src, "ls");
+    }
+
+    #[test]
+    fn test_repl_line_format_prefix_last_override_wins() {
+        let resolved =
+            resolve_repl_line_format("format=json --format text format=classic ls").expect("line");
+        assert_eq!(resolved.profile.format, OutputFormat::Classic);
+        assert_eq!(resolved.expr_src, "ls");
+    }
+
+    #[test]
+    fn test_repl_line_format_rejects_unsupported_raw() {
+        let err = resolve_repl_line_format("format=raw ls").expect_err("raw unsupported");
+        assert_eq!(err, "unsupported format `raw`");
+    }
+
+    #[test]
+    fn test_repl_line_format_without_prefix_uses_repl_default() {
+        let resolved = resolve_repl_line_format("from json | to json").expect("default");
+        assert_eq!(resolved.profile.format, OutputFormat::Auto);
+        assert_eq!(resolved.expr_src, "from json | to json");
+    }
+
+    #[test]
     fn test_texts_for_locale_zh_and_en() {
         rust_i18n::set_locale("en-US");
         let en = texts_for_current_locale();
@@ -148,6 +200,11 @@ mod tests {
         assert!(words.binary_search(&"ast".to_string()).is_ok());
         assert!(words.binary_search(&"cd".to_string()).is_ok());
         assert!(words.binary_search(&"pwd".to_string()).is_ok());
+        assert!(words.binary_search(&"format=auto".to_string()).is_ok());
+        assert!(words.binary_search(&"format=text".to_string()).is_ok());
+        assert!(words.binary_search(&"format=table".to_string()).is_ok());
+        assert!(words.binary_search(&"format=json".to_string()).is_ok());
+        assert!(words.binary_search(&"format=classic".to_string()).is_ok());
         assert!(words.binary_search(&":history".to_string()).is_err());
         assert!(words.binary_search(&":trace".to_string()).is_err());
         assert!(words.binary_search(&":ast".to_string()).is_err());
@@ -182,9 +239,11 @@ mod tests {
     #[test]
     fn test_line_is_incomplete() {
         assert!(line_is_incomplete("from json |"));
+        assert!(line_is_incomplete("format=table from json |"));
         assert!(line_is_incomplete("run-external echo \"abc"));
         assert!(line_is_incomplete("from json '{\"a\":1"));
         assert!(!line_is_incomplete("from json '{\"a\":1}'"));
+        assert!(!line_is_incomplete("format=json from json '{\"a\":1}'"));
         assert!(!line_is_incomplete("from json | select name"));
     }
 

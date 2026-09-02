@@ -3,7 +3,8 @@ use crate::control::{ControlAction, handle_control_command, push_history_line};
 use crate::prompt::{ReplPrompt, build_completion_candidates, build_reedline_editor};
 use ctengine::context::{CommandRegistry, DataEngineContext};
 use ctengine::entry::eval_expr;
-use ctengine::interpreter::print_pipeline_data_repl_with_signal;
+use ctengine::execution::{OutputFormat, OutputProfile};
+use ctengine::interpreter::try_print_pipeline_data_with_profile_and_signal;
 use ctengine::legacy_adapter::LegacyToolResolver;
 use ctsig::DataSignature;
 use reedline::Signal;
@@ -13,6 +14,70 @@ use sys_locale::get_locale;
 
 pub(crate) fn parse_pipeline_expr(input: &str) -> Result<ctdsl::Expr, String> {
     ctdsl::parse(input).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReplLineFormat<'a> {
+    pub(crate) profile: OutputProfile,
+    pub(crate) expr_src: &'a str,
+}
+
+fn parse_repl_output_format(raw: &str) -> Result<OutputFormat, String> {
+    OutputFormat::parse(raw).ok_or_else(|| format!("unsupported format `{raw}`"))
+}
+
+pub(crate) fn resolve_repl_line_format(input: &str) -> Result<ReplLineFormat<'_>, String> {
+    let mut profile = OutputProfile::for_repl();
+    let mut rest = input.trim_start();
+
+    loop {
+        let Some((head, tail)) = next_repl_line_token(rest) else {
+            break;
+        };
+
+        if let Some(value) = head.strip_prefix("format=") {
+            profile.format = parse_repl_output_format(value)?;
+            rest = tail.trim_start();
+            continue;
+        }
+
+        if let Some(value) = head.strip_prefix("--format=") {
+            profile.format = parse_repl_output_format(value)?;
+            rest = tail.trim_start();
+            continue;
+        }
+
+        if head == "--format" {
+            let Some((value, after_value)) = next_repl_line_token(tail.trim_start()) else {
+                return Err("missing value after `--format`".into());
+            };
+            profile.format = parse_repl_output_format(value)?;
+            rest = after_value.trim_start();
+            continue;
+        }
+
+        break;
+    }
+
+    Ok(ReplLineFormat {
+        profile,
+        expr_src: rest,
+    })
+}
+
+fn next_repl_line_token(input: &str) -> Option<(&str, &str)> {
+    let trimmed = input.trim_start();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    for (idx, ch) in trimmed.char_indices() {
+        if ch.is_whitespace() {
+            return Some((&trimmed[..idx], &trimmed[idx..]));
+        }
+    }
+
+    Some((trimmed, ""))
 }
 
 fn print_precheck_diagnostics(
@@ -93,7 +158,7 @@ pub fn run_repl(
         path_depth: prompt_path_depth_from_env(),
     };
 
-    let ctx = DataEngineContext::new(registry, legacy_resolver, plugin_registry)
+    let mut ctx = DataEngineContext::new(registry, legacy_resolver, plugin_registry)
         .with_signal(ctengine::context::SignalHandle::register_sigint())
         .enable_trace();
     let mut debug_enabled = false;
@@ -119,7 +184,14 @@ pub fn run_repl(
                 }
 
                 ctx.clear_trace();
-                let expr = match parse_pipeline_expr(trimmed) {
+                let resolved = match resolve_repl_line_format(trimmed) {
+                    Ok(resolved) => resolved,
+                    Err(e) => {
+                        eprintln!("parse error: {e}");
+                        continue;
+                    }
+                };
+                let expr = match parse_pipeline_expr(resolved.expr_src) {
                     Ok(e) => e,
                     Err(e) => {
                         eprintln!("parse error: {e}");
@@ -141,12 +213,18 @@ pub fn run_repl(
                     }
                 }
 
+                let previous_output_format = ctx.output_format;
+                ctx.output_format = resolved.profile.format;
                 match eval_expr(&expr, &ctx) {
                     Ok(data) => {
                         if debug_enabled {
                             ctx.emit_trace_if_enabled();
                         }
-                        if let Err(e) = print_pipeline_data_repl_with_signal(data, &ctx.signal) {
+                        if let Err(e) = try_print_pipeline_data_with_profile_and_signal(
+                            data,
+                            &resolved.profile,
+                            Some(&ctx.signal),
+                        ) {
                             eprintln!("error: {e}");
                         }
                     }
@@ -157,6 +235,7 @@ pub fn run_repl(
                         eprintln!("error: {e}");
                     }
                 }
+                ctx.output_format = previous_output_format;
                 // Clear one-shot interrupt state at REPL command boundary.
                 // During command execution, ctengine checks the signal non-destructively.
                 let _ = ctx.signal.take_interrupted();

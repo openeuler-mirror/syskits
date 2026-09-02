@@ -451,12 +451,7 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
             Box::new(File::open(filename)?)
         });
 
-        let lines: Vec<String> = if config.is_gnu_ext && !config.is_input_ref {
-            let all_lines = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
-            vec![all_lines.join(" ")]
-        } else {
-            reader.lines().collect::<std::io::Result<Vec<String>>>()?
-        };
+        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
 
         let size = lines.len();

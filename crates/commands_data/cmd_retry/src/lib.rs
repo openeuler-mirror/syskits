@@ -10,8 +10,8 @@ use ctengine::command::DataCommand;
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctengine::execution::{CommandCore, CommandRunner};
-use ctpipeline::{CtPipelineData, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 use std::time::Duration;
 
 #[derive(Default)]
@@ -19,6 +19,25 @@ pub struct CmdRetry;
 
 struct RetryCore;
 const INTERRUPT_POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+const RETRY_HELP: &str = r#"syskits data retry
+
+This is the syskits structured data pipeline retry command.
+It retries an expression when it fails with a runtime error.
+
+Usage:
+  retry <expr> [attempts] [interval]
+  retry --help
+  retry --version
+
+Defaults:
+  attempts: 3
+  interval: 1s
+
+Examples:
+  retry 'http https://example.com' 5 1s
+  retry 'assert true' 3 100ms
+"#;
 
 impl DataCommand for CmdRetry {
     fn signature(&self) -> DataSignature {
@@ -38,6 +57,16 @@ impl DataCommand for CmdRetry {
                 "retry interval duration (default: 1s)",
                 CtType::Duration,
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data retry",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data retry version",
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -48,8 +77,32 @@ impl DataCommand for CmdRetry {
         input: CtPipelineData,
         ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(RETRY_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data retry {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         CommandRunner::run(&RetryCore, call, input, ctx)
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("retry".into()),
+            ..Default::default()
+        },
+    )
 }
 
 impl CommandCore for RetryCore {

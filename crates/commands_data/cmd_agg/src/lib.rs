@@ -10,12 +10,34 @@ use ctengine::compare::{ct_cmp, resolve_field_path};
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
 #[derive(Default)]
 pub struct CmdAgg;
+
+const AGG_HELP: &str = r#"syskits data agg
+
+This is the syskits structured data pipeline agg command.
+It aggregates List<Record> input, including grouped rows from group-by.
+
+Usage:
+  agg <op> [ops...]
+  agg --help
+  agg --version
+
+Operations:
+  count
+  sum:<field>[=<alias>]
+  avg:<field>[=<alias>]
+  min:<field>[=<alias>]
+  max:<field>[=<alias>]
+
+Examples:
+  ps | agg count avg:cpu=max_avg
+  ps | group-by status | agg count avg:cpu
+"#;
 
 impl DataCommand for CmdAgg {
     fn signature(&self) -> DataSignature {
@@ -33,6 +55,16 @@ impl DataCommand for CmdAgg {
             "additional aggregation specs",
             CtType::String,
         ))
+        .flag(CtFlag::switch(
+            "help",
+            Some('h'),
+            "show help for syskits data agg",
+        ))
+        .flag(CtFlag::switch(
+            "version",
+            None,
+            "show syskits data agg version",
+        ))
         .input(CtType::Any)
         .output(CtType::Any)
     }
@@ -43,6 +75,16 @@ impl DataCommand for CmdAgg {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(AGG_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data agg {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let ops = parse_ops(call)?;
         let rows = normalize_input_rows(input)?;
 
@@ -70,6 +112,20 @@ impl DataCommand for CmdAgg {
             ))
         }
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("agg".into()),
+            ..Default::default()
+        },
+    )
 }
 
 #[derive(Debug, Clone)]

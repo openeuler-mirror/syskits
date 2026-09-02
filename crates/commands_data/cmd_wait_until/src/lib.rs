@@ -11,7 +11,7 @@ use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctengine::execution::{CommandCore, CommandRunner};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{CtPositionalArg, DataCall, DataSignature};
+use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
@@ -19,6 +19,25 @@ pub struct CmdWaitUntil;
 
 struct WaitUntilCore;
 const INTERRUPT_POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+const WAIT_UNTIL_HELP: &str = r#"syskits data wait-until
+
+This is the syskits structured data pipeline wait-until command.
+It repeatedly evaluates an expression until it becomes truthy or times out.
+
+Usage:
+  wait-until <expr> [timeout] [interval]
+  wait-until --help
+  wait-until --version
+
+Defaults:
+  timeout: 60s
+  interval: 1s
+
+Examples:
+  wait-until 'http https://example.com | get ok' 30s 1s
+  wait-until 'assert true' 5s 500ms
+"#;
 
 impl DataCommand for CmdWaitUntil {
     fn signature(&self) -> DataSignature {
@@ -38,6 +57,16 @@ impl DataCommand for CmdWaitUntil {
                 "poll interval duration (e.g. 1s); default: 1s",
                 CtType::Duration,
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data wait-until",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data wait-until version",
+            ))
             .input(CtType::Any)
             .output(CtType::Any)
     }
@@ -48,8 +77,32 @@ impl DataCommand for CmdWaitUntil {
         input: CtPipelineData,
         ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(WAIT_UNTIL_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data wait-until {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         CommandRunner::run(&WaitUntilCore, call, input, ctx)
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("wait-until".into()),
+            ..Default::default()
+        },
+    )
 }
 
 impl CommandCore for WaitUntilCore {

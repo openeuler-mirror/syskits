@@ -42,6 +42,11 @@ impl DataCommand for CmdFrom {
                 "show help for `from` formats",
             ))
             .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data from version",
+            ))
+            .flag(CtFlag::switch(
                 "objects",
                 Some('o'),
                 "for json: parse each non-empty line as a separate JSON value",
@@ -68,6 +73,12 @@ impl DataCommand for CmdFrom {
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         if call.has_flag("help") || call.has_flag("h") {
             return Ok(help_output());
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(
+                "from",
+                format!("syskits data from {}", env!("CARGO_PKG_VERSION")),
+            ));
         }
 
         let format = call
@@ -142,7 +153,10 @@ fn normalize_format(input: &str) -> Option<&'static str> {
 
 fn help_output() -> CtPipelineData {
     let help = [
-        "from: parse input into structured data",
+        "syskits data from",
+        "",
+        "This is the syskits structured data pipeline from command.",
+        "It parses text input into structured data.",
         "",
         "Usage:",
         "  from <format> [source]",
@@ -171,7 +185,21 @@ fn help_output() -> CtPipelineData {
         "  from csv 'name,age\\nAlice,30'",
     ]
     .join("\n");
-    CtPipelineData::Value(CtValue::String(help), CtPipelineMetadata::default())
+    meta_text_output("from", help)
+}
+
+fn meta_text_output(source: &str, text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some(source.into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn parse_text(s: &str) -> CtValue {

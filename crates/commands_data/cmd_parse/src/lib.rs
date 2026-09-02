@@ -19,6 +19,22 @@ use std::io::Read;
 #[derive(Default)]
 pub struct CmdParse;
 
+const PARSE_HELP: &str = r#"syskits data parse
+
+This is the syskits structured data pipeline parse command.
+It parses text input into structured records with a template or regex pattern.
+
+Usage:
+  parse <pattern>
+  parse --regex <pattern>
+  parse --help
+  parse --version
+
+Examples:
+  from text 'alice 30' | parse '{name} {age}'
+  from text 'pid=123' | parse --regex 'pid=(?P<pid>[0-9]+)'
+"#;
+
 impl DataCommand for CmdParse {
     fn signature(&self) -> DataSignature {
         DataSignature::new("parse", "parse text into structured records")
@@ -32,6 +48,16 @@ impl DataCommand for CmdParse {
                 Some('r'),
                 "force regex mode for the given pattern",
             ))
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data parse",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data parse version",
+            ))
             .input(CtType::Any)
             .output(CtType::List)
     }
@@ -42,6 +68,16 @@ impl DataCommand for CmdParse {
         input: CtPipelineData,
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
+        if call.has_flag("help") || call.has_flag("h") {
+            return Ok(meta_text_output(PARSE_HELP.to_string()));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(format!(
+                "syskits data parse {}",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+
         let pattern = call
             .req::<String>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("parse: {e}")))?;
@@ -65,6 +101,20 @@ impl DataCommand for CmdParse {
 
         Ok(CtPipelineData::Value(CtValue::List(out), meta))
     }
+}
+
+fn meta_text_output(text: String) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            exit_code: 0,
+            source: Some("parse".into()),
+            ..Default::default()
+        },
+    )
 }
 
 fn compile_regex(pattern: &str) -> Result<Regex, CtDiagnosticError> {

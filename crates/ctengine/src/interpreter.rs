@@ -315,6 +315,7 @@ fn eval_call(
         let core = DataAdapter::new(cmd.as_ref());
         let out = CommandRunner::run(&core, &data_call, input, ctx)?;
         if let Some(expected) = sig.output_type
+            && !is_meta_action
             && !pipeline_data_matches_type(&out, expected)
         {
             return Err(CtDiagnosticError::with_span(

@@ -39,6 +39,10 @@ fn looks_like_external_or_unknown_command_warning(message: &str) -> bool {
         || message.starts_with("precheck: unknown command `")
 }
 
+pub(crate) fn is_recoverable_cursor_position_error(message: &str) -> bool {
+    message.contains("The cursor position could not be read within a normal duration")
+}
+
 pub(crate) fn filter_precheck_diags_for_repl(
     expr: &ctdsl::Expr,
     diags: Vec<ctdsl::PrecheckDiagnostic>,
@@ -169,7 +173,13 @@ pub fn run_repl(
                 continue;
             }
             Err(e) => {
-                eprintln!("readline error: {e}");
+                let message = e.to_string();
+                if is_recoverable_cursor_position_error(&message) {
+                    eprintln!("readline warning: {message}");
+                    let _ = ctx.signal.take_interrupted();
+                    continue;
+                }
+                eprintln!("readline error: {message}");
                 return 1;
             }
         }

@@ -503,9 +503,6 @@ impl<'s> Lexer<'s> {
             {
                 self.advance();
             }
-            if self.pos == value_start {
-                return Err(self.current_err(format!("missing value after `--{name}=`")));
-            }
             return Ok(Token::LongFlagValue(
                 name,
                 self.src[value_start..self.pos].to_string(),
@@ -779,6 +776,15 @@ mod tests {
     fn test_lex_long_flag_equals_value() {
         let toks = lex("--to=si");
         assert_eq!(toks[0], Token::LongFlagValue("to".into(), "si".into()));
+    }
+
+    #[test]
+    fn test_lex_long_flag_equals_empty_value() {
+        let toks = lex("--output-delimiter=");
+        assert_eq!(
+            toks[0],
+            Token::LongFlagValue("output-delimiter".into(), "".into())
+        );
     }
 
     #[test]

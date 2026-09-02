@@ -141,6 +141,17 @@ fn tail_reads_pipeline_input() {
 }
 
 #[test]
+fn tail_reads_upstream_command_output() {
+    let output = run_data_classic(r#"printf "a\nb\nc\n" | tail -n 1"#, "");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "c\n");
+}
+
+#[test]
 fn uniq_reads_pipeline_input() {
     assert_data_classic_matches_direct(&["uniq"], "from text | uniq", "alpha\nalpha\nbeta\n");
 }

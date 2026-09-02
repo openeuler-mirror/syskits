@@ -205,6 +205,13 @@ fn id_gid_entity(gid: u32, stderr_text: &mut String, exit_code: &mut i32) -> IdE
     }
 }
 
+fn id_optional_label(value: u32, label: Option<String>) -> String {
+    match label {
+        Some(label) => format!("{value}({label})"),
+        None => value.to_string(),
+    }
+}
+
 fn id_default_classic_text(row: &IdRow) -> String {
     let mut text = String::new();
     if let Some(uid) = &row.uid {
@@ -601,6 +608,14 @@ fn id_flags_validity_checks(state: &mut IdState) -> CTResult<bool> {
     Ok(is_default_format)
 }
 
+fn id_format_uid_default(uid: u32) -> String {
+    id_optional_label(uid, ct_entries::uid2usr(uid).ok())
+}
+
+fn id_format_gid_default(gid: u32) -> String {
+    id_optional_label(gid, ct_entries::gid2grp(gid).ok())
+}
+
 fn id_get_state(matches: &clap::ArgMatches, users: &[String]) -> IdState {
     IdState {
         is_nflag: matches.get_flag(id_flags::ID_NAME),
@@ -703,51 +718,20 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
     let euid = id_state.ids.as_ref().map(|ids| ids.euid).unwrap_or(65535);
     let egid = id_state.ids.as_ref().map(|ids| ids.egid).unwrap_or(65535);
 
-    let uid_string = ct_entries::uid2usr(uid).unwrap_or_else(|_| {
-        writeln!(writer, "cannot find name for user ID {uid}").unwrap();
-        set_ct_exit_code(1);
-        uid.to_string()
-    });
-    write!(writer, "uid={uid}({uid_string})").unwrap();
-
-    let gid_string = ct_entries::gid2grp(gid).unwrap_or_else(|_| {
-        writeln!(writer, "cannot find name for group ID {gid}").unwrap();
-        set_ct_exit_code(1);
-        gid.to_string()
-    });
-    write!(writer, " gid={gid}({gid_string})").unwrap();
+    write!(writer, "uid={}", id_format_uid_default(uid)).unwrap();
+    write!(writer, " gid={}", id_format_gid_default(gid)).unwrap();
 
     if !id_state.is_user_specified && (euid != uid) {
-        let euid_string = ct_entries::uid2usr(euid).unwrap_or_else(|_| {
-            writeln!(writer, "cannot find name for user ID {euid}").unwrap();
-            set_ct_exit_code(1);
-            euid.to_string()
-        });
-        write!(writer, " euid={euid}({euid_string})").unwrap();
+        write!(writer, " euid={}", id_format_uid_default(euid)).unwrap();
     }
 
     if !id_state.is_user_specified && (egid != gid) {
-        let egid_string = ct_entries::gid2grp(egid).unwrap_or_else(|_| {
-            writeln!(writer, "cannot find name for group ID {egid}").unwrap();
-            set_ct_exit_code(1);
-            egid.to_string()
-        });
-        write!(writer, " egid={egid}({egid_string})").unwrap();
+        write!(writer, " egid={}", id_format_gid_default(egid)).unwrap();
     }
 
     let groups_string = groups
         .iter()
-        .map(|&gr| {
-            format!(
-                "{}({})",
-                gr,
-                ct_entries::gid2grp(gr).unwrap_or_else(|_| {
-                    writeln!(writer, "cannot find name for group ID {gr}").unwrap();
-                    set_ct_exit_code(1);
-                    gr.to_string()
-                })
-            )
-        })
+        .map(|&gr| id_format_gid_default(gr))
         .collect::<Vec<_>>()
         .join(",");
     write!(writer, " groups={groups_string}").unwrap();
@@ -1659,6 +1643,40 @@ mod tests {
 
             assert!(output_str.contains("uid=65535"));
             assert!(output_str.contains("gid=65535"));
+        }
+
+        #[test]
+        fn test_id_print_unknown_group_uses_number_only() {
+            let unknown_gid = u32::MAX;
+            assert!(ct_entries::gid2grp(unknown_gid).is_err());
+            let ids = Ids {
+                uid: 0,
+                gid: unknown_gid,
+                euid: 0,
+                egid: unknown_gid,
+            };
+            let id_state = IdState {
+                is_nflag: false,
+                is_uflag: false,
+                is_gflag: false,
+                is_gsflag: false,
+                is_rflag: false,
+                is_zflag: false,
+                is_cflag: false,
+                is_selinux_supported: false,
+                is_user_specified: false,
+                ids: Some(ids),
+            };
+            let groups = vec![unknown_gid];
+
+            let mut output = Vec::new();
+            id_print(&mut output, &id_state, &groups);
+            let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
+
+            assert!(output_str.contains(&format!(" gid={unknown_gid}")));
+            assert!(output_str.contains(&format!(" groups={unknown_gid}")));
+            assert!(!output_str.contains(&format!("gid={unknown_gid}({unknown_gid})")));
+            assert!(!output_str.contains("cannot find name for group ID"));
         }
     }
 

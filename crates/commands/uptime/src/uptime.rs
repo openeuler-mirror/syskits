@@ -41,6 +41,9 @@ use crate::platform::{
 mod platform;
 
 const UPTIME_SECS_PER_DAY: i64 = 86400;
+const UPTIME_SECS_PER_WEEK: i64 = UPTIME_SECS_PER_DAY * 7;
+const UPTIME_SECS_PER_YEAR: i64 = UPTIME_SECS_PER_DAY * 365;
+const UPTIME_SECS_PER_DECADE: i64 = UPTIME_SECS_PER_YEAR * 10;
 const UPTIME_SECS_PER_HOUR: i64 = 3600;
 const UPTIME_SECS_PER_MIN: i64 = 60;
 
@@ -140,34 +143,68 @@ fn uptime_print_n_users(n_users: usize) -> String {
 }
 
 fn uptime_print_pretty(up_secs: i64) -> String {
-    let days = up_secs / UPTIME_SECS_PER_DAY;
-    let hours = (up_secs % UPTIME_SECS_PER_DAY) / UPTIME_SECS_PER_HOUR;
-    let minutes = (up_secs % UPTIME_SECS_PER_HOUR) / UPTIME_SECS_PER_MIN;
+    let mut uptime_secs = up_secs.max(0);
 
+    let mut decades = 0;
+    let mut years = 0;
+    let mut weeks = 0;
+    let mut days = 0;
+    let mut hours = 0;
+    let mut minutes = 0;
     let mut parts = Vec::new();
 
+    if uptime_secs > UPTIME_SECS_PER_DECADE {
+        decades = uptime_secs / UPTIME_SECS_PER_DECADE;
+        uptime_secs -= decades * UPTIME_SECS_PER_DECADE;
+    }
+
+    if uptime_secs > UPTIME_SECS_PER_YEAR {
+        years = uptime_secs / UPTIME_SECS_PER_YEAR;
+        uptime_secs -= years * UPTIME_SECS_PER_YEAR;
+    }
+
+    if uptime_secs > UPTIME_SECS_PER_WEEK {
+        weeks = uptime_secs / UPTIME_SECS_PER_WEEK;
+        uptime_secs -= weeks * UPTIME_SECS_PER_WEEK;
+    }
+
+    if uptime_secs > UPTIME_SECS_PER_DAY {
+        days = uptime_secs / UPTIME_SECS_PER_DAY;
+        uptime_secs -= days * UPTIME_SECS_PER_DAY;
+    }
+
+    if uptime_secs > UPTIME_SECS_PER_HOUR {
+        hours = uptime_secs / UPTIME_SECS_PER_HOUR;
+        uptime_secs -= hours * UPTIME_SECS_PER_HOUR;
+    }
+
+    if uptime_secs > UPTIME_SECS_PER_MIN {
+        minutes = uptime_secs / UPTIME_SECS_PER_MIN;
+        uptime_secs -= minutes * UPTIME_SECS_PER_MIN;
+    }
+
+    let mut push_part = |value: i64, singular: &str, plural: &str| {
+        let unit = if value == 1 { singular } else { plural };
+        parts.push(format!("{value} {unit}"));
+    };
+
+    if decades > 0 {
+        push_part(decades, "decade", "decades");
+    }
+    if years > 0 {
+        push_part(years, "year", "years");
+    }
+    if weeks > 0 {
+        push_part(weeks, "week", "weeks");
+    }
     if days > 0 {
-        if days == 1 {
-            parts.push(format!("{days} day"));
-        } else {
-            parts.push(format!("{days} days"));
-        }
+        push_part(days, "day", "days");
     }
-
     if hours > 0 {
-        if hours == 1 {
-            parts.push(format!("{hours} hour"));
-        } else {
-            parts.push(format!("{hours} hours"));
-        }
+        push_part(hours, "hour", "hours");
     }
-
-    if minutes > 0 {
-        if minutes == 1 {
-            parts.push(format!("{minutes} minute"));
-        } else {
-            parts.push(format!("{minutes} minutes"));
-        }
+    if minutes > 0 || uptime_secs <= UPTIME_SECS_PER_MIN {
+        push_part(minutes, "minute", "minutes");
     }
 
     if parts.is_empty() {
@@ -509,16 +546,25 @@ mod tests {
         #[test]
         fn test_uptime_print_pretty() {
             assert_eq!(uptime_print_pretty(0), "up 0 minutes");
-            assert_eq!(uptime_print_pretty(60), "up 1 minute");
+            assert_eq!(uptime_print_pretty(60), "up 0 minutes");
+            assert_eq!(uptime_print_pretty(61), "up 1 minute");
             assert_eq!(uptime_print_pretty(120), "up 2 minutes");
-            assert_eq!(uptime_print_pretty(3600), "up 1 hour");
-            assert_eq!(uptime_print_pretty(3660), "up 1 hour, 1 minute");
-            assert_eq!(uptime_print_pretty(7200), "up 2 hours");
+            assert_eq!(uptime_print_pretty(3600), "up 60 minutes");
+            assert_eq!(uptime_print_pretty(3660), "up 1 hour, 0 minutes");
+            assert_eq!(uptime_print_pretty(7200), "up 2 hours, 0 minutes");
             assert_eq!(uptime_print_pretty(7320), "up 2 hours, 2 minutes");
-            assert_eq!(uptime_print_pretty(86400), "up 1 day");
-            assert_eq!(uptime_print_pretty(90000), "up 1 day, 1 hour");
+            assert_eq!(uptime_print_pretty(86400), "up 24 hours, 0 minutes");
+            assert_eq!(uptime_print_pretty(90000), "up 1 day, 60 minutes");
             assert_eq!(uptime_print_pretty(90061), "up 1 day, 1 hour, 1 minute");
             assert_eq!(uptime_print_pretty(180122), "up 2 days, 2 hours, 2 minutes");
+            assert_eq!(
+                uptime_print_pretty(28_987_200),
+                "up 47 weeks, 6 days, 12 hours, 0 minutes"
+            );
+            assert_eq!(
+                uptime_print_pretty(289_872_000),
+                "up 9 years, 10 weeks, 0 minutes"
+            );
         }
     }
 

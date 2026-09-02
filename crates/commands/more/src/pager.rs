@@ -67,7 +67,10 @@ pub struct PagerOptions {
 /// Pager state machine
 pub struct Pager {
     /// File content (broken into display lines)
-    lines: Vec<String>,
+    lines: Vec<DisplayLine>,
+
+    /// Original content length in bytes, used for GNU-compatible percent prompts.
+    content_bytes: usize,
 
     /// Current line (top of screen)
     current_line: usize,
@@ -109,6 +112,12 @@ pub struct Pager {
     lines_squeezed: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DisplayLine {
+    text: String,
+    byte_end: usize,
+}
+
 impl Pager {
     pub fn new(
         content: &str,
@@ -123,13 +132,14 @@ impl Pager {
 
         // Break content into display lines
         let lines = if options.logical_lines {
-            content.lines().map(|s| s.to_string()).collect()
+            break_logical_lines(content)
         } else {
             break_into_display_lines(content, columns as usize)
         };
 
         let mut pager = Self {
             lines,
+            content_bytes: content.len(),
             current_line: options.from_line,
             rows,
             columns,
@@ -438,7 +448,7 @@ impl Pager {
 
         while lines_drawn < self.content_rows as usize && line_idx < self.lines.len() {
             let line = &self.lines[line_idx];
-            let is_blank = line.is_empty();
+            let is_blank = line.text.is_empty();
 
             if self.options.squeeze && is_blank && prev_blank {
                 // Skip consecutive blank lines
@@ -447,7 +457,7 @@ impl Pager {
                 continue;
             }
 
-            writeln!(stdout, "{line}")?;
+            write!(stdout, "{}\r\n", line.text)?;
             lines_drawn += 1;
             line_idx += 1;
             prev_blank = is_blank;
@@ -458,13 +468,7 @@ impl Pager {
 
     /// Draw the prompt line
     fn draw_prompt(&mut self, stderr: &mut Stderr) -> io::Result<()> {
-        let total_lines = self.lines.len();
-        let lower_line = (self.current_line + self.content_rows as usize).min(total_lines);
-        let percent = if total_lines > 0 {
-            ((lower_line as f64 / total_lines as f64) * 100.0).round() as u16
-        } else {
-            100
-        };
+        let percent = self.percent_displayed();
 
         let at_eof = self.is_at_eof();
         let next_file = self.next_file.as_deref();
@@ -477,14 +481,11 @@ impl Pager {
     /// Check if at EOF and handle accordingly
     fn check_eof_action(&mut self, stderr: &mut Stderr) -> io::Result<PagerResult> {
         if self.is_at_eof() {
-            if self.options.exit_on_eof {
-                return Ok(PagerResult::Quit);
-            }
             if self.next_file.is_some() {
                 return Ok(PagerResult::NextFile(1));
             }
-            // Ring bell at EOF
-            TtyControl::bell(stderr)?;
+            self.renderer.clear_prompt(stderr)?;
+            return Ok(PagerResult::Quit);
         }
         Ok(PagerResult::Continue)
     }
@@ -492,6 +493,23 @@ impl Pager {
     /// Check if at end of file
     fn is_at_eof(&self) -> bool {
         self.current_line + self.content_rows as usize >= self.lines.len()
+    }
+
+    fn percent_displayed(&self) -> u16 {
+        if self.content_bytes == 0 {
+            return 100;
+        }
+
+        let last_visible = (self.current_line + self.content_rows as usize)
+            .min(self.lines.len())
+            .saturating_sub(1);
+        let byte_end = self
+            .lines
+            .get(last_visible)
+            .map(|line| line.byte_end)
+            .unwrap_or(0);
+
+        ((byte_end as f64 / self.content_bytes as f64) * 100.0).round() as u16
     }
 
     /// Advance by N pages
@@ -693,53 +711,93 @@ pub enum PagerResult {
     RunEditor,
 }
 
-/// Break content into display lines based on terminal width
-fn break_into_display_lines(content: &str, columns: usize) -> Vec<String> {
+fn break_logical_lines(content: &str) -> Vec<DisplayLine> {
     let mut result = Vec::new();
+    let mut line_start = 0;
 
-    for line in content.lines() {
-        let width = UnicodeWidthStr::width(line);
-        if width <= columns {
-            result.push(line.to_string());
-        } else {
-            // Break long line
-            result.extend(break_long_line(line, columns));
-        }
+    for line_with_terminator in content.split_inclusive('\n') {
+        let line = line_with_terminator
+            .strip_suffix('\n')
+            .unwrap_or(line_with_terminator);
+        let line_end = line_start + line_with_terminator.len();
+        result.push(DisplayLine {
+            text: line.to_string(),
+            byte_end: line_end,
+        });
+        line_start = line_end;
     }
 
     result
 }
 
-/// Break a long line into multiple lines
-fn break_long_line(line: &str, columns: usize) -> Vec<String> {
+/// Break content into display lines based on terminal width
+fn break_into_display_lines(content: &str, columns: usize) -> Vec<DisplayLine> {
+    let mut result = Vec::new();
+    let mut line_start = 0;
+
+    for line_with_terminator in content.split_inclusive('\n') {
+        let line = line_with_terminator
+            .strip_suffix('\n')
+            .unwrap_or(line_with_terminator);
+        let line_end = line_start + line_with_terminator.len();
+        let width = UnicodeWidthStr::width(line);
+        if width <= columns {
+            result.push(DisplayLine {
+                text: line.to_string(),
+                byte_end: line_end,
+            });
+        } else {
+            result.extend(break_long_line(line, columns, line_start, line_end));
+        }
+        line_start = line_end;
+    }
+
+    result
+}
+
+/// Break a long line into multiple display lines.
+fn break_long_line(
+    line: &str,
+    columns: usize,
+    line_start: usize,
+    line_end: usize,
+) -> Vec<DisplayLine> {
     let mut result = Vec::new();
     let mut current_line = String::new();
     let mut current_width = 0;
+    let mut current_byte_end = line_start;
 
-    for grapheme in UnicodeSegmentation::graphemes(line, true) {
+    for (offset, grapheme) in UnicodeSegmentation::grapheme_indices(line, true) {
         let grapheme_width = UnicodeWidthStr::width(grapheme);
 
-        if current_width + grapheme_width > columns {
-            result.push(current_line);
+        if current_width + grapheme_width > columns && !current_line.is_empty() {
+            result.push(DisplayLine {
+                text: current_line,
+                byte_end: current_byte_end,
+            });
             current_line = String::new();
             current_width = 0;
         }
 
         current_line.push_str(grapheme);
         current_width += grapheme_width;
+        current_byte_end = line_start + offset + grapheme.len();
     }
 
     if !current_line.is_empty() {
-        result.push(current_line);
+        result.push(DisplayLine {
+            text: current_line,
+            byte_end: line_end,
+        });
     }
 
     result
 }
 
 /// Search forward for pattern
-fn search_forward(lines: &[String], pattern: &Regex, start: usize) -> Option<usize> {
+fn search_forward(lines: &[DisplayLine], pattern: &Regex, start: usize) -> Option<usize> {
     for (idx, line) in lines.iter().enumerate().skip(start) {
-        if pattern.is_match(line) {
+        if pattern.is_match(&line.text) {
             return Some(idx);
         }
     }
@@ -747,10 +805,15 @@ fn search_forward(lines: &[String], pattern: &Regex, start: usize) -> Option<usi
 }
 
 /// Search forward for Nth occurrence
-fn search_forward_n(lines: &[String], pattern: &Regex, start: usize, n: usize) -> Option<usize> {
+fn search_forward_n(
+    lines: &[DisplayLine],
+    pattern: &Regex,
+    start: usize,
+    n: usize,
+) -> Option<usize> {
     let mut count = 0;
     for (idx, line) in lines.iter().enumerate().skip(start) {
-        if pattern.is_match(line) {
+        if pattern.is_match(&line.text) {
             count += 1;
             if count == n {
                 return Some(idx);
@@ -761,11 +824,16 @@ fn search_forward_n(lines: &[String], pattern: &Regex, start: usize, n: usize) -
 }
 
 /// Search backward for Nth occurrence
-fn search_backward_n(lines: &[String], pattern: &Regex, start: usize, n: usize) -> Option<usize> {
+fn search_backward_n(
+    lines: &[DisplayLine],
+    pattern: &Regex,
+    start: usize,
+    n: usize,
+) -> Option<usize> {
     let mut count = 0;
     let end = start.min(lines.len().saturating_sub(1));
     for (idx, line) in lines.iter().take(end + 1).enumerate().rev() {
-        if pattern.is_match(line) {
+        if pattern.is_match(&line.text) {
             count += 1;
             if count == n {
                 return Some(idx);
@@ -782,23 +850,91 @@ mod tests {
     #[test]
     fn test_break_long_line() {
         let line = "a".repeat(100);
-        let broken = break_long_line(&line, 80);
+        let broken = break_long_line(&line, 80, 0, line.len() + 1);
         assert_eq!(broken.len(), 2);
-        assert_eq!(broken[0].len(), 80);
-        assert_eq!(broken[1].len(), 20);
+        assert_eq!(broken[0].text.len(), 80);
+        assert_eq!(broken[0].byte_end, 80);
+        assert_eq!(broken[1].text.len(), 20);
+        assert_eq!(broken[1].byte_end, 101);
     }
 
     #[test]
     fn test_search_forward() {
         let lines = vec![
-            "line1".to_string(),
-            "line2".to_string(),
-            "foo".to_string(),
-            "line4".to_string(),
+            DisplayLine {
+                text: "line1".into(),
+                byte_end: 6,
+            },
+            DisplayLine {
+                text: "line2".into(),
+                byte_end: 12,
+            },
+            DisplayLine {
+                text: "foo".into(),
+                byte_end: 16,
+            },
+            DisplayLine {
+                text: "line4".into(),
+                byte_end: 22,
+            },
         ];
         let re = Regex::new("foo").unwrap();
         assert_eq!(search_forward(&lines, &re, 0), Some(2));
         assert_eq!(search_forward(&lines, &re, 3), None);
+    }
+
+    #[test]
+    fn percent_displayed_uses_source_byte_position() {
+        let content = concat!(
+            "adsad
+", "asdsd
+", "s
+", "ss
+", "s
+", "s
+", "sss
+", "s
+", "s
+", "s
+", "s
+", "asdss
+", "s
+", "s
+",
+            "ss
+", "s
+", "s
+", "s
+", "ss
+", "s
+", "s
+", "s
+", "s
+", "s
+", "s
+", "s
+", "s
+", "s
+", "s
+", "sss
+", "
+",
+            "ss
+", "s
+", "s
+", "s
+", "s
+", "s
+", "s
+", "ss
+", "s
+", "
+"
+        );
+        let pager = Pager::new(content, 38, 80, PagerOptions::default(), None, None);
+
+        assert_eq!(content.len(), 101);
+        assert_eq!(pager.percent_displayed(), 92);
     }
 
     #[test]

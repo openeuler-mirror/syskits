@@ -35,6 +35,11 @@ impl DataCommand for CmdTo {
                 Some('h'),
                 "show help for `to` formats",
             ))
+            .flag(CtFlag::switch(
+                "transpose",
+                None,
+                "for csv: serialize records as field-oriented CSV",
+            ))
             .input(CtType::Any)
             .output(CtType::String)
     }
@@ -61,6 +66,8 @@ impl DataCommand for CmdTo {
             ))
         })?;
 
+        let csv_transpose = call.has_flag("transpose");
+
         let out = match format {
             "json" => {
                 let value = consume_to_value(input)?;
@@ -68,6 +75,7 @@ impl DataCommand for CmdTo {
                     .map_err(|e| CtDiagnosticError::simple(format!("to json: {e}")))?
             }
             "jsonl" => to_jsonl(input)?,
+            "csv" if csv_transpose => to_csv_transposed(input)?,
             "csv" => to_csv(input)?,
             "yaml" => {
                 let value = consume_to_value(input)?;
@@ -120,6 +128,9 @@ fn help_output() -> CtPipelineData {
         "  toml                serialize to TOML text",
         "  text                flatten values to plain text lines",
         "",
+        "CSV flags:",
+        "  --transpose         serialize records as field-oriented CSV",
+        "",
         "Examples:",
         "  [1,2,3] | to json",
         "  [{a:1},{a:2}] | to jsonl",
@@ -161,6 +172,7 @@ fn to_jsonl(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
 
 fn to_csv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
     let rows = normalize_rows_for_csv(data)?;
+    validate_csv_record_field_names(&rows)?;
     let columns = collect_csv_columns(&rows);
 
     let mut wtr = csv::WriterBuilder::new()
@@ -189,6 +201,61 @@ fn to_csv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
         .map_err(|e| CtDiagnosticError::simple(format!("to csv: flush failed: {e}")))?;
     String::from_utf8(bytes)
         .map_err(|e| CtDiagnosticError::simple(format!("to csv: utf8 error: {e}")))
+}
+
+fn to_csv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
+    let rows = normalize_rows_for_csv(data)?;
+    validate_csv_record_field_names(&rows)?;
+    let columns = collect_csv_columns(&rows);
+
+    let mut wtr = csv::WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(Vec::<u8>::new());
+
+    for column in columns {
+        let mut record = Vec::with_capacity(rows.len() + 1);
+        record.push(column.clone());
+        for row in &rows {
+            let value = row
+                .iter()
+                .find(|(key, _)| key == &column)
+                .map(|(_, v)| ct_to_text_cell(v))
+                .unwrap_or_default();
+            record.push(value);
+        }
+
+        wtr.write_record(record)
+            .map_err(|e| CtDiagnosticError::simple(format!("to csv: row write failed: {e}")))?;
+    }
+
+    let bytes = wtr
+        .into_inner()
+        .map_err(|e| CtDiagnosticError::simple(format!("to csv: flush failed: {e}")))?;
+    String::from_utf8(bytes)
+        .map_err(|e| CtDiagnosticError::simple(format!("to csv: utf8 error: {e}")))
+}
+
+fn validate_csv_record_field_names(
+    rows: &[Vec<(String, CtValue)>],
+) -> Result<(), CtDiagnosticError> {
+    for (row_idx, row) in rows.iter().enumerate() {
+        let mut fields_seen = std::collections::HashSet::new();
+        for (field, _) in row {
+            let field = field.trim();
+            if field.is_empty() {
+                return Err(CtDiagnosticError::simple(format!(
+                    "to csv: field name is empty at input row {}",
+                    row_idx + 1
+                )));
+            }
+            if !fields_seen.insert(field.to_string()) {
+                return Err(CtDiagnosticError::simple(format!(
+                    "to csv: duplicate field `{field}`"
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn normalize_rows_for_csv(
@@ -364,6 +431,12 @@ mod tests {
         c
     }
 
+    fn fmt_call_transpose(fmt: &str) -> DataCall {
+        let mut c = fmt_call(fmt);
+        c.flags.insert("transpose".to_string(), None);
+        c
+    }
+
     #[test]
     fn test_to_json_record() {
         let input = CtPipelineData::Value(
@@ -434,6 +507,103 @@ mod tests {
         };
         assert!(csv.contains("name,age"));
         assert!(csv.contains("alice,30"));
+    }
+
+    #[test]
+    fn test_to_csv_rejects_empty_field_name() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("".into(), CtValue::String("a".into()))]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo.run(&fmt_call("csv"), input, &ctx()).unwrap_err();
+        assert!(err.to_string().contains("field name is empty"));
+    }
+
+    #[test]
+    fn test_to_csv_rejects_duplicate_field_name() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![
+                ("name".into(), CtValue::String("a".into())),
+                ("name".into(), CtValue::String("b".into())),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo.run(&fmt_call("csv"), input, &ctx()).unwrap_err();
+        assert!(err.to_string().contains("duplicate field"));
+    }
+
+    #[test]
+    fn test_to_csv_transpose_list_records() {
+        let input = CtPipelineData::Value(
+            CtValue::List(vec![
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("a".into())),
+                    ("age".into(), CtValue::Int(12)),
+                    ("gender".into(), CtValue::String("male".into())),
+                ]),
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("b".into())),
+                    ("age".into(), CtValue::Int(11)),
+                    ("gender".into(), CtValue::String("female".into())),
+                ]),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let r = CmdTo
+            .run(&fmt_call_transpose("csv"), input, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(csv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(csv, "name,a,b\nage,12,11\ngender,male,female\n");
+    }
+
+    #[test]
+    fn test_to_csv_transpose_missing_values_are_empty() {
+        let input = CtPipelineData::Value(
+            CtValue::List(vec![
+                CtValue::Record(vec![("name".into(), CtValue::String("a".into()))]),
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("b".into())),
+                    ("age".into(), CtValue::Int(11)),
+                ]),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let r = CmdTo
+            .run(&fmt_call_transpose("csv"), input, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(csv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(csv, "name,a,b\nage,,11\n");
+    }
+
+    #[test]
+    fn test_to_csv_transpose_rejects_empty_field_name() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("".into(), CtValue::String("a".into()))]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo
+            .run(&fmt_call_transpose("csv"), input, &ctx())
+            .unwrap_err();
+        assert!(err.to_string().contains("field name is empty"));
+    }
+
+    #[test]
+    fn test_to_csv_transpose_rejects_duplicate_field_name() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![
+                ("name".into(), CtValue::String("a".into())),
+                ("name".into(), CtValue::String("b".into())),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo
+            .run(&fmt_call_transpose("csv"), input, &ctx())
+            .unwrap_err();
+        assert!(err.to_string().contains("duplicate field"));
     }
 
     #[test]

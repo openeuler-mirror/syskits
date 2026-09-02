@@ -39,7 +39,7 @@ impl DataCommand for CmdTo {
             .flag(CtFlag::switch(
                 "transpose",
                 None,
-                "for csv: serialize records as field-oriented CSV",
+                "for csv/ssv: serialize records as field-oriented data",
             ))
             .input(CtType::Any)
             .output(CtType::String)
@@ -67,7 +67,7 @@ impl DataCommand for CmdTo {
             ))
         })?;
 
-        let csv_transpose = call.has_flag("transpose");
+        let transpose = call.has_flag("transpose");
 
         let out = match format {
             "json" => {
@@ -76,8 +76,9 @@ impl DataCommand for CmdTo {
                     .map_err(|e| CtDiagnosticError::simple(format!("to json: {e}")))?
             }
             "jsonl" => to_jsonl(input)?,
-            "csv" if csv_transpose => to_csv_transposed(input)?,
+            "csv" if transpose => to_csv_transposed(input)?,
             "csv" => to_csv(input)?,
+            "ssv" if transpose => to_ssv_transposed(input)?,
             "ssv" => to_ssv(input)?,
             "yaml" => {
                 let value = consume_to_value(input)?;
@@ -132,8 +133,8 @@ fn help_output() -> CtPipelineData {
         "  toml                serialize to TOML text",
         "  text                flatten values to plain text lines",
         "",
-        "CSV flags:",
-        "  --transpose         serialize records as field-oriented CSV",
+        "CSV/SSV flags:",
+        "  --transpose         serialize records as field-oriented data",
         "",
         "Examples:",
         "  [1,2,3] | to json",
@@ -260,6 +261,32 @@ fn to_ssv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
                     .unwrap_or_default()
             })
             .collect::<Vec<_>>();
+        lines.push(record.join(" "));
+    }
+
+    Ok(lines.join("\n"))
+}
+
+fn to_ssv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
+    let rows = normalize_rows_for_csv(data)?;
+    validate_csv_record_field_names(&rows)?;
+    let columns = collect_csv_columns(&rows);
+    if columns.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut lines = Vec::with_capacity(columns.len());
+    for column in columns {
+        let mut record = Vec::with_capacity(rows.len() + 1);
+        record.push(column.clone());
+        for row in &rows {
+            let value = row
+                .iter()
+                .find(|(key, _)| key == &column)
+                .map(|(_, v)| ct_to_ssv_cell(v))
+                .unwrap_or_default();
+            record.push(value);
+        }
         lines.push(record.join(" "));
     }
 
@@ -698,6 +725,70 @@ mod tests {
             panic!("string");
         };
         assert_eq!(ssv, "name\nAlice_Smith");
+    }
+
+    #[test]
+    fn test_to_ssv_transpose_list_records() {
+        let input = CtPipelineData::Value(
+            CtValue::List(vec![
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("a".into())),
+                    ("age".into(), CtValue::Int(12)),
+                    ("gender".into(), CtValue::String("male".into())),
+                ]),
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("b".into())),
+                    ("age".into(), CtValue::Int(11)),
+                    ("gender".into(), CtValue::String("female".into())),
+                ]),
+            ]),
+            CtPipelineMetadata::default(),
+        );
+        let r = CmdTo
+            .run(&fmt_call_transpose("ssv"), input, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(ssv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(ssv, "name a b\nage 12 11\ngender male female");
+    }
+
+    #[test]
+    fn test_to_ssv_transpose_list_stream() {
+        let stream = CtListStream::new(
+            vec![
+                CtValue::Record(vec![("name".into(), CtValue::String("alice".into()))]),
+                CtValue::Record(vec![
+                    ("name".into(), CtValue::String("bob".into())),
+                    ("age".into(), CtValue::Int(20)),
+                ]),
+            ]
+            .into_iter(),
+            CtPipelineMetadata::default(),
+        );
+        let input = CtPipelineData::ListStream(stream);
+        let r = CmdTo
+            .run(&fmt_call_transpose("ssv"), input, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(ssv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(ssv, "name alice bob\nage  20");
+    }
+
+    #[test]
+    fn test_to_ssv_transpose_sanitizes_whitespace_cells() {
+        let input = CtPipelineData::Value(
+            CtValue::Record(vec![("name".into(), CtValue::String("Alice Smith".into()))]),
+            CtPipelineMetadata::default(),
+        );
+        let r = CmdTo
+            .run(&fmt_call_transpose("ssv"), input, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(ssv), _) = r else {
+            panic!("string");
+        };
+        assert_eq!(ssv, "name Alice_Smith");
     }
 
     #[test]

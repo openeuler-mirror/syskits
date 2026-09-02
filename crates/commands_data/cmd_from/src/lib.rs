@@ -54,7 +54,7 @@ impl DataCommand for CmdFrom {
             .flag(CtFlag::switch(
                 "transpose",
                 None,
-                "for csv: parse field-oriented CSV where first column contains field names",
+                "for csv/ssv: parse field-oriented data where first column contains field names",
             ))
             .input(CtType::Any)
             .output(CtType::Any)
@@ -87,7 +87,7 @@ impl DataCommand for CmdFrom {
             .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
         let json_objects = call.has_flag("objects") || call.has_flag("o");
         let json_strict = call.has_flag("strict") || call.has_flag("s");
-        let csv_transpose = call.has_flag("transpose");
+        let transpose = call.has_flag("transpose");
 
         let raw = if let Some(src) = source_arg {
             src
@@ -113,9 +113,10 @@ impl DataCommand for CmdFrom {
         let value = match format {
             "json" => parse_json(&raw, json_strict, json_objects)?,
             "jsonl" => parse_jsonl(&raw)?,
-            "csv" if csv_transpose => parse_csv_transposed(&raw)?,
+            "csv" if transpose => parse_csv_transposed(&raw)?,
             "csv" => parse_csv(&raw)?,
-            "ssv" => parse_ssv(&raw),
+            "ssv" if transpose => parse_ssv_transposed(&raw)?,
+            "ssv" => parse_ssv(&raw)?,
             "yaml" => parse_yaml(&raw)?,
             "toml" => parse_toml(&raw)?,
             "text" => parse_text(&raw),
@@ -159,8 +160,8 @@ fn help_output() -> CtPipelineData {
         "  --objects, -o       parse each non-empty line as one JSON object/value",
         "  --strict, -s        strict JSON only (default is lenient json5-compatible parse)",
         "",
-        "CSV flags:",
-        "  --transpose         parse field-oriented CSV (first column = field names)",
+        "CSV/SSV flags:",
+        "  --transpose         parse field-oriented data (first column = field names)",
         "",
         "Examples:",
         "  from json '{\"a\":1}'",
@@ -362,19 +363,21 @@ fn parse_toml(s: &str) -> Result<CtValue, CtDiagnosticError> {
 
 /// 解析空白分隔值（Space-Separated Values）。
 /// 第一行作为列名，后续行按连续空白分割为字段。
-fn parse_ssv(s: &str) -> CtValue {
+fn parse_ssv(s: &str) -> Result<CtValue, CtDiagnosticError> {
     let mut lines = s.lines().filter(|l| !l.trim().is_empty());
     let Some(header_line) = lines.next() else {
-        return CtValue::List(vec![]);
+        return Ok(CtValue::List(vec![]));
     };
-    let headers: Vec<&str> = header_line.split_whitespace().collect();
+    let headers: Vec<String> = header_line.split_whitespace().map(str::to_string).collect();
+    validate_ssv_field_names(&headers, "header", "column")?;
+
     let mut rows = Vec::new();
     for line in lines {
         let cols: Vec<&str> = line.split_whitespace().collect();
         let mut fields = Vec::new();
         for (idx, header) in headers.iter().enumerate() {
             let val = cols.get(idx).copied().unwrap_or("");
-            fields.push((header.to_string(), infer_scalar(val)));
+            fields.push((header.clone(), infer_scalar(val)));
         }
         // 如果行有更多列，用 column{N} 命名
         for (idx, col) in cols.iter().enumerate().skip(headers.len()) {
@@ -382,7 +385,67 @@ fn parse_ssv(s: &str) -> CtValue {
         }
         rows.push(CtValue::Record(fields));
     }
-    CtValue::List(rows)
+    Ok(CtValue::List(rows))
+}
+
+fn parse_ssv_transposed(s: &str) -> Result<CtValue, CtDiagnosticError> {
+    let rows = s
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split_whitespace()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    if rows.is_empty() {
+        return Ok(CtValue::List(vec![]));
+    }
+
+    let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let record_count = max_cols.saturating_sub(1);
+    let mut records: Vec<Vec<(String, CtValue)>> = vec![Vec::new(); record_count];
+    let fields = rows
+        .iter()
+        .map(|row| row.first().cloned().unwrap_or_default())
+        .collect::<Vec<_>>();
+    validate_ssv_field_names(&fields, "transpose field", "row")?;
+
+    for row in rows {
+        let field_name = row.first().cloned().unwrap_or_default();
+        for record_idx in 0..record_count {
+            let value = row.get(record_idx + 1).map(String::as_str).unwrap_or("");
+            records[record_idx].push((field_name.clone(), infer_scalar(value)));
+        }
+    }
+
+    Ok(CtValue::List(
+        records.into_iter().map(CtValue::Record).collect(),
+    ))
+}
+
+fn validate_ssv_field_names(
+    fields: &[String],
+    label: &str,
+    position_label: &str,
+) -> Result<(), CtDiagnosticError> {
+    let mut fields_seen = std::collections::HashSet::new();
+    for (idx, field) in fields.iter().enumerate() {
+        let field = field.trim();
+        if field.is_empty() {
+            return Err(CtDiagnosticError::simple(format!(
+                "from ssv: {label} name is empty at {position_label} {}",
+                idx + 1
+            )));
+        }
+        if !fields_seen.insert(field.to_string()) {
+            return Err(CtDiagnosticError::simple(format!(
+                "from ssv: duplicate {label} `{field}`"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn infer_scalar(raw: &str) -> CtValue {
@@ -885,6 +948,92 @@ mod tests {
             first.iter().find(|(k, _)| k == "CPU").map(|(_, v)| v),
             Some(CtValue::Float(f)) if (*f - 0.5).abs() < 1e-9
         ));
+    }
+
+    #[test]
+    fn test_from_ssv_rejects_duplicate_header() {
+        let err = CmdFrom
+            .run(&call_fmt("ssv"), str_input("name name\na b"), &ctx())
+            .unwrap_err();
+        assert!(err.to_string().contains("duplicate header"));
+    }
+
+    #[test]
+    fn test_from_ssv_transpose() {
+        let r = CmdFrom
+            .run(
+                &call_fmt_src_transpose("ssv", "name a b\nage 12 11\ngender male female"),
+                CtPipelineData::Empty,
+                &ctx(),
+            )
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = r else {
+            panic!("expected list");
+        };
+        assert_eq!(items.len(), 2);
+        let CtValue::Record(first) = &items[0] else {
+            panic!("record");
+        };
+        assert!(matches!(
+            first.iter().find(|(k, _)| k == "name").map(|(_, v)| v),
+            Some(CtValue::String(s)) if s == "a"
+        ));
+        assert!(matches!(
+            first.iter().find(|(k, _)| k == "age").map(|(_, v)| v),
+            Some(CtValue::Int(12))
+        ));
+        assert!(matches!(
+            first.iter().find(|(k, _)| k == "gender").map(|(_, v)| v),
+            Some(CtValue::String(s)) if s == "male"
+        ));
+    }
+
+    #[test]
+    fn test_from_ssv_transpose_short_rows_become_nothing() {
+        let r = CmdFrom
+            .run(
+                &call_fmt_src_transpose("ssv", "name a b\nage 12"),
+                CtPipelineData::Empty,
+                &ctx(),
+            )
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = r else {
+            panic!("expected list");
+        };
+        let CtValue::Record(second) = &items[1] else {
+            panic!("record");
+        };
+        assert!(matches!(
+            second.iter().find(|(k, _)| k == "age").map(|(_, v)| v),
+            Some(CtValue::Nothing)
+        ));
+    }
+
+    #[test]
+    fn test_from_ssv_transpose_extra_columns_create_records() {
+        let r = CmdFrom
+            .run(
+                &call_fmt_src_transpose("ssv", "name a b c\nage 12 11 10"),
+                CtPipelineData::Empty,
+                &ctx(),
+            )
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = r else {
+            panic!("expected list");
+        };
+        assert_eq!(items.len(), 3);
+    }
+
+    #[test]
+    fn test_from_ssv_transpose_rejects_duplicate_field_name() {
+        let err = CmdFrom
+            .run(
+                &call_fmt_src_transpose("ssv", "name a b\nname c d"),
+                CtPipelineData::Empty,
+                &ctx(),
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("duplicate transpose field"));
     }
 
     #[test]

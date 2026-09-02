@@ -14,7 +14,7 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::io::{Write, stdout};
+use std::io::{Write, stderr, stdout};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ops::ControlFlow;
 
@@ -104,8 +104,9 @@ fn printf_invocation_from_matches(args_match: &ArgMatches) -> CTResult<PrintfInv
 fn printf_render_to_writer<W: Write>(
     invocation: &PrintfInvocation,
     writer: &mut W,
-) -> CTResult<()> {
+) -> CTResult<String> {
     let mut args_slice = invocation.arguments.as_slice();
+    let mut stderr_text = String::new();
 
     loop {
         let mut cursor = ArgCursor::new(args_slice);
@@ -116,20 +117,43 @@ fn printf_render_to_writer<W: Write>(
                 .write(&mut *writer, &mut cursor)
                 .map_err(|err| CtSimpleError::new(1, err.to_string()))?
             {
-                ControlFlow::Break(()) => return Ok(()),
+                ControlFlow::Break(()) => return Ok(stderr_text),
                 ControlFlow::Continue(()) => {}
             }
         }
 
         let consumed = cursor.consumed_count();
-        if consumed == 0 || consumed >= args_slice.len() {
+        if consumed == 0 {
+            if let Some(first_excess) = args_slice.first() {
+                stderr_text.push_str(&printf_excess_arguments_warning(first_excess));
+            }
+            break;
+        }
+        if consumed >= args_slice.len() {
             break;
         }
 
         args_slice = &args_slice[consumed..];
     }
 
-    Ok(())
+    Ok(stderr_text)
+}
+
+fn printf_excess_arguments_warning(arg: &FormatArgument) -> String {
+    format!(
+        "printf: warning: ignoring excess arguments, starting with {}\n",
+        printf_argument_for_warning(arg)
+    )
+}
+
+fn printf_argument_for_warning(arg: &FormatArgument) -> String {
+    match arg {
+        FormatArgument::Unparsed(s) | FormatArgument::String(s) => format!("‘{s}’"),
+        FormatArgument::Char(c) => format!("‘{c}’"),
+        FormatArgument::UnsignedInt(n) => format!("‘{n}’"),
+        FormatArgument::SignedInt(n) => format!("‘{n}’"),
+        FormatArgument::Float(n) => format!("‘{n}’"),
+    }
 }
 
 fn printf_error_text(err: &dyn CTError) -> String {
@@ -215,10 +239,16 @@ pub fn printf_main_with_writer<W: Write>(args: impl ctcore::Args, mut writer: W)
     init_printf_locale();
     let args_match = ct_app().get_matches_from(args);
     let invocation = printf_invocation_from_matches(&args_match)?;
-    printf_render_to_writer(&invocation, &mut writer)?;
+    let stderr_text = printf_render_to_writer(&invocation, &mut writer)?;
     writer
         .flush()
         .map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+    if !stderr_text.is_empty() {
+        stderr()
+            .lock()
+            .write_all(stderr_text.as_bytes())
+            .map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+    }
     Ok(())
 }
 
@@ -245,10 +275,10 @@ pub fn printf_native_semantic(args: impl ctcore::Args) -> CTResult<PrintfSemanti
 
     let mut output = Vec::new();
     match printf_render_to_writer(&invocation, &mut output) {
-        Ok(()) => Ok(printf_semantic_from_output(
+        Ok(stderr_text) => Ok(printf_semantic_from_output(
             &invocation.format_string,
             output,
-            String::new(),
+            stderr_text,
             0,
         )),
         Err(err) => Ok(printf_semantic_from_output(
@@ -410,6 +440,20 @@ mod tests {
             assert!(semantic.rows[0].terminated);
             assert_eq!(semantic.rows[1].text, "beta");
             assert!(semantic.rows[1].terminated);
+        }
+
+        #[test]
+        fn semantic_warns_about_excess_arguments_when_format_consumes_none() {
+            let args = [ctcore::ct_util_name(), "foo", "alpha", "beta"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "foo");
+            assert_eq!(
+                semantic.stderr_text,
+                "printf: warning: ignoring excess arguments, starting with ‘alpha’\n"
+            );
+            assert_eq!(semantic.exit_code, 0);
         }
 
         #[test]

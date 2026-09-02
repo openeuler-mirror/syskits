@@ -294,6 +294,21 @@ fn data_phase_b_gnu_flags_match_direct_classic_output() {
 }
 
 #[test]
+fn direct_printf_warns_about_excess_arguments() {
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["printf", "we", "are", "ok."])
+        .output()
+        .expect("run direct syskits printf excess args");
+
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(out.stdout, b"we");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "printf: warning: ignoring excess arguments, starting with ‘are’\n"
+    );
+}
+
+#[test]
 fn data_gnu_numeric_and_clustered_short_flags_match_direct_classic_output() {
     let temp_dir = TempDir::new().expect("tempdir");
     let file = temp_dir.path().join("sample.txt");

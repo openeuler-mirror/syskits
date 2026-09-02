@@ -130,7 +130,7 @@ impl ExternalInputEncoder {
     ) -> std::io::Result<()> {
         match mode {
             ExternalStdinMode::Raw => {
-                crate::pipeline_stdin::write_pipeline_as_structured_text(input, &mut writer)?;
+                crate::pipeline_stdin::write_pipeline_as_classic_stdin(input, &mut writer)?;
             }
             ExternalStdinMode::TextLines => match input {
                 CtPipelineData::ByteStream(mut stream) => {
@@ -197,12 +197,23 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_raw_uses_structured_text_not_classic_metadata() {
+    fn test_encode_raw_prefers_classic_metadata() {
         let meta = CtPipelineMetadata {
             classic_text: Some("classic".into()),
             classic_append_newline: false,
             ..Default::default()
         };
+        let val = CtValue::Record(vec![("text".into(), CtValue::String("structured".into()))]);
+        let data = CtPipelineData::Value(val, meta);
+
+        let mut buf = Vec::new();
+        ExternalInputEncoder::encode(data, ExternalStdinMode::Raw, &mut buf).unwrap();
+        assert_eq!(buf, b"classic");
+    }
+
+    #[test]
+    fn test_encode_raw_falls_back_to_structured_text_without_classic_metadata() {
+        let meta = CtPipelineMetadata::default();
         let val = CtValue::Record(vec![("text".into(), CtValue::String("structured".into()))]);
         let data = CtPipelineData::Value(val, meta);
 

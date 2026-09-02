@@ -4246,6 +4246,42 @@ fn display_inode(mdata: &Metadata) -> String {
     get_inode(mdata)
 }
 
+#[cfg(target_os = "linux")]
+fn get_security_context_from_xattr(p_buf: &Path, must_dereference: bool) -> Option<String> {
+    let c_path = CString::new(p_buf.as_os_str().as_bytes()).ok()?;
+    let get_xattr = |value: *mut ctcore::libc::c_void, size: usize| unsafe {
+        if must_dereference {
+            ctcore::libc::getxattr(c_path.as_ptr(), c"security.selinux".as_ptr(), value, size)
+        } else {
+            ctcore::libc::lgetxattr(c_path.as_ptr(), c"security.selinux".as_ptr(), value, size)
+        }
+    };
+
+    let len = get_xattr(std::ptr::null_mut(), 0);
+    if len <= 0 {
+        return None;
+    }
+
+    let mut context = vec![0u8; len as usize];
+    let len = get_xattr(context.as_mut_ptr().cast(), context.len());
+    if len <= 0 {
+        return None;
+    }
+
+    context.truncate(len as usize);
+    let context = context.strip_suffix(&[0]).unwrap_or(&context);
+    if context.is_empty() {
+        None
+    } else {
+        Some(String::from_utf8_lossy(context).into_owned())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_security_context_from_xattr(_p_buf: &Path, _must_dereference: bool) -> Option<String> {
+    None
+}
+
 // 返回 SELinux 安全上下文的 UTF8 `String`。
 #[allow(unused_variables)]
 fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool) -> String {
@@ -4265,12 +4301,12 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
 
             // 熔断机制：如果已知系统不支持，直接快速返回
             if supported == -1 {
-                return substitute_string;
+                return get_security_context_from_xattr(p_buf, must_dereference)
+                    .unwrap_or(substitute_string);
             }
 
             // 探针机制：避免第三方 selinux crate 吞掉底层的 errno，使用原生 libc 精准探测
             if supported == 0 {
-                use std::ffi::CString;
                 if let Ok(c_path) = CString::new(p_buf.as_os_str().as_bytes()) {
                     let res = unsafe {
                         if must_dereference {
@@ -4293,7 +4329,8 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
                         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
                         if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
                             SELINUX_SUPPORTED.store(-1, std::sync::atomic::Ordering::Relaxed);
-                            return substitute_string;
+                            return get_security_context_from_xattr(p_buf, must_dereference)
+                                .unwrap_or(substitute_string);
                         }
                     }
                 }
@@ -4303,12 +4340,18 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
 
             match selinux::SecurityContext::of_path(p_buf, must_dereference.to_owned(), false) {
                 Err(_r) => {
-                    if config.is_context {
+                    if let Some(context) = get_security_context_from_xattr(p_buf, must_dereference)
+                    {
+                        context
+                    } else if config.is_context {
                         ct_show_warning!("failed to get security context of: {}", p_buf.quote());
+                        substitute_string
+                    } else {
+                        substitute_string
                     }
-                    substitute_string
                 }
-                Ok(None) => substitute_string,
+                Ok(None) => get_security_context_from_xattr(p_buf, must_dereference)
+                    .unwrap_or(substitute_string),
                 Ok(Some(security_context)) => {
                     let context = security_context.as_bytes();
                     let context_strip_suffix = context.strip_suffix(&[0]).unwrap_or(context);
@@ -4330,7 +4373,7 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
             substitute_string
         }
     } else {
-        substitute_string
+        get_security_context_from_xattr(p_buf, must_dereference).unwrap_or(substitute_string)
     }
 }
 

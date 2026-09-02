@@ -10,7 +10,25 @@ use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
 use ctengine::execution::{CommandCore, CommandRunner};
 use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
-use ctsig::{DataCall, DataSignature};
+use ctsig::{CtFlag, DataCall, DataSignature};
+
+const PS_HELP: &str = "\
+syskits data ps
+
+This is the syskits structured data pipeline ps command, not procps-ng ps.
+It returns a structured process list with fields: pid, name, cpu, mem, status.
+procps-ng style arguments such as `ps aux` and `ps -ef` are not supported here.
+
+Usage:
+  ps
+  ps --help
+  ps --version
+
+Examples:
+  ps | where cpu > 1 | select pid name cpu
+  ~ps aux        # run the external procps-ng ps command
+  ~ps -ef        # run the external procps-ng ps command
+";
 
 #[derive(Default)]
 pub struct CmdPs;
@@ -20,17 +38,37 @@ struct PsCore;
 impl DataCommand for CmdPs {
     fn signature(&self) -> DataSignature {
         DataSignature::new("ps", "structured process list (linux only for now)")
+            .flag(CtFlag::switch(
+                "help",
+                Some('h'),
+                "show help for syskits data ps",
+            ))
+            .flag(CtFlag::switch(
+                "version",
+                None,
+                "show syskits data ps version",
+            ))
             .input(CtType::Nothing)
-            .output(CtType::List)
+            .output(CtType::Any)
     }
 
     fn run(
         &self,
-        _call: &DataCall,
+        call: &DataCall,
         input: CtPipelineData,
         ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
-        CommandRunner::run(&PsCore, _call, input, ctx)
+        if call.has_flag("help") {
+            return Ok(meta_text_output(PS_HELP.to_string(), 0));
+        }
+        if call.has_flag("version") {
+            return Ok(meta_text_output(
+                format!("syskits data ps {}", env!("CARGO_PKG_VERSION")),
+                0,
+            ));
+        }
+
+        CommandRunner::run(&PsCore, call, input, ctx)
     }
 }
 
@@ -52,6 +90,21 @@ pub fn ps_core_pipeline() -> Result<CtPipelineData, CtDiagnosticError> {
         CtValue::List(rows),
         CtPipelineMetadata::default(),
     ))
+}
+
+fn meta_text_output(text: String, exit_code: i32) -> CtPipelineData {
+    CtPipelineData::Value(
+        CtValue::String(text.clone()),
+        CtPipelineMetadata {
+            classic_text: Some(text),
+            classic_bytes: None,
+            classic_append_newline: false,
+            stderr_text: None,
+            exit_code,
+            source: Some("ps".into()),
+            ..Default::default()
+        },
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -246,6 +299,40 @@ mod tests {
             let cpu_value = fields.iter().find(|(k, _)| k == "cpu").map(|(_, v)| v);
             assert!(matches!(cpu_value, Some(CtValue::Float(v)) if *v >= 0.0));
         }
+    }
+
+    #[test]
+    fn ps_help_identifies_data_pipeline_command() {
+        let mut call = DataCall::named("ps");
+        call.flags.insert("help".into(), None);
+
+        let out = CmdPs
+            .run(&call, CtPipelineData::Empty, &ctx())
+            .expect("ps --help should run");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected help text");
+        };
+
+        assert!(text.contains("syskits structured data pipeline ps command"));
+        assert!(text.contains("not procps-ng ps"));
+        assert!(text.contains("~ps aux"));
+        assert_eq!(meta.exit_code, 0);
+    }
+
+    #[test]
+    fn ps_version_identifies_data_pipeline_command() {
+        let mut call = DataCall::named("ps");
+        call.flags.insert("version".into(), None);
+
+        let out = CmdPs
+            .run(&call, CtPipelineData::Empty, &ctx())
+            .expect("ps --version should run");
+        let CtPipelineData::Value(CtValue::String(text), meta) = out else {
+            panic!("expected version text");
+        };
+
+        assert!(text.starts_with("syskits data ps "));
+        assert_eq!(meta.exit_code, 0);
     }
 
     #[test]

@@ -147,6 +147,44 @@ fn assert_data_classic_matches_direct_with_data_args(
     assert_eq!(out.stderr, expected.stderr, "stderr mismatch for {label}");
 }
 
+#[test]
+fn data_ps_help_and_version_identify_syskits_data_command() {
+    let help = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "ps --help"])
+        .output()
+        .expect("run syskits data ps --help");
+    assert!(
+        help.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&help.stderr)
+    );
+    let help_stdout = String::from_utf8_lossy(&help.stdout);
+    assert!(
+        help_stdout.contains("syskits structured data pipeline ps command"),
+        "stdout: {help_stdout:?}"
+    );
+    assert!(
+        help_stdout.contains("not procps-ng ps"),
+        "stdout: {help_stdout:?}"
+    );
+    assert!(help_stdout.contains("~ps aux"), "stdout: {help_stdout:?}");
+
+    let version = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "ps --version"])
+        .output()
+        .expect("run syskits data ps --version");
+    assert!(
+        version.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&version.stderr)
+    );
+    let version_stdout = String::from_utf8_lossy(&version.stdout);
+    assert!(
+        version_stdout.starts_with("syskits data ps "),
+        "stdout: {version_stdout:?}"
+    );
+}
+
 fn split_chunks(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     let mut chunks = fs::read_dir(dir)
         .expect("read split output dir")

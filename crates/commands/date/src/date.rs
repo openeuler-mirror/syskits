@@ -83,6 +83,7 @@ static DATE_OPT_SET_HELP_STRING: &str = "set time described by STRING";
 /// Settings for this program, parsed from the command line
 struct DateSettings {
     utc: bool,
+    debug: bool,
     format: DateFormat,
     date_source: DateSource,
     set_to: Option<DateTime<FixedOffset>>,
@@ -338,6 +339,92 @@ fn date_row_from_datetime(
     })
 }
 
+fn date_ymd_hms_label(date: &DateTime<FixedOffset>) -> String {
+    format!(
+        "(Y-M-D) {:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        date.year(),
+        date.month(),
+        date.day(),
+        date.hour(),
+        date.minute(),
+        date.second()
+    )
+}
+
+fn date_ymd_label(date: &DateTime<FixedOffset>) -> String {
+    format!(
+        "(Y-M-D) {:04}-{:02}-{:02}",
+        date.year(),
+        date.month(),
+        date.day()
+    )
+}
+
+fn date_offset_label(date: &DateTime<FixedOffset>) -> String {
+    let offset = date.offset().local_minus_utc();
+    if offset == 0 {
+        "UTC".to_string()
+    } else {
+        let sign = if offset < 0 { '-' } else { '+' };
+        let abs = offset.abs();
+        let hours = abs / 3600;
+        let minutes = (abs % 3600) / 60;
+        if minutes == 0 {
+            format!("UTC{sign}{hours:02}")
+        } else {
+            format!("UTC{sign}{hours:02}:{minutes:02}")
+        }
+    }
+}
+
+fn custom_input_looks_ymd_date(input: &str) -> bool {
+    input.len() == 10
+        && input.as_bytes()[4] == b'-'
+        && input.as_bytes()[7] == b'-'
+        && input[..4].chars().all(|c| c.is_ascii_digit())
+        && input[5..7].chars().all(|c| c.is_ascii_digit())
+        && input[8..].chars().all(|c| c.is_ascii_digit())
+}
+
+fn emit_date_debug(input: &str, date: &DateTime<FixedOffset>, format_string: &str) {
+    if custom_input_looks_ymd_date(input) {
+        eprintln!("date: parsed date part: {}", date_ymd_label(date));
+    }
+    eprintln!("date: input timezone: system default");
+    if date.hour() == 0 && date.minute() == 0 && date.second() == 0 && date.nanosecond() == 0 {
+        eprintln!("date: warning: using midnight as starting time: 00:00:00");
+    }
+    let local_label = date_ymd_hms_label(date);
+    eprintln!("date: starting date/time: '{local_label}'");
+    eprintln!("date: '{local_label}' = {} epoch-seconds", date.timestamp());
+    eprintln!("date: timezone: system default");
+    eprintln!(
+        "date: final: {}.{:09} (epoch-seconds)",
+        date.timestamp(),
+        date.timestamp_subsec_nanos()
+    );
+    let utc = date.with_timezone(&Utc);
+    eprintln!(
+        "date: final: (Y-M-D) {:04}-{:02}-{:02} {:02}:{:02}:{:02} (UTC)",
+        utc.year(),
+        utc.month(),
+        utc.day(),
+        utc.hour(),
+        utc.minute(),
+        utc.second()
+    );
+    eprintln!(
+        "date: final: {} ({})",
+        date_ymd_hms_label(date),
+        date_offset_label(date)
+    );
+    eprintln!(
+        "{}: output format: ‘{}’",
+        ctcore::ct_util_name(),
+        format_string
+    );
+}
+
 pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -402,6 +489,7 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
 
     let date_set = DateSettings {
         utc: args_match.get_flag(DATE_OPT_UNIVERSAL),
+        debug: args_match.get_flag(DATE_OPT_DEBUG),
         format: date_format,
         date_source,
         set_to: None,
@@ -538,6 +626,7 @@ fn date_processing(
     // 创建日期设置结构体
     let date_set = DateSettings {
         utc: args_match.get_flag(DATE_OPT_UNIVERSAL),
+        debug: args_match.get_flag(DATE_OPT_DEBUG),
         format: date_format,
         date_source,
         set_to: set_to_params,
@@ -567,6 +656,34 @@ fn date_processing(
 
         set_system_datetime(date)
     } else {
+        let format_string = make_format_string(&date_set);
+
+        if let DateSource::Custom(ref input) = date_set.date_source {
+            let input_str = input.to_string_lossy().to_string();
+            let mut date = parse_date(&input_str);
+            if let Ok(dt) = date {
+                if date_set.utc {
+                    date = Ok(dt.with_timezone(&Utc).into());
+                }
+            }
+            match date {
+                Ok(date) => {
+                    if date_set.debug {
+                        emit_date_debug(&input_str, &date, &format_string);
+                    }
+                    let s = format_date_output(&date, &format_string)?;
+                    println!("{s}");
+                }
+                Err(_) => {
+                    ct_show!(CtSimpleError::new(
+                        1,
+                        format!("invalid date {}", input.quote())
+                    ));
+                }
+            }
+            return Ok(());
+        }
+
         // 获取当前时间，根据设置确定是否使用UTC
         let now: DateTime<FixedOffset> = if date_set.utc {
             let now = Utc::now();
@@ -579,20 +696,7 @@ fn date_processing(
         // 根据日期来源生成日期的迭代器
         // 创建一个动态分发的迭代器Box<dyn Iterator<Item = _>>，用于根据不同的DateSource枚举值生成对应的日期迭代
         let dates_iterator: Box<dyn Iterator<Item = _>> = match date_set.date_source {
-            DateSource::Custom(ref input) => {
-                let input_str = input.to_string_lossy().to_string();
-                let mut date = parse_date(&input_str);
-                if let Ok(dt) = date {
-                    if date_set.utc {
-                        date = Ok(dt.with_timezone(&Utc).into());
-                    }
-                }
-                let iter = std::iter::once(date.map_err(|_| {
-                    // 直接使用 OsString 的 quote() 完美还原非法字节
-                    CtSimpleError::new(1, format!("invalid date {}", input.quote()))
-                }));
-                Box::new(iter)
-            }
+            DateSource::Custom(_) => unreachable!("custom dates are handled before iterator setup"),
             DateSource::File(ref path) => {
                 if path.is_dir() {
                     return Err(CtSimpleError::new(
@@ -648,36 +752,12 @@ fn date_processing(
             }
         };
 
-        // 根据日期设置生成格式化字符串
-        let format_string = make_format_string(&date_set);
-
         // 格式化并打印所有日期
         for date in dates_iterator {
             match date {
                 Ok(date) => {
-                    #[cfg(target_os = "linux")]
-                    {
-                        let s = format_using_strftime(&date, &format_string)?;
-                        println!("{s}");
-                    }
-                    #[cfg(not(target_os = "linux"))]
-                    {
-                        // 临时替换格式字符串中的 `%N` 为 `%f`，以兼容处理
-                        let format_string = &format_string.replace("%N", "%f");
-                        // 检查格式字符串是否包含无效的格式项
-                        if format_string.contains("%#z") {
-                            return Err(CtSimpleError::new(
-                                1,
-                                format!("invalid format {}", format_string.replace("%f", "%N")),
-                            ));
-                        }
-                        // 格式化日期并打印
-                        let formatted = date
-                            .format_with_items(StrftimeItems::new(format_string))
-                            .to_string()
-                            .replace("%f", "%N");
-                        println!("{formatted}");
-                    }
+                    let s = format_date_output(&date, &format_string)?;
+                    println!("{s}");
                 }
                 Err(err) => ct_show!(err),
             }

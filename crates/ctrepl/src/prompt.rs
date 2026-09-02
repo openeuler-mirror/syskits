@@ -12,21 +12,57 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ReplPrompt {
     pub(crate) prompt_left: String,
     pub(crate) path_depth: usize,
+    cached_left: Arc<Mutex<Option<CachedPromptLeft>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CachedPromptLeft {
+    cwd: PathBuf,
+    rendered: String,
+}
+
+impl ReplPrompt {
+    pub(crate) fn new(prompt_left: String, path_depth: usize) -> Self {
+        Self {
+            prompt_left,
+            path_depth,
+            cached_left: Arc::new(Mutex::new(None)),
+        }
+    }
 }
 
 impl Prompt for ReplPrompt {
     fn render_prompt_left(&self) -> Cow<str> {
-        let cwd = env::current_dir()
-            .ok()
-            .map(|p| format_prompt_path(&p, self.path_depth))
-            .unwrap_or_else(|| ".".to_string());
-        Cow::Owned(format!("{}({cwd})", self.prompt_left))
+        let Ok(cwd) = env::current_dir() else {
+            return Cow::Owned(format!("{}(.)", self.prompt_left));
+        };
+
+        let mut cached = self
+            .cached_left
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(cached) = cached.as_ref()
+            && cached.cwd == cwd
+        {
+            return Cow::Owned(cached.rendered.clone());
+        }
+
+        let rendered = format!(
+            "{}({})",
+            self.prompt_left,
+            format_prompt_path(&cwd, self.path_depth)
+        );
+        *cached = Some(CachedPromptLeft {
+            cwd,
+            rendered: rendered.clone(),
+        });
+        Cow::Owned(rendered)
     }
 
     fn render_prompt_right(&self) -> Cow<str> {
@@ -49,13 +85,54 @@ impl Prompt for ReplPrompt {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ReplHighlighter {
     signatures: Arc<HashMap<String, DataSignature>>,
+    cache: Arc<Mutex<Option<HighlightCacheEntry>>>,
+}
+
+#[derive(Clone)]
+struct HighlightCacheEntry {
+    line: String,
+    styled: StyledText,
 }
 
 impl Highlighter for ReplHighlighter {
     fn highlight(&self, line: &str, _cursor: usize) -> StyledText {
+        {
+            let cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = cache.as_ref()
+                && entry.line == line
+            {
+                return entry.styled.clone();
+            }
+        }
+
+        let styled = self.highlight_uncached(line);
+        let mut cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *cache = Some(HighlightCacheEntry {
+            line: line.to_string(),
+            styled: styled.clone(),
+        });
+        styled
+    }
+}
+
+impl ReplHighlighter {
+    fn new(signatures: Arc<HashMap<String, DataSignature>>) -> Self {
+        Self {
+            signatures,
+            cache: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn highlight_uncached(&self, line: &str) -> StyledText {
         let mut out = StyledText::new();
         let base = Style::new();
         out.push((base, line.to_string()));
@@ -116,6 +193,9 @@ struct ReplValidator;
 
 impl Validator for ReplValidator {
     fn validate(&self, line: &str) -> ValidationResult {
+        if line.trim().is_empty() {
+            return ValidationResult::Complete;
+        }
         if line_is_incomplete(line) {
             ValidationResult::Incomplete
         } else {
@@ -377,7 +457,7 @@ pub(crate) fn build_reedline_editor(
     editor
         .with_hinter(Box::new(DefaultHinter::default()))
         .with_validator(Box::new(ReplValidator))
-        .with_highlighter(Box::new(ReplHighlighter { signatures }))
+        .with_highlighter(Box::new(ReplHighlighter::new(signatures)))
         .with_menu(ReedlineMenu::EngineCompleter(completion_menu))
         .with_edit_mode(edit_mode)
         .with_completer(completer)
@@ -447,12 +527,13 @@ pub(crate) fn build_completion_candidates(
 #[cfg(test)]
 mod tests {
     use super::{
-        CompletionCandidate, CompletionKind, ReplCompleter, build_completion_candidates,
-        completion_token_start, is_command_position,
+        CompletionCandidate, CompletionKind, ReplCompleter, ReplHighlighter,
+        build_completion_candidates, completion_token_start, is_command_position,
     };
     use ctsig::DataSignature;
-    use reedline::Completer;
+    use reedline::{Completer, Highlighter};
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn completer() -> ReplCompleter {
         ReplCompleter::new(vec![
@@ -584,5 +665,19 @@ mod tests {
         assert!(!values.contains(&":history".to_string()));
         assert!(!values.contains(&":trace".to_string()));
         assert!(!values.contains(&":ast".to_string()));
+    }
+
+    #[test]
+    fn test_highlighter_reuses_cached_result_when_only_cursor_moves() {
+        let highlighter = ReplHighlighter::new(Arc::new(HashMap::new()));
+        let first = highlighter.highlight("from json", 0);
+        let second = highlighter.highlight("from json", 4);
+
+        assert_eq!(first.buffer.len(), second.buffer.len());
+        let cache = highlighter.cache.lock().expect("highlight cache");
+        assert_eq!(
+            cache.as_ref().map(|entry| entry.line.as_str()),
+            Some("from json")
+        );
     }
 }

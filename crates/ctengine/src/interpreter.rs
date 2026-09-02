@@ -281,10 +281,7 @@ fn eval_call(
                 call.span.clone(),
             ));
         }
-        let ext_args = external_args_from_call(call);
-        let mut spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
-        spec.exit_policy = crate::external::ExternalExitPolicy::AllowNonZero;
-        spec.path_policy = crate::external::ExternalPathPolicy::SkipSyskitsPriority;
+        let spec = forced_external_call_spec(call)?;
         return crate::external::ExternalExecutor::run(spec, input, ctx);
     }
 
@@ -399,6 +396,145 @@ fn external_args_from_call(call: &Call) -> Vec<String> {
         }
     }
     ext_args
+}
+
+fn forced_external_call_spec(
+    call: &Call,
+) -> Result<crate::external::ExternalCallSpec, CtDiagnosticError> {
+    let mut ext_args = Vec::new();
+    let mut spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
+    spec.exit_policy = crate::external::ExternalExitPolicy::AllowNonZero;
+    spec.path_policy = crate::external::ExternalPathPolicy::SkipSyskitsPriority;
+
+    let mut idx = 0usize;
+    while idx < call.args.len() {
+        match &call.args[idx] {
+            Arg::LongFlag { name, span } if is_run_external_control_flag(name) => {
+                let Some(Arg::Positional { value, .. }) = call.args.get(idx + 1) else {
+                    return Err(flag_value_missing_error(call, &format!("--{name}"), span));
+                };
+                apply_forced_external_control(&mut spec, call, name, value, span)?;
+                idx += 1;
+            }
+            Arg::LongFlagValue {
+                name, value, span, ..
+            } if is_run_external_control_flag(name) => {
+                apply_forced_external_control(&mut spec, call, name, value, span)?;
+            }
+            arg => push_external_arg(&mut ext_args, arg),
+        }
+        idx += 1;
+    }
+
+    spec.args = ext_args;
+    Ok(spec)
+}
+
+fn push_external_arg(ext_args: &mut Vec<String>, arg: &Arg) {
+    match arg {
+        Arg::Positional { value, .. } => ext_args.push(value.to_string()),
+        Arg::LongFlag { name, .. } => ext_args.push(format!("--{name}")),
+        Arg::LongFlagValue { name, value, .. } => {
+            ext_args.push(format!("--{name}"));
+            ext_args.push(value.to_string());
+        }
+        Arg::ShortFlag { name, .. } => ext_args.push(format!("-{name}")),
+        Arg::Comparison { field, op, rhs, .. } => {
+            ext_args.push(field.clone());
+            ext_args.push(op.symbol().to_string());
+            ext_args.push(rhs.to_string());
+        }
+        Arg::WhereExpr {
+            conditions,
+            logic_ops,
+            ..
+        } => {
+            for (idx, (field, op, rhs)) in conditions.iter().enumerate() {
+                if idx > 0
+                    && let Some(logic) = logic_ops.get(idx - 1)
+                {
+                    ext_args.push(logic.clone());
+                }
+                ext_args.push(field.clone());
+                ext_args.push(op.symbol().to_string());
+                ext_args.push(rhs.to_string());
+            }
+        }
+    }
+}
+
+fn apply_forced_external_control(
+    spec: &mut crate::external::ExternalCallSpec,
+    call: &Call,
+    name: &str,
+    value: &Lit,
+    span: &ctpipeline::CtSpan,
+) -> Result<(), CtDiagnosticError> {
+    let value = value.to_string();
+    match name {
+        "stderr-mode" => spec.stderr_mode = parse_external_stderr_mode(&value)?,
+        "stdin-mode" => spec.stdin_mode = parse_external_stdin_mode(&value)?,
+        "exit-policy" => spec.exit_policy = parse_external_exit_policy(&value)?,
+        "timeout-ms" => {
+            let ms = value.parse::<i64>().map_err(|_| {
+                CtDiagnosticError::with_span(
+                    format!(
+                        "{}: flag `--timeout-ms` expects an integer value",
+                        call.name
+                    ),
+                    span.clone(),
+                )
+                .with_code(exit_code::USAGE_ERROR)
+            })?;
+            if ms > 0 {
+                spec.timeout_ms = Some(ms as u64);
+            }
+        }
+        _ => unreachable!("checked by is_run_external_control_flag"),
+    }
+    Ok(())
+}
+
+fn parse_external_stderr_mode(
+    value: &str,
+) -> Result<crate::external::ExternalStderrMode, CtDiagnosticError> {
+    match value.to_lowercase().as_str() {
+        "inherit" => Ok(crate::external::ExternalStderrMode::Inherit),
+        "merge" => Ok(crate::external::ExternalStderrMode::MergeToStdout),
+        "capture" => Ok(crate::external::ExternalStderrMode::Capture),
+        _ => Err(
+            CtDiagnosticError::simple(format!("unknown stderr-mode '{value}'"))
+                .with_code(exit_code::USAGE_ERROR),
+        ),
+    }
+}
+
+fn parse_external_stdin_mode(
+    value: &str,
+) -> Result<crate::external::ExternalStdinMode, CtDiagnosticError> {
+    match value.to_lowercase().as_str() {
+        "raw" => Ok(crate::external::ExternalStdinMode::Raw),
+        "text" => Ok(crate::external::ExternalStdinMode::TextLines),
+        "json" => Ok(crate::external::ExternalStdinMode::Json),
+        "jsonlines" => Ok(crate::external::ExternalStdinMode::JsonLines),
+        _ => Err(
+            CtDiagnosticError::simple(format!("unknown stdin-mode '{value}'"))
+                .with_code(exit_code::USAGE_ERROR),
+        ),
+    }
+}
+
+fn parse_external_exit_policy(
+    value: &str,
+) -> Result<crate::external::ExternalExitPolicy, CtDiagnosticError> {
+    match value.to_lowercase().as_str() {
+        "fail" => Ok(crate::external::ExternalExitPolicy::FailOnNonZero),
+        "allow" => Ok(crate::external::ExternalExitPolicy::AllowNonZero),
+        _ => Err(
+            CtDiagnosticError::simple(format!("unknown exit-policy '{value}'"))
+                .with_code(exit_code::USAGE_ERROR),
+        ),
+    }
 }
 
 fn pipeline_data_type(data: &CtPipelineData) -> CtType {
@@ -706,7 +842,7 @@ fn signature_has_flag(sig: &DataSignature, name: &str) -> bool {
 fn is_run_external_control_flag(name: &str) -> bool {
     matches!(
         name,
-        "stdout-mode" | "stderr-mode" | "stdin-mode" | "exit-policy" | "timeout-ms"
+        "stderr-mode" | "stdin-mode" | "exit-policy" | "timeout-ms"
     )
 }
 
@@ -1622,6 +1758,49 @@ mod tests {
         assert!(matches!(trace.stages[0].status, TraceStatus::Error(_)));
     }
 
+    #[test]
+    fn test_forced_external_consumes_control_flags() {
+        let call = parse_single_call(
+            "~printf hello --stderr-mode capture --stdin-mode text --timeout-ms 25 --unknown keep",
+        );
+        let spec = forced_external_call_spec(&call).expect("forced external spec");
+
+        assert_eq!(spec.cmd, "printf");
+        assert_eq!(
+            spec.args,
+            vec![
+                "hello".to_string(),
+                "--unknown".to_string(),
+                "keep".to_string()
+            ]
+        );
+        assert_eq!(
+            spec.stderr_mode,
+            crate::external::ExternalStderrMode::Capture
+        );
+        assert_eq!(
+            spec.stdin_mode,
+            crate::external::ExternalStdinMode::TextLines
+        );
+        assert_eq!(spec.timeout_ms, Some(25));
+        assert_eq!(
+            spec.path_policy,
+            crate::external::ExternalPathPolicy::SkipSyskitsPriority
+        );
+
+        let stdout_mode_call = parse_single_call("~printf hello --stdout-mode=auto");
+        let stdout_mode_spec =
+            forced_external_call_spec(&stdout_mode_call).expect("forced external spec");
+        assert_eq!(
+            stdout_mode_spec.args,
+            vec![
+                "hello".to_string(),
+                "--stdout-mode".to_string(),
+                "auto".to_string()
+            ]
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_eval_forced_external_skips_registry_and_allows_nonzero() {
@@ -1681,16 +1860,22 @@ mod tests {
     }
 
     fn run_external_signature() -> DataSignature {
-        DataSignature::new("run-external", "run external command").flag(CtFlag::with_value(
-            "stdout-mode",
-            None,
-            "stdout decode mode",
-            CtType::String,
-        ))
+        DataSignature::new("run-external", "run external command")
+            .rest(CtPositionalArg::optional(
+                "args",
+                "external command args",
+                CtType::String,
+            ))
+            .flag(CtFlag::with_value(
+                "stderr-mode",
+                None,
+                "stderr mode",
+                CtType::String,
+            ))
     }
 
     #[test]
-    fn test_build_data_call_run_external_preserves_dash_args() {
+    fn test_build_data_call_run_external_treats_stdout_mode_as_external_arg() {
         let call = parse_single_call("run-external echo -n hi --stdout-mode text");
         let sig = run_external_signature();
         let data_call = build_data_call(&call, Some(&sig)).expect("build data call");
@@ -1700,12 +1885,9 @@ mod tests {
             .iter()
             .map(|arg| arg.value.to_text())
             .collect();
-        assert_eq!(positionals, vec!["echo", "-n", "hi"]);
         assert_eq!(
-            data_call
-                .get_flag::<String>("stdout-mode")
-                .expect("flag extraction"),
-            Some("text".to_string())
+            positionals,
+            vec!["echo", "-n", "hi", "--stdout-mode", "text"]
         );
     }
 
@@ -1843,7 +2025,7 @@ mod tests {
 
     #[test]
     fn test_build_data_call_value_flag_requires_value() {
-        let call = parse_single_call("run-external echo --stdout-mode");
+        let call = parse_single_call("run-external echo --stderr-mode");
         let sig = run_external_signature();
         let err = build_data_call(&call, Some(&sig)).expect_err("missing value must fail");
         assert_eq!(err.code, crate::execution::exit_code::USAGE_ERROR);

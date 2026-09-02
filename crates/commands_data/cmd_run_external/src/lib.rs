@@ -7,7 +7,7 @@ use ctengine::{
     CtDiagnosticError, DataCommand, DataEngineContext,
     external::{
         ExternalCallSpec, ExternalExecutor, ExternalExitPolicy, ExternalPathPolicy,
-        ExternalStderrMode, ExternalStdinMode, ExternalStdoutMode,
+        ExternalStderrMode, ExternalStdinMode,
     },
 };
 use ctpipeline::{CtPipelineData, CtType, CtValue};
@@ -30,12 +30,6 @@ impl DataCommand for CmdRunExternal {
         .rest(CtPositionalArg::optional(
             "args",
             "Additional arguments for the command",
-            CtType::String,
-        ))
-        .flag(CtFlag::with_value(
-            "stdout-mode",
-            None,
-            "Mode for capturing stdout (raw, text, json, jsonlines, csv, auto)",
             CtType::String,
         ))
         .flag(CtFlag::with_value(
@@ -93,13 +87,6 @@ fn build_spec(call: &DataCall) -> Result<ExternalCallSpec, CtDiagnosticError> {
     spec.path_policy = ExternalPathPolicy::SkipSyskitsPriority;
 
     if let Some(s) = call
-        .get_flag::<String>("stdout-mode")
-        .map_err(|e| CtDiagnosticError::simple(e.to_string()))?
-    {
-        spec.stdout_mode = parse_stdout_mode(&s)?;
-    }
-
-    if let Some(s) = call
         .get_flag::<String>("stderr-mode")
         .map_err(|e| CtDiagnosticError::simple(e.to_string()))?
     {
@@ -129,20 +116,6 @@ fn build_spec(call: &DataCall) -> Result<ExternalCallSpec, CtDiagnosticError> {
     }
 
     Ok(spec)
-}
-
-fn parse_stdout_mode(s: &str) -> Result<ExternalStdoutMode, CtDiagnosticError> {
-    match s.to_lowercase().as_str() {
-        "raw" => Ok(ExternalStdoutMode::Raw),
-        "text" => Ok(ExternalStdoutMode::TextLines),
-        "json" => Ok(ExternalStdoutMode::Json),
-        "jsonlines" => Ok(ExternalStdoutMode::JsonLines),
-        "csv" => Ok(ExternalStdoutMode::Csv),
-        "auto" => Ok(ExternalStdoutMode::Auto),
-        _ => Err(CtDiagnosticError::simple(format!(
-            "unknown stdout-mode '{s}'"
-        ))),
-    }
 }
 
 fn parse_stderr_mode(s: &str) -> Result<ExternalStderrMode, CtDiagnosticError> {
@@ -197,32 +170,16 @@ mod tests {
     #[test]
     fn parses_known_modes_and_timeout() {
         let call = call_with_flags(vec![
-            ("stdout-mode", CtValue::String("jsonlines".into())),
             ("stderr-mode", CtValue::String("capture".into())),
             ("stdin-mode", CtValue::String("text".into())),
             ("exit-policy", CtValue::String("allow".into())),
             ("timeout-ms", CtValue::Int(1500)),
         ]);
         let spec = build_spec(&call).unwrap();
-        assert_eq!(spec.stdout_mode, ExternalStdoutMode::JsonLines);
         assert_eq!(spec.stderr_mode, ExternalStderrMode::Capture);
         assert_eq!(spec.stdin_mode, ExternalStdinMode::TextLines);
         assert_eq!(spec.exit_policy, ExternalExitPolicy::AllowNonZero);
         assert_eq!(spec.timeout_ms, Some(1500));
-    }
-
-    #[test]
-    fn parses_auto_stdout_mode() {
-        let call = call_with_flags(vec![("stdout-mode", CtValue::String("auto".into()))]);
-        let spec = build_spec(&call).unwrap();
-        assert_eq!(spec.stdout_mode, ExternalStdoutMode::Auto);
-    }
-
-    #[test]
-    fn unknown_mode_returns_error() {
-        let call = call_with_flags(vec![("stdout-mode", CtValue::String("invalid".into()))]);
-        let err = build_spec(&call).expect_err("expected parse error");
-        assert!(err.to_string().contains("unknown stdout-mode"));
     }
 
     #[test]
@@ -236,7 +193,10 @@ mod tests {
     fn defaults_apply_when_flags_are_missing() {
         let call = call_with_flags(Vec::new());
         let spec = build_spec(&call).unwrap();
-        assert_eq!(spec.stdout_mode, ExternalStdoutMode::Raw);
+        assert_eq!(
+            spec.stdout_mode,
+            ctengine::external::ExternalStdoutMode::Raw
+        );
         assert_eq!(spec.stderr_mode, ExternalStderrMode::Inherit);
         assert_eq!(spec.stdin_mode, ExternalStdinMode::Raw);
         assert_eq!(spec.exit_policy, ExternalExitPolicy::FailOnNonZero);

@@ -1,5 +1,7 @@
 use crate::config::{prompt_path_depth_from_env, repl_config_from_env, texts_for_current_locale};
-use crate::control::{ControlAction, handle_control_command, push_history_line};
+use crate::control::{
+    ControlAction, handle_control_command, load_history_lines_from_file, push_history_line,
+};
 use crate::prompt::{ReplPrompt, build_completion_candidates, build_reedline_editor};
 use ctengine::context::{CommandRegistry, DataEngineContext};
 use ctengine::entry::eval_expr;
@@ -162,7 +164,21 @@ pub fn run_repl(
         .with_signal(ctengine::context::SignalHandle::register_sigint())
         .enable_trace();
     let mut debug_enabled = false;
-    let mut history_lines: VecDeque<String> = VecDeque::new();
+    let mut history_lines = if config.persist_history {
+        if let Some(path) = &config.history_file {
+            match load_history_lines_from_file(path) {
+                Ok(history) => history,
+                Err(e) => {
+                    eprintln!("{}: {}", texts.history_io_warning, e);
+                    VecDeque::new()
+                }
+            }
+        } else {
+            VecDeque::new()
+        }
+    } else {
+        VecDeque::new()
+    };
 
     println!("{}", texts.banner);
 

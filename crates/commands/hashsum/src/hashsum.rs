@@ -223,6 +223,18 @@ fn hashsum_output_style(flags: &HashsumFlags) -> &'static str {
     }
 }
 
+fn tag_algorithm_name(flags: &HashsumFlags) -> String {
+    if flags.algoname == "BLAKE2" {
+        if flags.output_bits == 512 {
+            "BLAKE2b".to_string()
+        } else {
+            format!("BLAKE2b-{}", flags.output_bits)
+        }
+    } else {
+        flags.algoname.to_string()
+    }
+}
+
 fn render_compute_row_classic(
     flags: &HashsumFlags,
     filename: &Path,
@@ -230,14 +242,12 @@ fn render_compute_row_classic(
     sum: &str,
 ) -> String {
     if flags.is_tag {
+        let algorithm = tag_algorithm_name(flags);
         if flags.is_zero {
-            format!("{} ({}) = {}\0", flags.algoname, filename.display(), sum)
+            format!("{} ({}) = {}\0", algorithm, filename.display(), sum)
         } else {
             let (escaped_filename, prefix) = escape_filename(filename);
-            format!(
-                "{}{} ({}) = {}\n",
-                prefix, flags.algoname, escaped_filename, sum
-            )
+            format!("{}{} ({}) = {}\n", prefix, algorithm, escaped_filename, sum)
         }
     } else if flags.is_nonames {
         format!("{sum}\n")
@@ -1773,10 +1783,16 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
     // 初始化为可能的 GNU 格式，带有可选的二进制标记
     let gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
 
+    let bsd_algorithm = if flags.algoname == "BLAKE2" {
+        r"BLAKE2b(?:-[0-9]+)?"
+    } else {
+        flags.algoname
+    };
+
     // BSD 格式及 OpenSSL 格式正则表达式
     let bsd_re = Regex::new(&format!(
         r"^(?P<escaped>\\)?{algorithm} *\((?P<fileName>.*)\) *= *(?P<digest>[a-fA-F0-9]{digest_size})",
-        algorithm = flags.algoname,
+        algorithm = bsd_algorithm,
         digest_size = bytes_marker,
     ))
     .map_err(|_| HashsumError::InvalidRegex)?;
@@ -1973,6 +1989,7 @@ fn compute_and_output_hash<W: Write>(
     // 3. --zero 模式下，文件名不应转义 (disable file name escaping)。
 
     if flags.is_tag {
+        let algorithm = tag_algorithm_name(flags);
         // BSD 风格输出格式: ALGO (filename) = checksum
         if flags.is_zero {
             // --tag -z 组合：
@@ -1980,13 +1997,7 @@ fn compute_and_output_hash<W: Write>(
             // 2. 结尾手动添加 \0
             // 3. filename.display() 使用原始文件名（不转义）
             // 4. 不输出 prefix (反斜杠前缀)
-            write!(
-                writer,
-                "{} ({}) = {}\0",
-                flags.algoname,
-                filename.display(),
-                sum
-            )?;
+            write!(writer, "{} ({}) = {}\0", algorithm, filename.display(), sum)?;
         } else {
             // 普通 --tag：
             // 1. 需要转义文件名
@@ -1995,7 +2006,7 @@ fn compute_and_output_hash<W: Write>(
             writeln!(
                 writer,
                 "{}{} ({}) = {}",
-                prefix, flags.algoname, escaped_filename, sum
+                prefix, algorithm, escaped_filename, sum
             )?;
         }
     } else if flags.is_nonames {
@@ -2172,7 +2183,7 @@ mod tests {
     use std::ffi::OsString;
     use std::io::Cursor;
     use std::io::Seek;
-    use tempfile::NamedTempFile;
+    use tempfile::{NamedTempFile, tempdir};
 
     #[test]
     fn test_tool_implementation() {
@@ -2833,6 +2844,42 @@ mod tests {
             // 确认bytes_marker是"+"
             assert_eq!(bytes_marker, "+");
         }
+
+        #[test]
+        fn test_create_check_regexes_accepts_blake2b_tag() {
+            let flags = create_test_flags("BLAKE2", 512);
+            let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes(&flags).unwrap();
+            let mut bsd_reversed = None;
+            let digest = "a".repeat(128);
+            let line = format!("BLAKE2b (file) = {digest}");
+
+            let parsed =
+                parse_hash_line(line, &mut gnu_re, &bsd_re, &bytes_marker, &mut bsd_reversed)
+                    .unwrap();
+
+            assert_eq!(parsed.0, "file");
+            assert_eq!(parsed.1, digest);
+            assert!(parsed.2);
+            assert!(!parsed.3);
+        }
+
+        #[test]
+        fn test_create_check_regexes_accepts_blake2b_length_tag() {
+            let flags = create_test_flags("BLAKE2", 512);
+            let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes(&flags).unwrap();
+            let mut bsd_reversed = None;
+            let digest = "a".repeat(64);
+            let line = format!("BLAKE2b-256 (file) = {digest}");
+
+            let parsed =
+                parse_hash_line(line, &mut gnu_re, &bsd_re, &bytes_marker, &mut bsd_reversed)
+                    .unwrap();
+
+            assert_eq!(parsed.0, "file");
+            assert_eq!(parsed.1, digest);
+            assert!(parsed.2);
+            assert!(!parsed.3);
+        }
     }
 
     #[test]
@@ -3066,6 +3113,77 @@ mod tests {
         assert!(output_str.ends_with("\n"));
 
         // 临时文件会在变量离开作用域时自动删除
+    }
+
+    #[test]
+    fn test_b2sum_tag_uses_blake2b_label() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let file_path = temp_dir.path().join("file");
+        std::fs::write(&file_path, b"hello").expect("Failed to write input file");
+
+        let mut output = Vec::new();
+        let args = vec![
+            OsString::from("b2sum"),
+            OsString::from("--tag"),
+            file_path.as_os_str().to_owned(),
+        ];
+
+        hashsum_main(&mut output, args.into_iter()).expect("b2sum --tag should succeed");
+
+        let output = String::from_utf8(output).expect("Invalid UTF-8 in output");
+        assert!(output.starts_with("BLAKE2b ("));
+        assert!(!output.starts_with("BLAKE2 ("));
+    }
+
+    #[test]
+    fn test_b2sum_tag_with_length_uses_blake2b_length_label() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let file_path = temp_dir.path().join("file");
+        std::fs::write(&file_path, b"hello").expect("Failed to write input file");
+
+        let mut output = Vec::new();
+        let args = vec![
+            OsString::from("b2sum"),
+            OsString::from("--length=256"),
+            OsString::from("--tag"),
+            file_path.as_os_str().to_owned(),
+        ];
+
+        hashsum_main(&mut output, args.into_iter())
+            .expect("b2sum --length=256 --tag should succeed");
+
+        let output = String::from_utf8(output).expect("Invalid UTF-8 in output");
+        assert!(output.starts_with("BLAKE2b-256 ("));
+    }
+
+    #[test]
+    fn test_b2sum_check_accepts_blake2b_tag_output() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let file_path = temp_dir.path().join("file");
+        let sums_path = temp_dir.path().join("sums");
+        std::fs::write(&file_path, b"hello").expect("Failed to write input file");
+
+        let mut tag_output = Vec::new();
+        let tag_args = vec![
+            OsString::from("b2sum"),
+            OsString::from("--tag"),
+            file_path.as_os_str().to_owned(),
+        ];
+        hashsum_main(&mut tag_output, tag_args.into_iter()).expect("b2sum --tag should succeed");
+        std::fs::write(&sums_path, &tag_output).expect("Failed to write checksum file");
+
+        let mut check_output = Vec::new();
+        let check_args = vec![
+            OsString::from("b2sum"),
+            OsString::from("-c"),
+            sums_path.as_os_str().to_owned(),
+        ];
+
+        hashsum_main(&mut check_output, check_args.into_iter())
+            .expect("b2sum -c should accept BLAKE2b tag output");
+
+        let check_output = String::from_utf8(check_output).expect("Invalid UTF-8 in output");
+        assert!(check_output.contains(": OK\n"));
     }
 
     #[cfg(test)]

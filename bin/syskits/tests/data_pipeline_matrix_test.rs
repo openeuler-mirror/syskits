@@ -579,6 +579,31 @@ fn external_path_policy_skips_priority_syskits_for_tilde_and_run_external() {
 }
 
 #[test]
+fn external_csv_is_decoded_with_from_csv() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "data",
+            "format=json",
+            "~printf \"name,age,gender\\nalice,18,male\\nbob,20,female\\n\" | from csv",
+        ])
+        .output()
+        .expect("run forced external printf csv through from csv");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stderr, b"");
+
+    let stdout = String::from_utf8(output.stdout).expect("json stdout");
+    assert!(stdout.contains(r#""name":"alice""#), "stdout: {stdout}");
+    assert!(stdout.contains(r#""age":18"#), "stdout: {stdout}");
+    assert!(stdout.contains(r#""gender":"female""#), "stdout: {stdout}");
+    assert!(!stdout.starts_with("[110,"), "stdout: {stdout}");
+}
+
+#[test]
 fn shell_tilde_prefix_forces_external_for_direct_only_command() {
     let expected = Command::new("chroot")
         .arg("--help")

@@ -175,7 +175,6 @@ fn test_output_profile_matrix_single_axis_formats() {
         OutputFormat::Text,
         OutputFormat::Table,
         OutputFormat::Json,
-        OutputFormat::Raw,
     ];
 
     for stdout_is_tty in tty_modes {
@@ -680,7 +679,7 @@ fn data_to_empty_record_outputs_empty_text_for_plain_text_formats() {
     for format in ["yaml", "csv", "toml", "text"] {
         let expr = format!("from json \"{{}}\" | to {format}");
         let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
-            .args(["data", "format=raw", &expr])
+            .args(["data", "format=text", &expr])
             .output()
             .unwrap_or_else(|_| panic!("run data empty record to {format}"));
 
@@ -697,7 +696,7 @@ fn data_to_empty_record_outputs_empty_text_for_plain_text_formats() {
 #[test]
 fn data_to_toml_empty_list_outputs_empty_text() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
-        .args(["data", "format=raw", "from json \"[]\" | to toml"])
+        .args(["data", "format=text", "from json \"[]\" | to toml"])
         .output()
         .expect("run data empty list to toml");
 

@@ -939,7 +939,6 @@ pub fn try_print_pipeline_data_with_profile_and_signal(
         OutputFormat::Text => print_pipeline_data_text(data, signal),
         OutputFormat::Table => print_pipeline_data_table(data, profile.use_pager, signal),
         OutputFormat::Json => print_pipeline_data_json(data, signal),
-        OutputFormat::Raw => print_pipeline_data_raw(data, signal),
         OutputFormat::Auto => {
             print_pipeline_data_auto(data, profile.stdout_is_tty, profile.use_pager, signal)
         }
@@ -1028,16 +1027,6 @@ fn print_pipeline_data_text(
         }
     }
     Ok(())
-}
-
-fn print_pipeline_data_raw(
-    data: CtPipelineData,
-    signal: Option<&SignalHandle>,
-) -> Result<(), CtDiagnosticError> {
-    match data {
-        CtPipelineData::ByteStream(bs) => print_pipeline_bytes(bs, signal),
-        other => print_pipeline_data_text(other, signal),
-    }
 }
 
 fn print_pipeline_data_json(

@@ -255,17 +255,17 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_precheck_diags_keeps_unknown_for_unregistered_command() {
-        let expr = ctdsl::parse("ls | from json").expect("parse");
+    fn test_filter_precheck_diags_suppresses_unknown_for_path_fallback_command() {
+        let expr = ctdsl::parse("java --version").expect("parse");
         let diags = vec![ctdsl::PrecheckDiagnostic {
             level: ctdsl::PrecheckLevel::Warning,
-            message: "precheck: unknown command `ls`; skip type-chain check".to_string(),
+            message: "precheck: unknown command `java`; skip type-chain check".to_string(),
             stage_index: 0,
             span: None,
         }];
         let sigs = HashMap::new();
         let out = filter_precheck_diags_for_repl(&expr, diags, &sigs, None);
-        assert_eq!(out.len(), 1);
+        assert!(out.is_empty());
     }
 
     #[test]
@@ -285,11 +285,11 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_precheck_diags_suppresses_unknown_for_tilde_external_command() {
+    fn test_filter_precheck_diags_suppresses_forced_external_command() {
         let expr = ctdsl::parse("~chroot --help").expect("parse");
         let diags = vec![ctdsl::PrecheckDiagnostic {
             level: ctdsl::PrecheckLevel::Warning,
-            message: "precheck: unknown command `~chroot`; skip type-chain check".to_string(),
+            message: "precheck: external command `chroot`; skip type-chain check".to_string(),
             stage_index: 0,
             span: None,
         }];

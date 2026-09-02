@@ -287,6 +287,14 @@ fn eval_call(
         return crate::external::ExternalExecutor::run(spec, input, ctx);
     }
 
+    if should_route_legacy_meta_action(call)
+        && let Some(adapter) = &ctx.legacy_adapter
+        && adapter.can_resolve(&call.name)
+    {
+        let spec = adapter.external_call_spec(call)?;
+        return crate::external::ExternalExecutor::run(spec, input, ctx);
+    }
+
     if let Some(cmd) = ctx.registry.get(&call.name) {
         let sig = cmd.signature();
         if let Some(expected) = sig.input_type
@@ -342,6 +350,15 @@ fn eval_call(
     let ext_args = external_args_from_call(call);
     let spec = crate::external::ExternalCallSpec::quick(&call.name, &ext_args);
     crate::external::ExternalExecutor::run(spec, input, ctx)
+}
+
+fn should_route_legacy_meta_action(call: &Call) -> bool {
+    call.args.iter().any(|arg| {
+        matches!(
+            arg,
+            Arg::LongFlag { name, .. } if name == "help" || name == "version"
+        )
+    })
 }
 
 fn external_args_from_call(call: &Call) -> Vec<String> {

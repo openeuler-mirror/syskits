@@ -557,6 +557,29 @@ fn shell_tilde_prefix_preserves_external_nonzero_status() {
 }
 
 #[test]
+fn shell_native_wrapper_meta_options_use_legacy_text_path() {
+    for (command_name, option) in [
+        ("cat", "--version"),
+        ("cat", "--help"),
+        ("ls", "--version"),
+        ("ls", "--help"),
+        ("uname", "--version"),
+        ("uname", "--help"),
+    ] {
+        let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args([command_name, option])
+            .output()
+            .unwrap_or_else(|err| panic!("run direct syskits {command_name} {option}: {err}"));
+        let shell = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args(["shell", "format=classic", command_name, option])
+            .output()
+            .unwrap_or_else(|err| panic!("run syskits shell {command_name} {option}: {err}"));
+
+        assert_same_process_output(&shell, &expected);
+    }
+}
+
+#[test]
 fn shell_direct_only_nonzero_command_matches_internal_tool() {
     let expected = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["false"])

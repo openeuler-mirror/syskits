@@ -34,8 +34,9 @@ pub(crate) fn has_precheck_error(diags: &[ctdsl::PrecheckDiagnostic]) -> bool {
         .any(|d| matches!(d.level, ctdsl::PrecheckLevel::Error))
 }
 
-fn looks_like_unknown_command_warning(message: &str) -> bool {
-    message.starts_with("precheck: unknown command `")
+fn looks_like_external_or_unknown_command_warning(message: &str) -> bool {
+    message.starts_with("precheck: external command `")
+        || message.starts_with("precheck: unknown command `")
 }
 
 pub(crate) fn filter_precheck_diags_for_repl(
@@ -50,24 +51,14 @@ pub(crate) fn filter_precheck_diags_for_repl(
 }
 
 pub(crate) fn filter_precheck_diags_for_repl_with_known_command(
-    expr: &ctdsl::Expr,
+    _expr: &ctdsl::Expr,
     diags: Vec<ctdsl::PrecheckDiagnostic>,
-    signatures: &HashMap<String, DataSignature>,
-    is_known_legacy_command: impl Fn(&str) -> bool,
+    _signatures: &HashMap<String, DataSignature>,
+    _is_known_legacy_command: impl Fn(&str) -> bool,
 ) -> Vec<ctdsl::PrecheckDiagnostic> {
     diags
         .into_iter()
-        .filter(|d| {
-            if !looks_like_unknown_command_warning(&d.message) {
-                return true;
-            }
-            let Some(stage) = expr.stages().get(d.stage_index) else {
-                return true;
-            };
-            !stage.force_external
-                && !signatures.contains_key(&stage.name)
-                && !is_known_legacy_command(&stage.name)
-        })
+        .filter(|d| !looks_like_external_or_unknown_command_warning(&d.message))
         .collect()
 }
 

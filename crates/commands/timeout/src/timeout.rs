@@ -295,6 +295,20 @@ fn timeout_send_signal(process: &mut Child, signal: usize, is_foreground: bool) 
     }
 }
 
+fn timeout_terminate_self_with_signal(signal: i32) -> CTResult<()> {
+    #[cfg(test)]
+    {
+        Err(ExitStatus::SignalTerminated(signal).into())
+    }
+
+    #[cfg(not(test))]
+    unsafe {
+        libc::signal(signal, libc::SIG_DFL);
+        libc::kill(libc::getpid(), signal);
+        libc::_exit(128 + signal);
+    }
+}
+
 /// 根据指定的超时标志设置进程的超时行为
 ///
 /// 此函数负责根据`TimeoutFlags`结构体中的标志，设置进程的超时行为。
@@ -436,7 +450,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
 
                 if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
                     let _ = process.wait()?;
-                    Err(ExitStatus::SignalTerminated(9).into())
+                    timeout_terminate_self_with_signal(libc::SIGKILL)
                 } else {
                     handle_timeout_exceeded(process, flags)
                 }
@@ -524,9 +538,9 @@ fn handle_timeout_exceeded(process: &mut Child, flags: &TimeoutFlags) -> CTResul
 
                     let _ = process.wait()?;
 
-                    // GNU 规定，只要发射了 KILL 信号，退出码绝对是 137 (128+9)
-                    // 即使没有开启 preserve-status，也不能返回 124！
-                    Err(ExitStatus::SignalTerminated(9).into()) // 137
+                    // GNU 规定，只要发射了 KILL 信号，timeout 自身也以 SIGKILL 终止，
+                    // shell 因此前台作业被杀而打印 "Killed"，退出状态为 137。
+                    timeout_terminate_self_with_signal(libc::SIGKILL)
                 }
                 Err(_) => Err(ExitStatus::TimeoutFailed.into()),
             }
@@ -752,6 +766,21 @@ mod tests {
             // 进程应该超时并返回124（兼容性要求）
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 124);
+        }
+
+        #[test]
+        fn test_timeout_with_initial_kill_signal() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("KILL").unwrap(),
+                duration: Duration::from_millis(100),
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["sleep".to_string(), "1".to_string()],
+            });
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 137);
         }
 
         #[test]

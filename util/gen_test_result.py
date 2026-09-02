@@ -769,56 +769,114 @@ def build_scope_label(ran_tests: bool, selected_tests: list[str]) -> str:
     return "Scope: existing GNU test logs"
 
 
-def main() -> int:
-    args = parse_args()
-    script_dir = Path(__file__).resolve().parent
-    repo_dir = script_dir.parent
-    gnu_dir = repo_dir.parent / "gnu"
-    tests_dir = gnu_dir / "tests"
-    run_script_path = script_dir / "run-gnu-test.sh"
-    results_path = script_dir / "aggregated-result.json"
-    status_filters = get_result_status_filters(args)
-
+def validate_cli_args(
+    args: argparse.Namespace,
+    status_filters: set[str],
+) -> str | None:
+    """
+    校验命令行参数组合，返回错误信息或 None。
+    """
     if args.list_tests and args.list_results:
-        print("--list-tests and --list-results cannot be used together.")
-        return 1
+        return "--list-tests and --list-results cannot be used together."
 
     if status_filters and not args.list_results:
         filters_text = ", ".join(sorted(status_filters))
-        print(f"Status filters require --list-results: {filters_text}")
+        return f"Status filters require --list-results: {filters_text}"
+
+    return None
+
+
+def handle_list_results_mode(
+    results_path: Path,
+    component_filters: list[str],
+    status_filters: set[str],
+) -> int:
+    """
+    处理 --list-results 模式。
+    """
+    try:
+        result_components = select_result_components(
+            build_result_components(load_aggregated_results(results_path)),
+            component_filters,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(exc)
         return 1
 
-    if args.list_results:
-        try:
-            result_components = select_result_components(
-                build_result_components(load_aggregated_results(results_path)),
-                args.tests,
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            print(exc)
-            return 1
-        result_components = filter_result_components_by_status(
-            result_components,
-            status_filters,
+    result_components = filter_result_components_by_status(
+        result_components,
+        status_filters,
+    )
+    print_test_results(result_components)
+    return 0
+
+
+def handle_list_tests_mode(tests_dir: Path, component_filters: list[str]) -> int:
+    """
+    处理 --list-tests 模式。
+    """
+    if not tests_dir.is_dir():
+        print(f"Tests directory not found: {tests_dir}")
+        return 1
+
+    try:
+        test_components = select_test_components(
+            discover_test_cases(tests_dir),
+            component_filters,
         )
-        print_test_results(result_components)
-        return 0
+    except ValueError as exc:
+        print(exc)
+        return 1
 
-    if args.list_tests:
-        if not tests_dir.is_dir():
-            print(f"Tests directory not found: {tests_dir}")
-            return 1
-        try:
-            test_components = select_test_components(
-                discover_test_cases(tests_dir),
-                args.tests,
-            )
-        except ValueError as exc:
-            print(exc)
-            return 1
-        print_test_cases(test_components)
-        return 0
+    print_test_cases(test_components)
+    return 0
 
+
+def normalize_requested_tests(requested_tests: list[str], gnu_dir: Path) -> list[str]:
+    """
+    规范化命令行传入的测试路径。
+    """
+    return [
+        normalize_test_path(test, gnu_dir).as_posix()
+        for test in requested_tests
+    ]
+
+
+def write_result_outputs(
+    script_dir: Path,
+    results: dict[str, dict[str, dict[str, str]]],
+    ran_tests: bool,
+    normalized_tests: list[str],
+) -> None:
+    """
+    将聚合结果写入 JSON 和 HTML 文件。
+    """
+    json_output_path = script_dir / "aggregated-result.json"
+    with json_output_path.open("w", encoding="utf-8") as file:
+        json.dump(results, file, indent=2, ensure_ascii=False)
+
+    html_output_path = script_dir / "test_coverage.html"
+    generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    scope_label = build_scope_label(ran_tests, normalized_tests)
+    html_output_path.write_text(
+        build_html(results, scope_label, generated_at),
+        encoding="utf-8",
+    )
+
+    print(f"Generated successfully: {json_output_path}")
+    print(f"Generated successfully: {html_output_path}")
+
+
+def handle_generate_mode(
+    args: argparse.Namespace,
+    script_dir: Path,
+    gnu_dir: Path,
+    tests_dir: Path,
+    run_script_path: Path,
+) -> int:
+    """
+    处理默认的结果生成模式。
+    """
     if not run_script_path.is_file():
         print(f"Run script not found: {run_script_path}")
         return 1
@@ -828,10 +886,7 @@ def main() -> int:
         return 1
 
     try:
-        normalized_tests = [
-            normalize_test_path(test, gnu_dir).as_posix()
-            for test in args.tests
-        ]
+        normalized_tests = normalize_requested_tests(args.tests, gnu_dir)
     except ValueError as exc:
         print(exc)
         return 1
@@ -845,22 +900,42 @@ def main() -> int:
         else discover_all_log_files(tests_dir)
     )
     results = collect_results(log_files, tests_dir)
-
-    json_output_path = script_dir / "aggregated-result.json"
-    with json_output_path.open("w", encoding="utf-8") as file:
-        json.dump(results, file, indent=2, ensure_ascii=False)
-
-    html_output_path = script_dir / "test_coverage.html"
-    generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
-    scope_label = build_scope_label(args.run, normalized_tests)
-    html_output_path.write_text(
-        build_html(results, scope_label, generated_at),
-        encoding="utf-8",
-    )
-
-    print(f"Generated successfully: {json_output_path}")
-    print(f"Generated successfully: {html_output_path}")
+    write_result_outputs(script_dir, results, args.run, normalized_tests)
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+    script_dir = Path(__file__).resolve().parent
+    repo_dir = script_dir.parent
+    gnu_dir = repo_dir.parent / "gnu"
+    tests_dir = gnu_dir / "tests"
+    run_script_path = script_dir / "run-gnu-test.sh"
+    results_path = script_dir / "aggregated-result.json"
+    status_filters = get_result_status_filters(args)
+
+    error_message = validate_cli_args(args, status_filters)
+    if error_message:
+        print(error_message)
+        return 1
+
+    if args.list_results:
+        return handle_list_results_mode(
+            results_path,
+            args.tests,
+            status_filters,
+        )
+
+    if args.list_tests:
+        return handle_list_tests_mode(tests_dir, args.tests)
+
+    return handle_generate_mode(
+        args,
+        script_dir,
+        gnu_dir,
+        tests_dir,
+        run_script_path,
+    )
 
 
 if __name__ == "__main__":

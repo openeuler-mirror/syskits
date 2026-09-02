@@ -18120,7 +18120,8 @@ mod tests {
         //   -t, --tagged-paragraph      Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.
         //   -m, --preserve-headers      Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.
         //   -s, --split-only            Split lines only, do not reflow.
-        //   -u, --uniform-spacing       Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.
+        //   -u, --uniform-spacing       Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline;
+        //   other punctuation is not interpreted as a sentence break.
         //   -p, --prefix <PREFIX>       Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.
         //   -P, --skip-prefix <PSKIP>   Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP
         //   -x, --exact-prefix          PREFIX must match at the beginning of the line with no preceding whitespace.

@@ -2609,7 +2609,8 @@ mod tests {
         //   -q, --quiet            Fail silently if an error occurs.
         //       --suffix <SUFFIX>  append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. This option is implied if TEMPLATE does not end with X.
         //   -p <DIR>               short form of --tmpdir
-        //       --tmpdir[=<DIR>]   interpret TEMPLATE relative to DIR; if DIR is not specified, use $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE may contain slashes, but mktemp creates only the final component
+        //       --tmpdir[=<DIR>]   interpret TEMPLATE relative to DIR; if DIR is not specified, use $TMPDIR ($TMP on windows) if set, else /tmp. With this option,
+        //   TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE may contain slashes, but mktemp creates only the final component
         //   -t                     Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) to create a filename template [deprecated]
         //   -h, --help             Print help
         //   -V, --version          Print version

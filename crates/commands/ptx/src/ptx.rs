@@ -42,8 +42,22 @@ use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
-const PTX_HELP_TEXT: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G)\n  or:  ptx -G [OPTION]... [INPUT [OUTPUT]]\nOutput a permuted index, including context, of the words in the input files.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -A, --auto-reference           output automatically generated references\n  -G, --traditional              behave more like System V 'ptx'\n  -F, --flag-truncation=STRING   use STRING for flagging line truncations.\n                                 The default is '/'\n  -M, --macro-name=STRING        macro name to use instead of 'xx'\n  -O, --format=roff              generate output as roff directives\n  -R, --right-side-refs          put references at right, not counted in -w\n  -S, --sentence-regexp=REGEXP   for end of lines or end of sentences\n  -T, --format=tex               generate output as TeX directives\n  -W, --word-regexp=REGEXP       use REGEXP to match each keyword\n  -b, --break-file=FILE          word break characters in this FILE\n  -f, --ignore-case              fold lower case to upper case for sorting\n  -g, --gap-size=NUMBER          gap size in columns between output fields\n  -i, --ignore-file=FILE         read ignore word list from FILE\n  -o, --only-file=FILE           read only word list from this FILE\n  -r, --references               first field of each line is a reference\n  -t, --typeset-mode               - not implemented -\n  -w, --width=NUMBER             output width in columns, reference excluded\n      --help        display this help and exit\n      --version     output version information and exit\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/ptx>\nor available locally via: info '(coreutils) ptx invocation'\n";
-const PTX_VERSION_TEXT: &str = "ptx (GNU coreutils) 9.4\nCopyright (C) 2023 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\nWritten by F. Pinard.\n";
+const PTX_HELP_TEXT: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G)\n  or:  ptx -G [OPTION]... [INPUT [OUTPUT]]\n
+Output a permuted index, including context, of the words in the input files.\n\nWith no FILE, or when FILE is -, read standard input.\n
+\nMandatory arguments to long options are mandatory for short options too.\n  -A, --auto-reference           output automatically generated references\n  
+-G, --traditional              behave more like System V 'ptx'\n  -F, --flag-truncation=STRING   use STRING for flagging line truncations.\n                                 
+The default is '/'\n  -M, --macro-name=STRING        macro name to use instead of 'xx'\n  -O, --format=roff              generate output as roff directives\n  
+-R, --right-side-refs          put references at right, not counted in -w\n  -S, --sentence-regexp=REGEXP   for end of lines or end of sentences\n  
+-T, --format=tex               generate output as TeX directives\n  -W, --word-regexp=REGEXP       use REGEXP to match each keyword\n  -b, --break-file=FILE          
+word break characters in this FILE\n  -f, --ignore-case              fold lower case to upper case for sorting\n  -g, --gap-size=NUMBER          
+gap size in columns between output fields\n  -i, --ignore-file=FILE         read ignore word list from FILE\n  -o, --only-file=FILE           
+read only word list from this FILE\n  -r, --references               first field of each line is a reference\n  -t, --typeset-mode               
+- not implemented -\n  -w, --width=NUMBER             output width in columns, reference excluded\n      --help        display this help and exit\n      
+--version     output version information and exit\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\n
+Report any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/ptx>\n
+or available locally via: info '(coreutils) ptx invocation'\n";
+const PTX_VERSION_TEXT: &str = "ptx (GNU coreutils) 9.4\nCopyright (C) 2023 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n
+This is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\nWritten by F. Pinard.\n";
 
 #[derive(Debug)]
 enum OutFormat {

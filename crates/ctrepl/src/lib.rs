@@ -305,10 +305,7 @@ mod tests {
 
     #[test]
     fn test_prompt_left_contains_cwd_name() {
-        let p = ReplPrompt {
-            prompt_left: "syskits".to_string(),
-            path_depth: 3,
-        };
+        let p = ReplPrompt::new("syskits".to_string(), 3);
         let left = p.render_prompt_left().to_string();
         assert!(left.starts_with("syskits("));
         assert!(left.ends_with(')'));

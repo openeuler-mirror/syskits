@@ -155,10 +155,7 @@ pub fn run_repl(
         signatures.clone(),
         &config,
     );
-    let prompt = ReplPrompt {
-        prompt_left: texts.prompt_left.clone(),
-        path_depth: prompt_path_depth_from_env(),
-    };
+    let prompt = ReplPrompt::new(texts.prompt_left.clone(), prompt_path_depth_from_env());
 
     let mut ctx = DataEngineContext::new(registry, legacy_resolver, plugin_registry)
         .with_signal(ctengine::context::SignalHandle::register_sigint())

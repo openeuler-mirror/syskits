@@ -391,7 +391,13 @@ pub fn tail_native_semantic(args: impl ctcore::Args) -> CTResult<TailSemantic> {
                 }
             }
             TailInputKind::File(_) | TailInputKind::Stdin => {
-                if let Some(path) = input.resolve() {
+                let resolved_stdin = if ctcore::ct_io::has_injected_stdin() {
+                    None
+                } else {
+                    input.resolve()
+                };
+
+                if let Some(path) = resolved_stdin {
                     if !path.exists() {
                         stderr_text.push_str(&format!(
                             "tail: cannot open '{}' for reading: {}\n",

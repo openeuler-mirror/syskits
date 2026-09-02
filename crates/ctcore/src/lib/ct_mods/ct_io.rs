@@ -157,6 +157,10 @@ pub fn injected_stdin_bytes() -> Option<Vec<u8>> {
     })
 }
 
+pub fn has_injected_stdin() -> bool {
+    CT_STDIN_INJECTION.with(|slot| slot.borrow().is_some())
+}
+
 pub fn stdin_reader_box() -> Box<dyn Read> {
     match CT_STDIN_INJECTION.with(|slot| slot.borrow().clone()) {
         Some(cursor) => Box::new(InjectedStdinReader { cursor }),

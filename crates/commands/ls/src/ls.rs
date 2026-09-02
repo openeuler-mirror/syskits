@@ -71,7 +71,7 @@ use lscolors::{LsColors, Style};
 use number_prefix::NumberPrefix;
 #[cfg(unix)]
 use once_cell::sync::Lazy;
-use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use term_grid::{Cell, Direction};
 use unicode_width::UnicodeWidthStr;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use rust_i18n::t;
@@ -3121,7 +3121,7 @@ fn tabify_grid_output(rendered: &str, tab_size: usize) -> String {
         while spaces > 0 {
             let next_tab = ((column / tab_size) + 1) * tab_size;
             let distance = next_tab - column;
-            if distance <= spaces && distance > 1 {
+            if distance <= spaces && (distance > 1 || spaces - distance >= tab_size) {
                 output.push('\t');
                 column = next_tab;
                 spaces -= distance;
@@ -3140,8 +3140,106 @@ fn format_grid_output(rendered: &str, tab_size: usize, preserve_spaces: bool) ->
     if preserve_spaces {
         rendered.to_owned()
     } else {
-        tabify_grid_output(rendered, tab_size)
+        trim_trailing_grid_padding(&tabify_grid_output(rendered, tab_size))
     }
+}
+
+fn trim_trailing_grid_padding(rendered: &str) -> String {
+    let mut output = String::with_capacity(rendered.len());
+    for line in rendered.split_inclusive('\n') {
+        if let Some(line) = line.strip_suffix('\n') {
+            output.push_str(line.trim_end_matches([' ', '\t']));
+            output.push('\n');
+        } else {
+            output.push_str(line.trim_end_matches([' ', '\t']));
+        }
+    }
+    output
+}
+
+fn grid_index(
+    row: usize,
+    column: usize,
+    rows: usize,
+    columns: usize,
+    direction: Direction,
+) -> usize {
+    match direction {
+        Direction::TopToBottom => row + column * rows,
+        Direction::LeftToRight => row * columns + column,
+    }
+}
+
+fn grid_dimensions(item_count: usize, columns: usize) -> (usize, usize) {
+    let rows = item_count.div_ceil(columns);
+    (rows, columns)
+}
+
+fn grid_column_widths(cells: &[Cell], columns: usize, direction: Direction) -> Vec<usize> {
+    let (rows, columns) = grid_dimensions(cells.len(), columns);
+    let mut widths = vec![0; columns];
+
+    for row in 0..rows {
+        for (column, width) in widths.iter_mut().enumerate() {
+            let index = grid_index(row, column, rows, columns, direction);
+            if let Some(cell) = cells.get(index) {
+                *width = (*width).max(cell.width);
+            }
+        }
+    }
+
+    widths
+}
+
+fn grid_required_width(widths: &[usize]) -> usize {
+    match widths.split_last() {
+        Some((last, leading)) => leading.iter().map(|width| width + 2).sum::<usize>() + last,
+        None => 0,
+    }
+}
+
+fn grid_columns_that_fit(cells: &[Cell], width: usize, direction: Direction) -> usize {
+    for columns in (1..=cells.len()).rev() {
+        let widths = grid_column_widths(cells, columns, direction);
+        if grid_required_width(&widths) < width {
+            return columns;
+        }
+    }
+
+    1
+}
+
+fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
+    let columns = grid_columns_that_fit(cells, width, direction);
+    let (rows, columns) = grid_dimensions(cells.len(), columns);
+    let column_widths = grid_column_widths(cells, columns, direction);
+    let mut rendered = String::new();
+
+    for row in 0..rows {
+        let mut last_column = None;
+        for column in 0..columns {
+            let index = grid_index(row, column, rows, columns, direction);
+            if index < cells.len() {
+                last_column = Some(column);
+            }
+        }
+
+        for column in 0..columns {
+            let index = grid_index(row, column, rows, columns, direction);
+            let Some(cell) = cells.get(index) else {
+                continue;
+            };
+
+            rendered.push_str(&cell.contents);
+            if Some(column) != last_column {
+                let padding = column_widths[column].saturating_sub(cell.width) + 2;
+                rendered.push_str(&" ".repeat(padding));
+            }
+        }
+        rendered.push('\n');
+    }
+
+    rendered
 }
 
 fn display_grid<W: Write>(
@@ -3151,6 +3249,8 @@ fn display_grid<W: Write>(
     output: &mut W,
     quoted: bool,
 ) -> CTResult<()> {
+    let names = names.collect::<Vec<_>>();
+
     if width == 0 {
         // 如果宽度为 0，我们就打印一行
         let mut printed_something = false;
@@ -3164,43 +3264,22 @@ fn display_grid<W: Write>(
         if printed_something {
             writeln!(output)?;
         }
-    } else {
-        // 我们可能需要 Filling::Text("\t".to_string())；
-        let filling_spaces = Filling::Spaces(2);
-        let mut grid = Grid::new(GridOptions {
-            filling: filling_spaces,
-            direction,
-        });
-
-        for name in names {
-            let formatted_name = Cell {
-                contents: if quoted && !name.contents.starts_with('\'') {
-                    format!(" {}", name.contents)
+    } else if !names.is_empty() {
+        let names = names
+            .into_iter()
+            .map(|name| {
+                if quoted && !name.contents.starts_with('\'') {
+                    Cell {
+                        contents: format!(" {}", name.contents),
+                        width: name.width + 1,
+                    }
                 } else {
-                    name.contents
-                },
-                width: name.width,
-            };
-            grid.add(formatted_name);
-        }
-
-        match grid.fit_into_width(width as usize) {
-            Some(out) => {
-                write!(
-                    output,
-                    "{}",
-                    format_grid_output(&out.to_string(), 8, quoted)
-                )?;
-            }
-            // Width is too small for the grid, so we fit it in one column
-            None => {
-                write!(
-                    output,
-                    "{}",
-                    format_grid_output(&grid.fit_into_columns(1).to_string(), 8, quoted)
-                )?;
-            }
-        }
+                    name
+                }
+            })
+            .collect::<Vec<_>>();
+        let rendered = render_grid(&names, width as usize, direction);
+        write!(output, "{}", format_grid_output(&rendered, 8, quoted))?;
     }
     Ok(())
 }
@@ -4466,6 +4545,95 @@ mod tests {
             tabify_grid_output("a.txt  b.txt  subdir\n", 8),
             "a.txt  b.txt  subdir\n"
         );
+        assert_eq!(
+            tabify_grid_output(
+                "CLAUDE.md   LICENSE            bin        doc                      spec            testdir       testfile1  util\n",
+                8
+            ),
+            "CLAUDE.md   LICENSE\t       bin\t  doc\t\t\t   spec\t\t   testdir\t testfile1  util\n"
+        );
+    }
+
+    #[test]
+    fn grid_output_trims_padding_after_last_column() {
+        assert_eq!(format_grid_output("x  \n", 0, false), "x\n");
+    }
+
+    #[test]
+    fn grid_uses_column_specific_widths_when_fitting() {
+        let cells = [
+            Cell {
+                contents: "aaaaaaaaaa".into(),
+                width: 10,
+            },
+            Cell {
+                contents: "bb".into(),
+                width: 2,
+            },
+            Cell {
+                contents: "cc".into(),
+                width: 2,
+            },
+            Cell {
+                contents: "dd".into(),
+                width: 2,
+            },
+            Cell {
+                contents: "ee".into(),
+                width: 2,
+            },
+            Cell {
+                contents: "ffffffffff".into(),
+                width: 10,
+            },
+        ];
+
+        assert_eq!(grid_columns_that_fit(&cells, 26, Direction::TopToBottom), 2);
+        assert_eq!(grid_columns_that_fit(&cells, 27, Direction::TopToBottom), 3);
+        assert_eq!(
+            render_grid(&cells, 27, Direction::TopToBottom),
+            "aaaaaaaaaa  cc  ee\nbb          dd  ffffffffff\n"
+        );
+    }
+
+    #[test]
+    fn grid_width_must_leave_room_before_terminal_edge() {
+        assert_eq!(grid_required_width(&[34, 27, 32, 44, 35]), 180);
+        assert_eq!(grid_required_width(&[34, 26, 44, 35]), 145);
+    }
+
+    #[test]
+    fn quoted_grid_prefix_counts_toward_cell_width() {
+        let cells = [
+            Cell {
+                contents: "'['".into(),
+                width: 3,
+            },
+            Cell {
+                contents: "long".into(),
+                width: 4,
+            },
+            Cell {
+                contents: "x".into(),
+                width: 1,
+            },
+            Cell {
+                contents: "y".into(),
+                width: 1,
+            },
+        ];
+        let mut output = Vec::new();
+
+        display_grid(
+            cells.into_iter(),
+            10,
+            Direction::TopToBottom,
+            &mut output,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(String::from_utf8(output).unwrap(), "'['     x\n long   y\n");
     }
 
     #[test]

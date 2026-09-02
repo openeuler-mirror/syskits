@@ -6,8 +6,8 @@
 use ctengine::{
     CtDiagnosticError, DataCommand, DataEngineContext,
     external::{
-        ExternalCallSpec, ExternalExecutor, ExternalExitPolicy, ExternalStderrMode,
-        ExternalStdinMode, ExternalStdoutMode,
+        ExternalCallSpec, ExternalExecutor, ExternalExitPolicy, ExternalPathPolicy,
+        ExternalStderrMode, ExternalStdinMode, ExternalStdoutMode,
     },
 };
 use ctpipeline::{CtPipelineData, CtType, CtValue};
@@ -90,6 +90,7 @@ fn build_spec(call: &DataCall) -> Result<ExternalCallSpec, CtDiagnosticError> {
     }
 
     let mut spec = ExternalCallSpec::quick(&cmd_name, &ext_args);
+    spec.path_policy = ExternalPathPolicy::SkipSyskitsPriority;
 
     if let Some(s) = call
         .get_flag::<String>("stdout-mode")
@@ -239,6 +240,7 @@ mod tests {
         assert_eq!(spec.stderr_mode, ExternalStderrMode::Inherit);
         assert_eq!(spec.stdin_mode, ExternalStdinMode::Raw);
         assert_eq!(spec.exit_policy, ExternalExitPolicy::FailOnNonZero);
+        assert_eq!(spec.path_policy, ExternalPathPolicy::SkipSyskitsPriority);
         assert_eq!(spec.timeout_ms, None);
     }
 

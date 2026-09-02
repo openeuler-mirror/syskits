@@ -10,7 +10,8 @@
  */
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 /// 定义如何将数据管线中的输入编码提供给外部命令的 stdin。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -69,6 +70,18 @@ pub enum ExternalExitPolicy {
     AllowNonZero,
 }
 
+/// 定义裸外部命令名如何从 PATH 中解析。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExternalPathPolicy {
+    /// 使用操作系统默认 PATH 解析行为。
+    #[default]
+    Normal,
+    /// 解析 PATH 时跳过 syskits priority shim 目录。
+    SkipSyskitsPriority,
+}
+
+const SYSKITS_PRIORITY_DIR: &str = "/usr/local/priority_syskits";
+
 /// 描述一次外部命令的完整调用参数与行为策略。
 #[derive(Debug, Clone)]
 pub struct ExternalCallSpec {
@@ -80,6 +93,7 @@ pub struct ExternalCallSpec {
     pub stdout_mode: ExternalStdoutMode,
     pub stderr_mode: ExternalStderrMode,
     pub exit_policy: ExternalExitPolicy,
+    pub path_policy: ExternalPathPolicy,
     pub timeout_ms: Option<u64>,
 }
 
@@ -95,6 +109,7 @@ impl ExternalCallSpec {
             stdout_mode: ExternalStdoutMode::Raw,
             stderr_mode: ExternalStderrMode::Inherit,
             exit_policy: ExternalExitPolicy::FailOnNonZero,
+            path_policy: ExternalPathPolicy::Normal,
             timeout_ms: None,
         }
     }
@@ -1390,6 +1405,53 @@ mod decoder_tests {
             Some(&ctpipeline::CtValue::Int(9))
         );
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_external_program_skips_priority_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir =
+            std::env::temp_dir().join(format!("syskits-external-path-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let priority_dir = temp_dir.join("priority");
+        let system_dir = temp_dir.join("system");
+        std::fs::create_dir_all(&priority_dir).expect("create priority dir");
+        std::fs::create_dir_all(&system_dir).expect("create system dir");
+
+        let priority_cmd = priority_dir.join("demo");
+        let system_cmd = system_dir.join("demo");
+        std::fs::write(&priority_cmd, "#!/bin/sh\necho priority\n").expect("write priority cmd");
+        std::fs::write(&system_cmd, "#!/bin/sh\necho system\n").expect("write system cmd");
+        std::fs::set_permissions(&priority_cmd, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod priority cmd");
+        std::fs::set_permissions(&system_cmd, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod system cmd");
+
+        let path_env = std::env::join_paths([priority_dir.as_path(), system_dir.as_path()])
+            .expect("join path");
+        let resolved = resolve_external_program_skipping_dirs(
+            "demo",
+            Some(path_env),
+            &[priority_dir.as_path()],
+        )
+        .expect("resolve demo");
+
+        assert_eq!(std::path::PathBuf::from(resolved), system_cmd);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_external_program_respects_explicit_path() {
+        let resolved = resolve_external_program_skipping_dirs(
+            "./demo",
+            Some(OsString::from("/usr/local/priority_syskits")),
+            &[Path::new(SYSKITS_PRIORITY_DIR)],
+        )
+        .expect("explicit path should not be searched");
+
+        assert_eq!(resolved, OsString::from("./demo"));
+    }
 }
 
 struct ExternalStream {
@@ -1575,6 +1637,71 @@ fn terminate_process_tree(child: &mut std::process::Child) {
     let _ = child.kill();
 }
 
+fn resolve_external_program(
+    cmd: &str,
+    policy: ExternalPathPolicy,
+    path_env: Option<OsString>,
+) -> Result<OsString, crate::error::CtDiagnosticError> {
+    match policy {
+        ExternalPathPolicy::Normal => Ok(OsString::from(cmd)),
+        ExternalPathPolicy::SkipSyskitsPriority => resolve_external_program_skipping_dirs(
+            cmd,
+            path_env,
+            &[Path::new(SYSKITS_PRIORITY_DIR)],
+        ),
+    }
+}
+
+fn resolve_external_program_skipping_dirs(
+    cmd: &str,
+    path_env: Option<OsString>,
+    skip_dirs: &[&Path],
+) -> Result<OsString, crate::error::CtDiagnosticError> {
+    let cmd_path = Path::new(cmd);
+    if cmd_path.components().count() > 1 {
+        return Ok(OsString::from(cmd));
+    }
+
+    let Some(path_env) = path_env else {
+        return Ok(OsString::from(cmd));
+    };
+
+    for dir in std::env::split_paths(&path_env) {
+        if should_skip_external_path_dir(&dir, skip_dirs) {
+            continue;
+        }
+        let candidate = dir.join(cmd);
+        if is_executable_file(&candidate) {
+            return Ok(candidate.into_os_string());
+        }
+    }
+
+    Err(crate::error::CtDiagnosticError::simple(format!(
+        "external command `{cmd}` not found after skipping syskits priority shims"
+    )))
+}
+
+fn should_skip_external_path_dir(dir: &Path, skip_dirs: &[&Path]) -> bool {
+    skip_dirs.iter().any(|skip_dir| dir == *skip_dir)
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    meta.is_file() && meta.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .map(|meta| meta.is_file())
+        .unwrap_or(false)
+}
+
 pub struct ExternalExecutor;
 
 impl ExternalExecutor {
@@ -1584,7 +1711,13 @@ impl ExternalExecutor {
         input: ctpipeline::pipeline_data::CtPipelineData,
         _ctx: &crate::context::DataEngineContext,
     ) -> Result<ctpipeline::pipeline_data::CtPipelineData, crate::error::CtDiagnosticError> {
-        let mut cmd = std::process::Command::new(&spec.cmd);
+        let path_env = spec
+            .env_overrides
+            .get("PATH")
+            .map(OsString::from)
+            .or_else(|| std::env::var_os("PATH"));
+        let program = resolve_external_program(&spec.cmd, spec.path_policy, path_env)?;
+        let mut cmd = std::process::Command::new(&program);
         cmd.args(&spec.args);
         let stdin_input = if matches!(input, CtPipelineData::Empty) {
             None

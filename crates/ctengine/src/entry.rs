@@ -507,16 +507,16 @@ mod tests {
     }
 
     #[test]
-    fn resolve_data_output_profile_accepts_raw_env_override() {
+    fn resolve_data_output_profile_ignores_unknown_env_override() {
         with_data_output_env(Some("raw"), None, || {
             let profile = resolve_data_output_profile(false);
-            assert_eq!(profile.format, OutputFormat::Raw);
+            assert_eq!(profile.format, OutputFormat::Auto);
         });
     }
 
     #[test]
     fn resolve_data_request_supports_single_axis_assignment() {
-        with_data_output_env(Some("raw"), None, || {
+        with_data_output_env(Some("text"), None, || {
             let args = vec![
                 OsString::from("format=json"),
                 OsString::from("pwd"),
@@ -538,14 +538,25 @@ mod tests {
         with_data_output_env(None, None, || {
             let args = vec![
                 OsString::from("--format"),
-                OsString::from("raw"),
+                OsString::from("text"),
                 OsString::from("pwd"),
             ];
 
             let parsed = resolve_data_request(&args, true).expect("parsed args");
 
-            assert_eq!(parsed.profile.format, OutputFormat::Raw);
+            assert_eq!(parsed.profile.format, OutputFormat::Text);
             assert_eq!(parsed.pipeline_argv, &[OsString::from("pwd")]);
+        });
+    }
+
+    #[test]
+    fn resolve_data_request_rejects_raw_format() {
+        with_data_output_env(None, None, || {
+            let args = vec![OsString::from("format=raw"), OsString::from("pwd")];
+
+            let err = resolve_data_request(&args, true).expect_err("raw format should be removed");
+
+            assert_eq!(err, "unsupported format `raw`");
         });
     }
 

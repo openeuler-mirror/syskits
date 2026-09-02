@@ -432,9 +432,9 @@ fn run_external_timeout_kills_process_group_after_stdout_eof() {
 }
 
 #[test]
-fn data_format_raw_preserves_external_raw_stdout() {
+fn data_format_text_preserves_external_raw_stdout() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
-        .env("SYSKITS_DATA_FORMAT", "raw")
+        .env("SYSKITS_DATA_FORMAT", "text")
         .args(["data", "run-external printf abc"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -452,7 +452,7 @@ fn data_format_raw_preserves_external_raw_stdout() {
 #[test]
 fn run_external_raw_stdin_flattens_structured_text_lines() {
     let output = run_data_with_args(
-        &["format=raw", "from text | run-external cat"],
+        &["format=text", "from text | run-external cat"],
         "alpha\nbeta\n",
     );
 
@@ -468,7 +468,7 @@ fn run_external_raw_stdin_flattens_structured_text_lines() {
 #[test]
 fn forced_external_inherits_process_stdin_without_pipeline_input() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
-        .args(["data", "format=raw", "~cat"])
+        .args(["data", "format=text", "~cat"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

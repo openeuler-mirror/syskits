@@ -39,8 +39,6 @@ pub enum OutputFormat {
     Table,
     /// JSON 模式（结构化序列化）
     Json,
-    /// 原样输出模式（ByteStream 直写）。
-    Raw,
 }
 
 impl OutputFormat {
@@ -51,7 +49,6 @@ impl OutputFormat {
             "text" => Some(Self::Text),
             "table" => Some(Self::Table),
             "json" => Some(Self::Json),
-            "raw" => Some(Self::Raw),
             _ => None,
         }
     }
@@ -183,7 +180,7 @@ mod tests {
         assert_eq!(OutputFormat::parse("text"), Some(OutputFormat::Text));
         assert_eq!(OutputFormat::parse("table"), Some(OutputFormat::Table));
         assert_eq!(OutputFormat::parse("json"), Some(OutputFormat::Json));
-        assert_eq!(OutputFormat::parse("raw"), Some(OutputFormat::Raw));
+        assert_eq!(OutputFormat::parse("raw"), None);
         assert_eq!(OutputFormat::parse("legacy"), None);
         assert_eq!(OutputFormat::parse("native"), None);
         assert_eq!(OutputFormat::parse("coreutils"), None);

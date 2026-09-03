@@ -136,6 +136,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(arg)
 }
 
@@ -385,6 +386,16 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--quiet"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_repeated_silent_aliases() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-s", "--quiet", "--silent", "-s"];
+
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.get_flag(tty_flags::TTY_SILENT));
         }
     }
 }

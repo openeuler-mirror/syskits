@@ -249,7 +249,6 @@ fn chcon_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
             .short('H')
-            .requires(opt_flags::RECURSIVE)
             .overrides_with_all([
                 opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS,
                 opt_flags::sym_links::NO_FOLLOW_SYM_LINKS,
@@ -258,7 +257,6 @@ fn chcon_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS)
             .short('L')
-            .requires(opt_flags::RECURSIVE)
             .overrides_with_all([
                 opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                 opt_flags::sym_links::NO_FOLLOW_SYM_LINKS,
@@ -267,7 +265,6 @@ fn chcon_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::sym_links::NO_FOLLOW_SYM_LINKS)
             .short('P')
-            .requires(opt_flags::RECURSIVE)
             .overrides_with_all([
                 opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                 opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS,
@@ -887,18 +884,20 @@ mod tests {
     }
 
     #[test]
-    fn test_ct_app_execution_help_invalid() {
+    fn test_ct_app_accepts_traversal_options_without_recursive() {
         let command = ct_app();
 
-        // 测试用例：有效输入 --help
-        let args = vec![ctcore::ct_util_name(), "-H"];
-        let executable = command.try_get_matches_from(args);
+        for (option, flag) in [
+            ("-H", opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK),
+            ("-L", opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS),
+            ("-P", opt_flags::sym_links::NO_FOLLOW_SYM_LINKS),
+        ] {
+            let args = vec![ctcore::ct_util_name(), option, "1", "testfile"];
+            let matches = command.clone().try_get_matches_from(args).unwrap();
 
-        assert!(executable.is_err());
-        assert_eq!(
-            executable.unwrap_err().kind(),
-            ErrorKind::MissingRequiredArgument
-        );
+            assert!(matches.get_flag(flag), "{option} should be accepted");
+            assert!(!matches.get_flag(opt_flags::RECURSIVE));
+        }
     }
 
     #[test]

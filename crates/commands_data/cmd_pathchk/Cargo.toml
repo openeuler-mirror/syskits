@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "Phase A native pathchk command"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+repository = "https://atomgit.com/openeuler/syskits"
 
 [dependencies]
 ct_pathchk = { path = "../../commands/pathchk" }

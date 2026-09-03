@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "Native vdir data command"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+repository = "https://atomgit.com/openeuler/syskits"
 
 [dependencies]
 ct_vdir = { path = "../../commands/vdir" }

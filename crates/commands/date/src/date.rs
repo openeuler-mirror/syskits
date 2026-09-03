@@ -29,7 +29,7 @@ use libc::{
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -383,6 +383,16 @@ fn date_offset_label(date: &DateTime<FixedOffset>) -> String {
     }
 }
 
+fn date_file_reader(path: &Path) -> CTResult<Box<dyn BufRead>> {
+    if path == Path::new("-") {
+        return Ok(Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box())));
+    }
+
+    let file =
+        File::open(path).map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+    Ok(Box::new(BufReader::new(file)))
+}
+
 fn custom_input_looks_ymd_date(input: &str) -> bool {
     input.len() == 10
         && input.as_bytes()[4] == b'-'
@@ -546,9 +556,7 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
             }
         }
         DateSource::File(path) => {
-            let file = File::open(path)
-                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
-            for line in BufReader::new(file).lines().map_while(Result::ok) {
+            for line in date_file_reader(path)?.lines().map_while(Result::ok) {
                 match parse_date(&line) {
                     Ok(dt) => {
                         let dt = if date_set.utc {
@@ -710,15 +718,13 @@ fn date_processing(
         let dates_iterator: Box<dyn Iterator<Item = _>> = match date_set.date_source {
             DateSource::Custom(_) => unreachable!("custom dates are handled before iterator setup"),
             DateSource::File(ref path) => {
-                if path.is_dir() {
+                if path != Path::new("-") && path.is_dir() {
                     return Err(CtSimpleError::new(
                         2,
                         format!("expected file, got directory {}", path.quote()),
                     ));
                 }
-                let file = File::open(path)
-                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
-                let lines = BufReader::new(file).lines();
+                let lines = date_file_reader(path)?.lines();
                 let mut iter: Box<dyn Iterator<Item = _>> =
                     Box::new(lines.map_while(Result::ok).map(|line| {
                         parse_date(&line).map_err(|_| {
@@ -1670,6 +1676,25 @@ mod tests {
         let result = date_native_semantic(args.into_iter()).unwrap();
 
         assert_eq!(result.rows[0].unix_seconds, 1_709_190_296);
+    }
+
+    #[test]
+    fn test_file_dash_reads_stdin() {
+        let result = ctcore::ct_io::with_injected_stdin(
+            b"2024-02-29 UTC\n1970-01-01 UTC\n".to_vec(),
+            || {
+                let args = [
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("-f"),
+                    OsString::from("-"),
+                    OsString::from("+%s"),
+                ];
+                date_native_semantic(args.into_iter()).unwrap()
+            },
+        );
+
+        assert_eq!(result.classic_text, "1709164800\n0\n");
+        assert_eq!(result.rows.len(), 2);
     }
 
     mod tests_ct_app {

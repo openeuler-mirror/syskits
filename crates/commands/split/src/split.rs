@@ -1049,10 +1049,9 @@ struct SpliceByteChunkWriter<'a> {
 
     /// The underlying writer for the current chunk.
     ///
-    /// Once the number of bytes written to this writer exceeds
-    /// `chunk_size`, a new writer is initialized and assigned to this
-    /// field.
-    inner: BufWriter<Box<dyn Write>>,
+    /// It is created lazily on the first actual write, matching GNU split's
+    /// behavior for empty input and interrupted stdin.
+    inner: Option<BufWriter<Box<dyn Write>>>,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -1063,23 +1062,36 @@ impl<'a> SpliceByteChunkWriter<'a> {
         splice_chunk_size: u64,
         splice_settings: &'a SpliceSettings,
     ) -> CTResult<SpliceByteChunkWriter<'a>> {
-        let mut file_iterator =
+        let file_iterator =
             FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)?;
-        let file_name = file_iterator
-            .next()
-            .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
-        if splice_settings.verbose {
-            split_emit_creating_file(&file_name).map_err(CTIoError::from)?;
-        }
-        let splice_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SpliceByteChunkWriter {
             settings: splice_settings,
             chunk_size: splice_chunk_size,
             num_bytes_remaining_in_current_chunk: splice_chunk_size,
             num_chunks_written: 0,
-            inner: splice_inner,
+            inner: None,
             filename_iterator: file_iterator,
         })
+    }
+
+    fn next_writer(&mut self) -> std::io::Result<BufWriter<Box<dyn Write>>> {
+        let file_name = self
+            .filename_iterator
+            .next()
+            .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
+        if self.settings.verbose {
+            split_emit_creating_file(&file_name)?;
+        }
+        self.settings
+            .splice_instantiate_current_writer(&file_name, true)
+    }
+
+    fn current_writer(&mut self) -> std::io::Result<&mut BufWriter<Box<dyn Write>>> {
+        if self.inner.is_none() {
+            let writer = self.next_writer()?;
+            self.inner = Some(writer);
+        }
+        Ok(self.inner.as_mut().unwrap())
     }
 }
 
@@ -1104,32 +1116,24 @@ impl Write for SpliceByteChunkWriter<'_> {
                 // 更新分块信息并创建新的分块文件
                 self.num_chunks_written += 1;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
-
-                // 根据文件名生成器获取下一个文件名，并创建该文件
-                let file_name = self
-                    .filename_iterator
-                    .next()
-                    .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
-                if self.settings.verbose {
-                    split_emit_creating_file(&file_name)?;
-                }
-                self.inner = self
-                    .settings
-                    .splice_instantiate_current_writer(&file_name, true)?;
+                self.inner = Some(self.next_writer()?);
             }
 
             // 决定本次写入的字节数
             let buffer_len = buf.len();
             if (buffer_len as u64) < self.num_bytes_remaining_in_current_chunk {
                 // 如果当前分块剩余空间大于缓冲区中的字节数，则写入全部缓冲区中的字节
-                let num_bytes_written = splice_custom_write(buf, &mut self.inner, self.settings)?;
+                let settings = self.settings;
+                let writer = self.current_writer()?;
+                let num_bytes_written = splice_custom_write(buf, writer, settings)?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
             } else {
                 // 如果当前分块剩余空间小于或等于缓冲区中的字节数，则只写入足够填满当前分块的字节
                 let size = self.num_bytes_remaining_in_current_chunk as usize;
-                let num_bytes_written =
-                    splice_custom_write(&buf[..size], &mut self.inner, self.settings)?;
+                let settings = self.settings;
+                let writer = self.current_writer()?;
+                let num_bytes_written = splice_custom_write(&buf[..size], writer, settings)?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
 
                 // 如果底层写入器未能写入所有字节，则返回已写入的字节数
@@ -1147,7 +1151,11 @@ impl Write for SpliceByteChunkWriter<'_> {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
+        if let Some(inner) = self.inner.as_mut() {
+            inner.flush()
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -1178,10 +1186,9 @@ struct SpliceLineChunkWriter<'a> {
 
     /// The underlying writer for the current chunk.
     ///
-    /// Once the number of lines written to this writer exceeds
-    /// `chunk_size`, a new writer is initialized and assigned to this
-    /// field.
-    inner: BufWriter<Box<dyn Write>>,
+    /// It is created lazily on the first actual write, matching GNU split's
+    /// behavior for empty input and interrupted stdin.
+    inner: Option<BufWriter<Box<dyn Write>>>,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -1192,23 +1199,36 @@ impl<'a> SpliceLineChunkWriter<'a> {
         chunk_size: u64,
         splice_settings: &'a SpliceSettings,
     ) -> CTResult<SpliceLineChunkWriter<'a>> {
-        let mut file_iterator =
+        let file_iterator =
             FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)?;
-        let file_name = file_iterator
-            .next()
-            .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
-        if splice_settings.verbose {
-            split_emit_creating_file(&file_name).map_err(CTIoError::from)?;
-        }
-        let buf_inner = splice_settings.splice_instantiate_current_writer(&file_name, true)?;
         Ok(SpliceLineChunkWriter {
             settings: splice_settings,
             chunk_size,
             num_lines_remaining_in_current_chunk: chunk_size,
             num_chunks_written: 0,
-            inner: buf_inner,
+            inner: None,
             filename_iterator: file_iterator,
         })
+    }
+
+    fn next_writer(&mut self) -> std::io::Result<BufWriter<Box<dyn Write>>> {
+        let filename = self
+            .filename_iterator
+            .next()
+            .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
+        if self.settings.verbose {
+            split_emit_creating_file(&filename)?;
+        }
+        self.settings
+            .splice_instantiate_current_writer(&filename, true)
+    }
+
+    fn current_writer(&mut self) -> std::io::Result<&mut BufWriter<Box<dyn Write>>> {
+        if self.inner.is_none() {
+            let writer = self.next_writer()?;
+            self.inner = Some(writer);
+        }
+        Ok(self.inner.as_mut().unwrap())
     }
 }
 
@@ -1227,45 +1247,41 @@ impl Write for SpliceLineChunkWriter<'_> {
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
 
-                // 获取新文件名，若已耗尽则返回错误
-                let filename = self
-                    .filename_iterator
-                    .next()
-                    .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
-
-                // 开启详细日志时，打印创建文件信息
-                if self.settings.verbose {
-                    split_emit_creating_file(&filename)?;
-                }
-
-                // 实例化当前分块对应的底层写入器
-                self.inner = self
-                    .settings
-                    .splice_instantiate_current_writer(&filename, true)?;
+                self.inner = Some(self.next_writer()?);
 
                 // 重置当前分块剩余行数
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
 
             // 从上一个分隔符后的第一个字符开始，到当前分隔符前的最后一个字符结束，写入一行数据
+            let settings = self.settings;
+            let writer = self.current_writer()?;
             let num_bytes_written_size =
-                splice_custom_write(&buf[prev_size..=size], &mut self.inner, self.settings)?;
+                splice_custom_write(&buf[prev_size..=size], writer, settings)?;
             total_bytes_written_size += num_bytes_written_size;
             prev_size = size + 1;
             self.num_lines_remaining_in_current_chunk -= 1;
         }
 
         // 写入剩余未处理部分（可能包含最后一行）
-        let num_bytes_written_size =
-            splice_custom_write(&buf[prev_size..buf.len()], &mut self.inner, self.settings)?;
-        total_bytes_written_size += num_bytes_written_size;
+        if prev_size < buf.len() {
+            let settings = self.settings;
+            let writer = self.current_writer()?;
+            let num_bytes_written_size =
+                splice_custom_write(&buf[prev_size..buf.len()], writer, settings)?;
+            total_bytes_written_size += num_bytes_written_size;
+        }
 
         // 返回已成功写入的总字节数
         Ok(total_bytes_written_size)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
+        if let Some(inner) = self.inner.as_mut() {
+            inner.flush()
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -2063,6 +2079,51 @@ mod tests {
         }
 
         outputs
+    }
+
+    #[test]
+    fn test_split_empty_input_does_not_create_default_output() {
+        let temp = tempdir().expect("tempdir");
+        let input = temp.path().join("empty.txt");
+        std::fs::write(&input, "").expect("write empty input");
+
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), input.to_str().unwrap(), "--verbose"];
+        let matches = command.try_get_matches_from(args).unwrap();
+        let mut settings = SpliceSettings::from(&matches, &None).unwrap();
+        settings.prefix = temp.path().join("x").to_string_lossy().into_owned();
+
+        let (result, stdout, files) = split_run_with_buffered_observers(|| split(&settings));
+
+        assert!(result.is_ok());
+        assert!(stdout.is_empty());
+        assert!(files.is_empty());
+        assert!(collect_outputs_by_prefix(&settings.prefix).is_empty());
+    }
+
+    #[test]
+    fn test_split_empty_input_does_not_create_hex_output() {
+        let temp = tempdir().expect("tempdir");
+        let input = temp.path().join("empty.txt");
+        std::fs::write(&input, "").expect("write empty input");
+
+        let command = ct_app();
+        let args = vec![
+            ctcore::ct_util_name(),
+            input.to_str().unwrap(),
+            "--hex-suffixes",
+            "--verbose",
+        ];
+        let matches = command.try_get_matches_from(args).unwrap();
+        let mut settings = SpliceSettings::from(&matches, &None).unwrap();
+        settings.prefix = temp.path().join("x").to_string_lossy().into_owned();
+
+        let (result, stdout, files) = split_run_with_buffered_observers(|| split(&settings));
+
+        assert!(result.is_ok());
+        assert!(stdout.is_empty());
+        assert!(files.is_empty());
+        assert!(collect_outputs_by_prefix(&settings.prefix).is_empty());
     }
 
     mod semantic_tests {

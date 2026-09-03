@@ -132,6 +132,35 @@ pub enum Sequence {
 }
 
 impl Sequence {
+    pub fn contains_character_class(set_str: &[u8]) -> Result<bool, BadSequence> {
+        Ok(Self::from_str(set_str)?
+            .iter()
+            .any(|sequence| sequence.is_character_class()))
+    }
+
+    fn is_character_class(&self) -> bool {
+        matches!(
+            self,
+            Self::Alnum
+                | Self::Alpha
+                | Self::Blank
+                | Self::Control
+                | Self::Digit
+                | Self::Graph
+                | Self::Lower
+                | Self::Print
+                | Self::Punct
+                | Self::Space
+                | Self::Upper
+                | Self::Xdigit
+        )
+    }
+
+    pub fn complement_cardinality(set: &[u8]) -> usize {
+        let unique_count = set.iter().copied().collect::<HashSet<_>>().len();
+        256usize.saturating_sub(unique_count)
+    }
+
     /// 将序列展开为字符迭代器
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
@@ -485,28 +514,41 @@ impl SymbolTranslator for DeleteOperation {
 /// 补集转换操作的实现
 #[derive(Debug)]
 pub struct TranslateOperationComplement {
-    /// 当前迭代位置
-    iter: u8,
-    /// set2 的迭代位置
-    set2_iter: usize,
-    /// 第一个字符集
-    set1: Vec<u8>,
-    /// 第二个字符集
-    set2: Vec<u8>,
     /// 字符映射表
     translation_map: HashMap<u8, u8>,
 }
 
 impl TranslateOperationComplement {
     /// 创建新的补集转换操作
-    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Self {
-        Self {
-            iter: 0,
-            set2_iter: 0,
-            set1,
-            set2,
-            translation_map: HashMap::new(),
+    fn new(set1: Vec<u8>, set2: Vec<u8>, truncate_set1: bool) -> Result<Self, BadSequence> {
+        if !truncate_set1 && set2.is_empty() && Sequence::complement_cardinality(&set1) > 0 {
+            return Err(BadSequence::EmptySet2WhenNotTruncatingSet1);
         }
+
+        let fallback = set2.last().copied();
+        let in_set1: HashSet<u8> = set1.into_iter().collect();
+        let mut set2_iter = set2.into_iter();
+        let mut translation_map = HashMap::new();
+
+        for byte in u8::MIN..=u8::MAX {
+            if in_set1.contains(&byte) {
+                continue;
+            }
+
+            match set2_iter.next() {
+                Some(replacement) => {
+                    translation_map.insert(byte, replacement);
+                }
+                None if truncate_set1 => break,
+                None => {
+                    if let Some(replacement) = fallback {
+                        translation_map.insert(byte, replacement);
+                    }
+                }
+            }
+        }
+
+        Ok(Self { translation_map })
     }
 }
 
@@ -547,23 +589,24 @@ pub enum TranslateOperation {
 }
 
 impl TranslateOperation {
-    /// 查找下一个补集字符
-    fn next_complement_char(iter: u8, ignore_list: &[u8]) -> (u8, u8) {
-        (iter..)
-            .filter(|c| !ignore_list.iter().any(|s| s == c))
-            .map(|c| (c + 1, c))
-            .next()
-            .expect("exhausted all possible characters")
-    }
-}
-
-impl TranslateOperation {
     /// 创建新的转换操作
+    #[cfg(test)]
     pub fn new(set1: Vec<u8>, set2: Vec<u8>, is_complement: bool) -> Result<Self, BadSequence> {
+        Self::new_with_truncate(set1, set2, is_complement, false)
+    }
+
+    pub fn new_with_truncate(
+        set1: Vec<u8>,
+        set2: Vec<u8>,
+        is_complement: bool,
+        truncate_set1: bool,
+    ) -> Result<Self, BadSequence> {
         if is_complement {
             Ok(Self::Complement(TranslateOperationComplement::new(
-                set1, set2,
-            )))
+                set1,
+                set2,
+                truncate_set1,
+            )?))
         } else {
             Ok(Self::Standard(TranslateOperationStandard::new(set1, set2)?))
         }
@@ -576,25 +619,8 @@ impl SymbolTranslator for TranslateOperation {
             Self::Standard(TranslateOperationStandard { translation_map }) => {
                 Some(*translation_map.get(&current).unwrap_or(&current))
             }
-            Self::Complement(complement_op) => {
-                if let Some(c) = complement_op.set1.iter().find(|c| c.eq(&&current)) {
-                    Some(*c)
-                } else {
-                    let value = if let Some(value) = complement_op.set2.get(complement_op.set2_iter)
-                    {
-                        let (next_iter, next_key) =
-                            Self::next_complement_char(complement_op.iter, &complement_op.set1);
-                        complement_op.iter = next_iter;
-                        complement_op.set2_iter = complement_op.set2_iter.saturating_add(1);
-                        complement_op.translation_map.insert(next_key, *value);
-                        *value
-                    } else {
-                        let fallback = *complement_op.set2.last().unwrap_or(&current);
-                        complement_op.translation_map.insert(current, fallback);
-                        fallback
-                    };
-                    Some(value)
-                }
+            Self::Complement(TranslateOperationComplement { translation_map }) => {
+                Some(*translation_map.get(&current).unwrap_or(&current))
             }
         }
     }
@@ -1078,8 +1104,8 @@ mod tests {
             // 测试补集转换
             let mut op = TranslateOperation::new(vec![b'a', b'b'], vec![b'1', b'2'], true).unwrap();
             assert_eq!(op.translate(b'a'), Some(b'a')); // 在集合中的字符保持不变
-            assert_eq!(op.translate(b'x'), Some(b'1')); // 不在集合中的字符被映射
-            assert_eq!(op.translate(b'y'), Some(b'2')); // 不在集合中的下一个字符被映射
+            assert_eq!(op.translate(b'x'), Some(b'2')); // 补集映射按字节域预先建立
+            assert_eq!(op.translate(b'y'), Some(b'2')); // string2 较短时重复最后一个字符
         }
 
         #[test]
@@ -1159,9 +1185,9 @@ mod tests {
             assert_eq!(op.translate(b'e'), Some(b'e'));
 
             // 不在集合中的字符被映射
-            assert_eq!(op.translate(b'b'), Some(b'A'));
-            assert_eq!(op.translate(b'c'), Some(b'E'));
-            assert_eq!(op.translate(b'd'), Some(b'I'));
+            assert_eq!(op.translate(b'b'), Some(b'U'));
+            assert_eq!(op.translate(b'c'), Some(b'U'));
+            assert_eq!(op.translate(b'd'), Some(b'U'));
 
             // 测试映射耗尽后的行为
             let mut chars = vec![];

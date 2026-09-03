@@ -136,7 +136,7 @@ impl SttyFlags {
             is_all: matches.get_flag(stty_flags::STTY_ALL),
             // 是否保存当前设置的标志
             is_save: matches.get_flag(stty_flags::STTY_SAVE),
-            stdout_is_terminal: std::io::stdout().is_terminal(),
+            stdout_is_terminal: false,
             file_name,
             file,
             settings,
@@ -203,8 +203,8 @@ pub fn stty_main_with_writer<W: Write>(args: impl ctcore::Args, writer: &mut W) 
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
-    let stty_opts = SttyFlags::new(&matches)?;
-    stty(&stty_opts, writer)
+    let mut stty_opts = SttyFlags::new(&matches)?;
+    stty(&mut stty_opts, writer)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -360,7 +360,7 @@ fn tcsetattr_arg_for_setting(setting: &str) -> Option<SetArg> {
 /// # 返回值
 ///
 /// 返回一个`CTResult`，表示操作成功完成或包含错误信息
-fn stty<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
+fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W) -> CTResult<()> {
     // Check 参数冲突
     opts.check()?;
 
@@ -369,6 +369,8 @@ fn stty<W: Write>(opts: &SttyFlags, writer: &mut W) -> CTResult<()> {
             validate_setting_syntax(setting)?;
         }
     }
+
+    opts.stdout_is_terminal = std::io::stdout().is_terminal();
 
     // 通过 tcgetattr 获取终端配置
     let mut termios = tcgetattr(opts.file.as_fd())

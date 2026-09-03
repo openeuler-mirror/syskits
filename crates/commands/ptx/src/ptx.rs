@@ -1668,6 +1668,28 @@ fn ptx_format_dumb_line_bytes(
             .saturating_sub(if fields.tail_truncation { trunc_len } else { 0 });
         output.extend(std::iter::repeat(b' ').take(pad));
     } else {
+        let previous_byte_is_whitespace = all_before
+            .last()
+            .is_some_and(|byte| byte.is_ascii_whitespace());
+        let trunc_only_adjust = if config.is_gnu_ext
+            && fields.before_truncation
+            && fields.before.is_empty()
+            && word_ref.position > 0
+            && previous_byte_is_whitespace
+            && half_line_width <= gap_size + trunc_len * 2
+        {
+            1
+        } else {
+            0
+        };
+        let whitespace_before_adjust = if config.is_gnu_ext
+            && !fields.before.is_empty()
+            && fields.before.iter().all(|byte| byte.is_ascii_whitespace())
+        {
+            1
+        } else {
+            0
+        };
         let pad = half_line_width
             .saturating_sub(gap_size)
             .saturating_sub(fields.before.len())
@@ -1675,7 +1697,9 @@ fn ptx_format_dumb_line_bytes(
                 trunc_len
             } else {
                 0
-            });
+            })
+            .saturating_add(trunc_only_adjust)
+            .saturating_add(whitespace_before_adjust);
         output.extend(std::iter::repeat(b' ').take(pad));
     }
 
@@ -2630,6 +2654,26 @@ mod tests {
                 "options should be rendered in compact help format"
             );
         }
+    }
+
+    #[test]
+    fn test_cli_dumb_formatter_w10_two_tokens_alignment() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(temp.path(), b"foo bar\n").unwrap();
+
+        let mut out = Vec::new();
+        ptx_main_with_writer(
+            [
+                OsString::from("ptx"),
+                OsString::from("-w10"),
+                OsString::from(temp.path()),
+            ]
+            .into_iter(),
+            &mut out,
+        )
+        .unwrap();
+
+        assert_eq!(out, b"     /   bar\n        foo/\n");
     }
 
     mod config_tests {

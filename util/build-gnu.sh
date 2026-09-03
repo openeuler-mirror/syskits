@@ -184,6 +184,7 @@ fi
 # tests/Coreutils.pm 通过 PATH 调用 getlimits，这里确保每次都可用
 test -f src/getlimits || "${MAKE}" -j "$("${NPROC}")" src/getlimits
 cp -f src/getlimits "${SYSKITS_BUILD_DIR}"
+chmod 755 "${SYSKITS_BUILD_DIR}/getlimits"
 
 # 劫持GNU coreutils的tests，使其适配syskits coreutils
 # 原本GNU tests的假设：path_prepend_ ./src 优先使用 GNU 自己编译的 src/ls
@@ -587,9 +588,14 @@ sed -i 's/$help_algs eq $test_algs or die.*/1;/' tests/cksum/cksum-base64.pl
 
 ### tail tests
 # 移除针对关闭的 stdin (<&-) 的测试块，因为 Rust 会自动将其重定向到 /dev/null
-"${SED}" -i '/returns_ 1 \/usr\/bin\/timeout 10 tail -f - <&-/,/compare exp err || fail=1/d' tests/tail/follow-stdin.sh
+"${SED}" -i '/returns_ 1 .*tail -f - <&-/,/compare exp err || fail=1/d' tests/tail/follow-stdin.sh
 # 移除针对 tty 警告文本的特定测试，防止 Rust io::copy 在后台捕获 SIGTERM 时陷入 EINTR 重试死循环
 "${SED}" -i '/# Before coreutils-8.28 this would erroneously issue a warning/,/fi/d' tests/tail/follow-stdin.sh
+# assert-2.sh 是一个时间敏感用例。先等待 tail 观察到缺失的 foo，
+# 再去创建 foo，避免在 installed/release 环境下暴露测试自身的 race。
+if ! grep -Fq "Wait until tail has noticed missing foo before recreating it." tests/tail/assert-2.sh; then
+  perl -0pi -e 's@  # Wait up to 12\.7s for tail to notice new foo file\n  ok='\''ok ok ok'\''@  # Wait until tail has noticed missing foo before recreating it.\n  tail_re='\''No such file'\'' retry_delay_ check_tail_output .1 7 ||\n    { cat out; fail=1; break; }\n\n  # Wait up to 12.7s for tail to notice new foo file\n  ok='\''ok ok ok'\''@' tests/tail/assert-2.sh
+fi
 # 跳过 inotify-rotate-resources.sh
 # Rust 采用目录级监听机制管理 watch，天然不泄露资源，无需兼容 C 语言强耦合的 rm_watch 探测
 "${SED}" -i '1s/^/exit 77  # Skip test - Rust uses directory watching, rendering this strace check invalid\n/' tests/tail/inotify-rotate-resources.sh

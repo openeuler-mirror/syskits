@@ -352,6 +352,20 @@ fn truncate_reference_file_only(
     Ok(())
 }
 
+#[cfg(unix)]
+fn io_block_size_for_new_file(filename: &str) -> u64 {
+    let path = Path::new(filename);
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
+    let parent = parent.unwrap_or_else(|| Path::new("."));
+
+    metadata(parent).map(|md| md.st_blksize()).unwrap_or(0)
+}
+
+#[cfg(not(unix))]
+fn io_block_size_for_new_file(_filename: &str) -> u64 {
+    0
+}
+
 /// 将文件截断到指定的大小。
 ///
 /// `size_string` 提供的是绝对大小或相对大小。相对大小会根据文件的当前大小调整每个文件的大小。
@@ -392,7 +406,13 @@ fn truncate_size_only(
 
                 (md.len(), blocksize_md)
             }
-            Err(_) => (0, 0),
+            Err(_) => {
+                if is_blocks && is_create {
+                    (0, io_block_size_for_new_file(filename))
+                } else {
+                    (0, 0)
+                }
+            }
         };
 
         let t_size = match is_blocks {
@@ -687,6 +707,8 @@ mod tests {
     mod truncate_size_only_tests {
         use std::fs::metadata;
         use std::io::Write;
+        #[cfg(unix)]
+        use std::os::linux::fs::MetadataExt;
 
         use tempfile::NamedTempFile;
 
@@ -780,6 +802,35 @@ mod tests {
 
             // 清理
             std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[test]
+        fn test_truncate_size_only_io_blocks_creates_missing_file_with_parent_block_size() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let target_path = temp_dir.path().join("new-file");
+            let target = target_path.to_str().unwrap().to_string();
+            let target_files = vec![target.clone()];
+
+            truncate_size_only("1", &target_files, true, true).unwrap();
+
+            #[cfg(unix)]
+            let expected_size = metadata(temp_dir.path()).unwrap().st_blksize();
+            #[cfg(not(unix))]
+            let expected_size = 0;
+
+            assert_eq!(metadata(&target).unwrap().len(), expected_size);
+        }
+
+        #[test]
+        fn test_truncate_size_only_io_blocks_no_create_keeps_missing_file_absent() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let target_path = temp_dir.path().join("new-file");
+            let target = target_path.to_str().unwrap().to_string();
+            let target_files = vec![target.clone()];
+
+            truncate_size_only("1", &target_files, false, true).unwrap();
+
+            assert!(!target_path.exists());
         }
 
         #[test]

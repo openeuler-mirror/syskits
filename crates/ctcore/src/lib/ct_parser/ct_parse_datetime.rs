@@ -20,6 +20,7 @@ use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
     DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Weekday,
 };
+use chrono_tz::Tz;
 
 /// 日期时间解析错误
 #[derive(Debug, Clone)]
@@ -125,31 +126,8 @@ pub fn parse_datetime_gnu_compat(
         }
     }
 
-    // 特殊时区环境变量重写 (e.g. TZ="EST5" 1970-01-01 00:00)
-    if let Some(rest) = input_trim.strip_prefix("TZ=\"") {
-        if let Some(quote_idx) = rest.find('"') {
-            let tz_name = &rest[..quote_idx];
-            let date_str = rest[quote_idx + 1..].trim();
-            let offset_hours = if tz_name.starts_with("EST") {
-                -5
-            } else if tz_name.starts_with("PST") {
-                -8
-            } else {
-                0
-            };
-            if let Some(offset) = FixedOffset::east_opt(offset_hours * 3600) {
-                let formats = ["%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"];
-                for fmt in formats {
-                    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(date_str, fmt) {
-                        if let chrono::LocalResult::Single(dt) =
-                            offset.from_local_datetime(&naive_dt)
-                        {
-                            return Ok(dt.with_timezone(&Local));
-                        }
-                    }
-                }
-            }
-        }
+    if let Some(dt) = parse_embedded_timezone(input_trim) {
+        return Ok(dt);
     }
 
     let mut processed_lower = input_lower.clone();
@@ -542,6 +520,54 @@ fn parse_military_timezone_only(
     }
 }
 
+fn parse_embedded_timezone(input: &str) -> Option<DateTime<Local>> {
+    let rest = input.strip_prefix("TZ=\"")?;
+    let quote_idx = rest.find('"')?;
+    let timezone_name = &rest[..quote_idx];
+    let date_str = rest[quote_idx + 1..].trim();
+    let naive = parse_embedded_timezone_datetime(date_str)?;
+
+    if let Ok(timezone) = timezone_name.parse::<Tz>() {
+        return timezone
+            .from_local_datetime(&naive)
+            .earliest()
+            .map(|dt| dt.with_timezone(&Local));
+    }
+
+    let offset_hours = if timezone_name.starts_with("EST") {
+        -5
+    } else if timezone_name.starts_with("PST") {
+        -8
+    } else if timezone_name == "UTC0" || timezone_name == "GMT0" {
+        0
+    } else {
+        return None;
+    };
+    FixedOffset::east_opt(offset_hours * 3600)?
+        .from_local_datetime(&naive)
+        .single()
+        .map(|dt| dt.with_timezone(&Local))
+}
+
+fn parse_embedded_timezone_datetime(input: &str) -> Option<NaiveDateTime> {
+    for format in [
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+    ] {
+        if let Ok(date) = NaiveDateTime::parse_from_str(input, format) {
+            return Some(date);
+        }
+    }
+
+    NaiveDate::parse_from_str(input, "%Y-%m-%d")
+        .ok()?
+        .and_hms_opt(0, 0, 0)
+}
+
 fn parse_compact_time_of_day(
     input: &str,
     reference_time: DateTime<Local>,
@@ -718,7 +744,7 @@ pub fn parse_datetime_to_filetime(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Local, TimeZone, Timelike};
+    use chrono::{Local, TimeZone, Timelike, Utc};
 
     #[test]
     fn test_parse_weekday_simple() {
@@ -835,6 +861,38 @@ mod tests {
         assert_eq!(local.hour(), 0);
         assert_eq!(local.minute(), 0);
         assert_eq!(local.second(), 0);
+    }
+
+    #[test]
+    fn test_parse_embedded_iana_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_utc) in [
+            (
+                "TZ=\"America/Los_Angeles\" 2024-07-01 09:00",
+                Utc.with_ymd_and_hms(2024, 7, 1, 16, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/Los_Angeles\" 2024-01-01 09:00",
+                Utc.with_ymd_and_hms(2024, 1, 1, 17, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/Los_Angeles\" 2024-11-03 01:30",
+                Utc.with_ymd_and_hms(2024, 11, 3, 8, 30, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                expected_utc.timestamp(),
+                "input {input}"
+            );
+        }
+
+        assert!(
+            parse_datetime_gnu_compat("TZ=\"America/Los_Angeles\" 2024-03-10 02:30", ref_time)
+                .is_err()
+        );
     }
 
     #[test]

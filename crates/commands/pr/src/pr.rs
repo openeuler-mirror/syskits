@@ -368,7 +368,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pr_flags::PR_FORM_FEED)
             .short('F')
-            .short_alias('f')
+            .visible_short_alias('f')
             .long(pr_flags::PR_FORM_FEED)
             .help(
                 "Use a <form-feed> for new pages, instead of the default behavior that \
@@ -411,7 +411,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pr_flags::PR_COLUMN)
             .long(pr_flags::PR_COLUMN)
-            .alias("columns")
+            .visible_alias("columns")
             .help(
                 "Produce multi-column output that is arranged in column columns \
                  (the default shall be 1) and is written down each column  in  the order in which \
@@ -464,6 +464,7 @@ pub fn ct_app() -> Command {
             .value_name("margin"),
         Arg::new(pr_flags::PR_JOIN_LINES)
             .short('J')
+            .long(pr_flags::PR_JOIN_LINES)
             .help(
                 "merge full lines, turns off -W line truncation, no column \
                  alignment, --sep-string[=STRING] sets separators",

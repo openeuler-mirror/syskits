@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code, strip_errno};
 use ctcore::{ct_show_error, ct_util_name};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
@@ -45,11 +45,16 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
         is_verbose: matches.get_flag(rmdir_flags::RMDIR_VERBOSE),
     };
 
-    for path in matches
+    let paths: Vec<_> = matches
         .get_many::<OsString>(rmdir_flags::RMDIR_ARG_DIRS)
         .unwrap_or_default()
         .map(Path::new)
-    {
+        .collect();
+    if paths.is_empty() {
+        return Err(CTsageError::new(1, "missing operand"));
+    }
+
+    for path in paths {
         if let Err(error) = rmdir_remove(path, configs) {
             let RmdirError { error, path } = error;
 
@@ -709,7 +714,26 @@ mod tests {
             let args = args_vec.iter().map(OsString::from);
             let result = rmdir_main(args);
 
-            assert!(result.is_ok());
+            let err = result.expect_err("rmdir without operands should fail");
+            assert_eq!(err.code(), 1);
+            assert_eq!(err.to_string(), "missing operand");
+        }
+
+        #[test]
+        fn test_rmdir_main_options_without_operands_fail() {
+            for args_vec in [
+                vec![ctcore::ct_util_name(), "--ignore-fail-on-non-empty"],
+                vec![ctcore::ct_util_name(), "--parents"],
+                vec![ctcore::ct_util_name(), "--verbose"],
+                vec![ctcore::ct_util_name(), "-p"],
+                vec![ctcore::ct_util_name(), "-v"],
+            ] {
+                let result = rmdir_main(args_vec.iter().map(OsString::from));
+                let err = result.expect_err("rmdir option without operands should fail");
+
+                assert_eq!(err.code(), 1);
+                assert_eq!(err.to_string(), "missing operand");
+            }
         }
 
         #[test]

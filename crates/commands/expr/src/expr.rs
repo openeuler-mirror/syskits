@@ -17,7 +17,7 @@ use std::fmt::Display;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
-    ct_display::Quotable,
+    ct_display::locale_quote,
     ct_error::{CTError, CTResult},
 };
 use syntax_tree::SyntaxTreeAstNode;
@@ -61,20 +61,28 @@ impl Display for ExprError {
         // 根据错误类型格式化错误信息
         match self {
             Self::UnexpectedArgument(s) => {
-                write!(f, "syntax error: unexpected argument {}", s.quote())
+                write!(f, "syntax error: unexpected argument {}", locale_quote(s))
             }
             Self::MissingArgument(s) => {
-                write!(f, "syntax error: missing argument after {}", s.quote())
+                write!(
+                    f,
+                    "syntax error: missing argument after {}",
+                    locale_quote(s)
+                )
             }
             Self::NonIntegerArgument => write!(f, "non-integer argument"),
             Self::MissingOperand => write!(f, "missing operand"),
             Self::DivisionByZero => write!(f, "division by zero"),
             Self::RegexError(s) => write!(f, "{s}"),
             Self::ExpectedClosingBraceAfter(s) => {
-                write!(f, "syntax error: expecting ')' after {}", s.quote())
+                write!(f, "syntax error: expecting ')' after {}", locale_quote(s))
             }
             Self::ExpectedClosingBraceInsteadOf(s) => {
-                write!(f, "syntax error: expecting ')' instead of {}", s.quote())
+                write!(
+                    f,
+                    "syntax error: expecting ')' instead of {}",
+                    locale_quote(s)
+                )
             }
             Self::UnexpectedClosingBrace => write!(f, "syntax error: unexpected ')'"),
         }
@@ -162,7 +170,9 @@ fn expr_native_output(args: impl ctcore::Args) -> CTResult<ExprNativeOutput> {
         Vec::new()
     };
 
-    if let Some(first) = operands.first() {
+    if operands.len() == 1
+        && let Some(first) = operands.first()
+    {
         if first == OsStr::new("--help") || first == OsStr::new("--version") {
             let help_args = vec![OsString::from(ctcore::ct_util_name()), first.clone()];
             ct_app().try_get_matches_from(help_args)?;

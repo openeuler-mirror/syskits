@@ -811,6 +811,13 @@ fn get_date_source(args_match: &ArgMatches) -> DateSource {
 }
 
 fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> {
+    if args_match.contains_id(DATE_OPT_ISO_8601) && args_match.get_flag(DATE_OPT_RFC_EMAIL) {
+        return Err(Err(CtSimpleError::new(
+            1,
+            "multiple output formats specified",
+        )));
+    }
+
     // 根据命令行参数确定日期格式
     let date_format = if let Some(form) = args_match.get_one::<String>(DATE_OPT_FORMAT) {
         if !form.starts_with('+') {
@@ -3315,6 +3322,26 @@ mod tests {
             let result = date_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_date_main_rfc_email_then_iso_8601_conflict() {
+            let args = [ctcore::ct_util_name(), "-R", "-Iseconds"];
+
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(error.to_string(), "multiple output formats specified");
+        }
+
+        #[test]
+        fn test_date_main_iso_8601_then_rfc_email_conflict() {
+            let args = [ctcore::ct_util_name(), "-Iseconds", "-R"];
+
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]

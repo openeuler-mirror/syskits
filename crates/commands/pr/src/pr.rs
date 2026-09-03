@@ -759,6 +759,7 @@ fn pr_build_options(
     );
     let columns_to_print = parse_columns_to_print(merge_files_print, &column_mode_options);
     let page_width = parse_page_width(arg_matches, is_join_lines, merge_files_print.is_some())?;
+    let header_width = parse_header_width(arg_matches)?;
     let line_width = parse_line_width(
         page_width,
         &column_mode_options,
@@ -808,7 +809,7 @@ fn pr_build_options(
         is_form_feed_used,
         is_join_lines,
         col_sep_for_printing,
-        page_width: page_width.unwrap_or(72),
+        page_width: header_width,
         line_width,
         show_control_chars: arg_matches.get_flag(pr_flags::PR_SHOW_CONTROL_CHARS),
         show_nonprinting: arg_matches.get_flag(pr_flags::PR_SHOW_NONPRINTING),
@@ -1075,6 +1076,13 @@ fn parse_page_width(
         None
     };
     Ok(page_width)
+}
+
+fn parse_header_width(arg_matches: &ArgMatches) -> Result<usize, PrError> {
+    pr_parse_usize(arg_matches, pr_flags::PR_PAGE_WIDTH)
+        .or_else(|| pr_parse_usize(arg_matches, pr_flags::PR_COLUMN_WIDTH))
+        .transpose()
+        .map(|width| width.unwrap_or(PR_DEFAULT_COLUMN_WIDTH))
 }
 
 fn parse_column_separator(arg_matches: &ArgMatches) -> String {
@@ -2758,15 +2766,14 @@ fn pr_header_content(output_opts: &PrOutputOptions, page: usize) -> Vec<String> 
         let date_width = UnicodeWidthStr::width(output_opts.last_modified_time.as_str());
         let file_width = UnicodeWidthStr::width(output_opts.header.as_str());
         let page_text = t!("pr.page", page = page);
-        let page_width = UnicodeWidthStr::width(page_text.as_str());
+        let page_text_width = UnicodeWidthStr::width(page_text.as_str());
 
-        let chars_per_line = output_opts.line_width.unwrap_or(output_opts.page_width);
-
-        let header_width_available = chars_per_line
+        let header_width_available = output_opts
+            .page_width
             .saturating_sub(date_width)
             .saturating_sub(file_width);
 
-        let available_width = header_width_available.saturating_sub(page_width);
+        let available_width = header_width_available.saturating_sub(page_text_width);
 
         let lhs_spaces = available_width / 2;
         let rhs_spaces = available_width - lhs_spaces;
@@ -4414,6 +4421,14 @@ mod tests {
                 result[2],
                 "2023-01-01                      TEST_HEADER                       Page 1"
             );
+
+            let output_opts = PrOutputOptions {
+                page_width: 1,
+                ..output_opts
+            };
+
+            let result = pr_header_content(&output_opts, 1);
+            assert_eq!(result[2], "2023-01-01 TEST_HEADER Page 1");
         }
 
         #[test]

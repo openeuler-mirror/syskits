@@ -293,7 +293,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_DIRECTORY)
             .short('d')
-            .short_alias('F')
+            .visible_short_alias('F')
             .long(lnoptions::LN_DIRECTORY)
             .help("allow the superuser to try to hard link directories")
             .action(ArgAction::SetTrue)

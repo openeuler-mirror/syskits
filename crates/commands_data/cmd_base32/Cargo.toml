@@ -9,7 +9,7 @@ edition.workspace = true
 homepage.workspace = true
 
 description = "Structured data command for base32"
-repository = "https://work.ctyun.cn/git/CTyunOS/syskits"
+repository = "https://atomgit.com/openeuler/syskits"
 
 [lib]
 path = "src/lib.rs"

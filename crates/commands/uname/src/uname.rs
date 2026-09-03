@@ -229,6 +229,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .args(args)
 }
 
@@ -746,6 +747,16 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--kernel-name"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_repeated_kernel_name_options() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-s", "-s", "--kernel-name"])
+                .unwrap();
+
+            assert!(matches.get_flag(uname_flags::UNAME_KERNEL_NAME));
+            assert!(!matches.get_flag(uname_flags::UNAME_ALL));
         }
 
         #[test]

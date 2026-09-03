@@ -1644,6 +1644,20 @@ mod tests {
         assert_eq!(result.classic_text, "2024-02-29\n");
     }
 
+    #[test]
+    fn test_embedded_timezone_uses_iana_offset() {
+        let args = [
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-d"),
+            OsString::from("TZ=\"America/Los_Angeles\" 2024-07-01 09:00"),
+            OsString::from("+%s"),
+        ];
+
+        let result = date_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(result.rows[0].unix_seconds, 1_719_849_600);
+    }
+
     mod tests_ct_app {
         use crate::ct_app;
         use clap::error::ErrorKind;

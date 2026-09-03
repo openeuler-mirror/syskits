@@ -38,6 +38,7 @@ libc = { workspace = true, optional = true }
 once_cell = { workspace = true }
 os_display = "0.1.3"
 chrono = { workspace = true, optional = true }
+chrono-tz = { workspace = true, optional = true }
 filetime = { workspace = true, optional = true } 
 parse_datetime = { workspace = true, optional = true }
 
@@ -131,4 +132,4 @@ utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
-datetime = ["chrono", "filetime", "parse_datetime"]
+datetime = ["chrono", "chrono-tz", "filetime", "parse_datetime"]

@@ -362,13 +362,13 @@ fn parse_csv_transposed(s: &str) -> Result<CtValue, CtDiagnosticError> {
             )));
         }
 
-        for record_idx in 0..record_count {
+        for (record_idx, record) in records.iter_mut().enumerate().take(record_count) {
             let value = row
                 .get(record_idx + 1)
                 .map(String::as_str)
                 .unwrap_or("")
                 .trim();
-            records[record_idx].push((field_name.to_string(), infer_scalar(value)));
+            record.push((field_name.to_string(), infer_scalar(value)));
         }
     }
 
@@ -442,9 +442,9 @@ fn parse_ssv_transposed(s: &str) -> Result<CtValue, CtDiagnosticError> {
 
     for row in rows {
         let field_name = row.first().cloned().unwrap_or_default();
-        for record_idx in 0..record_count {
+        for (record_idx, record) in records.iter_mut().enumerate().take(record_count) {
             let value = row.get(record_idx + 1).map(String::as_str).unwrap_or("");
-            records[record_idx].push((field_name.clone(), infer_scalar(value)));
+            record.push((field_name.clone(), infer_scalar(value)));
         }
     }
 

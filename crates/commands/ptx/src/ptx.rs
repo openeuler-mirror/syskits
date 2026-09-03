@@ -473,9 +473,7 @@ fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
 }
 
 fn ptx_input_reference_span(line: &str) -> Option<(usize, usize)> {
-    let Some(first) = line.chars().next() else {
-        return None;
-    };
+    let first = line.chars().next()?;
     if first.is_whitespace() {
         return None;
     }
@@ -1261,6 +1259,7 @@ fn format_tex_field(s: &str) -> String {
 }
 
 /// 格式化输出为 TeX 格式
+#[allow(clippy::too_many_arguments)]
 fn ptx_format_tex_line(
     config: &PtxConfig,
     word_ref: &WordRef,
@@ -1367,6 +1366,7 @@ fn ptx_context_slices<'a>(
 }
 
 /// 格式化输出为 Roff 格式
+#[allow(clippy::too_many_arguments)]
 fn ptx_format_roff_line(
     config: &PtxConfig,
     word_ref: &WordRef,
@@ -1477,6 +1477,7 @@ fn context_bounds(
     (left, right)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ptx_format_dumb_line(
     config: &PtxConfig,
     word_ref: &WordRef,
@@ -1673,18 +1674,18 @@ fn ptx_format_dumb_line_bytes(
             let pad = reference_max_width
                 .saturating_add(gap_size)
                 .saturating_sub(reference.chars().count().saturating_add(1));
-            output.extend(std::iter::repeat(b' ').take(pad));
+            output.extend(std::iter::repeat_n(b' ', pad));
         } else {
             output.extend_from_slice(reference_bytes);
             let pad = reference_max_width
                 .saturating_add(gap_size)
                 .saturating_sub(reference.chars().count());
-            output.extend(std::iter::repeat(b' ').take(pad));
+            output.extend(std::iter::repeat_n(b' ', pad));
         }
     }
 
     let half_line_width = effective_line_width / 2;
-    let trunc_len = config.trunc_str.as_bytes().len();
+    let trunc_len = config.trunc_str.len();
 
     if !fields.tail.is_empty() {
         output.extend_from_slice(&ptx_display_field_bytes(&fields.tail));
@@ -1701,7 +1702,7 @@ fn ptx_format_dumb_line_bytes(
             })
             .saturating_sub(fields.tail.len())
             .saturating_sub(if fields.tail_truncation { trunc_len } else { 0 });
-        output.extend(std::iter::repeat(b' ').take(pad));
+        output.extend(std::iter::repeat_n(b' ', pad));
     } else {
         let previous_byte_is_whitespace = all_before
             .last()
@@ -1735,14 +1736,14 @@ fn ptx_format_dumb_line_bytes(
             })
             .saturating_add(trunc_only_adjust)
             .saturating_add(whitespace_before_adjust);
-        output.extend(std::iter::repeat(b' ').take(pad));
+        output.extend(std::iter::repeat_n(b' ', pad));
     }
 
     if fields.before_truncation {
         output.extend_from_slice(config.trunc_str.as_bytes());
     }
     output.extend_from_slice(&ptx_display_field_bytes(&fields.before));
-    output.extend(std::iter::repeat(b' ').take(gap_size));
+    output.extend(std::iter::repeat_n(b' ', gap_size));
     output.extend_from_slice(&ptx_display_field_bytes(&fields.keyafter));
     if fields.keyafter_truncation {
         output.extend_from_slice(config.trunc_str.as_bytes());
@@ -1758,7 +1759,7 @@ fn ptx_format_dumb_line_bytes(
             })
             .saturating_sub(fields.head.len())
             .saturating_sub(if fields.head_truncation { trunc_len } else { 0 });
-        output.extend(std::iter::repeat(b' ').take(pad));
+        output.extend(std::iter::repeat_n(b' ', pad));
         if fields.head_truncation {
             output.extend_from_slice(config.trunc_str.as_bytes());
         }
@@ -1771,11 +1772,11 @@ fn ptx_format_dumb_line_bytes(
             } else {
                 0
             });
-        output.extend(std::iter::repeat(b' ').take(pad));
+        output.extend(std::iter::repeat_n(b' ', pad));
     }
 
     if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
-        output.extend(std::iter::repeat(b' ').take(gap_size));
+        output.extend(std::iter::repeat_n(b' ', gap_size));
         output.extend_from_slice(reference.as_bytes());
     }
 

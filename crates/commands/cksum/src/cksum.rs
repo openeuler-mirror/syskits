@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::{
     ct_encoding,
-    ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code},
+    ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code},
     ct_show,
     ct_sum::{
         BSD, CtBlake2b, CtCRC, CtCRC32b, CtDigest, CtDigestWriter, CtSm3, Md5, SYSV, Sha1,
@@ -490,6 +490,43 @@ fn cksum_output_format_name(format: &CksumOutputFormat) -> &'static str {
     }
 }
 
+fn reject_verify_only_options_outside_check_mode(
+    check: bool,
+    quiet: bool,
+    status: bool,
+    strict: bool,
+    warn: bool,
+    ignore_missing: bool,
+) -> CTResult<()> {
+    if check {
+        return Ok(());
+    }
+
+    for (is_present, option_name) in [
+        (quiet, "--quiet"),
+        (status, "--status"),
+        (strict, "--strict"),
+        (warn, "--warn"),
+        (ignore_missing, "--ignore-missing"),
+    ] {
+        if is_present {
+            return Err(CTsageError::new(
+                1,
+                format!("the {option_name} option is meaningful only when verifying checksums"),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn long_option_matches(option: &str, arg: &str) -> bool {
+    let Some(arg) = arg.strip_prefix("--") else {
+        return false;
+    };
+    !arg.is_empty() && option.starts_with(arg)
+}
+
 fn parse_cksum_length(
     algo_name: &str,
     input_length_str: Option<&String>,
@@ -580,10 +617,10 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         } else if arg_str == "--text" || arg_str == "-t" {
             last_text_idx = i;
             text = true;
-        } else if arg_str == "--status" {
+        } else if long_option_matches(opt_flags::STATUS, &arg_str) {
             last_status_idx = i;
             status = true;
-        } else if arg_str == "--warn" || arg_str == "-w" {
+        } else if arg_str == "-w" || long_option_matches(opt_flags::WARN, &arg_str) {
             last_warn_idx = i;
             warn = true;
         } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
@@ -641,6 +678,15 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
     }
 
     let check = matches.get_flag(opt_flags::CHECK);
+    reject_verify_only_options_outside_check_mode(
+        check,
+        matches.get_flag(opt_flags::QUIET),
+        matches.get_flag(opt_flags::STATUS),
+        matches.get_flag(opt_flags::STRICT),
+        matches.get_flag(opt_flags::WARN),
+        matches.get_flag(opt_flags::IGNORE_MISSING),
+    )?;
+
     if check {
         if matches.get_flag(opt_flags::ZERO) {
             return Ok(CksumSemanticDispatch::Semantic(semantic_error(
@@ -1696,10 +1742,10 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         } else if arg_str == "--text" || arg_str == "-t" {
             last_text_idx = i;
             text = true;
-        } else if arg_str == "--status" {
+        } else if long_option_matches(opt_flags::STATUS, &arg_str) {
             last_status_idx = i;
             status = true;
-        } else if arg_str == "--warn" || arg_str == "-w" {
+        } else if arg_str == "-w" || long_option_matches(opt_flags::WARN, &arg_str) {
             last_warn_idx = i;
             warn = true;
         } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
@@ -1840,7 +1886,17 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
     };
 
-    if matches.get_flag(opt_flags::CHECK) {
+    let check = matches.get_flag(opt_flags::CHECK);
+    reject_verify_only_options_outside_check_mode(
+        check,
+        opts.quiet,
+        matches.get_flag(opt_flags::STATUS),
+        opts.strict,
+        matches.get_flag(opt_flags::WARN),
+        opts.ignore_missing,
+    )?;
+
+    if check {
         if opts.zero {
             ctcore::ct_show_error!("the --zero option is not supported when verifying checksums");
             return Ok(1);

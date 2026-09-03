@@ -16,10 +16,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
+use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::ct_show;
 use std::ffi::OsString;
 use std::io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
@@ -134,8 +135,13 @@ impl Mode {
                 Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(head_flags::LINES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
+            let (n, all_but_last) = parse::parse_num(v).map_err(|err| match err {
+                ParseSizeError::SizeTooBig(_) => format!(
+                    "invalid number of lines: {}: Value too large for defined data type",
+                    locale_quote(v)
+                ),
+                _ => format!("invalid number of lines: {}", locale_quote(v)),
+            })?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {

@@ -29,7 +29,7 @@ use rand::Rng;
 use tempfile::Builder;
 
 use ctcore::Tool;
-use ctcore::ct_display::{Quotable, ct_println_verbatim};
+use ctcore::ct_display::{Quotable, ct_println_verbatim, locale_quote};
 use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo};
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -84,7 +84,9 @@ impl Display for MkTempError {
             MkTempError::MustEndInX(s) => {
                 write!(f, "with --suffix, template {} must end in X", s.quote())
             }
-            MkTempError::TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
+            MkTempError::TooFewXs(s) => {
+                write!(f, "too few X's in template {}", locale_quote(s))
+            }
             MkTempError::PrefixContainsDirSeparator(s) => {
                 write!(
                     f,
@@ -861,7 +863,7 @@ mod tests {
         fn test_mktemp_error_fmt_too_few_xs() {
             let template = "too_few_X".to_string();
             let error = MkTempError::TooFewXs(template.clone());
-            let expected_message = format!("too few X's in template '{template}'");
+            let expected_message = format!("too few X's in template {}", locale_quote(&template));
             assert_eq!(format!("{error}"), expected_message);
         }
 
@@ -1057,7 +1059,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "too few X's in template 'too_few_X'"
+                format!("too few X's in template {}", locale_quote("too_few_X"))
             );
         }
 
@@ -1135,7 +1137,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "too few X's in template 'test.'"
+                format!("too few X's in template {}", locale_quote("test."))
             );
         }
 
@@ -1220,7 +1222,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "too few X's in template ''"
+                format!("too few X's in template {}", locale_quote(""))
             );
         }
 
@@ -1231,7 +1233,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "too few X's in template ''"
+                format!("too few X's in template {}", locale_quote(""))
             );
         }
 
@@ -2325,7 +2327,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "too few X's in template 'too_few_X'"
+                format!("too few X's in template {}", locale_quote("too_few_X"))
             );
         }
 
@@ -2391,7 +2393,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "too few X's in template ''"
+                format!("too few X's in template {}", locale_quote(""))
             );
         }
 
@@ -2487,7 +2489,10 @@ mod tests {
             );
 
             let error = result.unwrap_err();
-            assert_eq!(error.to_string(), "too few X's in template 'bad'");
+            assert_eq!(
+                error.to_string(),
+                format!("too few X's in template {}", locale_quote("bad"))
+            );
             assert_eq!(error.code(), 1);
         }
 

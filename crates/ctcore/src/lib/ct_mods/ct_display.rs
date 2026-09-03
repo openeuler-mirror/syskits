@@ -26,6 +26,7 @@
 /// ct_println_verbatim(path)?; // Prints "foo/bar.baz"
 /// # Ok::<(), std::io::Error>(())
 /// ```
+use std::env;
 use std::ffi::OsStr;
 use std::io::{self, Write as IoWrite};
 
@@ -34,6 +35,44 @@ use std::os::unix::ffi::OsStrExt;
 
 // 这些原本在这里定义，但现在它们有自己的 crate。
 pub use os_display::{Quotable, Quoted};
+
+// Quote a diagnostic argument using the same locale-sensitive quote marks GNU
+// coreutils uses for simple messages.
+pub fn locale_quote(text: &str) -> String {
+    let (left_quote, right_quote) = locale_quote_marks();
+    let escaped = if right_quote == "'" {
+        text.replace('\\', "\\\\").replace('\'', "\\'")
+    } else {
+        text.to_string()
+    };
+
+    format!("{left_quote}{escaped}{right_quote}")
+}
+
+fn locale_quote_marks() -> (&'static str, &'static str) {
+    let locale = locale_name_for_ctype();
+    let normalized = locale.to_ascii_uppercase();
+
+    if normalized.contains("UTF-8") || normalized.contains("UTF8") {
+        ("‘", "’")
+    } else if normalized.contains("GB18030") {
+        ("\u{a1ae}", "\u{a1af}")
+    } else {
+        ("'", "'")
+    }
+}
+
+fn locale_name_for_ctype() -> String {
+    for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        if let Ok(value) = env::var(key) {
+            if !value.is_empty() {
+                return value;
+            }
+        }
+    }
+
+    "C".to_string()
+}
 
 /// 直接将路径（或类似OsStr的对象）打印到stdout，后面带一个换行符，即使其编码无效也不会丢失任何信息。
 ///

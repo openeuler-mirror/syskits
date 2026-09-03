@@ -21,7 +21,7 @@ use std::io::BufRead;
 use std::io::{self, BufReader, Write, stdout};
 mod factor_algorithm;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::locale_quote;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_show_error;
 pub use factor_algorithm::*;
@@ -201,7 +201,7 @@ fn factor_row_from_token(token: &str, print_exponents: bool) -> Result<FactorRow
     let parsed = parse_number_token(display_token).ok_or_else(|| {
         format!(
             "factor: {} is not a valid positive integer\n",
-            display_token.quote()
+            locale_quote(display_token)
         )
     })?;
 
@@ -447,7 +447,10 @@ fn factors_print_str(
     let parsed = match parse_number_token(display_token) {
         Some(parsed) => parsed,
         None => {
-            ct_show_error!("{} is not a valid positive integer", display_token.quote());
+            ct_show_error!(
+                "{} is not a valid positive integer",
+                locale_quote(display_token)
+            );
             set_ct_exit_code(1);
             return Ok(());
         }

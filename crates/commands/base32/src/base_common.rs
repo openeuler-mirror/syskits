@@ -13,14 +13,17 @@ use std::io::Read;
 use std::io::Write;
 
 use ctcore::ct_display::Quotable;
+use ctcore::ct_encoding::CtDecodeError;
 use ctcore::ct_encoding::CtEncodeError;
 use ctcore::ct_encoding::Data;
 use ctcore::ct_encoding::Format;
 use ctcore::ct_encoding::wrap_write;
+use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
+use ctcore::ct_error::strip_errno;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -165,6 +168,16 @@ pub fn get_base_input<'a>(
         Some(base_name) => {
             let file_buf = File::open(Path::new(base_name))
                 .map_err_context(|| base_name.maybe_quote().to_string())?;
+            if file_buf
+                .metadata()
+                .map_err_context(|| base_name.maybe_quote().to_string())?
+                .is_dir()
+            {
+                return Err(read_error(std::io::Error::new(
+                    std::io::ErrorKind::IsADirectory,
+                    "Is a directory",
+                )));
+            }
             Ok(Box::new(BufReader::new(file_buf))) //作为 Box<dyn Read> 类型转换
         }
         None => Ok(ctcore::ct_io::stdin_reader_box()),
@@ -187,7 +200,7 @@ pub fn handle_base_input<R: Read, W: Write>(
     if ct_decode {
         match input_data.decode(&mut writer) {
             Ok(_) => Ok(()),
-            Err(_) => Err(CtSimpleError::new(1, "invalid input")),
+            Err(err) => Err(decode_error(err)),
         }
     } else {
         match input_data.encode(&mut writer) {
@@ -199,6 +212,23 @@ pub fn handle_base_input<R: Read, W: Write>(
             )),
         }
     }
+}
+
+fn decode_error(err: CtDecodeError) -> Box<dyn CTError> {
+    match err {
+        CtDecodeError::Io(e)
+            if e.kind() == std::io::ErrorKind::InvalidData
+                && strip_errno(&e) == "invalid input" =>
+        {
+            CtSimpleError::new(1, "invalid input")
+        }
+        CtDecodeError::Io(e) => read_error(e),
+        _ => CtSimpleError::new(1, "invalid input"),
+    }
+}
+
+fn read_error(err: std::io::Error) -> Box<dyn CTError> {
+    CtSimpleError::new(1, format!("read error: {}", strip_errno(&err)))
 }
 
 pub fn handle_base_input_to_writer<R: Read, W: Write>(
@@ -298,9 +328,7 @@ fn stream_encode_to_writer<R: Read, W: Write>(
     let mut line_col = 0usize;
 
     loop {
-        let n = ct_input
-            .read(&mut buf)
-            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+        let n = ct_input.read(&mut buf).map_err(read_error)?;
         if n == 0 {
             break;
         }
@@ -355,9 +383,7 @@ fn stream_decode_to_writer<R: Read, W: Write>(
     let mut pending = Vec::new();
 
     loop {
-        let n = ct_input
-            .read(&mut buf)
-            .map_err(|_| CtSimpleError::new(1, "error: invalid input"))?;
+        let n = ct_input.read(&mut buf).map_err(read_error)?;
         if n == 0 {
             break;
         }
@@ -504,6 +530,59 @@ mod test {
     fn base_delete_file(filename: &str) -> io::Result<()> {
         fs::remove_file(filename)?;
         Ok(())
+    }
+
+    struct FailRead {
+        kind: io::ErrorKind,
+    }
+
+    impl Read for FailRead {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::new(self.kind, "Is a directory"))
+        }
+    }
+
+    #[test]
+    fn test_get_base_input_directory_reports_read_error() {
+        let dirname = "base_common_directory_input";
+        fs::create_dir_all(dirname).expect("create test directory");
+
+        let args = [ctcore::ct_util_name(), "-d", dirname];
+        let config = base_common::base_parsing_command_args(
+            args.iter().map(OsString::from),
+            BASE32_ABOUT.to_string(),
+            BASE32_USAGE.to_string(),
+        )
+        .expect("parse_base_cmd_args failed");
+
+        let stdin_raw = stdin();
+        let err = match base_common::get_base_input(&config, &stdin_raw) {
+            Ok(_) => panic!("directory input should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.to_string(), "read error: Is a directory");
+
+        fs::remove_dir(dirname).expect("remove test directory");
+    }
+
+    #[test]
+    fn test_handle_base_input_preserves_read_errors() {
+        let mut input = FailRead {
+            kind: io::ErrorKind::IsADirectory,
+        };
+        let mut output = Vec::new();
+
+        let err = base_common::handle_base_input(
+            &mut input,
+            &mut output,
+            Format::Base32,
+            Some(76),
+            false,
+            true,
+        )
+        .expect_err("read failure should be reported");
+
+        assert_eq!(err.to_string(), "read error: Is a directory");
     }
 
     #[test]

@@ -76,6 +76,10 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
                 return Err(r.into());
             }
 
+            if matches!(r, Error::MissingOperand | Error::MissingOperandAfter(_)) {
+                return Err(CTsageError::new(libc::EXIT_FAILURE, r.to_string()));
+            }
+
             return Err(CTsageError::new(libc::EXIT_FAILURE, format!("{r}.\n")));
         }
     };
@@ -374,12 +378,19 @@ fn chcon_parse_command_line(
             context: context.into(),
         }
     } else {
-        return Err(Error::MissingContext);
+        return Err(Error::MissingOperand);
     };
 
     let files: Vec<_> = match_files.map(PathBuf::from).collect();
     if files.is_empty() {
-        return Err(Error::MissingFiles);
+        return Err(match &command_mode {
+            ChconCommandLineMode::ContextBased { context } => {
+                Error::MissingOperandAfter(context.clone())
+            }
+            ChconCommandLineMode::ReferenceBased { .. } | ChconCommandLineMode::Custom { .. } => {
+                Error::MissingOperand
+            }
+        });
     }
 
     Ok(ChconOptions {
@@ -854,6 +865,12 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
 
+    fn parse_error(args: &[&str]) -> String {
+        let err = chcon_parse_command_line(ct_app(), args.iter().map(OsString::from))
+            .expect_err("expected parse error");
+        report_full_error(&err)
+    }
+
     #[test]
     fn test_tool_implementation() {
         let tool = Chcon;
@@ -910,6 +927,23 @@ mod tests {
 
         assert!(executable.is_err());
         assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn test_chcon_missing_operand_messages() {
+        assert_eq!(parse_error(&[ctcore::ct_util_name()]), "missing operand");
+        assert_eq!(
+            parse_error(&[ctcore::ct_util_name(), "testfile"]),
+            "missing operand after 'testfile'"
+        );
+        assert_eq!(
+            parse_error(&[ctcore::ct_util_name(), "--reference=testfile"]),
+            "missing operand"
+        );
+        assert_eq!(
+            parse_error(&[ctcore::ct_util_name(), "-u", "user"]),
+            "missing operand"
+        );
     }
 
     #[test]

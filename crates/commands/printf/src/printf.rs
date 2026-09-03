@@ -472,5 +472,54 @@ mod tests {
             assert_eq!(semantic.rows[0].text, "alpha");
             assert!(!semantic.rows[0].terminated);
         }
+
+        #[test]
+        fn semantic_rejects_hex_escape_without_digits() {
+            let args = [ctcore::ct_util_name(), "\\x"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(
+                semantic.stderr_text,
+                "printf: missing hexadecimal number in escape\n"
+            );
+            assert_eq!(semantic.exit_code, 1);
+            assert!(semantic.rows.is_empty());
+        }
+
+        #[test]
+        fn semantic_preserves_partial_output_before_incomplete_hex_escape() {
+            let args = [ctcore::ct_util_name(), "alpha\\x"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "alpha");
+            assert_eq!(
+                semantic.stderr_text,
+                "printf: missing hexadecimal number in escape\n"
+            );
+            assert_eq!(semantic.exit_code, 1);
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].text, "alpha");
+            assert!(!semantic.rows[0].terminated);
+        }
+
+        #[test]
+        fn semantic_preserves_percent_b_output_before_incomplete_hex_escape() {
+            let args = [ctcore::ct_util_name(), "%b", "alpha\\x"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "alpha");
+            assert_eq!(
+                semantic.stderr_text,
+                "printf: missing hexadecimal number in escape\n"
+            );
+            assert_eq!(semantic.exit_code, 1);
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].text, "alpha");
+            assert!(!semantic.rows[0].terminated);
+        }
     }
 }

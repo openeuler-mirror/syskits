@@ -254,11 +254,8 @@ mod tests {
             }
 
             fn get_str(&mut self) -> &'a str {
-                if let Some(arg) = self.next() {
-                    match arg {
-                        FormatArgument::Unparsed(s) | FormatArgument::String(s) => s,
-                        _ => "",
-                    }
+                if let Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) = self.next() {
+                    s
                 } else {
                     ""
                 }

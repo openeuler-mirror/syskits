@@ -68,6 +68,11 @@ pub fn parse_datetime_gnu_compat(
     let input_trim = input.trim();
     let input_lower = input_trim.to_lowercase();
 
+    // GNU ignores a weekday when an explicit date is also present.
+    if let Some(input_without_weekday) = strip_weekday_from_explicit_iso_date(input_trim) {
+        return parse_datetime_gnu_compat(&input_without_weekday, reference_time);
+    }
+
     // 负数/正数纪元秒 (Epoch: @-22, @31536000)
     if let Some(epoch_str) = input_trim.strip_prefix('@') {
         if let Ok(secs) = epoch_str.parse::<f64>() {
@@ -559,54 +564,82 @@ fn parse_compact_time_of_day(
     }
 }
 
+fn parse_weekday_name(input: &str) -> Option<Weekday> {
+    match input.trim_end_matches(',').to_ascii_lowercase().as_str() {
+        "sunday" | "sun" => Some(Weekday::Sun),
+        "monday" | "mon" => Some(Weekday::Mon),
+        "tuesday" | "tue" | "tues" => Some(Weekday::Tue),
+        "wednesday" | "wed" | "wednes" => Some(Weekday::Wed),
+        "thursday" | "thu" | "thur" | "thurs" => Some(Weekday::Thu),
+        "friday" | "fri" => Some(Weekday::Fri),
+        "saturday" | "sat" => Some(Weekday::Sat),
+        _ => None,
+    }
+}
+
+fn strip_weekday_from_explicit_iso_date(input: &str) -> Option<String> {
+    let parts: Vec<&str> = input.split_whitespace().collect();
+    let weekday_index = parts
+        .iter()
+        .position(|part| parse_weekday_name(part).is_some())?;
+    let weekday_start = if weekday_index > 0 {
+        let modifier = parts[weekday_index - 1];
+        if modifier.eq_ignore_ascii_case("next")
+            || modifier.eq_ignore_ascii_case("last")
+            || modifier.eq_ignore_ascii_case("this")
+        {
+            weekday_index - 1
+        } else {
+            weekday_index
+        }
+    } else {
+        weekday_index
+    };
+
+    let has_explicit_iso_date = parts
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index < weekday_start || *index > weekday_index)
+        .any(|(_, part)| {
+            let date = part
+                .trim_matches(',')
+                .split(['T', 't'])
+                .next()
+                .unwrap_or(part);
+            NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok()
+        });
+    if !has_explicit_iso_date {
+        return None;
+    }
+
+    Some(
+        parts
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index < weekday_start || *index > weekday_index)
+            .map(|(_, part)| *part)
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
 /// 解析包含星期几名称的表达式
 fn parse_weekday_expression(
     input: &str,
     reference_time: DateTime<Local>,
 ) -> Option<DateTime<Local>> {
     let parts: Vec<&str> = input.split_whitespace().collect();
-
-    if parts.is_empty() {
-        return None;
-    }
-
-    // 星期几名称映射 (基于GNU coreutils parse-datetime.y)
-    let weekdays = [
-        ("sunday", Weekday::Sun),
-        ("sun", Weekday::Sun),
-        ("monday", Weekday::Mon),
-        ("mon", Weekday::Mon),
-        ("tuesday", Weekday::Tue),
-        ("tue", Weekday::Tue),
-        ("tues", Weekday::Tue),
-        ("wednesday", Weekday::Wed),
-        ("wed", Weekday::Wed),
-        ("wednes", Weekday::Wed),
-        ("thursday", Weekday::Thu),
-        ("thu", Weekday::Thu),
-        ("thur", Weekday::Thu),
-        ("thurs", Weekday::Thu),
-        ("friday", Weekday::Fri),
-        ("fri", Weekday::Fri),
-        ("saturday", Weekday::Sat),
-        ("sat", Weekday::Sat),
-    ];
-
-    // 查找星期几
-    let mut target_weekday = None;
-    for (name, weekday) in &weekdays {
-        if parts.contains(name) {
-            target_weekday = Some(*weekday);
-            break;
-        }
-    }
-
-    let target_weekday = target_weekday?;
+    let (modifier, weekday) = match parts.as_slice() {
+        [weekday] => (None, *weekday),
+        [modifier @ ("next" | "last" | "this"), weekday] => (Some(*modifier), *weekday),
+        _ => return None,
+    };
+    let target_weekday = parse_weekday_name(weekday)?;
     let current_weekday = reference_time.weekday();
 
     // 根据修饰词计算目标日期
-    let days_offset = match parts.first() {
-        Some(&"next") => {
+    let days_offset = match modifier {
+        Some("next") => {
             // "next weekday" - GNU语义：如果目标星期几距离超过1天，则指本周；否则指下周
             let days = (target_weekday.num_days_from_monday() as i32
                 - current_weekday.num_days_from_monday() as i32
@@ -618,7 +651,7 @@ fn parse_weekday_expression(
                 days // 如果目标星期几在本周后面几天，就是本周
             }
         }
-        Some(&"last") => {
+        Some("last") => {
             // "last Friday" - 上一个星期五（不包括今天）
             let days = (current_weekday.num_days_from_monday() as i32
                 - target_weekday.num_days_from_monday() as i32
@@ -626,7 +659,7 @@ fn parse_weekday_expression(
                 % 7;
             if days == 0 { -7 } else { -days }
         }
-        Some(&"this") => {
+        Some("this") => {
             // "this Friday" - 本周的星期五
             let days = target_weekday.num_days_from_monday() as i32
                 - current_weekday.num_days_from_monday() as i32;
@@ -714,6 +747,23 @@ mod tests {
 
         let this_saturday = parse_datetime_gnu_compat("this saturday", ref_time).unwrap();
         assert_eq!(this_saturday.weekday(), Weekday::Sat);
+    }
+
+    #[test]
+    fn test_explicit_date_ignores_weekday() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["2024-02-29 next Fri", "next Fri 2024-02-29"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap(),
+                "input {input}"
+            );
+            assert_eq!(parsed.hour(), 0, "input {input}");
+            assert_eq!(parsed.minute(), 0, "input {input}");
+            assert_eq!(parsed.second(), 0, "input {input}");
+        }
     }
 
     #[test]

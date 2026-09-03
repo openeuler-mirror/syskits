@@ -1630,6 +1630,20 @@ mod tests {
         assert!(parse_date("2400").is_err());
     }
 
+    #[test]
+    fn test_explicit_date_with_weekday_uses_explicit_date() {
+        let args = [
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-d"),
+            OsString::from("2024-02-29 next Fri"),
+            OsString::from("+%F"),
+        ];
+
+        let result = date_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(result.classic_text, "2024-02-29\n");
+    }
+
     mod tests_ct_app {
         use crate::ct_app;
         use clap::error::ErrorKind;

@@ -205,6 +205,8 @@ pub fn ct_app() -> Command {
                 "set or adjust the size of each file according to SIZE, which is in \
             bytes unless --io-blocks is specified",
             )
+            .action(ArgAction::Set)
+            .overrides_with(truncate_flags::TRUNCATE_SIZE)
             .value_name("SIZE")
             .allow_hyphen_values(true),
         Arg::new(truncate_flags::TRUNCATE_ARG_FILES)
@@ -1539,6 +1541,23 @@ mod tests {
             let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
+
+        #[test]
+        fn test_truncate_main_repeated_size_uses_last_value() {
+            let file = "test_truncate_main_repeated_size";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(file);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "abcdef").unwrap();
+            let file_name = file_path.to_str().unwrap();
+
+            let args = [ctcore::ct_util_name(), "--size", "1", "-s", "2", file_name];
+            let result = truncate_main(args.iter().map(OsString::from));
+
+            assert!(result.is_ok());
+            assert_eq!(metadata(&file_path).unwrap().len(), 2);
+        }
+
         #[test]
         fn test_truncate_main_reference_long() {
             let file = "test_truncate_main_reference_long";
@@ -2289,6 +2308,19 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--size", "1000", file];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_size_allows_repeated_size_with_last_value() {
+            let command = ct_app();
+            let file = "test_ct_app_size_allows_repeated_size";
+            let args = vec![ctcore::ct_util_name(), "--size", "1", "-s", "2", file];
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(truncate_flags::TRUNCATE_SIZE),
+                Some(&"2".to_string())
+            );
         }
 
         #[test]

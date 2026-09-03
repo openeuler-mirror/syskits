@@ -605,14 +605,18 @@ impl Line {
         let mut last_end = 0;
 
         if *separator == Sep::Whitespaces {
+            let mut saw_field = false;
             for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
                 if i > last_end {
                     field_ranges.push((last_end, i));
+                    saw_field = true;
                 }
                 last_end = i + 1;
             }
             if last_end < string.len() {
                 field_ranges.push((last_end, string.len()));
+            } else if saw_field && last_end == string.len() {
+                field_ranges.push((string.len(), string.len()));
             }
         } else if let Sep::Char(sep) = separator {
             // 单字节用 memchr_iter，多字节用 find_iter
@@ -2183,6 +2187,37 @@ mod tests {
                 settings,
             );
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_zero_terminated_preserves_trailing_empty_field() {
+            let temp = tempdir().unwrap();
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "hello world\n").unwrap();
+            create_test_file(&file2_path, "hello world\n").unwrap();
+
+            let settings = JoinSettings {
+                key1: 0,
+                key2: 0,
+                is_print_joined: true,
+                line_ending: CtLineEnding::Nul,
+                separator: Sep::Whitespaces,
+                ..Default::default()
+            };
+            let mut output = Vec::new();
+
+            join_exec_to_writer(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+                &mut output,
+                false,
+            )
+            .unwrap();
+
+            assert_eq!(output, b"hello world  world \0");
         }
     }
 

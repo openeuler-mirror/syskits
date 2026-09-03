@@ -38,6 +38,7 @@ pub enum TestSymbol {
     Bang,
     BoolOp(OsString),
     Literal(OsString),
+    LengthOperand(OsString),
     Op(TestOperator),
     UnaryOp(TestUnaryOperator),
     None,
@@ -83,6 +84,7 @@ impl TestSymbol {
             Self::Bang => OsString::from("!"),
             Self::BoolOp(s)
             | Self::Literal(s)
+            | Self::LengthOperand(s)
             | Self::Op(TestOperator::String(s))
             | Self::Op(TestOperator::Int(s))
             | Self::Op(TestOperator::File(s))
@@ -103,6 +105,7 @@ impl std::fmt::Display for TestSymbol {
             Self::Bang => OsStr::new("!"),
             Self::BoolOp(s)
             | Self::Literal(s)
+            | Self::LengthOperand(s)
             | Self::Op(TestOperator::String(s))
             | Self::Op(TestOperator::Int(s))
             | Self::Op(TestOperator::File(s))
@@ -169,6 +172,22 @@ impl TestParser {
     /// calls to `next()` or `peek()`.
     fn peek(&mut self) -> TestSymbol {
         TestSymbol::new(self.tokens.peek().cloned())
+    }
+
+    fn symbol_value(symbol: TestSymbol) -> OsString {
+        match symbol {
+            TestSymbol::LParen => OsString::from("("),
+            TestSymbol::Bang => OsString::from("!"),
+            TestSymbol::BoolOp(s)
+            | TestSymbol::Literal(s)
+            | TestSymbol::LengthOperand(s)
+            | TestSymbol::Op(TestOperator::String(s))
+            | TestSymbol::Op(TestOperator::Int(s))
+            | TestSymbol::Op(TestOperator::File(s))
+            | TestSymbol::UnaryOp(TestUnaryOperator::StrlenOp(s))
+            | TestSymbol::UnaryOp(TestUnaryOperator::FiletestOp(s)) => s,
+            TestSymbol::None => panic!(),
+        }
     }
 
     /// Test if the next token in the stream is a BOOLOP (-a or -o), without
@@ -410,7 +429,25 @@ impl TestParser {
     /// Parse a string literal, optionally followed by a comparison operator
     /// and a second string literal.
     fn literal(&mut self, token: TestSymbol) -> ParseResult<()> {
-        self.stack.push(token.into_literal());
+        let left_is_length = token == TestSymbol::Literal(OsString::from("-l"))
+            && self
+                .tokens
+                .clone()
+                .nth(1)
+                .is_some_and(|token| matches!(TestSymbol::new(Some(token)), TestSymbol::Op(_)));
+
+        if left_is_length {
+            match self.next_token() {
+                TestSymbol::None => {
+                    return Err(ParseError::MissingArgument(token.to_string()));
+                }
+                token => self
+                    .stack
+                    .push(TestSymbol::LengthOperand(Self::symbol_value(token))),
+            }
+        } else {
+            self.stack.push(token.into_literal());
+        }
 
         // EXPR → str OP str
         if let TestSymbol::Op(_) = self.peek() {
@@ -419,6 +456,24 @@ impl TestParser {
             match self.next_token() {
                 TestSymbol::None => {
                     return Err(ParseError::MissingArgument(format!("{op}")));
+                }
+                TestSymbol::Literal(s)
+                    if s == "-l"
+                        && matches!(
+                            op,
+                            TestSymbol::Op(TestOperator::Int(_))
+                                | TestSymbol::Op(TestOperator::File(_))
+                        )
+                        && self.tokens.peek().is_some() =>
+                {
+                    match self.next_token() {
+                        TestSymbol::None => {
+                            return Err(ParseError::MissingArgument("-l".quote().to_string()));
+                        }
+                        token => self
+                            .stack
+                            .push(TestSymbol::LengthOperand(Self::symbol_value(token))),
+                    }
                 }
                 token => self.stack.push(token.into_literal()),
             }

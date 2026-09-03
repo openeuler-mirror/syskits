@@ -135,6 +135,7 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
         () => {
             match stack.pop() {
                 Some(TestSymbol::Literal(s)) => s,
+                Some(TestSymbol::LengthOperand(s)) => s,
                 _ => panic!(),
             }
         };
@@ -159,15 +160,15 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
             }
         }
         Some(TestSymbol::Op(TestOperator::Int(op))) => {
-            let b = pop_literal!();
-            let a = pop_literal!();
+            let b = pop_integer_operand(stack)?;
+            let a = pop_integer_operand(stack)?;
 
             Ok(test_integers(&a, &b, &op)?)
         }
         Some(TestSymbol::Op(TestOperator::File(op))) => {
-            let b = pop_literal!();
-            let a = pop_literal!();
-            Ok(files(&a, &b, &op)?)
+            let b = pop_file_operand(stack, &op);
+            let a = pop_file_operand(stack, &op);
+            Ok(files(&a?, &b?, &op)?)
         }
         Some(TestSymbol::UnaryOp(TestUnaryOperator::StrlenOp(op))) => {
             let s = match stack.pop() {
@@ -217,6 +218,7 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
             })
         }
         Some(TestSymbol::Literal(s)) => Ok(!s.is_empty()),
+        Some(TestSymbol::LengthOperand(s)) => Ok(!s.is_empty()),
         Some(TestSymbol::None) | None => Ok(false),
         Some(TestSymbol::BoolOp(op)) => {
             if (op == "-a" || op == "-o") && stack.len() < 2 {
@@ -229,6 +231,24 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
             Ok(if op == "-a" { a && b } else { a || b })
         }
         _ => Err(ParseError::ExpectedValue),
+    }
+}
+
+fn pop_integer_operand(stack: &mut Vec<TestSymbol>) -> ParseResult<OsString> {
+    match stack.pop() {
+        Some(TestSymbol::LengthOperand(s)) => Ok(OsString::from(s.len().to_string())),
+        Some(TestSymbol::Literal(s)) => Ok(s),
+        _ => panic!(),
+    }
+}
+
+fn pop_file_operand(stack: &mut Vec<TestSymbol>, op: &OsStr) -> ParseResult<OsString> {
+    match stack.pop() {
+        Some(TestSymbol::LengthOperand(_)) => Err(ParseError::OperatorDoesNotAcceptLength(
+            op.to_string_lossy().into_owned(),
+        )),
+        Some(TestSymbol::Literal(s)) => Ok(s),
+        _ => panic!(),
     }
 }
 

@@ -57,6 +57,7 @@
 use std::{
     error::Error,
     fmt::{Display, Formatter},
+    io::{self, Write},
     sync::atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
@@ -748,12 +749,25 @@ impl ClapErrorWrapper {
     fn note_output_failed(&self) {
         self.output_failed.store(true, Ordering::SeqCst);
     }
+
+    fn render_without_clap_help_footer(&self) -> String {
+        strip_clap_help_footer(self.error.render().to_string())
+    }
+
+    fn print_without_clap_help_footer(&self) -> io::Result<()> {
+        let rendered = self.render_without_clap_help_footer();
+        if self.error.use_stderr() {
+            io::stderr().write_all(rendered.as_bytes())
+        } else {
+            io::stdout().write_all(rendered.as_bytes())
+        }
+    }
 }
 
 // 这是对Display特性的滥用
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match self.error.print() {
+        match self.print_without_clap_help_footer() {
             Ok(_) => Ok(()),
             Err(_) => {
                 self.note_output_failed();
@@ -761,6 +775,26 @@ impl Display for ClapErrorWrapper {
             }
         }
     }
+}
+
+fn strip_clap_help_footer(mut rendered: String) -> String {
+    const CLAP_HELP_FOOTER_PREFIX: &str = "\n\nFor more information, try '";
+    const CLAP_HELP_FOOTER_SUFFIX: &str = "'.\n";
+
+    let Some(start) = rendered.rfind(CLAP_HELP_FOOTER_PREFIX) else {
+        return rendered;
+    };
+    let footer = &rendered[start..];
+    if footer.ends_with(CLAP_HELP_FOOTER_SUFFIX)
+        && !footer[CLAP_HELP_FOOTER_PREFIX.len()..footer.len() - CLAP_HELP_FOOTER_SUFFIX.len()]
+            .contains('\n')
+    {
+        rendered.truncate(start);
+        if !rendered.ends_with('\n') {
+            rendered.push('\n');
+        }
+    }
+    rendered
 }
 
 #[cfg(test)]
@@ -869,6 +903,31 @@ mod tests {
 
         wrapper.note_output_failed();
         assert_eq!(wrapper.code(), 125);
+    }
+
+    #[test]
+    fn test_strip_clap_help_footer_removes_only_final_footer() {
+        let rendered = concat!(
+            "error: missing operand\n\n",
+            "Usage: test <FILE>\n\n",
+            "For more information, try '--help'.\n"
+        )
+        .to_string();
+
+        assert_eq!(
+            strip_clap_help_footer(rendered),
+            "error: missing operand\n\nUsage: test <FILE>\n"
+        );
+    }
+
+    #[test]
+    fn test_strip_clap_help_footer_leaves_other_text_unchanged() {
+        let rendered = "error: For more information, try '--help'.\nnot a footer\n".to_string();
+
+        assert_eq!(
+            strip_clap_help_footer(rendered),
+            "error: For more information, try '--help'.\nnot a footer\n"
+        );
     }
 
     #[test]

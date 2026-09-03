@@ -928,7 +928,7 @@ fn date_args_init() -> Vec<Arg> {
         Arg::new(DATE_OPT_UNIVERSAL)
             .short('u')
             .long(DATE_OPT_UNIVERSAL)
-            .alias(DATE_OPT_UNIVERSAL_2)
+            .visible_alias(DATE_OPT_UNIVERSAL_2)
             .help(t!("date.clap.date_opt_universal"))
             .action(ArgAction::SetTrue),
         Arg::new(DATE_OPT_RESOLUTION)

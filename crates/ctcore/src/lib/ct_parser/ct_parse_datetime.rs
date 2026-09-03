@@ -130,6 +130,10 @@ pub fn parse_datetime_gnu_compat(
         return Ok(dt);
     }
 
+    if let Some(dt) = parse_rfc5322_datetime(input_trim) {
+        return Ok(dt);
+    }
+
     let mut processed_lower = input_lower.clone();
     let mut processed_trim = input_trim.to_string();
 
@@ -568,6 +572,31 @@ fn parse_embedded_timezone_datetime(input: &str) -> Option<NaiveDateTime> {
         .and_hms_opt(0, 0, 0)
 }
 
+fn parse_rfc5322_datetime(input: &str) -> Option<DateTime<Local>> {
+    let date_time = if let Some((weekday, rest)) = input.split_once(',') {
+        if parse_weekday_name(weekday.trim()).is_some() {
+            rest.trim()
+        } else {
+            input
+        }
+    } else {
+        input
+    };
+
+    for format in [
+        "%d %b %Y %H:%M:%S %z",
+        "%d %b %Y %H:%M %z",
+        "%d %B %Y %H:%M:%S %z",
+        "%d %B %Y %H:%M %z",
+    ] {
+        if let Ok(date) = DateTime::parse_from_str(date_time, format) {
+            return Some(date.with_timezone(&Local));
+        }
+    }
+
+    None
+}
+
 fn parse_compact_time_of_day(
     input: &str,
     reference_time: DateTime<Local>,
@@ -893,6 +922,21 @@ mod tests {
             parse_datetime_gnu_compat("TZ=\"America/Los_Angeles\" 2024-03-10 02:30", ref_time)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn test_parse_rfc5322_datetime() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let expected = Utc.with_ymd_and_hms(2024, 2, 29, 7, 4, 56).unwrap();
+
+        for input in [
+            "Thu, 29 Feb 2024 12:34:56 +0530",
+            "Fri, 29 Feb 2024 12:34:56 +0530",
+            "29 Feb 2024 12:34:56 +0530",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
     }
 
     #[test]

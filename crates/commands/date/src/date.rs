@@ -1658,6 +1658,20 @@ mod tests {
         assert_eq!(result.rows[0].unix_seconds, 1_719_849_600);
     }
 
+    #[test]
+    fn test_rfc5322_date_string_uses_numeric_offset() {
+        let args = [
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-d"),
+            OsString::from("Thu, 29 Feb 2024 12:34:56 +0530"),
+            OsString::from("+%s"),
+        ];
+
+        let result = date_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(result.rows[0].unix_seconds, 1_709_190_296);
+    }
+
     mod tests_ct_app {
         use crate::ct_app;
         use clap::error::ErrorKind;

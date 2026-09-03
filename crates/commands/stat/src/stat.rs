@@ -1164,7 +1164,9 @@ impl Stater {
                 let quoting_style = std::env::var("QUOTING_STYLE").unwrap_or_default();
 
                 let format_quote = |s: &str| -> String {
-                    if quoting_style == "locale" {
+                    if !self.is_from_user {
+                        s.to_string()
+                    } else if quoting_style == "locale" {
                         format!("'{}'", s.replace('\'', "\\'"))
                     } else {
                         s.quote().to_string()
@@ -2594,6 +2596,8 @@ mod test_stat_all {
     use super::*;
     use clap::ArgMatches;
     use std::fs::File;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use tempfile::tempdir;
 
     fn create_test_matches(
@@ -2766,6 +2770,57 @@ mod test_stat_all {
             false,
         );
         assert_eq!(result, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_default_format_shows_symlink_target_and_captured_access_time() {
+        let temp_dir = tempdir().unwrap();
+        let target = temp_dir.path().join("content.txt");
+        let link = temp_dir.path().join("content.link");
+        fs::write(&target, b"alpha\nbeta\n").unwrap();
+        symlink("content.txt", &link).unwrap();
+        rustix::fs::utimensat(
+            rustix::fs::CWD,
+            &link,
+            &rustix::fs::Timestamps {
+                last_access: rustix::fs::Timespec {
+                    tv_sec: 1_893_456_000,
+                    tv_nsec: 0,
+                },
+                last_modification: rustix::fs::Timespec {
+                    tv_sec: 946_684_800,
+                    tv_nsec: 0,
+                },
+            },
+            AtFlags::SYMLINK_NOFOLLOW,
+        )
+        .unwrap();
+
+        let display_name = "content.link";
+        let matches = create_test_matches(vec![display_name], false, None, false);
+        let stater = Stater::new(&matches).unwrap();
+        let meta = fs::symlink_metadata(&link).unwrap();
+        let expected_access_time = pretty_time(meta.atime(), meta.atime_nsec());
+        let rendered = render_file_tokens(
+            &stater,
+            &meta,
+            stater.select_tokens(&meta),
+            link.as_os_str(),
+            display_name,
+        );
+
+        assert!(
+            rendered
+                .lines()
+                .next()
+                .is_some_and(|line| line.ends_with("content.link -> content.txt")),
+            "unexpected default symlink heading: {rendered}"
+        );
+        assert!(
+            rendered.contains(&expected_access_time),
+            "default output did not use the metadata captured before readlink: {rendered}"
+        );
     }
 
     #[test]

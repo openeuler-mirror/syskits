@@ -22,7 +22,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use ctcore::ct_show;
 use libc::mkfifo;
 use selinux::SecurityContext;
@@ -108,7 +108,7 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
             let err = std::io::Error::last_os_error();
             ct_show!(CtSimpleError::new(
                 1,
-                format!("cannot create fifo {}: {}", fifo.quote(), err)
+                format!("cannot create fifo {}: {}", fifo.quote(), strip_errno(&err))
             ));
             has_error = true;
         } else if specified_mode {
@@ -128,7 +128,11 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
                     let err = std::io::Error::last_os_error();
                     ct_show!(CtSimpleError::new(
                         1,
-                        format!("cannot set permissions of {}: {}", fifo.quote(), err)
+                        format!(
+                            "cannot set permissions of {}: {}",
+                            fifo.quote(),
+                            strip_errno(&err)
+                        )
                     ));
                     has_error = true;
                 }

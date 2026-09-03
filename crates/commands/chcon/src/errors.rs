@@ -18,11 +18,11 @@ pub(crate) type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("No context is specified")]
-    MissingContext,
+    #[error("missing operand")]
+    MissingOperand,
 
-    #[error("No files are specified")]
-    MissingFiles,
+    #[error("missing operand after {}", .0.quote())]
+    MissingOperandAfter(OsString),
 
     #[error("Data is out of range")]
     OutOfRange,
@@ -93,10 +93,10 @@ mod tests {
     use selinux::errors::Error::PathIsInvalid;
 
     #[test]
-    fn test_missing_context_error() {
-        let error = Error::MissingContext;
+    fn test_missing_operand_error() {
+        let error = Error::MissingOperand;
         let result = report_full_error(&error);
-        assert_eq!(result, "No context is specified");
+        assert_eq!(result, "missing operand");
     }
 
     #[test]
@@ -155,10 +155,10 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_files_error() {
-        let error = Error::MissingFiles;
+    fn test_missing_operand_after_error() {
+        let error = Error::MissingOperandAfter(OsString::from("testfile"));
         let result = report_full_error(&error);
-        assert_eq!(result, "No files are specified");
+        assert_eq!(result, "missing operand after 'testfile'");
     }
 
     #[test]

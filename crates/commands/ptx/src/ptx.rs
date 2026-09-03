@@ -41,22 +41,6 @@ use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
-const PTX_HELP_TEXT: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G)\n  or:  ptx -G [OPTION]... [INPUT [OUTPUT]]\n
-Output a permuted index, including context, of the words in the input files.\n\nWith no FILE, or when FILE is -, read standard input.\n
-\nMandatory arguments to long options are mandatory for short options too.\n  -A, --auto-reference           output automatically generated references\n  
--G, --traditional              behave more like System V 'ptx'\n  -F, --flag-truncation=STRING   use STRING for flagging line truncations.\n                                 
-The default is '/'\n  -M, --macro-name=STRING        macro name to use instead of 'xx'\n  -O, --format=roff              generate output as roff directives\n  
--R, --right-side-refs          put references at right, not counted in -w\n  -S, --sentence-regexp=REGEXP   for end of lines or end of sentences\n  
--T, --format=tex               generate output as TeX directives\n  -W, --word-regexp=REGEXP       use REGEXP to match each keyword\n  -b, --break-file=FILE          
-word break characters in this FILE\n  -f, --ignore-case              fold lower case to upper case for sorting\n  -g, --gap-size=NUMBER          
-gap size in columns between output fields\n  -i, --ignore-file=FILE         read ignore word list from FILE\n  -o, --only-file=FILE           
-read only word list from this FILE\n  -r, --references               first field of each line is a reference\n  -t, --typeset-mode               
-- not implemented -\n  -w, --width=NUMBER             output width in columns, reference excluded\n      --help        display this help and exit\n      
---version     output version information and exit\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\n
-Report any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/ptx>\n
-or available locally via: info '(coreutils) ptx invocation'\n";
-const PTX_VERSION_TEXT: &str = "ptx (GNU coreutils) 9.4\nCopyright (C) 2023 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n
-This is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\nWritten by F. Pinard.\n";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 
 #[derive(Debug)]
@@ -2119,6 +2103,15 @@ pub fn ptx_core_output(args: impl ctcore::Args) -> CTResult<PtxCoreOutput> {
     Ok(PtxCoreOutput { bytes: out })
 }
 
+fn ptx_render_help_text() -> String {
+    let mut command = ct_app();
+    command.render_help().to_string()
+}
+
+fn ptx_render_version_text() -> String {
+    ct_app().render_version()
+}
+
 pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -2128,11 +2121,11 @@ pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> C
         Err(err) => {
             return match err.kind() {
                 ErrorKind::DisplayHelp => {
-                    out.write_all(PTX_HELP_TEXT.as_bytes())?;
+                    out.write_all(ptx_render_help_text().as_bytes())?;
                     Ok(())
                 }
                 ErrorKind::DisplayVersion => {
-                    out.write_all(PTX_VERSION_TEXT.as_bytes())?;
+                    out.write_all(ptx_render_version_text().as_bytes())?;
                     Ok(())
                 }
                 _ => Err(err.into()),
@@ -2215,13 +2208,13 @@ fn ptx_semantic_from_clap_error(error: clap::Error) -> PtxSemantic {
     match error.kind() {
         ErrorKind::DisplayHelp => PtxSemantic {
             rows: Vec::new(),
-            classic_text: PTX_HELP_TEXT.into(),
+            classic_text: ptx_render_help_text(),
             stderr_text: String::new(),
             exit_code: 0,
         },
         ErrorKind::DisplayVersion => PtxSemantic {
             rows: Vec::new(),
-            classic_text: PTX_VERSION_TEXT.into(),
+            classic_text: ptx_render_version_text(),
             stderr_text: String::new(),
             exit_code: 0,
         },
@@ -2589,6 +2582,54 @@ mod tests {
             OsString::from("--definitely-invalid-flag"),
         ];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[test]
+    fn test_version_uses_syskits_package_version() {
+        let mut out = Vec::new();
+        ptx_main_with_writer(
+            [OsString::from("ptx"), OsString::from("--version")].into_iter(),
+            &mut out,
+        )
+        .unwrap();
+
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.ends_with(&format!(" {}\n", crate_version!())));
+        assert!(!text.contains("GNU coreutils"));
+    }
+
+    #[test]
+    fn test_help_uses_syskits_command_definition() {
+        let mut out = Vec::new();
+        ptx_main_with_writer(
+            [OsString::from("ptx"), OsString::from("--help")].into_iter(),
+            &mut out,
+        )
+        .unwrap();
+
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("Usage:"));
+        assert!(text.contains("--auto-reference"));
+        assert!(!text.contains("GNU coreutils"));
+        assert!(!text.contains("translationproject.org"));
+
+        let options = text
+            .split_once("Options:")
+            .map(|(_, options)| options)
+            .expect("help should include options");
+        let option_lines: Vec<&str> = options
+            .lines()
+            .filter(|line| line.trim_start().starts_with('-'))
+            .collect();
+        assert!(option_lines.len() > 1);
+        for window in option_lines.windows(2) {
+            let first = options.find(window[0]).unwrap();
+            let second = options.find(window[1]).unwrap();
+            assert!(
+                !options[first..second].contains("\n\n"),
+                "options should be rendered in compact help format"
+            );
+        }
     }
 
     mod config_tests {

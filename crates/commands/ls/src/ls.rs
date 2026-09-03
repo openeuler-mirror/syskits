@@ -44,6 +44,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
+use ctcore::ct_error::UClapError;
 use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
@@ -1134,7 +1135,6 @@ impl LsConfig {
 
         let mut quoting_style = extract_quoting_style(options, show_control);
         let ls_indicator_style = extract_indicator_style(options);
-        let ls_time_style = ls_parse_time_style(options)?;
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
@@ -1306,6 +1306,12 @@ impl LsConfig {
         if is_dired && format == LsFormat::Long && options.get_flag(ls_flags::LS_ZERO) {
             return Err(Box::new(LsError::LsDiredAndZeroAreIncompatible));
         }
+
+        let ls_time_style = if format == LsFormat::Long {
+            ls_parse_time_style(options)?
+        } else {
+            LsTimeStyle::LsLocale
+        };
 
         let dereference = if options.get_flag(ls_flags::dereference::LS_ALL) {
             LsDereference::LsAll
@@ -1648,7 +1654,7 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
     rust_i18n::set_locale(&lang_code);
     let command = ct_app();
 
-    let matches = command.try_get_matches_from(args)?;
+    let matches = command.try_get_matches_from(args).with_exit_code(2)?;
 
     let config = LsConfig::from(&matches)?;
 
@@ -4532,6 +4538,45 @@ mod tests {
         ENV_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    #[test]
+    fn invalid_option_argument_exits_with_ls_failure() {
+        let err = ls_main(vec![OsString::from("ls"), OsString::from("--all=invalid")].into_iter())
+            .unwrap_err();
+
+        assert_eq!(err.code(), 2);
+    }
+
+    #[test]
+    fn time_style_is_ignored_without_long_format() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--time-style", "."])
+            .unwrap();
+
+        assert!(LsConfig::from(&matches).is_ok());
+    }
+
+    #[test]
+    fn invalid_time_style_fails_with_long_format() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-l", "--time-style", "."])
+            .unwrap();
+        let err = match LsConfig::from(&matches) {
+            Ok(_) => panic!("invalid --time-style should fail in long format"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.code(), 2);
+    }
+
+    #[test]
+    fn time_style_is_ignored_when_later_f_cancels_long_format() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-l", "-f", "--time-style", "."])
+            .unwrap();
+
+        assert!(LsConfig::from(&matches).is_ok());
     }
 
     struct EnvVarGuard {

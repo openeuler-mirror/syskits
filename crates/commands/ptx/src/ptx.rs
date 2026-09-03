@@ -2489,7 +2489,7 @@ pub fn ct_app() -> Command {
         Arg::new(ptx_options::PTX_TYPESET_MODE)
             .short('t')
             .long(ptx_options::PTX_TYPESET_MODE)
-            .hide(true)
+            .help("not implemented.")
             .action(ArgAction::SetTrue),
         Arg::new(ptx_options::PTX_WIDTH)
             .short('w')

@@ -438,7 +438,7 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let command = ct_app();
-    let matches = command.get_matches_from(args);
+    let matches = command.try_get_matches_from(args)?;
 
     let config = dir_config_from_matches(&matches)?;
     let paths_from_args = dir_paths_from_matches(&matches);
@@ -533,6 +533,15 @@ mod tests {
             let result = dir_main(args.iter().map(OsString::from));
             //println!("{}", result);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_invalid_color_exits_with_dir_failure() {
+            let args = [ctcore::ct_util_name(), "--color=invalid"];
+            let result = dir_main(args.iter().map(OsString::from));
+            let err = result.expect_err("invalid --color should fail");
+
+            assert_eq!(err.code(), 1);
         }
 
         #[test]

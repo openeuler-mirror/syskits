@@ -22,7 +22,7 @@ use std::os::unix::fs::FileTypeExt;
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::CTResult;
 use ctcore::ct_locale::hard_locale_time;
 use itertools::Itertools;
@@ -711,6 +711,11 @@ fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
 fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError) -> String {
     if arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS) {
         String::new()
+    } else if matches!(pr_err, PrError::EncounteredErrors(_)) {
+        format!(
+            "{pr_err}\nTry '{} --help' for more information.\n",
+            ctcore::ct_help_utility_name()
+        )
     } else {
         format!("{pr_err}\n")
     }
@@ -1226,36 +1231,58 @@ fn parse_number(arg_matches: &ArgMatches) -> Result<Option<PrNumberingMode>, PrE
     let first_number = pr_parse_usize(arg_matches, pr_flags::PR_FIRST_LINE_NUMBER)
         .unwrap_or(Ok(default_first_number))?;
 
-    Ok(arg_matches
-        .get_one::<String>(pr_flags::PR_NUMBER_LINES)
-        .map(|i| {
-            let parse_result = i.parse::<usize>();
+    match arg_matches.get_one::<String>(pr_flags::PR_NUMBER_LINES) {
+        Some(value) => parse_number_lines_value(value, first_number).map(Some),
+        None if arg_matches.contains_id(pr_flags::PR_NUMBER_LINES) => Ok(Some(PrNumberingMode {
+            first_number,
+            ..PrNumberingMode::default()
+        })),
+        None => Ok(None),
+    }
+}
 
-            let (separator, width) = match parse_result {
-                Ok(res) => (PrNumberingMode::default().separator, res),
-                Err(_) => (
-                    i[0..1].to_string(),
-                    i[1..]
-                        .parse::<usize>()
-                        .unwrap_or(PrNumberingMode::default().width),
-                ),
-            };
+fn invalid_number_lines_arg(value: &str) -> PrError {
+    PrError::EncounteredErrors(format!(
+        "'-n' extra characters or invalid number in the argument: {}",
+        locale_quote(value)
+    ))
+}
 
-            PrNumberingMode {
-                width,
-                separator,
-                first_number,
-            }
-        })
-        .or_else(
-            || match arg_matches.contains_id(pr_flags::PR_NUMBER_LINES) {
-                true => Some(PrNumberingMode {
-                    first_number,
-                    ..PrNumberingMode::default()
-                }),
-                false => None,
-            },
-        ))
+fn parse_number_lines_value(value: &str, first_number: usize) -> Result<PrNumberingMode, PrError> {
+    if value.is_empty() {
+        return Err(PrError::EncounteredErrors(format!(
+            "'-n': Invalid argument: {}",
+            locale_quote(value)
+        )));
+    }
+
+    let default = PrNumberingMode::default();
+
+    let (separator, width_arg) = match value.chars().next() {
+        Some(first) if first.is_ascii_digit() => (default.separator, value),
+        Some(first) => {
+            let rest = &value[first.len_utf8()..];
+            (first.to_string(), rest)
+        }
+        None => unreachable!("empty value is handled above"),
+    };
+
+    let width = if width_arg.is_empty() {
+        default.width
+    } else if width_arg.chars().all(|c| c.is_ascii_digit()) {
+        match width_arg.parse::<usize>() {
+            Ok(width) if width > 0 => width,
+            _ => return Err(invalid_number_lines_arg(width_arg)),
+        }
+    } else {
+        return Err(invalid_number_lines_arg(width_arg));
+    };
+
+    Ok(PrNumberingMode {
+        width,
+        separator,
+        first_number,
+    })
 }
 
 fn parse_header(arg_matches: &ArgMatches, paths: &[&str], is_merge_mode: bool) -> String {
@@ -6089,16 +6116,48 @@ mod tests {
 
         #[test]
         fn test_parse_number_invalid_format() {
-            // 测试无效的行号格式
             let args = create_matches_with_args("-n=xxx");
 
             let result = parse_number(&args);
 
-            // 应该使用默认值
-            assert!(result.is_ok());
-            let numbering_mode = result.unwrap().unwrap();
-            assert_eq!(numbering_mode.separator, "x"); // 第一个字符作为分隔符
-            assert_eq!(numbering_mode.width, 5); // 使用默认宽度
+            assert!(result.is_err());
+            match result {
+                Err(PrError::EncounteredErrors(msg)) => {
+                    assert!(
+                        msg.contains("'-n' extra characters or invalid number in the argument")
+                    );
+                    assert!(msg.contains("xx"));
+                }
+                _ => panic!("Expected PrError::EncounteredErrors, got a different error"),
+            }
+        }
+
+        #[test]
+        fn test_parse_number_accepts_separator_and_width() {
+            let args = create_matches_with_args("-n=x3");
+
+            let numbering_mode = parse_number(&args).unwrap().unwrap();
+
+            assert_eq!(numbering_mode.separator, "x");
+            assert_eq!(numbering_mode.width, 3);
+        }
+
+        #[test]
+        fn test_parse_number_rejects_zero_width() {
+            let args = create_matches_with_args("-n=0");
+
+            let result = parse_number(&args);
+
+            assert!(result.is_err());
+            match result {
+                Err(PrError::EncounteredErrors(msg)) => {
+                    assert!(
+                        msg.contains("'-n' extra characters or invalid number in the argument")
+                    );
+                    assert!(msg.contains("0"));
+                }
+                _ => panic!("Expected PrError::EncounteredErrors, got a different error"),
+            }
         }
 
         #[test]

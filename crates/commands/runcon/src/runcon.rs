@@ -33,7 +33,7 @@ extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTResult, CTsageError};
+use ctcore::ct_error::{CTResult, CTsageError, UClapError};
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
@@ -79,21 +79,10 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
     let config = ct_app();
 
     // 解析命令行参数
-    let settings = RunconSettings::new(config, args).map_err(|r| {
-        if let DefaultError::CommandLine(ref r) = r {
-            // 处理帮助和版本信息的显示
-            match r.kind() {
-                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
-                    println!("{r}");
-                    return CTsageError::new(0, String::new());
-                }
-                _ => return CTsageError::new(125, format!("{r}")),
-            }
-        }
-        if let DefaultError::MissingCommand = r {
-            return CTsageError::new(125, format!("{r}"));
-        }
-        CTsageError::new(error_exit_status::RUNCON_CANCELED, format!("{r}"))
+    let settings = RunconSettings::new(config, args).map_err(|r| match r {
+        DefaultError::CommandLine(r) => r.with_exit_code(125).into(),
+        DefaultError::MissingCommand => CTsageError::new(125, "No command is specified"),
+        r => CTsageError::new(error_exit_status::RUNCON_CANCELED, format!("{r}")),
     })?;
 
     // 根据运行模式执行相应操作

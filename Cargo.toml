@@ -81,6 +81,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 rand_core = "0.6"
 rayon = "1.8"
 regex = "1.10.4"
+regex-automata = "0.4.9"
 rstest = "0.18.2"
 rust-ini = "0.19.0"
 same-file = "1.0.6"

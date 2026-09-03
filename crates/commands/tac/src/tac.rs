@@ -23,6 +23,7 @@ use ctcore::ct_error::CTResult;
 use ctcore::Tool;
 use memchr::memmem;
 use memmap2::Mmap;
+use regex_automata::{Input, hybrid::dfa, nfa::thompson};
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
@@ -397,32 +398,81 @@ fn tac_lossy_string(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+fn tac_find_last_regex_match(
+    data: &[u8],
+    pattern: &regex::bytes::Regex,
+    reverse_dfa: Option<(&dfa::DFA, &mut dfa::Cache)>,
+) -> Option<(usize, usize)> {
+    if let Some((reverse_dfa, cache)) = reverse_dfa {
+        match reverse_dfa.try_search_rev(cache, &Input::new(data).earliest(true)) {
+            Ok(None) => return None,
+            Ok(Some(found)) if found.offset() < data.len() => {
+                let start = found.offset();
+                if let Some(forward_match) = pattern.find_at(data, start)
+                    && forward_match.start() == start
+                {
+                    return Some((start, forward_match.end()));
+                }
+            }
+            Ok(Some(_)) | Err(_) => {}
+        }
+    }
+
+    let mut search_start = 0;
+    let mut last_match = None;
+
+    while search_start < data.len() {
+        let Some(found) = pattern.find_at(data, search_start) else {
+            break;
+        };
+        if found.start() == data.len() {
+            break;
+        }
+
+        last_match = Some((found.start(), found.end()));
+        // Advance from the match start so overlapping candidates remain visible.
+        search_start = found.start() + 1;
+    }
+
+    last_match
+}
+
 fn tac_collect_regex_segments(
     data: &[u8],
     pattern: &regex::bytes::Regex,
     before: bool,
 ) -> Vec<Vec<u8>> {
-    let matches: Vec<(usize, usize)> = pattern
-        .find_iter(data)
-        .map(|m| (m.start(), m.end()))
-        .collect();
-    let mut segments = Vec::with_capacity(matches.len() + 1);
-    let mut following_line_start = data.len();
+    let reverse_dfa = dfa::DFA::builder()
+        .thompson(thompson::Config::new().reverse(true))
+        .build(pattern.as_str())
+        .ok();
+    let mut reverse_cache = reverse_dfa.as_ref().map(dfa::DFA::create_cache);
+    let mut segments = Vec::new();
+    let mut search_end = data.len();
+    let mut past_end = data.len();
+    let mut first_match = true;
 
-    for &(start, end) in matches.iter().rev() {
-        let segment = if before {
-            let segment = data[start..following_line_start].to_vec();
-            following_line_start = start;
-            segment
+    while let Some((start, end)) = tac_find_last_regex_match(
+        &data[..search_end],
+        pattern,
+        reverse_dfa.as_ref().zip(reverse_cache.as_mut()),
+    ) {
+        if before {
+            segments.push(data[start..past_end].to_vec());
+            past_end = start;
         } else {
-            let segment = data[end..following_line_start].to_vec();
-            following_line_start = end;
-            segment
-        };
-        segments.push(segment);
+            // A separator ending at EOF does not create an empty trailing record.
+            if !first_match || end != past_end {
+                segments.push(data[end..past_end].to_vec());
+            }
+            past_end = end;
+            first_match = false;
+        }
+
+        search_end = start;
     }
 
-    segments.push(data[0..following_line_start].to_vec());
+    segments.push(data[..past_end].to_vec());
     segments
 }
 
@@ -1035,6 +1085,22 @@ mod tests {
             tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
             assert_eq!(output, b"aaaa");
         }
+
+        #[test]
+        fn test_tac_buffer_regex_variable_length_separator() {
+            let mut output = Vec::new();
+            let pattern = Regex::new(r":+").unwrap();
+            tac_buffer_regex(&mut output, b"aa::bbb::c::", &pattern, false).unwrap();
+            assert_eq!(output, b":c::bbb::aa:");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_variable_length_separator_before() {
+            let mut output = Vec::new();
+            let pattern = Regex::new(r":+").unwrap();
+            tac_buffer_regex(&mut output, b"aa::bbb::c::", &pattern, true).unwrap();
+            assert_eq!(output, b":::c::bbb:aa");
+        }
     }
 
     #[cfg(test)]
@@ -1175,6 +1241,24 @@ mod tests {
             assert!(result.is_ok());
             // before 模式：分隔符属于后面的记录，输出为 "::3::21"
             assert_eq!(output, b"::3::21");
+        }
+
+        #[test]
+        fn test_tac_main_regex_separator_placement() {
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"aa::bbb::c::").unwrap();
+
+            let args = [
+                "tac".to_string(),
+                "--regex".to_string(),
+                "--separator".to_string(),
+                ":+".to_string(),
+                temp_file.path().to_str().unwrap().to_string(),
+            ];
+            let mut output = Vec::new();
+            let result = tac_main(&mut output, args.iter().map(OsString::from));
+            assert!(result.is_ok());
+            assert_eq!(output, b":c::bbb::aa:");
         }
 
         #[test]

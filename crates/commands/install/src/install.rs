@@ -519,13 +519,20 @@ impl Installer {
         Ok(())
     }
 
+    fn leading_parent(path: &Path) -> Option<&Path> {
+        match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => Some(parent),
+            _ => None,
+        }
+    }
+
     fn process_source_file(&self, from: &Path, to: &Path) -> CTResult<()> {
         if from.is_dir() {
             return Err(InstallError::OmittingDirectory(from.to_path_buf()).into());
         }
 
         if self.create_leading {
-            if let Some(parent) = to.parent() {
+            if let Some(parent) = Self::leading_parent(to) {
                 create_leading_dirs(parent, self.verbose, self)
                     .map_err(|e| InstallError::CreateDirFailed(parent.to_path_buf(), e))?;
 
@@ -2372,6 +2379,15 @@ mod tests {
         // 验证多个文件是否都安装成功
         assert!(target_dir.join("source.txt").exists());
         assert!(target_dir.join("source2.txt").exists());
+    }
+
+    #[test]
+    fn test_leading_parent_skips_bare_file_name() {
+        assert!(Installer::leading_parent(Path::new("out1")).is_none());
+        assert_eq!(
+            Installer::leading_parent(Path::new("dir/out1")),
+            Some(Path::new("dir"))
+        );
     }
 
     #[test]

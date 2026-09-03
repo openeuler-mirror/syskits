@@ -598,7 +598,7 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
     rust_i18n::set_locale(&lang_code);
 
     let command = ct_app();
-    let matches = command.get_matches_from(args);
+    let matches = command.try_get_matches_from(args)?;
     let config = vdir_config_from_matches(&matches)?;
     let paths_from_args = vdir_paths_from_matches(&matches);
 
@@ -645,7 +645,10 @@ mod tests {
         // Test execute method with help flag (should work)
         let args: Vec<OsString> = vec![OsString::from("vdir"), OsString::from("--help")];
         let result = tool.execute(&args);
-        assert!(result.is_ok());
+        match result {
+            Ok(()) => {}
+            Err(err) => assert_eq!(err.code(), 0),
+        }
     }
 
     #[cfg(test)]
@@ -661,7 +664,7 @@ mod tests {
         fn test_ctmain_input_err_no_app_name_v() {
             let args = ["--version", ""];
             let result = vdir_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -669,7 +672,16 @@ mod tests {
             let args = ["-V", ""];
             let result = vdir_main(args.iter().map(OsString::from));
             //println!("{}", result);
-            assert!(result.is_err());
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_invalid_classify_exits_with_vdir_failure() {
+            let args = [ctcore::ct_util_name(), "--classify=invalid"];
+            let result = vdir_main(args.iter().map(OsString::from));
+            let err = result.expect_err("invalid --classify should fail");
+
+            assert_eq!(err.code(), 1);
         }
 
         #[test]

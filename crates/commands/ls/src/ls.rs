@@ -3277,7 +3277,7 @@ fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
             }
         }
 
-        for column in 0..columns {
+        for (column, column_width) in column_widths.iter().copied().enumerate().take(columns) {
             let index = grid_index(row, column, rows, columns, direction);
             let Some(cell) = cells.get(index) else {
                 continue;
@@ -3285,7 +3285,7 @@ fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
 
             rendered.push_str(&cell.contents);
             if Some(column) != last_column {
-                let padding = column_widths[column].saturating_sub(cell.width) + 2;
+                let padding = column_width.saturating_sub(cell.width) + 2;
                 rendered.push_str(&" ".repeat(padding));
             }
         }
@@ -3422,6 +3422,7 @@ fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// 决定每个字段的最大字符数。
 #[allow(clippy::write_literal)]
 #[allow(clippy::cognitive_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn display_item_long<W: Write>(
     item: &PathData,
     padding: &LsPaddingCollection,

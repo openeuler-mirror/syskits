@@ -320,7 +320,7 @@ fn env_split_string_argument(
 }
 
 fn env_is_name_value_operand(arg: &OsStr) -> bool {
-    !NativeStr::new(arg).strip_prefix(OsStr::new("-")).is_some()
+    NativeStr::new(arg).strip_prefix(OsStr::new("-")).is_none()
         && NativeStr::new(arg).split_once(&'=').is_some()
 }
 

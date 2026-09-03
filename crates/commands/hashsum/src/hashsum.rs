@@ -263,7 +263,7 @@ fn render_compute_row_classic(
             format!("{} ({}) = {}\0", algorithm, filename.display(), sum)
         } else {
             let (escaped_filename, prefix) = escape_filename(filename);
-            format!("{}{} ({}) = {}\n", prefix, algorithm, escaped_filename, sum)
+            format!("{prefix}{algorithm} ({escaped_filename}) = {sum}\n")
         }
     } else if flags.is_nonames {
         format!("{sum}\n")
@@ -1808,9 +1808,7 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
 
     // BSD 格式及 OpenSSL 格式正则表达式
     let bsd_re = Regex::new(&format!(
-        r"^(?P<escaped>\\)?{algorithm} *\((?P<fileName>.*)\) *= *(?P<digest>[a-fA-F0-9]{digest_size})",
-        algorithm = bsd_algorithm,
-        digest_size = bytes_marker,
+        r"^(?P<escaped>\\)?{bsd_algorithm} *\((?P<fileName>.*)\) *= *(?P<digest>[a-fA-F0-9]{bytes_marker})",
     ))
     .map_err(|_| HashsumError::InvalidRegex)?;
 
@@ -2020,11 +2018,7 @@ fn compute_and_output_hash<W: Write>(
             // 1. 需要转义文件名
             // 2. 使用 writeln! (自动 \n 结尾)
             let (escaped_filename, prefix) = escape_filename(filename);
-            writeln!(
-                writer,
-                "{}{} ({}) = {}",
-                prefix, algorithm, escaped_filename, sum
-            )?;
+            writeln!(writer, "{prefix}{algorithm} ({escaped_filename}) = {sum}")?;
         }
     } else if flags.is_nonames {
         // 仅输出哈希值

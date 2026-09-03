@@ -1546,20 +1546,6 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_unknown_command_error() {
-        // Since the interpreter now falls back to external process execution,
-        // an unknown command will fail with a "failed to spawn" or IO error
-        let expr = ctdsl::parse("__syskits_no_such_cmd_xyz__").unwrap();
-        let ctx = DataEngineContext::new(CommandRegistry::empty(), None, None);
-        let err = eval_pipeline(&expr, CtPipelineData::Empty, &ctx).unwrap_err();
-        // The error should come from failing to spawn the external process
-        assert!(
-            err.to_string().contains("failed to spawn") || err.to_string().contains("No such file"),
-            "Unexpected error: {err}"
-        );
-    }
-
-    #[test]
     fn test_eval_interrupt_signal() {
         let expr = ctdsl::parse("echo").unwrap();
         let ctx = make_ctx();

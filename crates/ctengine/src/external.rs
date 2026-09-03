@@ -1689,10 +1689,10 @@ impl Read for ExternalStream {
             }
 
             if interrupted {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("External command '{}' interrupted by user", self.spec.cmd),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "External command '{}' interrupted by user",
+                    self.spec.cmd
+                )));
             }
 
             if self.spec.exit_policy == ExternalExitPolicy::FailOnNonZero && !status.success() {
@@ -1801,7 +1801,7 @@ fn resolve_external_program_skipping_dirs(
 }
 
 fn should_skip_external_path_dir(dir: &Path, skip_dirs: &[&Path]) -> bool {
-    skip_dirs.iter().any(|skip_dir| dir == *skip_dir)
+    skip_dirs.contains(&dir)
 }
 
 #[cfg(unix)]

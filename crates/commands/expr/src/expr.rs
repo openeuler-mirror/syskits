@@ -172,11 +172,10 @@ fn expr_native_output(args: impl ctcore::Args) -> CTResult<ExprNativeOutput> {
 
     if operands.len() == 1
         && let Some(first) = operands.first()
+        && (first == OsStr::new("--help") || first == OsStr::new("--version"))
     {
-        if first == OsStr::new("--help") || first == OsStr::new("--version") {
-            let help_args = vec![OsString::from(ctcore::ct_util_name()), first.clone()];
-            ct_app().try_get_matches_from(help_args)?;
-        }
+        let help_args = vec![OsString::from(ctcore::ct_util_name()), first.clone()];
+        ct_app().try_get_matches_from(help_args)?;
     }
 
     if matches!(operands.first(), Some(arg) if arg == OsStr::new("--")) {

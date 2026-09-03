@@ -166,8 +166,7 @@ impl FmtConfigs {
                 if g > FMT_DEFAULT_WIDTH {
                     return Err(CtSimpleError::new(1, "GOAL cannot be greater than WIDTH."));
                 }
-                let w = (g * 100 / FMT_DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
-                (w, g)
+                (g + 10, g)
             }
             (None, None) => (FMT_DEFAULT_WIDTH, FMT_DEFAULT_GOAL),
         };
@@ -7004,7 +7003,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                width: 3,
+                width: 10,
                 goal: 0,
                 tab_width: 8,
             };
@@ -7034,7 +7033,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                width: 4,
+                width: 11,
                 goal: 1,
                 tab_width: 8,
             };
@@ -7064,7 +7063,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                width: 13,
+                width: 20,
                 goal: 10,
                 tab_width: 8,
             };
@@ -7144,7 +7143,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                width: 3,
+                width: 10,
                 goal: 0,
                 tab_width: 8,
             };
@@ -7174,7 +7173,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                width: 4,
+                width: 11,
                 goal: 1,
                 tab_width: 8,
             };
@@ -7204,7 +7203,7 @@ mod tests {
                 is_xanti_prefix: false,
                 is_uniform: false,
                 is_quick: false,
-                width: 13,
+                width: 20,
                 goal: 10,
                 tab_width: 8,
             };
@@ -7677,6 +7676,19 @@ mod tests {
             let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
             assert!(result.is_ok());
             assert!(output_stream.into_inner().is_empty()); // No output for empty input
+        }
+
+        #[test]
+        fn test_goal_without_width_uses_gnu_default_extra_width() {
+            let tmp_dir = TempDir::with_prefix("test_fmt_").unwrap();
+            let test_file_path = tmp_dir.path().join("test1");
+            fs::write(&test_file_path, b"banana\napple\nbanana\n10\n2\n").unwrap();
+            let file_name = test_file_path.to_str().unwrap();
+
+            let cmd_args = [ctcore::ct_util_name(), "-g", "1", file_name];
+            let semantic = fmt_native_semantic(cmd_args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.output, "banana\napple\nbanana\n10 2\n");
         }
 
         #[test]

@@ -22,6 +22,7 @@ clap = { workspace = true }
 filetime = { workspace = true }
 file_diff = { workspace = true }
 selinux = { workspace = true }
+libc = { workspace = true }
 ctcore = { workspace = true, features = [
     "backup-control",
     "fs",

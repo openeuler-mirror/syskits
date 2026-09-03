@@ -9,6 +9,7 @@ install:
     install_target_directory: move all SOURCE arguments into DIRECTORY
     install_no_target_directory: treat DEST as a normal file
     install_verbose: explain what is being done
+    install_debug: explain how a file is copied. Implies -v
     install_preserve_context: preserve security context
     install_context: set security context of files and directories
   usage: install [OPTION]... [FILE]...

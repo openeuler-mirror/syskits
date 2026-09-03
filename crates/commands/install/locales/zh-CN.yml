@@ -9,6 +9,7 @@ install:
     install_target_directory: 将所有SOURCE参数移动到DIRECTORY中
     install_no_target_directory: 将DEST视为普通文件
     install_verbose: 解释正在执行的操作
+    install_debug: 解释文件如何复制。隐含 -v
     install_preserve_context: 保留安全上下文
     install_context: 设置文件和目录的安全上下文
   usage: install [选项]... [文件]...

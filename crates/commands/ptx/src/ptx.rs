@@ -330,6 +330,9 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     }
     config.is_auto_ref = matches.get_flag(ptx_options::PTX_AUTO_REFERENCE);
     config.is_input_ref = matches.get_flag(ptx_options::PTX_REFERENCES);
+    if config.is_input_ref && !matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP) {
+        config.context_regex = "\n".to_string();
+    }
     config.is_right_ref = matches.get_flag(ptx_options::PTX_RIGHT_SIDE_REFS);
     config.is_ignore_case = matches.get_flag(ptx_options::PTX_IGNORE_CASE);
     if matches.contains_id(ptx_options::PTX_MACRO_NAME) {
@@ -469,6 +472,46 @@ fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
     trimmed
 }
 
+fn ptx_input_reference_span(line: &str) -> Option<(usize, usize)> {
+    let Some(first) = line.chars().next() else {
+        return None;
+    };
+    if first.is_whitespace() {
+        return None;
+    }
+
+    let end = line
+        .char_indices()
+        .find_map(|(idx, ch)| ch.is_whitespace().then_some(idx))
+        .unwrap_or(line.len());
+
+    Some((0, end))
+}
+
+fn ptx_input_reference_text(line: &str) -> &str {
+    match ptx_input_reference_span(line) {
+        Some((start, end)) => &line[start..end],
+        None => "",
+    }
+}
+
+fn ptx_input_reference_content_start(line: &str) -> usize {
+    let Some((_, end)) = ptx_input_reference_span(line) else {
+        return 0;
+    };
+
+    let mut start = end;
+    for (idx, ch) in line[end..].char_indices() {
+        if !ch.is_whitespace() {
+            start = end + idx;
+            break;
+        }
+        start = end + idx + ch.len_utf8();
+    }
+
+    start
+}
+
 /// 从输入文件读取内容并构建文件映射
 ///
 /// # 参数
@@ -554,16 +597,17 @@ fn ptx_create_word_set(
             let context_end = trim_context_end(&content.text, context_start, context_end_raw);
             let context_text = &content.text[context_start..context_end];
 
-            let (ref_beg, ref_end) = match ref_reg.find(context_text) {
-                Some(x) => (context_start + x.start(), context_start + x.end()),
-                None => (context_start, context_start),
-            };
-
             for mat in reg.find_iter(context_text) {
                 let (global_beg, global_end) =
                     (context_start + mat.start(), context_start + mat.end());
-                if config.is_input_ref && ((global_beg, global_end) == (ref_beg, ref_end)) {
-                    continue;
+                let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
+                let line_start = content.line_starts[local_line_nr];
+                let line = &content.lines[local_line_nr];
+                if config.is_input_ref {
+                    let reference_content_start = ptx_input_reference_content_start(line);
+                    if global_beg < line_start + reference_content_start {
+                        continue;
+                    }
                 }
 
                 let mut word = content.text[global_beg..global_end].to_owned();
@@ -577,8 +621,11 @@ fn ptx_create_word_set(
                     word = word.to_lowercase();
                 }
 
-                let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
-                let line_start = content.line_starts[local_line_nr];
+                let context_start = if config.is_input_ref {
+                    context_start.max(line_start + ptx_input_reference_content_start(line))
+                } else {
+                    context_start
+                };
                 let global_char_position = content.byte_to_char[global_beg];
                 let global_char_position_end = content.byte_to_char[global_end];
                 let context_char_start = content.byte_to_char[context_start];
@@ -625,15 +672,12 @@ fn ptx_get_reference(
     word_ref: &WordRef,
     file_name: &str,
     line: &str,
-    context_reg: &Regex,
+    _context_reg: &Regex,
 ) -> String {
     if config.is_auto_ref {
         format!("{}:{}", file_name.maybe_quote(), word_ref.local_line_nr + 1)
     } else if config.is_input_ref {
-        match context_reg.find(line) {
-            Some(x) => line[x.start()..x.end()].to_string(),
-            None => String::new(),
-        }
+        ptx_input_reference_text(line).to_string()
     } else {
         String::new()
     }
@@ -1390,20 +1434,11 @@ fn ptx_display_field(s: &str) -> String {
 fn context_base_start(
     config: &PtxConfig,
     line: &str,
-    chars_line: &[char],
-    context_reg: &Regex,
+    _chars_line: &[char],
+    _context_reg: &Regex,
 ) -> usize {
     if config.is_input_ref {
-        match context_reg.find(line) {
-            Some(m) => {
-                let mut idx = m.end();
-                while idx < chars_line.len() && chars_line[idx].is_whitespace() {
-                    idx += 1;
-                }
-                idx
-            }
-            None => 0,
-        }
+        ptx_input_reference_content_start(line)
     } else {
         0
     }
@@ -3185,6 +3220,37 @@ mod tests {
             assert!(word_set.iter().any(|w| w.word == "hello"));
             assert!(word_set.iter().any(|w| w.word == "world"));
         }
+
+        #[test]
+        fn test_ptx_create_word_set_skips_input_reference_field() {
+            let config = PtxConfig {
+                is_input_ref: true,
+                context_regex: "\n".to_string(),
+                ..Default::default()
+            };
+            let filter = WordFilter {
+                word_regex: r"[A-Za-z]+".to_string(),
+                ..Default::default()
+            };
+            let file_map = vec![test_file_content(
+                "test.txt",
+                vec![
+                    "openssl,https://githubs.com/openssl/openssl.git".to_string(),
+                    "ref hello world".to_string(),
+                ],
+                0,
+            )];
+
+            let words: Vec<String> = ptx_create_word_set(&config, &filter, &file_map)
+                .into_iter()
+                .map(|word_ref| word_ref.word)
+                .collect();
+
+            assert!(!words.iter().any(|word| word == "openssl"));
+            assert!(!words.iter().any(|word| word == "ref"));
+            assert!(words.iter().any(|word| word == "hello"));
+            assert!(words.iter().any(|word| word == "world"));
+        }
     }
 
     mod reference_tests {
@@ -3212,7 +3278,6 @@ mod tests {
             let config = PtxConfig {
                 is_auto_ref: false,
                 is_input_ref: true,
-                context_regex: r"\d+".to_string(),
                 ..Default::default()
             };
 
@@ -3222,7 +3287,7 @@ mod tests {
                 &config,
                 &word_ref,
                 "test.txt",
-                "word 123 text",
+                "123 word text",
                 &context_reg,
             );
 

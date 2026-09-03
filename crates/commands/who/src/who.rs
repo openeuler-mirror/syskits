@@ -116,7 +116,8 @@ pub fn ct_app() -> Command {
             .visible_short_alias('w')
             .visible_aliases(["message", "writable"])
             .help(t!("who.clap.options.mesg"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_MESG),
         Arg::new(who_flags::WHO_FILE)
             .num_args(1..=2)
             .value_hint(clap::ValueHint::FilePath)
@@ -382,6 +383,23 @@ mod tests {
         let args = vec![ctcore::ct_util_name(), "--mesg"];
         let executable = command.try_get_matches_from(args);
         assert!(executable.is_ok());
+    }
+
+    #[test]
+    fn test_ct_app_repeated_mesg_aliases() {
+        let command = ct_app();
+        let args = vec![
+            ctcore::ct_util_name(),
+            "-T",
+            "-w",
+            "--message",
+            "--writable",
+            "utmp",
+        ];
+
+        let matches = command.try_get_matches_from(args).unwrap();
+
+        assert!(matches.get_flag(who_flags::WHO_MESG));
     }
 
     #[test]

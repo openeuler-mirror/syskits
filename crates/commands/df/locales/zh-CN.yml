@@ -29,6 +29,7 @@ df:
     df_opt_portability: 使用POSIX输出格式
     df_opt_sync: 获取使用信息前调用sync（仅限非Windows系统）
     df_opt_print_type: 打印文件系统类型
+    df_opt_ignored_v: （忽略）
   usage: df [选项]... [文件]...
   about: |-
     显示每个文件所在的文件系统的信息，

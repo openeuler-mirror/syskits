@@ -1015,7 +1015,7 @@ fn df_args_init() -> Vec<Arg> {
             .value_hint(clap::ValueHint::AnyPath),
         Arg::new("ignored-v")
             .short('v')
-            .hide(true)
+            .help(t!("df.clap.df_opt_ignored_v"))
             .action(ArgAction::SetTrue),
     ];
     args
@@ -1078,12 +1078,15 @@ mod tests {
 
         #[test]
         fn test_ct_app_help() {
-            let command = ct_app();
+            let mut command = ct_app();
             let args = vec![ctcore::ct_util_name(), "--help"];
+            let help = command.render_help().to_string();
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert!(help.contains("-v"));
+            assert!(help.contains("(ignored)"));
         }
 
         #[test]

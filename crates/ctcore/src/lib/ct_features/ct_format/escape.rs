@@ -165,14 +165,7 @@ pub fn parse_escape_code(rest: &mut &[u8], is_b_format: bool) -> Result<EscapedC
             b'v' => Ok(EscapedChar::Byte(b'\x0b')),
             b'x' => match parse_code(rest, Base::Hex) {
                 Some(c) => Ok(EscapedChar::Byte(c)),
-                None => {
-                    // 应对 POSIX 测试：如果不含数字，严格模式直接报错
-                    if std::env::var_os("POSIXLY_CORRECT").is_some() {
-                        Err(FormatError::SpecError(b"\\x".to_vec()))
-                    } else {
-                        Ok(EscapedChar::Backslash(b'x'))
-                    }
-                }
+                None => Err(FormatError::MissingHexadecimalNumber),
             },
             b'u' => match parse_unicode(rest, 4) {
                 Some(c) => Ok(EscapedChar::Char(c)),
@@ -554,6 +547,23 @@ mod test {
             EscapedChar::Byte(0x1F)
         );
         assert_eq!(input, b"");
+    }
+
+    #[test]
+    fn test_parse_escape_code_hex_requires_digit() {
+        let mut input: &[u8] = b"x";
+        assert!(matches!(
+            parse_escape_code(&mut input, false),
+            Err(FormatError::MissingHexadecimalNumber)
+        ));
+        assert_eq!(input, b"");
+
+        let mut input: &[u8] = b"xZ";
+        assert!(matches!(
+            parse_escape_code(&mut input, true),
+            Err(FormatError::MissingHexadecimalNumber)
+        ));
+        assert_eq!(input, b"Z");
     }
 
     #[test]

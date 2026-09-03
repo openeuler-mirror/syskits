@@ -331,14 +331,13 @@ impl IndexedSpec {
             }
             Spec::EscapedString => {
                 let s = cursor.get_str(self.arg_index);
-                let mut parsed = Vec::new();
                 for res in parse_escape_only(s.as_bytes()) {
-                    match res?.write(&mut parsed)? {
+                    match res?.write(&mut writer)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => break,
                     };
                 }
-                writer.write_all(&parsed).map_err(FormatError::IoError)
+                Ok(())
             }
             Spec::QuotedString => {
                 let s = cursor.get_str(self.arg_index);

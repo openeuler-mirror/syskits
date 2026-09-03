@@ -46,6 +46,7 @@ use self::{
 #[derive(Debug)]
 pub enum FormatError {
     SpecError(Vec<u8>),
+    MissingHexadecimalNumber,
     IoError(std::io::Error),
     NoMoreArguments,
     InvalidArgument(FormatArgument),
@@ -66,6 +67,9 @@ impl From<std::io::Error> for FormatError {
 impl Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::MissingHexadecimalNumber => {
+                write!(f, "missing hexadecimal number in escape")
+            }
             Self::SpecError(s) => write!(
                 f,
                 "%{}: invalid conversion specification",
@@ -486,24 +490,11 @@ mod tests {
     #[test]
     fn test_can_parse_escape_only_invalid_escape() {
         let format_string = b"Hello \\xZZ";
-        let result: Vec<_> = parse_escape_only(format_string)
-            .map(|r| r.unwrap())
-            .collect();
-        // println!("{:?}", result);
-        assert_eq!(
-            result,
-            [
-                EscapedChar::Byte(72),
-                EscapedChar::Byte(101),
-                EscapedChar::Byte(108),
-                EscapedChar::Byte(108),
-                EscapedChar::Byte(111),
-                EscapedChar::Byte(32),
-                EscapedChar::Backslash(120),
-                EscapedChar::Byte(90),
-                EscapedChar::Byte(90)
-            ]
-        );
+        let result: Vec<_> = parse_escape_only(format_string).collect();
+        assert!(matches!(
+            result.get(6),
+            Some(Err(FormatError::MissingHexadecimalNumber))
+        ));
     }
 
     #[test]
@@ -517,8 +508,8 @@ mod tests {
             Some(Ok(FormatItem::Char(EscapedChar::Byte(72))))
         ));
         assert!(matches!(
-            result.last(),
-            Some(Ok(FormatItem::Char(EscapedChar::Byte(100))))
+            result.get(6),
+            Some(Err(FormatError::MissingHexadecimalNumber))
         ));
     }
 

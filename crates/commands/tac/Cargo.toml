@@ -20,6 +20,7 @@ rust-i18n = { workspace = true }
 memchr = { workspace = true }
 memmap2 = { workspace = true }
 regex = { workspace = true }
+regex-automata = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true }
 

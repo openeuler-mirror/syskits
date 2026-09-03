@@ -18,9 +18,11 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 
 use std::ffi::OsString;
+use std::fs::File;
 use sys_locale::get_locale;
 
 mod platform;
@@ -31,6 +33,26 @@ pub mod sync_flags {
 }
 
 const SYNC_ARG_FILES: &str = "files";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SyncMode {
+    Global,
+    File,
+    Data,
+    FileSystem,
+}
+
+fn select_sync_mode(has_data: bool, has_file_system: bool, has_files: bool) -> SyncMode {
+    if !has_files {
+        SyncMode::Global
+    } else if has_file_system {
+        SyncMode::FileSystem
+    } else if has_data {
+        SyncMode::Data
+    } else {
+        SyncMode::File
+    }
+}
 
 pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
@@ -58,13 +80,18 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
         check_files(f)?;
     }
 
-    if is_file_system {
-        sync_fs(files);
-    } else if is_has_data {
-        #[cfg(target_os = "linux")]
-        platform::fdatasync(files);
-    } else {
-        sync();
+    match select_sync_mode(is_has_data, is_file_system, !files.is_empty()) {
+        SyncMode::Global => {
+            sync();
+        }
+        SyncMode::File => sync_files(&files)?,
+        SyncMode::Data => {
+            #[cfg(target_os = "linux")]
+            platform::fdatasync(files);
+        }
+        SyncMode::FileSystem => {
+            sync_fs(files);
+        }
     }
     Ok(())
 }
@@ -107,6 +134,16 @@ fn sync_fs(files: Vec<String>) -> isize {
     unsafe { platform::do_syncfs(files) }
 }
 
+fn sync_files(files: &[String]) -> CTResult<()> {
+    for path in files {
+        let file =
+            File::open(path).map_err_context(|| format!("error opening {}", path.quote()))?;
+        file.sync_all()
+            .map_err_context(|| format!("error syncing {}", path.quote()))?;
+    }
+    Ok(())
+}
+
 fn check_files(f: &String) -> CTResult<()> {
     platform::check_files(f)
 }
@@ -147,6 +184,14 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("sync"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[test]
+    fn test_select_sync_mode() {
+        assert_eq!(select_sync_mode(false, false, false), SyncMode::Global);
+        assert_eq!(select_sync_mode(false, false, true), SyncMode::File);
+        assert_eq!(select_sync_mode(true, false, true), SyncMode::Data);
+        assert_eq!(select_sync_mode(false, true, true), SyncMode::FileSystem);
     }
 
     #[cfg(test)]
@@ -256,6 +301,20 @@ mod tests {
 
             let args = [ctcore::ct_util_name(), dir_name];
             let result = sync_main(args.iter().map(OsString::from));
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_file_without_mode() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test_ct_main_file_without_mode");
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "sync-data").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+            let args = [ctcore::ct_util_name(), file_name];
+            let result = sync_main(args.iter().map(OsString::from));
+
             assert!(result.is_ok());
         }
 

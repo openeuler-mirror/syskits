@@ -197,10 +197,7 @@ impl Tool for Groups {
                     Err(semantic.exit_code.into())
                 }
             }
-            Err(err) => {
-                eprint!("{err}");
-                Err(125.into())
-            }
+            Err(err) => Err(err),
         }
     }
 }
@@ -238,7 +235,8 @@ mod tests {
 
             // 测试 execute 方法
             let args = vec![OsString::from("groups"), OsString::from("--help")];
-            assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+            let err = tool.execute(&args).unwrap_err();
+            assert_eq!(err.code(), 0);
         }
     }
 

@@ -20,6 +20,7 @@ use clap::{crate_version, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 
+use ctcore::ct_display::locale_quote;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::ct_show_warning;
@@ -155,11 +156,15 @@ impl TailFilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => {
-                    return Err(CtSimpleError::new(
-                        1,
-                        format!("invalid number of lines: {e}"),
-                    ));
+                Err(err) => {
+                    let message = match err {
+                        ParseSizeError::SizeTooBig(_) => format!(
+                            "invalid number of lines: {}: Value too large for defined data type",
+                            locale_quote(arg)
+                        ),
+                        _ => format!("invalid number of lines: {}", locale_quote(arg)),
+                    };
+                    return Err(CtSimpleError::new(1, message));
                 }
             }
         } else if zero_term {
@@ -501,7 +506,7 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
             (n, true) => Ok(TailSignum::Positive(n)),
             (n, false) => Ok(TailSignum::Negative(n)),
         },
-        Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
+        Err(err) => Err(err),
     }
 }
 

@@ -3020,10 +3020,24 @@ fn display_grid_by_format_other_type<W: Write>(
 
     match config.format {
         LsFormat::Columns => {
-            display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+            display_grid(
+                names,
+                config.width,
+                Direction::TopToBottom,
+                out,
+                quoted,
+                config.color.is_some(),
+            )?;
         }
         LsFormat::Across => {
-            display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+            display_grid(
+                names,
+                config.width,
+                Direction::LeftToRight,
+                out,
+                quoted,
+                config.color.is_some(),
+            )?;
         }
         LsFormat::Commas => {
             let mut current_col = 0;
@@ -3266,6 +3280,7 @@ fn display_grid<W: Write>(
     direction: Direction,
     output: &mut W,
     quoted: bool,
+    preserve_padding_spaces: bool,
 ) -> CTResult<()> {
     let names = names.collect::<Vec<_>>();
 
@@ -3297,7 +3312,11 @@ fn display_grid<W: Write>(
             })
             .collect::<Vec<_>>();
         let rendered = render_grid(&names, width as usize, direction);
-        write!(output, "{}", format_grid_output(&rendered, 8, quoted))?;
+        write!(
+            output,
+            "{}",
+            format_grid_output(&rendered, 8, quoted || preserve_padding_spaces)
+        )?;
     }
     Ok(())
 }
@@ -4733,6 +4752,7 @@ mod tests {
             Direction::TopToBottom,
             &mut output,
             true,
+            false,
         )
         .unwrap();
 
@@ -4740,13 +4760,47 @@ mod tests {
     }
 
     #[test]
-    fn quoted_grid_output_preserves_alignment_spaces() {
+    fn format_grid_output_preserves_alignment_spaces_when_requested() {
         let rendered = "'a b'   \x1b[0m\x1b[42;31mc.foo\x1b[0m\n";
 
         assert_eq!(format_grid_output(rendered, 8, true), rendered);
         assert_eq!(
             format_grid_output(rendered, 8, false),
             "'a b'\t\x1b[0m\x1b[42;31mc.foo\x1b[0m\n"
+        );
+    }
+
+    #[test]
+    fn display_grid_preserves_padding_spaces_for_colored_output() {
+        let cells = [
+            Cell {
+                contents: "plain".into(),
+                width: 5,
+            },
+            Cell {
+                contents: "\x1b[01;34mdir\x1b[0m".into(),
+                width: 3,
+            },
+            Cell {
+                contents: "tail".into(),
+                width: 4,
+            },
+        ];
+        let mut output = Vec::new();
+
+        display_grid(
+            cells.into_iter(),
+            20,
+            Direction::LeftToRight,
+            &mut output,
+            false,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "plain  \x1b[01;34mdir\x1b[0m  tail\n"
         );
     }
 

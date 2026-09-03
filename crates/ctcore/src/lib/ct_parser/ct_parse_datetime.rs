@@ -79,6 +79,14 @@ pub fn parse_datetime_gnu_compat(
         }
     }
 
+    if (1..=4).contains(&input_trim.len()) && input_trim.bytes().all(|b| b.is_ascii_digit()) {
+        return parse_compact_time_of_day(input_trim, reference_time).ok_or_else(|| {
+            ParseDateTimeError {
+                message: format!("Unable to parse date: {input}"),
+            }
+        });
+    }
+
     // 军用时区拦截 (Military Timezone: e.g. 09:00B -> UTC+2)
     if input_trim.len() == 6 {
         let bytes = input_trim.as_bytes();
@@ -485,6 +493,28 @@ pub fn parse_datetime_gnu_compat(
     }
 }
 
+fn parse_compact_time_of_day(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let (hour_part, minute_part) = match input.len() {
+        1 | 2 => (input, "0"),
+        3 => input.split_at(1),
+        4 => input.split_at(2),
+        _ => return None,
+    };
+
+    let hour = hour_part.parse::<u32>().ok()?;
+    let minute = minute_part.parse::<u32>().ok()?;
+    let time = chrono::NaiveTime::from_hms_opt(hour, minute, 0)?;
+    let naive = reference_time.date_naive().and_time(time);
+
+    match Local.from_local_datetime(&naive) {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
+}
+
 /// 解析包含星期几名称的表达式
 fn parse_weekday_expression(
     input: &str,
@@ -611,7 +641,7 @@ pub fn parse_datetime_to_filetime(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Local, TimeZone};
+    use chrono::{Local, TimeZone, Timelike};
 
     #[test]
     fn test_parse_weekday_simple() {
@@ -654,6 +684,37 @@ mod tests {
 
         let today = parse_datetime_gnu_compat("today", ref_time).unwrap();
         assert_eq!(today.day(), 24);
+    }
+
+    #[test]
+    fn test_parse_compact_time_of_day() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, hour, minute) in [
+            ("1", 1, 0),
+            ("10", 10, 0),
+            ("100", 1, 0),
+            ("1234", 12, 34),
+            ("2359", 23, 59),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), ref_time.date_naive(), "input {input}");
+            assert_eq!(parsed.hour(), hour, "input {input}");
+            assert_eq!(parsed.minute(), minute, "input {input}");
+            assert_eq!(parsed.second(), 0, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_invalid_compact_time_of_day() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["99", "090", "2400", "2360"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} should fail"
+            );
+        }
     }
 
     #[test]

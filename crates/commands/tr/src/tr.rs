@@ -385,37 +385,25 @@ fn tr_process<R: BufRead, W: Write>(
     // 把原始的 writer 包装进我们的防爆阀中
     let mut strict_writer = StrictWriter { inner: writer };
 
-    // 提前触发一次缓冲区读取。
-    // 如果输入流是一个目录，底层的 read 会立即返回 EISDIR 错误并被拦截。
-    if let Err(e) = reader.fill_buf() {
-        return Err(CtSimpleError::new(1, format!("read error: {e}")));
-    }
-
     let mut sets_iter = flags.sets.iter().map(|c| c.as_str());
     let (set1, set2) = Sequence::solve_set_characters(
         sets_iter.next().unwrap_or_default().as_bytes(),
         sets_iter.next().unwrap_or_default().as_bytes(),
-        flags.is_truncate_set1_flag,
+        flags.is_truncate_set1_flag && !flags.is_complement_flag,
     )?;
 
     let is_translating = !flags.is_delete_flag && flags.sets.len() >= 2;
     if is_translating {
         let s1 = &flags.sets[0];
         let s2 = &flags.sets[1];
+        let set1_len = if flags.is_complement_flag {
+            Sequence::complement_cardinality(&set1)
+        } else {
+            set1.len()
+        };
 
-        // 1. 取反翻译特例
-        if flags.is_complement_flag && !set2.is_empty() {
-            let first = set2[0];
-            if set2.iter().any(|&c| c != first) {
-                return Err(CtSimpleError::new(
-                    1,
-                    "when translating with complemented character classes,\nstring2 must map all characters in the domain to one",
-                ));
-            }
-        }
-
-        // 2. string1 大于 string2 且 string2 以字符类结尾
-        if set1.len() > set2.len() {
+        // 1. string1 大于 string2 且 string2 以字符类结尾
+        if set1_len > set2.len() && !flags.is_truncate_set1_flag {
             let is_ending_with_class = [
                 "[:alnum:]",
                 "[:alpha:]",
@@ -433,10 +421,35 @@ fn tr_process<R: BufRead, W: Write>(
             .iter()
             .any(|cls| s2.ends_with(cls));
 
+            if set2.is_empty() {
+                return Err(CtSimpleError::new(
+                    1,
+                    "when not truncating set1, string2 must be non-empty",
+                ));
+            }
+
             if is_ending_with_class {
                 return Err(CtSimpleError::new(
                     1,
                     "when translating with string1 longer than string2,\nthe latter string must not end with a character class",
+                ));
+            }
+        }
+
+        // 2. GNU tr 仅在补集翻译且 string1 包含字符类时要求 string2 同质映射。
+        if flags.is_complement_flag && Sequence::contains_character_class(s1.as_bytes())? {
+            let is_homogeneous = set2
+                .first()
+                .is_some_and(|first| set2.iter().all(|c| c == first));
+            let maps_domain_to_one = if flags.is_truncate_set1_flag {
+                set2.len() == set1_len && is_homogeneous
+            } else {
+                is_homogeneous
+            };
+            if !maps_domain_to_one {
+                return Err(CtSimpleError::new(
+                    1,
+                    "when translating with complemented character classes,\nstring2 must map all characters in the domain to one",
                 ));
             }
         }
@@ -453,6 +466,11 @@ fn tr_process<R: BufRead, W: Write>(
         }
     }
 
+    // 参数与集合规则验证完成后再触发输入读取，保持 GNU tr 的错误时机。
+    if let Err(e) = reader.fill_buf() {
+        return Err(CtSimpleError::new(1, format!("read error: {e}")));
+    }
+
     if flags.is_delete_flag {
         if flags.is_squeeze_flag {
             let delete_op = DeleteOperation::new(set1, flags.is_complement_flag);
@@ -467,13 +485,22 @@ fn tr_process<R: BufRead, W: Write>(
             let squeeze_op = SqueezeOperation::new(set1, flags.is_complement_flag);
             translate_input(reader, &mut strict_writer, squeeze_op);
         } else {
-            let translate_op =
-                TranslateOperation::new(set1, set2.clone(), flags.is_complement_flag)?;
+            let translate_op = TranslateOperation::new_with_truncate(
+                set1,
+                set2.clone(),
+                flags.is_complement_flag,
+                flags.is_truncate_set1_flag,
+            )?;
             let squeeze_op = SqueezeOperation::new(set2, false);
             translate_input(reader, &mut strict_writer, translate_op.chain(squeeze_op));
         }
     } else {
-        let translate_op = TranslateOperation::new(set1, set2, flags.is_complement_flag)?;
+        let translate_op = TranslateOperation::new_with_truncate(
+            set1,
+            set2,
+            flags.is_complement_flag,
+            flags.is_truncate_set1_flag,
+        )?;
         translate_input(reader, &mut strict_writer, translate_op);
     }
     Ok(())
@@ -829,6 +856,54 @@ mod tests {
 
             tr_process(&mut input, &mut output, flags).unwrap();
             assert_eq!(output, b"xxxxx123");
+        }
+
+        #[test]
+        fn test_tr_process_complement_range_translation_uses_byte_domain() {
+            let mut input = Cursor::new(b"\nabc1x");
+            let mut output = Vec::new();
+
+            let flags = TrFlags {
+                is_complement_flag: true,
+                sets: vec!["a-z".to_string(), "A-Z".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"KabcZx");
+        }
+
+        #[test]
+        fn test_tr_process_complement_character_class_allows_single_mapping() {
+            let mut input = Cursor::new(b"\nabc1");
+            let mut output = Vec::new();
+
+            let flags = TrFlags {
+                is_complement_flag: true,
+                sets: vec!["[:lower:]".to_string(), "X".to_string()],
+                ..Default::default()
+            };
+
+            tr_process(&mut input, &mut output, flags).unwrap();
+            assert_eq!(output, b"XabcX");
+        }
+
+        #[test]
+        fn test_tr_process_complement_character_class_rejects_non_homogeneous_set2() {
+            let mut input = Cursor::new(b"");
+            let mut output = Vec::new();
+
+            let flags = TrFlags {
+                is_complement_flag: true,
+                sets: vec!["[:lower:]".to_string(), "A-Z".to_string()],
+                ..Default::default()
+            };
+
+            let err = tr_process(&mut input, &mut output, flags).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("string2 must map all characters in the domain to one")
+            );
         }
 
         #[test]

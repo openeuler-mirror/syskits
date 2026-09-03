@@ -56,6 +56,8 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_show_warning;
 
 #[cfg(unix)]
+use std::os::unix::process::CommandExt;
+#[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self};
 
@@ -299,6 +301,39 @@ fn env_check_and_handle_string_args(
     }
 }
 
+fn env_split_string_argument(
+    split_arg: &OsStr,
+    all_args: &mut Vec<OsString>,
+    input_args_for_debug: Option<&Vec<OsString>>,
+) -> CTResult<()> {
+    if let Some(input_args) = input_args_for_debug {
+        env_debug_print_args(input_args);
+    }
+
+    let arg_strings = env_parse_args_from_str(&NCvt::convert(split_arg))?;
+    all_args.extend(
+        arg_strings
+            .into_iter()
+            .map(from_native_int_representation_owned),
+    );
+    Ok(())
+}
+
+fn env_is_name_value_operand(arg: &OsStr) -> bool {
+    !NativeStr::new(arg).strip_prefix(OsStr::new("-")).is_some()
+        && NativeStr::new(arg).split_once(&'=').is_some()
+}
+
+fn env_is_option_like(arg: &OsStr) -> bool {
+    NativeStr::new(arg).strip_prefix(OsStr::new("-")).is_some()
+}
+
+fn env_has_program_name(args: &[OsString]) -> bool {
+    args.first()
+        .map(|arg| arg.as_os_str() == OsStr::new(ctcore::ct_util_name()))
+        .unwrap_or(false)
+}
+
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
@@ -315,37 +350,121 @@ impl EnvAppData {
         &mut self,
         source_args: &Vec<OsString>,
     ) -> CTResult<Vec<std::ffi::OsString>> {
-        let mut all_args: Vec<std::ffi::OsString> = Vec::new();
-        for arg in source_args {
-            match arg {
-                b if env_check_and_handle_string_args(
-                    b,
-                    "--split-string",
-                    &mut all_args,
-                    None,
-                )? =>
+        let Some(first_arg) = source_args.first() else {
+            return Ok(Vec::new());
+        };
+        let has_program_name = env_has_program_name(source_args);
+        let program_name = has_program_name.then(|| first_arg.clone());
+        let mut args = if has_program_name {
+            source_args[1..].to_vec()
+        } else {
+            source_args.clone()
+        };
+        loop {
+            let mut all_args: Vec<std::ffi::OsString> =
+                program_name.iter().cloned().collect::<Vec<_>>();
+            let mut next_args: Vec<std::ffi::OsString> = Vec::new();
+            let mut iter = args.iter().peekable();
+            let mut expanded_split_string = false;
+
+            while let Some(arg) = iter.next() {
+                if arg == "--" || arg == "-" {
+                    next_args.push(arg.clone());
+                    next_args.extend(iter.cloned());
+                    break;
+                }
+
+                if arg == "--split-string" {
+                    let Some(split_arg) = iter.next() else {
+                        return Err(CTsageError::new(
+                            125,
+                            "option '--split-string' requires an argument".to_string(),
+                        ));
+                    };
+                    env_split_string_argument(split_arg, &mut next_args, None)?;
+                    self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
+                }
+
+                if let Some(split_arg) =
+                    NativeStr::new(arg).strip_prefix(OsStr::new("--split-string="))
                 {
+                    env_split_string_argument(&split_arg, &mut next_args, None)?;
                     self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
                 }
-                b if env_check_and_handle_string_args(b, "-S", &mut all_args, None)? => {
+
+                if env_is_name_value_operand(arg) {
+                    next_args.push(arg.clone());
+                    next_args.extend(iter.cloned());
+                    break;
+                }
+
+                if !env_is_option_like(arg) {
+                    next_args.push(arg.clone());
+                    next_args.extend(iter.cloned());
+                    break;
+                }
+
+                if arg == "-S" {
+                    let Some(split_arg) = iter.next() else {
+                        return Err(CTsageError::new(
+                            125,
+                            "option requires an argument -- 'S'".to_string(),
+                        ));
+                    };
+                    env_split_string_argument(split_arg, &mut next_args, None)?;
                     self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
                 }
-                b if env_check_and_handle_string_args(
-                    b,
-                    "-vS",
-                    &mut all_args,
-                    Some(source_args),
-                )? =>
+
+                if arg == "-vS" {
+                    let Some(split_arg) = iter.next() else {
+                        return Err(CTsageError::new(
+                            125,
+                            "option requires an argument -- 'S'".to_string(),
+                        ));
+                    };
+                    env_split_string_argument(split_arg, &mut next_args, Some(source_args))?;
+                    self.do_debug_printing = true;
+                    self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
+                }
+
+                if env_check_and_handle_string_args(arg, "-vS", &mut next_args, Some(source_args))?
                 {
                     self.do_debug_printing = true;
                     self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
                 }
-                _ => {
-                    all_args.push(arg.clone());
+
+                if env_check_and_handle_string_args(arg, "-S", &mut next_args, None)? {
+                    self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
                 }
+
+                next_args.push(arg.clone());
             }
+
+            all_args.extend(next_args.clone());
+            if !expanded_split_string {
+                return Ok(all_args);
+            }
+
+            args = next_args;
         }
-        Ok(all_args)
     }
 
     fn parse_arguments(
@@ -354,22 +473,30 @@ impl EnvAppData {
     ) -> Result<(Vec<OsString>, clap::ArgMatches), Box<dyn CTError>> {
         let sources_args: Vec<OsString> = source_args.collect();
         let args = self.process_all_string_arguments(&sources_args)?;
+        let args_for_clap = if env_has_program_name(&sources_args) || !self.had_string_argument {
+            args
+        } else {
+            let mut args_for_clap = Vec::with_capacity(args.len() + 1);
+            args_for_clap.push(OsString::from(ctcore::ct_util_name()));
+            args_for_clap.extend(args);
+            args_for_clap
+        };
         let app = ct_app();
-        let args_match = app
-            .try_get_matches_from(args)
-            .map_err(|e| -> Box<dyn CTError> {
-                match e.kind() {
-                    clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => e.into(),
-                    _ => {
-                        let s = format!("{e}");
-                        if !s.is_empty() {
-                            eprintln!("{}", s.trim_end());
+        let args_match =
+            app.try_get_matches_from(args_for_clap)
+                .map_err(|e| -> Box<dyn CTError> {
+                    match e.kind() {
+                        clap::error::ErrorKind::DisplayHelp
+                        | clap::error::ErrorKind::DisplayVersion => e.into(),
+                        _ => {
+                            let s = format!("{e}");
+                            if !s.is_empty() {
+                                eprintln!("{}", s.trim_end());
+                            }
+                            ctcore::ct_error::ExitCode::new(125)
                         }
-                        ctcore::ct_error::ExitCode::new(125)
                     }
-                }
-            })?;
+                })?;
         Ok((sources_args, args_match))
     }
 
@@ -393,13 +520,9 @@ impl EnvAppData {
         if options.program.is_empty() {
             print_env(options.line_ending);
         } else {
-            // --- 应用和打印信号处理状态 ---
-            #[cfg(unix)]
-            apply_signal_handlers(&options)?;
-
             #[cfg(unix)]
             if options.list_signal_handling {
-                list_signal_handling(&options);
+                list_signal_handling_with_options(&options);
             }
 
             return self.run_program(options, is_debug_printing);
@@ -423,7 +546,16 @@ impl EnvAppData {
             }
         }
 
-        match process::Command::new(&*prog).args(args).status() {
+        let mut command = process::Command::new(&*prog);
+        command.args(args);
+
+        #[cfg(unix)]
+        ensure_child_status_is_waitable();
+
+        #[cfg(unix)]
+        configure_command_signal_handling(&mut command, &options)?;
+
+        match command.status() {
             Ok(exit) if !exit.success() => {
                 #[cfg(unix)]
                 if let Some(exit_code) = exit.code() {
@@ -535,10 +667,34 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
     }
 }
 
+#[cfg(unix)]
+fn ensure_child_status_is_waitable() {
+    unsafe {
+        let _ = sigaction(
+            Signal::SIGCHLD,
+            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty()),
+        );
+    }
+}
+
 // --- 处理和打印系统级信号状态 ---
 #[cfg(unix)]
 fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
-    if let Some(ref sigs) = options.default_signals {
+    apply_signal_handlers_to_process(
+        options.default_signals.as_deref(),
+        options.ignore_signals.as_deref(),
+        options.block_signals.as_deref(),
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+fn apply_signal_handlers_to_process(
+    default_signals: Option<&[Signal]>,
+    ignore_signals: Option<&[Signal]>,
+    block_signals: Option<&[Signal]>,
+) {
+    if let Some(sigs) = default_signals {
         for &sig in sigs {
             if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
                 continue;
@@ -551,7 +707,7 @@ fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
             }
         }
     }
-    if let Some(ref sigs) = options.ignore_signals {
+    if let Some(sigs) = ignore_signals {
         for &sig in sigs {
             if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
                 continue;
@@ -564,7 +720,7 @@ fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
             }
         }
     }
-    if let Some(ref sigs) = options.block_signals {
+    if let Some(sigs) = block_signals {
         let mut set = SigSet::empty();
         for &sig in sigs {
             if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
@@ -578,7 +734,65 @@ fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
             None,
         );
     }
+}
+
+#[cfg(unix)]
+fn configure_command_signal_handling(
+    command: &mut process::Command,
+    options: &EnvOptions<'_>,
+) -> CTResult<()> {
+    let default_signals = options.default_signals.clone();
+    let ignore_signals = options.ignore_signals.clone();
+    let block_signals = options.block_signals.clone();
+
+    unsafe {
+        command.pre_exec(move || {
+            apply_signal_handlers_to_process(
+                default_signals.as_deref(),
+                ignore_signals.as_deref(),
+                block_signals.as_deref(),
+            );
+            Ok(())
+        });
+    }
+
     Ok(())
+}
+
+#[cfg(unix)]
+fn list_signal_handling_with_options(options: &EnvOptions<'_>) {
+    let saved_actions: Vec<(Signal, libc::sigaction)> = Signal::iterator()
+        .filter(|&sig| sig != Signal::SIGKILL && sig != Signal::SIGSTOP)
+        .filter_map(|sig| {
+            let mut old_act: libc::sigaction = unsafe { std::mem::zeroed() };
+            if unsafe { libc::sigaction(sig as libc::c_int, std::ptr::null(), &mut old_act) } == 0 {
+                Some((sig, old_act))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut saved_mask = SigSet::empty();
+    let _ = nix::sys::signal::sigprocmask(
+        nix::sys::signal::SigmaskHow::SIG_BLOCK,
+        None,
+        Some(&mut saved_mask),
+    );
+
+    let _ = apply_signal_handlers(options);
+    list_signal_handling(options);
+
+    for (sig, old_act) in saved_actions {
+        unsafe {
+            libc::sigaction(sig as libc::c_int, &old_act, std::ptr::null_mut());
+        }
+    }
+    let _ = nix::sys::signal::sigprocmask(
+        nix::sys::signal::SigmaskHow::SIG_SETMASK,
+        Some(&saved_mask),
+        None,
+    );
 }
 
 #[cfg(unix)]
@@ -1419,12 +1633,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let args = [
-                ctcore::ct_util_name(),
-                "--split-string=''",
-                "cat",
-                file_path,
-            ];
+            let args = [ctcore::ct_util_name(), "--split-string=", "cat", file_path];
 
             let result = env_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
@@ -1452,7 +1661,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "-S", "", "cat", file_path];
 
             let result = env_main(args.iter().map(OsString::from));
-            assert!(result.is_err()); //error  ,与 系统命令env不一致
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1477,7 +1686,7 @@ mod tests {
             let args = [
                 ctcore::ct_util_name(),
                 "-S",
-                "--split-string=''",
+                "--split-string=",
                 "cat",
                 file_path,
             ];
@@ -2073,12 +2282,7 @@ mod tests {
            dddd.\n";
             file.write_all(content.as_bytes()).unwrap();
 
-            let cmd = [
-                ctcore::ct_util_name(),
-                "--split-string=''",
-                "cat",
-                file_path,
-            ];
+            let cmd = [ctcore::ct_util_name(), "--split-string=", "cat", file_path];
 
             let args = cmd.iter().map(OsString::from);
 
@@ -2114,7 +2318,7 @@ mod tests {
             let mut env_app_data = EnvAppData::default();
 
             let result = env_app_data.run_env(args);
-            assert!(result.is_err()); //error  ,与 系统命令env不一致
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2139,7 +2343,7 @@ mod tests {
             let cmd = [
                 ctcore::ct_util_name(),
                 "-S",
-                "--split-string=''",
+                "--split-string=",
                 "cat",
                 file_path,
             ];
@@ -2839,7 +3043,9 @@ mod tests {
 
             let expected_args_2 = vec![
                 OsString::from("arg1"),
+                OsString::from("-S"),
                 OsString::from("arg2"),
+                OsString::from("-vS"),
                 OsString::from("arg3"),
             ];
 
@@ -3548,7 +3754,10 @@ mod tests {
                 files: [].to_vec(),
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
-                program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                program: ["arg1", "-S", "arg2", "-vS", "arg3"]
+                    .iter()
+                    .map(OsStr::new)
+                    .collect::<Vec<_>>(),
                 #[cfg(unix)]
                 default_signals: None,
                 #[cfg(unix)]
@@ -4184,7 +4393,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -4251,7 +4460,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -4319,7 +4528,7 @@ mod tests {
             let (original_args, matches) = result.unwrap();
 
             assert_eq!(original_args, expected_args);
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
             let expected_opts = EnvOptions {
                 ignore_env: false,
                 line_ending: Newline,
@@ -4477,7 +4686,10 @@ mod tests {
                 files: [].to_vec(),
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
-                program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                program: ["arg1", "-S", "arg2", "-vS", "arg3"]
+                    .iter()
+                    .map(OsStr::new)
+                    .collect::<Vec<_>>(),
                 #[cfg(unix)]
                 default_signals: None,
                 #[cfg(unix)]
@@ -5157,7 +5369,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -5228,7 +5440,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -5300,7 +5512,7 @@ mod tests {
             let (original_args, matches) = result.unwrap();
 
             assert_eq!(original_args, expected_args);
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
             let expected_opts = EnvOptions {
                 ignore_env: false,
                 line_ending: Newline,
@@ -5462,7 +5674,10 @@ mod tests {
                 files: [].to_vec(),
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
-                program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                program: ["arg1", "-S", "arg2", "-vS", "arg3"]
+                    .iter()
+                    .map(OsStr::new)
+                    .collect::<Vec<_>>(),
                 #[cfg(unix)]
                 default_signals: None,
                 #[cfg(unix)]
@@ -6142,7 +6357,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -6213,7 +6428,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -6285,7 +6500,7 @@ mod tests {
             let (original_args, matches) = result.unwrap();
 
             assert_eq!(original_args, expected_args);
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
             let expected_opts = EnvOptions {
                 ignore_env: false,
                 line_ending: Newline,
@@ -6451,7 +6666,10 @@ mod tests {
                 files: [].to_vec(),
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
-                program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                program: ["arg1", "-S", "arg2", "-vS", "arg3"]
+                    .iter()
+                    .map(OsStr::new)
+                    .collect::<Vec<_>>(),
                 #[cfg(unix)]
                 default_signals: None,
                 #[cfg(unix)]
@@ -7153,7 +7371,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -7226,7 +7444,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -7300,7 +7518,7 @@ mod tests {
             let (original_args, matches) = result.unwrap();
 
             assert_eq!(original_args, expected_args);
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
             let expected_opts = EnvOptions {
                 ignore_env: false,
                 line_ending: Newline,
@@ -7470,7 +7688,10 @@ mod tests {
                 files: [].to_vec(),
                 unsets: [].to_vec(),
                 sets: [].to_vec(),
-                program: ["arg2", "arg3"].iter().map(OsStr::new).collect::<Vec<_>>(),
+                program: ["arg1", "-S", "arg2", "-vS", "arg3"]
+                    .iter()
+                    .map(OsStr::new)
+                    .collect::<Vec<_>>(),
                 #[cfg(unix)]
                 default_signals: None,
                 #[cfg(unix)]
@@ -8057,7 +8278,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -8131,7 +8352,7 @@ mod tests {
 
             assert_eq!(original_args, expected_args);
 
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
 
             let expected_opts = EnvOptions {
                 ignore_env: false,
@@ -8206,7 +8427,7 @@ mod tests {
             let (original_args, matches) = result.unwrap();
 
             assert_eq!(original_args, expected_args);
-            let binding = ["cat", file_path, "arg3"];
+            let binding = ["arg1", "cat", file_path, "arg3"];
             let expected_opts = EnvOptions {
                 ignore_env: false,
                 line_ending: Newline,

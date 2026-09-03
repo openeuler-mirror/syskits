@@ -29,6 +29,7 @@ df:
     df_opt_portability: use the POSIX output format
     df_opt_sync: invoke sync before getting usage info (non-windows only)
     df_opt_print_type: print file system type
+    df_opt_ignored_v: (ignored)
   usage: df [OPTION]... [FILE]...
   about: |-
     Show information about the file system on which each FILE resides,

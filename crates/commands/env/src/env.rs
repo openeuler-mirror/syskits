@@ -390,18 +390,18 @@ impl EnvAppData {
 
         env_apply_specified_env_vars(&options, is_debug_printing);
 
-        // --- 应用和打印信号处理状态 ---
-        #[cfg(unix)]
-        apply_signal_handlers(&options)?;
-
-        #[cfg(unix)]
-        if options.list_signal_handling {
-            list_signal_handling();
-        }
-
         if options.program.is_empty() {
             print_env(options.line_ending);
         } else {
+            // --- 应用和打印信号处理状态 ---
+            #[cfg(unix)]
+            apply_signal_handlers(&options)?;
+
+            #[cfg(unix)]
+            if options.list_signal_handling {
+                list_signal_handling(&options);
+            }
+
             return self.run_program(options, is_debug_printing);
         }
 
@@ -582,7 +582,7 @@ fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
 }
 
 #[cfg(unix)]
-fn list_signal_handling() {
+fn list_signal_handling(options: &EnvOptions<'_>) {
     for sig in Signal::iterator() {
         if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
             continue;
@@ -598,28 +598,29 @@ fn list_signal_handling() {
 
         let mut old_act: libc::sigaction = unsafe { std::mem::zeroed() };
         if unsafe { libc::sigaction(sig as libc::c_int, std::ptr::null(), &mut old_act) } == 0 {
-            let handler = old_act.sa_sigaction;
-
-            let state_str = if handler == libc::SIG_IGN {
-                "IGNORE"
-            } else if handler == libc::SIG_DFL {
-                "DEFAULT"
-            } else {
-                "HANDLED"
-            };
-
-            // 精准复刻 GNU env 的 --list-signal-handling 输出格式 (不对默认状态进行报告)
-            if handler != libc::SIG_DFL || is_blocked {
-                let name = sig.as_str().strip_prefix("SIG").unwrap_or(sig.as_str());
-                let num = sig as i32;
-                if handler != libc::SIG_DFL && is_blocked {
-                    eprintln!("{name:<10} ({num:2}): {state_str}, BLOCKED");
-                } else if handler != libc::SIG_DFL {
-                    eprintln!("{name:<10} ({num:2}): {state_str}");
-                } else if is_blocked {
-                    eprintln!("{name:<10} ({num:2}): DEFAULT, BLOCKED");
+            let mut is_ignored = old_act.sa_sigaction == libc::SIG_IGN;
+            if !is_ignored && !is_blocked {
+                continue;
+            }
+            if sig == Signal::SIGPIPE
+                && is_ignored
+                && !options
+                    .ignore_signals
+                    .as_ref()
+                    .is_some_and(|sigs| sigs.contains(&Signal::SIGPIPE))
+            {
+                is_ignored = false;
+                if !is_blocked {
+                    continue;
                 }
             }
+
+            let name = sig.as_str().strip_prefix("SIG").unwrap_or(sig.as_str());
+            let num = sig as i32;
+            let ignored = if is_ignored { "IGNORE" } else { "" };
+            let blocked = if is_blocked { "BLOCK" } else { "" };
+            let separator = if is_ignored && is_blocked { "," } else { "" };
+            eprintln!("{name:<10} ({num:2}): {blocked}{separator}{ignored}");
         }
     }
 }

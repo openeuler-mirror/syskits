@@ -135,26 +135,31 @@ impl StdbufFlags {
     /// # 返回值
     /// * `Result<BufferType, String>` - 解析后的缓冲类型或错误信息
     fn parse_buffer_option(matches: &ArgMatches, option_name: &str) -> Result<BufferType, String> {
-        match matches.get_one::<String>(option_name) {
-            Some(value) => match value.as_str() {
+        let mut buffer_type = BufferType::Default;
+        for value in matches
+            .get_many::<String>(option_name)
+            .into_iter()
+            .flatten()
+        {
+            buffer_type = match value.as_str() {
                 "L" => {
                     if option_name == stdbuf_flags::INPUT {
-                        Err("line buffering stdin is meaningless".to_string())
+                        return Err("line buffering stdin is meaningless".to_string());
                     } else {
-                        Ok(BufferType::Line)
+                        BufferType::Line
                     }
                 }
-                x => parse_size_u64(x).map_or_else(
-                    |e| Err(format!("invalid mode {e}")),
-                    |m| {
-                        Ok(BufferType::Size(m.try_into().map_err(|_| {
+                x => BufferType::Size(
+                    parse_size_u64(x)
+                        .map_err(|e| format!("invalid mode {e}"))?
+                        .try_into()
+                        .map_err(|_| {
                             format!("invalid mode '{x}': Value too large for defined data type")
-                        })?))
-                    },
+                        })?,
                 ),
-            },
-            None => Ok(BufferType::Default),
+            };
         }
+        Ok(buffer_type)
     }
 
     /// 设置命令的环境变量
@@ -325,18 +330,21 @@ pub fn ct_app() -> Command {
             .short(stdbuf_flags::INPUT_SHORT)
             .help(t!("stdbuf.clap.input"))
             .value_name("MODE")
+            .action(ArgAction::Append)
             .required_unless_present_any([stdbuf_flags::OUTPUT, stdbuf_flags::ERROR]),
         Arg::new(stdbuf_flags::OUTPUT)
             .long(stdbuf_flags::OUTPUT)
             .short(stdbuf_flags::OUTPUT_SHORT)
             .help(t!("stdbuf.clap.output"))
             .value_name("MODE")
+            .action(ArgAction::Append)
             .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::ERROR]),
         Arg::new(stdbuf_flags::ERROR)
             .long(stdbuf_flags::ERROR)
             .short(stdbuf_flags::ERROR_SHORT)
             .help(t!("stdbuf.clap.error"))
             .value_name("MODE")
+            .action(ArgAction::Append)
             .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::OUTPUT]),
         Arg::new(stdbuf_flags::COMMAND)
             .action(ArgAction::Append)
@@ -784,6 +792,54 @@ mod tests {
             let result = app.try_get_matches_from(args);
             assert!(result.is_err());
         }
+    }
+
+    #[test]
+    fn test_repeated_output_option_uses_last_mode() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                "stdbuf",
+                "-o0",
+                "--output=L",
+                "/usr/bin/printenv",
+                "_STDBUF_O",
+            ])
+            .unwrap();
+
+        assert_eq!(
+            matches
+                .get_many::<String>(stdbuf_flags::OUTPUT)
+                .unwrap()
+                .next_back()
+                .map(String::as_str),
+            Some("L")
+        );
+        assert_eq!(
+            matches
+                .get_many::<String>(stdbuf_flags::COMMAND)
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["/usr/bin/printenv", "_STDBUF_O"]
+        );
+
+        let matches = ct_app()
+            .try_get_matches_from(["stdbuf", "--output=L", "-o0", "/usr/bin/true"])
+            .unwrap();
+        assert_eq!(
+            matches
+                .get_many::<String>(stdbuf_flags::OUTPUT)
+                .unwrap()
+                .next_back()
+                .map(String::as_str),
+            Some("0")
+        );
+
+        let matches = ct_app()
+            .try_get_matches_from(["stdbuf", "--output=invalid", "-oL", "/usr/bin/true"])
+            .unwrap();
+        let error = StdbufFlags::new(matches).err().unwrap();
+        assert!(error.to_string().contains("invalid mode"));
     }
 
     // 新增测试：测试多个缓冲区选项的组合

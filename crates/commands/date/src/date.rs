@@ -1438,6 +1438,10 @@ fn parse_date<S: AsRef<str> + Clone>(
         return Ok(dt.into());
     }
 
+    if let Some(dt) = parse_gnu_compact_time(input, ref_time) {
+        return Ok(dt);
+    }
+
     let today_str = ref_time.format("%Y-%m-%d").to_string();
     let input_with_date = format!("{today_str} {input}");
 
@@ -1470,6 +1474,35 @@ fn parse_date<S: AsRef<str> + Clone>(
         Ok(date) => Ok(date),
         Err(e) => Err((input.into(), e)),
     }
+}
+
+fn parse_gnu_compact_time(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<FixedOffset>> {
+    let input = input.trim();
+    if !(1..=4).contains(&input.len()) || !input.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+
+    let (hour_part, minute_part) = match input.len() {
+        1 | 2 => (input, "0"),
+        3 => input.split_at(1),
+        4 => input.split_at(2),
+        _ => return None,
+    };
+
+    let hour = hour_part.parse::<u32>().ok()?;
+    let minute = minute_part.parse::<u32>().ok()?;
+    let time = chrono::NaiveTime::from_hms_opt(hour, minute, 0)?;
+    let naive = reference_time.date_naive().and_time(time);
+
+    use chrono::TimeZone;
+    let local = match Local.from_local_datetime(&naive) {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => dt,
+        chrono::LocalResult::None => return None,
+    };
+    Some(local.with_timezone(local.offset()))
 }
 
 #[cfg(target_os = "linux")]
@@ -1572,6 +1605,22 @@ mod tests {
         let wide_nsec = format_using_strftime(&dt, "%99N").unwrap();
         assert_eq!(wide_nsec.len(), 99);
         assert!(wide_nsec.chars().all(|c| c == '0'));
+    }
+
+    #[test]
+    fn test_parse_gnu_compact_time_operand() {
+        let dt = parse_date("1").unwrap();
+        assert_eq!(dt.hour(), 1);
+        assert_eq!(dt.minute(), 0);
+        assert_eq!(dt.second(), 0);
+
+        let dt = parse_date("1234").unwrap();
+        assert_eq!(dt.hour(), 12);
+        assert_eq!(dt.minute(), 34);
+        assert_eq!(dt.second(), 0);
+
+        assert!(parse_date("090").is_err());
+        assert!(parse_date("2400").is_err());
     }
 
     mod tests_ct_app {

@@ -26,6 +26,51 @@ fn date_debug_for_ymd_date_reports_parse_trace() {
     assert!(stderr.contains("date: output format: ‘%F’"));
 }
 
+#[test]
+fn date_numeric_date_operand_is_parsed_as_today_time() {
+    for (input, expected_time) in [
+        ("1", "01:00:00"),
+        ("100", "01:00:00"),
+        ("1234", "12:34:00"),
+        ("2359", "23:59:00"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("TZ", "Asia/Shanghai")
+            .args(["date", "-d", input, "+%T"])
+            .output()
+            .expect("run syskits date -d compact time");
+
+        assert!(
+            output.status.success(),
+            "input {input}, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            format!("{expected_time}\n"),
+            "input {input}"
+        );
+    }
+}
+
+#[test]
+fn date_numeric_date_operand_rejects_invalid_compact_time() {
+    for input in ["090", "99", "12345", "2400"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("TZ", "Asia/Shanghai")
+            .args(["date", "-d", input, "+%T"])
+            .output()
+            .expect("run syskits date -d invalid compact time");
+
+        assert!(!output.status.success(), "input {input} should fail");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("invalid date"),
+            "input {input}, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn date_set_prints_target_time_even_when_clock_set_fails() {
@@ -49,6 +94,36 @@ fn date_set_prints_target_time_even_when_clock_set_fails() {
         "date -s should fail without permission to set CLOCK_REALTIME"
     );
     assert_eq!(output.stdout, b"2012-09-23_01:01:00_CST\n");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("cannot set date"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn date_set_numeric_operand_is_parsed_as_today_time_even_when_clock_set_fails() {
+    let output = Command::new("runuser")
+        .args([
+            "-u",
+            "nobody",
+            "--",
+            env!("CARGO_BIN_EXE_syskits"),
+            "date",
+            "-s",
+            "1",
+            "+%T",
+        ])
+        .env("TZ", "Asia/Shanghai")
+        .output()
+        .expect("run syskits date -s compact time as unprivileged user");
+
+    assert!(
+        !output.status.success(),
+        "date -s should fail without permission to set CLOCK_REALTIME"
+    );
+    assert_eq!(output.stdout, b"01:00:00\n");
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("cannot set date"),
         "stderr: {}",

@@ -95,6 +95,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .args(args)
 }
 
@@ -313,6 +314,21 @@ mod tests {
             let result = sync_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_main_repeated_file_data_with_file() {
+            let filename = "test_ct_main_repeated_file_data_with_file";
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join(filename);
+            let mut tmp_file = File::create(&file_path).unwrap();
+            writeln!(tmp_file, "sync-data").unwrap();
+
+            let file_name = file_path.to_str().unwrap();
+            let args = [ctcore::ct_util_name(), "-d", "--data", "-d", file_name];
+            let result = sync_main(args.iter().map(OsString::from));
+
+            assert!(result.is_ok());
+        }
     }
 
     #[cfg(test)]
@@ -435,6 +451,17 @@ mod tests {
             let result = command.try_get_matches_from(missing_args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_repeated_file_data() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-d", "--data", "-d", "file"];
+
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.get_flag(sync_flags::SYNC_DATA));
+            assert!(!matches.get_flag(sync_flags::SYNC_FILE_SYSTEM));
         }
 
         #[test]

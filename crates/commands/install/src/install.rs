@@ -1412,22 +1412,31 @@ impl CopyOffloadStatus {
     }
 }
 
-fn remove_existing_file(to: &Path) {
+fn remove_existing_file(to: &Path, verbose: bool) {
     // fs::copy fails if destination is a invalid symlink.
     // so lets just remove all existing files at destination before copy.
-    if let Err(e) = fs::remove_file(to) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            ct_show_error!(
-                "Failed to remove existing file {}. Error: {:?}",
-                to.display(),
-                e
-            );
+    match fs::remove_file(to) {
+        Ok(()) if verbose => println!("removed {}", to.quote()),
+        Ok(()) => {}
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                ct_show_error!(
+                    "Failed to remove existing file {}. Error: {:?}",
+                    to.display(),
+                    e
+                );
+            }
         }
     }
 }
 
-fn copy_file(from: &Path, to: &Path, debug: bool) -> CTResult<Option<CopyDebugInfo>> {
-    remove_existing_file(to);
+fn copy_file(
+    from: &Path,
+    to: &Path,
+    debug: bool,
+    verbose: bool,
+) -> CTResult<Option<CopyDebugInfo>> {
+    remove_existing_file(to, verbose);
 
     let copy_debug = if debug {
         copy_file_with_debug(from, to)
@@ -1839,7 +1848,7 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(to, b)?;
 
-    let copy_debug = copy_file(from, to, b.debug)?;
+    let copy_debug = copy_file(from, to, b.debug, b.verbose)?;
 
     if b.set_context {
         if let Some(ref ctx) = b.context {
@@ -1985,7 +1994,7 @@ mod tests {
         std::fs::write(&source, "test content").unwrap();
 
         // 测试复制
-        assert!(copy_file(&source, &dest, false).unwrap().is_none());
+        assert!(copy_file(&source, &dest, false, false).unwrap().is_none());
 
         assert!(dest.exists());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
@@ -1999,7 +2008,7 @@ mod tests {
 
         std::fs::write(&source, "test content").unwrap();
 
-        let debug = copy_file(&source, &dest, true).unwrap().unwrap();
+        let debug = copy_file(&source, &dest, true, false).unwrap().unwrap();
 
         assert!(dest.exists());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
@@ -2016,7 +2025,7 @@ mod tests {
 
         File::create(&source).unwrap().set_len(1024 * 1024).unwrap();
 
-        let debug = copy_file(&source, &dest, true).unwrap().unwrap();
+        let debug = copy_file(&source, &dest, true, false).unwrap().unwrap();
         let source_blocks = std::fs::metadata(&source).unwrap().blocks();
         let dest_blocks = std::fs::metadata(&dest).unwrap().blocks();
 

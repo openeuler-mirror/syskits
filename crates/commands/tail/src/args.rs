@@ -146,7 +146,7 @@ impl TailFilterMode {
                 Err(e) => {
                     return Err(CtSimpleError::new(
                         1,
-                        format!("invalid number of bytes: '{e}'"),
+                        format!("invalid number of bytes: {e}"),
                     ));
                 }
             }
@@ -802,6 +802,23 @@ mod tests {
             // 测试无效的数字输入
             let args = create_args(&["-n", "invalid"]);
             assert!(tail_parse_args(args).is_err());
+        }
+
+        #[test]
+        fn test_invalid_byte_count_messages_are_not_requoted() {
+            let cases = [
+                (&["-c", "l"][..], "invalid number of bytes: 'l'"),
+                (
+                    &["-c", "99999999999999999999"][..],
+                    "invalid number of bytes: '99999999999999999999': Value too large for defined data type",
+                ),
+                (&["-c", "--"][..], "invalid number of bytes: '-'"),
+            ];
+
+            for (args, expected) in cases {
+                let err = tail_parse_args(create_args(args)).unwrap_err();
+                assert_eq!(err.to_string(), expected);
+            }
         }
 
         #[test]

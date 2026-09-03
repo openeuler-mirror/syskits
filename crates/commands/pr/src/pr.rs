@@ -280,6 +280,10 @@ quick_error! {
             display("pr: {0}", msg)
         }
 
+        EncounteredErrorsNoHelp(msg: String) {
+            display("pr: {0}", msg)
+        }
+
         IsDirectory(path: String) {
             display("pr: {0}: Is a directory", path)
         }
@@ -1015,7 +1019,7 @@ fn parse_column_mode_options(
     while let Some(token) = tokens.next() {
         let parse_old_style = |unparsed_num: &str| {
             unparsed_num.parse::<usize>().map_err(|_e| {
-                PrError::EncounteredErrors(format!(
+                PrError::EncounteredErrorsNoHelp(format!(
                     "invalid number of columns: {}",
                     unparsed_num.quote()
                 ))
@@ -1055,7 +1059,7 @@ fn parse_column_mode_options(
     let is_across_mode = arg_matches.get_flag(pr_flags::PR_ACROSS);
 
     if let Some(0) = column_option_value {
-        return Err(PrError::EncounteredErrors(
+        return Err(PrError::EncounteredErrorsNoHelp(
             "invalid number of columns: '0'".to_string(),
         ));
     }
@@ -1169,7 +1173,7 @@ fn parse_start_end_page(
     let invalid_pages_map = |i: String| {
         let unparsed_value = arg_matches.get_one::<String>(pr_flags::PR_PAGES).unwrap();
         i.parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrors(format!(
+            PrError::EncounteredErrorsNoHelp(format!(
                 "invalid --pages argument {}",
                 unparsed_value.quote()
             ))
@@ -1203,7 +1207,7 @@ fn parse_start_end_page(
 
     if let Some(end_page) = end_page {
         if start_page > end_page {
-            return Err(PrError::EncounteredErrors(format!(
+            return Err(PrError::EncounteredErrorsNoHelp(format!(
                 "invalid --pages argument '{start_page}:{end_page}'"
             )));
         }
@@ -5821,6 +5825,52 @@ mod tests {
         }
 
         #[test]
+        fn test_pr_argument_errors_that_do_not_show_help() {
+            let no_help_cases = [
+                (
+                    &[
+                        "pr",
+                        "--date-format=-- Date/Time --",
+                        "-h",
+                        "x",
+                        "-0",
+                        "/dev/null",
+                    ][..],
+                    "pr: invalid number of columns: '0'\n",
+                ),
+                (
+                    &[
+                        "pr",
+                        "--date-format=-- Date/Time --",
+                        "-h",
+                        "x",
+                        "--pages=1:-1",
+                        "/dev/null",
+                    ][..],
+                    "pr: invalid --pages argument '1:-1'\n",
+                ),
+            ];
+
+            for (args, expected_stderr) in no_help_cases {
+                let semantic = pr_native_semantic(strings_to_os_strings(args).into_iter()).unwrap();
+                assert_eq!(semantic.exit_code, 1);
+                assert_eq!(semantic.stderr_text, expected_stderr);
+            }
+
+            let semantic = pr_native_semantic(
+                strings_to_os_strings(&["pr", "-n=xxx", "/dev/null"]).into_iter(),
+            )
+            .unwrap();
+            assert_eq!(semantic.exit_code, 1);
+            assert!(semantic.stderr_text.contains("Try '"));
+            assert!(
+                semantic
+                    .stderr_text
+                    .contains(" --help' for more information.")
+            );
+        }
+
+        #[test]
         fn test_pr_main_with_nonexistent_file() {
             // 构建带不存在文件的参数
             let args = strings_to_os_strings(&["pr", "nonexistent_file.txt"]);
@@ -6107,10 +6157,10 @@ mod tests {
             // 起始页大于结束页，应该返回错误
             assert!(result.is_err());
             match result {
-                Err(PrError::EncounteredErrors(msg)) => {
+                Err(PrError::EncounteredErrorsNoHelp(msg)) => {
                     assert!(msg.contains("invalid --pages argument '5:3'"));
                 }
-                _ => panic!("Expected PrError::EncounteredErrors, got a different error"),
+                _ => panic!("Expected PrError::EncounteredErrorsNoHelp, got a different error"),
             }
         }
 
@@ -7061,10 +7111,10 @@ mod tests {
             assert!(result.is_err());
             let err = result.unwrap_err();
             match err {
-                PrError::EncounteredErrors(msg) => {
+                PrError::EncounteredErrorsNoHelp(msg) => {
                     assert!(msg.contains("invalid --pages argument"));
                 }
-                _ => panic!("Expected PrError::EncounteredErrors"),
+                _ => panic!("Expected PrError::EncounteredErrorsNoHelp"),
             }
 
             // 测试无效的 --pages 参数范围 (起始页大于结束页)
@@ -7074,10 +7124,10 @@ mod tests {
             assert!(result.is_err());
             let err = result.unwrap_err();
             match err {
-                PrError::EncounteredErrors(msg) => {
+                PrError::EncounteredErrorsNoHelp(msg) => {
                     assert!(msg.contains("invalid --pages argument '10:5'"));
                 }
-                _ => panic!("Expected PrError::EncounteredErrors"),
+                _ => panic!("Expected PrError::EncounteredErrorsNoHelp"),
             }
 
             // 测试 --pages 参数优先级高于 +page 语法

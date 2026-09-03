@@ -39,6 +39,7 @@ use sys_locale::get_locale;
 use std::{collections::HashSet, io::IsTerminal};
 
 use clap::builder::{NonEmptyStringValueParser, ValueParser};
+use clap::error::{ContextKind, ContextValue, ErrorKind as ClapErrorKind};
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -1654,7 +1655,10 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
     rust_i18n::set_locale(&lang_code);
     let command = ct_app();
 
-    let matches = command.try_get_matches_from(args).with_exit_code(2)?;
+    let matches = command.try_get_matches_from(args).map_err(|err| {
+        let code = if is_invalid_classify_arg(&err) { 1 } else { 2 };
+        err.with_exit_code(code)
+    })?;
 
     let config = LsConfig::from(&matches)?;
 
@@ -1663,6 +1667,17 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
     list(paths_from_args, &config)
+}
+
+fn is_invalid_classify_arg(err: &clap::Error) -> bool {
+    if err.kind() != ClapErrorKind::InvalidValue {
+        return false;
+    }
+
+    matches!(
+        err.get(ContextKind::InvalidArg),
+        Some(ContextValue::String(arg)) if arg.starts_with("--classify")
+    )
 }
 
 fn parse_quoting_style(s: &str) -> Result<String, String> {
@@ -4566,6 +4581,30 @@ mod tests {
             Ok(_) => panic!("invalid --time-style should fail in long format"),
             Err(err) => err,
         };
+
+        assert_eq!(err.code(), 2);
+    }
+
+    #[test]
+    fn invalid_classify_value_exits_with_failure() {
+        let err = ls_main(
+            [ctcore::ct_util_name(), "--classify=invalid"]
+                .into_iter()
+                .map(OsString::from),
+        )
+        .expect_err("invalid --classify should fail");
+
+        assert_eq!(err.code(), 1);
+    }
+
+    #[test]
+    fn other_parse_errors_still_exit_with_usage_error() {
+        let err = ls_main(
+            [ctcore::ct_util_name(), "--definitely-invalid"]
+                .into_iter()
+                .map(OsString::from),
+        )
+        .expect_err("unknown option should fail");
 
         assert_eq!(err.code(), 2);
     }

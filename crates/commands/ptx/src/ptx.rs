@@ -30,7 +30,6 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use regex::Regex;
-use std::cmp;
 use std::collections::{BTreeSet, HashSet};
 use std::error::Error;
 use std::ffi::OsString;
@@ -58,6 +57,7 @@ Report any translation bugs to <https://translationproject.org/team/>\nFull docu
 or available locally via: info '(coreutils) ptx invocation'\n";
 const PTX_VERSION_TEXT: &str = "ptx (GNU coreutils) 9.4\nCopyright (C) 2023 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n
 This is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\nWritten by F. Pinard.\n";
+const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 
 #[derive(Debug)]
 enum OutFormat {
@@ -133,7 +133,7 @@ impl Default for PtxConfig {
             is_ignore_case: false,
             macro_name: "xx".to_owned(),
             trunc_str: "/".to_owned(),
-            context_regex: "\\w+".to_owned(),
+            context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
             line_width: 72,
             gap_size: 3,
         }
@@ -253,7 +253,7 @@ impl WordFilter {
                             .collect::<String>()
                     )
                 } else if config.is_gnu_ext {
-                    "\\w+".to_owned()
+                    "[A-Za-z]+".to_owned()
                 } else {
                     "[^ \t\n]+".to_owned()
                 }
@@ -276,7 +276,7 @@ impl Default for WordFilter {
             is_ignore_specified: false,
             only_set: HashSet::new(),
             ignore_set: HashSet::new(),
-            word_regex: r"\w+".to_string(),
+            word_regex: "[A-Za-z]+".to_string(),
         }
     }
 }
@@ -296,6 +296,22 @@ struct WordRef {
     position: usize,
     /// 单词在行中的结束位置
     position_end: usize,
+    /// 单词在完整文件文本中的起始位置
+    global_position: usize,
+    /// 单词在完整文件文本中的结束位置
+    global_position_end: usize,
+    /// 当前上下文在完整文件文本中的起始位置
+    context_start: usize,
+    /// 当前上下文在完整文件文本中的结束位置
+    context_end: usize,
+    /// 单词在完整文件字符数组中的起始位置
+    global_char_position: usize,
+    /// 单词在完整文件字符数组中的结束位置
+    global_char_position_end: usize,
+    /// 当前上下文在完整文件字符数组中的起始位置
+    context_char_start: usize,
+    /// 当前上下文在完整文件字符数组中的结束位置
+    context_char_end: usize,
     file_index: usize,
 }
 
@@ -412,6 +428,12 @@ fn compile_regex_lossy(pattern: &str) -> Regex {
 struct FileContent {
     /// 文件名 (从 Map 键移入内部)
     filename: String,
+    /// 文件完整文本，物理行之间保留 '\n'，用于 GNU 默认跨行上下文处理。
+    text: String,
+    chars_text: Vec<char>,
+    byte_to_char: Vec<usize>,
+    /// 每个物理行在完整文本中的起始字节偏移。
+    line_starts: Vec<usize>,
     /// 文件的所有行
     lines: Vec<String>,
     /// 每行的字符数组表示，用于快速索引
@@ -421,6 +443,47 @@ struct FileContent {
 }
 
 type FileMap = Vec<FileContent>;
+
+fn build_byte_to_char_map(text: &str) -> Vec<usize> {
+    let mut map = vec![0; text.len() + 1];
+    let mut char_index = 0usize;
+    for (byte_index, ch) in text.char_indices() {
+        for slot in &mut map[byte_index..byte_index + ch.len_utf8()] {
+            *slot = char_index;
+        }
+        char_index += 1;
+        map[byte_index + ch.len_utf8()] = char_index;
+    }
+    map[text.len()] = char_index;
+    map
+}
+
+fn line_index_for_offset(line_starts: &[usize], offset: usize) -> usize {
+    match line_starts.binary_search(&offset) {
+        Ok(index) => index,
+        Err(0) => 0,
+        Err(index) => index - 1,
+    }
+}
+
+fn next_context_end(context_reg: &Regex, text: &str, start: usize) -> usize {
+    match context_reg.find_at(text, start) {
+        Some(m) if m.end() > start => m.end(),
+        _ => text.len(),
+    }
+}
+
+fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
+    let mut trimmed = end;
+    while trimmed > start {
+        let prefix = &text[start..trimmed];
+        match prefix.chars().next_back() {
+            Some(ch) if ch.is_whitespace() => trimmed -= ch.len_utf8(),
+            _ => break,
+        }
+    }
+    trimmed
+}
 
 /// 从输入文件读取内容并构建文件映射
 ///
@@ -452,12 +515,27 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
         });
 
         let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+        let mut text = String::new();
+        let mut line_starts = Vec::with_capacity(lines.len());
+        for (index, line) in lines.iter().enumerate() {
+            if index > 0 {
+                text.push('\n');
+            }
+            line_starts.push(text.len());
+            text.push_str(line);
+        }
+        let chars_text: Vec<char> = text.chars().collect();
+        let byte_to_char = build_byte_to_char_map(&text);
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
 
         let size = lines.len();
         // 直接 Push 到数组尾部
         file_map.push(FileContent {
             filename: filename.to_owned(),
+            text,
+            chars_text,
+            byte_to_char,
+            line_starts,
             lines,
             chars_lines,
             offset,
@@ -485,23 +563,26 @@ fn ptx_create_word_set(
     let ref_reg = compile_regex_lossy(&config.context_regex);
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
 
-    // 使用 enumerate 获取文件索引
     for (file_idx, content) in file_map.iter().enumerate() {
-        let mut count: usize = 0;
-        let offs = content.offset;
-        for line in &content.lines {
-            let (ref_beg, ref_end) = match ref_reg.find(line) {
-                Some(x) => (x.start(), x.end()),
-                None => (0, 0),
+        let mut context_start = 0usize;
+        while context_start < content.text.len() {
+            let context_end_raw = next_context_end(&ref_reg, &content.text, context_start);
+            let context_end = trim_context_end(&content.text, context_start, context_end_raw);
+            let context_text = &content.text[context_start..context_end];
+
+            let (ref_beg, ref_end) = match ref_reg.find(context_text) {
+                Some(x) => (context_start + x.start(), context_start + x.end()),
+                None => (context_start, context_start),
             };
 
-            for mat in reg.find_iter(line) {
-                let (beg, end) = (mat.start(), mat.end());
-                if config.is_input_ref && ((beg, end) == (ref_beg, ref_end)) {
+            for mat in reg.find_iter(context_text) {
+                let (global_beg, global_end) =
+                    (context_start + mat.start(), context_start + mat.end());
+                if config.is_input_ref && ((global_beg, global_end) == (ref_beg, ref_end)) {
                     continue;
                 }
 
-                let mut word = line[beg..end].to_owned();
+                let mut word = content.text[global_beg..global_end].to_owned();
                 if filter.is_only_specified && !filter.only_set.contains(&word) {
                     continue;
                 }
@@ -512,16 +593,34 @@ fn ptx_create_word_set(
                     word = word.to_lowercase();
                 }
 
+                let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
+                let line_start = content.line_starts[local_line_nr];
+                let global_char_position = content.byte_to_char[global_beg];
+                let global_char_position_end = content.byte_to_char[global_end];
+                let context_char_start = content.byte_to_char[context_start];
+                let context_char_end = content.byte_to_char[context_end];
                 word_set.insert(WordRef {
                     word,
-                    file_index: file_idx, // 记录索引
-                    global_line_nr: offs + count,
-                    local_line_nr: count,
-                    position: beg,
-                    position_end: end,
+                    file_index: file_idx,
+                    global_line_nr: content.offset + local_line_nr,
+                    local_line_nr,
+                    position: global_beg - line_start,
+                    position_end: global_end - line_start,
+                    global_position: global_beg,
+                    global_position_end: global_end,
+                    context_start,
+                    context_end,
+                    global_char_position,
+                    global_char_position_end,
+                    context_char_start,
+                    context_char_end,
                 });
             }
-            count += 1;
+
+            if context_end_raw <= context_start {
+                break;
+            }
+            context_start = context_end_raw;
         }
     }
     word_set
@@ -603,58 +702,460 @@ fn ptx_format_name(format: &OutFormat) -> &'static str {
     }
 }
 
-fn assert_str_integrity(s: &[char], beg: usize, end: usize) {
-    assert!(beg <= end);
-    assert!(end <= s.len());
+#[derive(Debug, Clone, Default)]
+struct PtxOutputFields {
+    tail: String,
+    before: String,
+    keyafter: String,
+    head: String,
+    keyword_len: usize,
+    tail_truncation: bool,
+    before_truncation: bool,
+    keyafter_truncation: bool,
+    head_truncation: bool,
 }
 
-/// 向左调整位置以避免在单词中间截断
-///
-/// # 参数
-/// * `text` - 要处理的字符数组
-/// * `begin` - 起始位置
-/// * `end` - 结束位置
-///
-/// # 返回值
-/// 返回调整后的起始位置，确保不会在单词中间截断
-fn trim_broken_word_left(text: &[char], begin: usize, end: usize) -> usize {
-    // 处理边界情况
-    if begin == end || begin == 0 || text[begin].is_whitespace() || text[begin - 1].is_whitespace()
+fn ptx_chars_to_string(chars: &[char], start: usize, end: usize) -> String {
+    if start >= end || start >= chars.len() {
+        return String::new();
+    }
+    chars[start..end.min(chars.len())].iter().collect()
+}
+
+fn ptx_skip_white(chars: &[char], mut cursor: usize, limit: usize) -> usize {
+    while cursor < limit && chars[cursor].is_whitespace() {
+        cursor += 1;
+    }
+    cursor
+}
+
+fn ptx_skip_white_backwards(chars: &[char], mut cursor: usize, start: usize) -> usize {
+    while cursor > start && chars[cursor - 1].is_whitespace() {
+        cursor -= 1;
+    }
+    cursor
+}
+
+fn ptx_is_default_word_char(config: &PtxConfig, c: char) -> bool {
+    if config.is_gnu_ext {
+        c.is_ascii_alphabetic()
+    } else {
+        !c.is_whitespace()
+    }
+}
+
+fn ptx_skip_something(chars: &[char], cursor: usize, limit: usize, config: &PtxConfig) -> usize {
+    if cursor >= limit {
+        return cursor;
+    }
+
+    let mut next = cursor;
+    if ptx_is_default_word_char(config, chars[next]) {
+        while next < limit && ptx_is_default_word_char(config, chars[next]) {
+            next += 1;
+        }
+    } else {
+        next += 1;
+    }
+    next
+}
+
+fn ptx_field_dimensions(config: &PtxConfig, line_width: usize) -> (usize, usize, usize, usize) {
+    let half_line_width = line_width / 2;
+    let trunc_len = if config.trunc_str.is_empty() {
+        0
+    } else {
+        config.trunc_str.chars().count()
+    };
+
+    let mut before_max_width = half_line_width.saturating_sub(config.gap_size);
+    let mut keyafter_max_width = half_line_width;
+    if trunc_len > 0 {
+        if config.is_gnu_ext {
+            before_max_width = before_max_width.saturating_sub(2 * trunc_len);
+            keyafter_max_width = keyafter_max_width.saturating_sub(2 * trunc_len);
+        } else {
+            keyafter_max_width = keyafter_max_width.saturating_sub(2 * trunc_len + 1);
+        }
+    }
+
+    (
+        half_line_width,
+        before_max_width,
+        keyafter_max_width,
+        trunc_len,
+    )
+}
+
+fn ptx_content_maximum_word_length(content: &FileContent, config: &PtxConfig) -> usize {
+    ptx_maximum_word_length_in_chars(&content.chars_text, config)
+}
+
+fn ptx_content_maximum_word_length_bytes(content: &FileContent, config: &PtxConfig) -> usize {
+    ptx_maximum_word_length_in_bytes(content.text.as_bytes(), config)
+}
+
+fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize {
+    let mut max_len = 0usize;
+    let mut cursor = 0usize;
+    while cursor < chars.len() {
+        if ptx_is_default_word_char(config, chars[cursor]) {
+            let start = cursor;
+            while cursor < chars.len() && ptx_is_default_word_char(config, chars[cursor]) {
+                cursor += 1;
+            }
+            max_len = max_len.max(cursor - start);
+        } else {
+            cursor += 1;
+        }
+    }
+    max_len
+}
+
+fn ptx_maximum_word_length_in_bytes(bytes: &[u8], config: &PtxConfig) -> usize {
+    let mut max_len = 0usize;
+    let mut cursor = 0usize;
+    while cursor < bytes.len() {
+        if ptx_is_default_word_byte(config, bytes[cursor]) {
+            let start = cursor;
+            while cursor < bytes.len() && ptx_is_default_word_byte(config, bytes[cursor]) {
+                cursor += 1;
+            }
+            max_len = max_len.max(cursor - start);
+        } else {
+            cursor += 1;
+        }
+    }
+    max_len
+}
+
+fn ptx_define_output_fields_for_width(
+    all_before: &[char],
+    keyword: &str,
+    all_after: &[char],
+    config: &PtxConfig,
+    line_width: usize,
+    maximum_word_length: usize,
+) -> PtxOutputFields {
+    let (half_line_width, before_max_width, keyafter_max_width, _) =
+        ptx_field_dimensions(config, line_width);
+    let truncation_enabled = !config.trunc_str.is_empty();
+
+    let mut chars =
+        Vec::with_capacity(all_before.len() + keyword.chars().count() + all_after.len());
+    chars.extend_from_slice(all_before);
+    let keyword_chars: Vec<char> = keyword.chars().collect();
+    chars.extend(keyword_chars.iter());
+    chars.extend_from_slice(all_after);
+
+    let context_start = 0usize;
+    let context_end = chars.len();
+    let key_start = all_before.len();
+    let key_end = key_start + keyword_chars.len();
+    let left_context_start = context_start;
+    let right_context_end = context_end;
+    let left_field_start = if key_start.saturating_sub(left_context_start)
+        > half_line_width.saturating_add(maximum_word_length)
     {
-        return begin;
+        let jump = half_line_width.saturating_add(maximum_word_length);
+        let mut start = key_start.saturating_sub(jump);
+        start = ptx_skip_something(&chars, start, key_start, config);
+        start
+    } else {
+        left_context_start
+    };
+
+    let keyafter_start = key_start;
+    let mut keyafter_end = key_end;
+    let mut cursor = keyafter_end;
+    let keyafter_limit = keyafter_start.saturating_add(keyafter_max_width);
+    while cursor < right_context_end && cursor <= keyafter_limit {
+        keyafter_end = cursor;
+        cursor = ptx_skip_something(&chars, cursor, right_context_end, config);
+    }
+    if cursor <= keyafter_limit {
+        keyafter_end = cursor;
+    }
+    let mut keyafter_truncation = truncation_enabled && keyafter_end < right_context_end;
+    keyafter_end = ptx_skip_white_backwards(&chars, keyafter_end, keyafter_start);
+
+    let mut before_start = left_field_start;
+    let mut before_end = keyafter_start;
+    before_end = ptx_skip_white_backwards(&chars, before_end, before_start);
+    while before_start.saturating_add(before_max_width) < before_end {
+        let next = ptx_skip_something(&chars, before_start, before_end, config);
+        if next <= before_start {
+            break;
+        }
+        before_start = next;
     }
 
-    // 如果起始位置在单词中间，向左移动到单词开始或空格
-    let mut pos = begin;
-    while pos < end && !text[pos].is_whitespace() {
-        pos += 1;
+    let mut before_truncation = if truncation_enabled {
+        ptx_skip_white_backwards(&chars, before_start, context_start) > left_context_start
+    } else {
+        false
+    };
+    before_start = ptx_skip_white(&chars, before_start, context_end);
+
+    let before_len = before_end.saturating_sub(before_start);
+    let tail_max_width = before_max_width
+        .saturating_sub(before_len)
+        .saturating_sub(config.gap_size);
+    let (tail_start, tail_end, tail_truncation) = if tail_max_width > 0 {
+        let tail_start = ptx_skip_white(&chars, keyafter_end, context_end);
+        let mut tail_end = tail_start;
+        let mut cursor = tail_end;
+        let tail_limit = tail_start.saturating_add(tail_max_width);
+        while cursor < right_context_end && cursor < tail_limit {
+            tail_end = cursor;
+            cursor = ptx_skip_something(&chars, cursor, right_context_end, config);
+        }
+        if cursor < tail_limit {
+            tail_end = cursor;
+        }
+
+        let mut tail_truncation = false;
+        if tail_end > tail_start {
+            keyafter_truncation = false;
+            tail_truncation = truncation_enabled && tail_end < right_context_end;
+        }
+        tail_end = ptx_skip_white_backwards(&chars, tail_end, tail_start);
+        (tail_start, tail_end, tail_truncation)
+    } else {
+        (0, 0, false)
+    };
+
+    let keyafter_len = keyafter_end.saturating_sub(keyafter_start);
+    let head_max_width = keyafter_max_width
+        .saturating_sub(keyafter_len)
+        .saturating_sub(config.gap_size);
+    let (head_start, head_end, head_truncation) = if head_max_width > 0 {
+        let head_end = ptx_skip_white_backwards(&chars, before_start, context_start);
+        let mut head_start = left_field_start;
+        while head_start.saturating_add(head_max_width) < head_end {
+            let next = ptx_skip_something(&chars, head_start, head_end, config);
+            if next <= head_start {
+                break;
+            }
+            head_start = next;
+        }
+
+        let mut head_truncation = false;
+        if head_end > head_start {
+            before_truncation = false;
+            head_truncation = truncation_enabled && head_start > left_context_start;
+        }
+        head_start = ptx_skip_white(&chars, head_start, head_end);
+        (head_start, head_end, head_truncation)
+    } else {
+        (0, 0, false)
+    };
+
+    PtxOutputFields {
+        tail: ptx_chars_to_string(&chars, tail_start, tail_end),
+        before: ptx_chars_to_string(&chars, before_start, before_end),
+        keyafter: ptx_chars_to_string(&chars, keyafter_start, keyafter_end),
+        head: ptx_chars_to_string(&chars, head_start, head_end),
+        keyword_len: keyword_chars.len(),
+        tail_truncation,
+        before_truncation,
+        keyafter_truncation,
+        head_truncation,
     }
-    pos
 }
 
-fn trim_broken_word_right(s: &[char], beg: usize, end: usize) -> usize {
-    assert_str_integrity(s, beg, end);
-    if beg == end || end == s.len() || s[end - 1].is_whitespace() || s[end].is_whitespace() {
-        return end;
-    }
-    let mut e = end;
-    while beg < e && !s[e - 1].is_whitespace() {
-        e -= 1;
-    }
-    e
+#[derive(Debug, Clone, Default)]
+struct PtxOutputFieldsBytes {
+    tail: Vec<u8>,
+    before: Vec<u8>,
+    keyafter: Vec<u8>,
+    head: Vec<u8>,
+    tail_truncation: bool,
+    before_truncation: bool,
+    keyafter_truncation: bool,
+    head_truncation: bool,
 }
 
-fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
-    assert_str_integrity(s, beg, end);
-    let mut b = beg;
-    let mut e = end;
-    while b < e && s[b].is_whitespace() {
-        b += 1;
+fn ptx_is_default_word_byte(config: &PtxConfig, byte: u8) -> bool {
+    if config.is_gnu_ext {
+        byte.is_ascii_alphabetic()
+    } else {
+        !byte.is_ascii_whitespace()
     }
-    while b < e && s[e - 1].is_whitespace() {
-        e -= 1;
+}
+
+fn ptx_skip_white_bytes(bytes: &[u8], mut cursor: usize, limit: usize) -> usize {
+    while cursor < limit && bytes[cursor].is_ascii_whitespace() {
+        cursor += 1;
     }
-    (b, e)
+    cursor
+}
+
+fn ptx_skip_white_backwards_bytes(bytes: &[u8], mut cursor: usize, start: usize) -> usize {
+    while cursor > start && bytes[cursor - 1].is_ascii_whitespace() {
+        cursor -= 1;
+    }
+    cursor
+}
+
+fn ptx_skip_something_bytes(
+    bytes: &[u8],
+    cursor: usize,
+    limit: usize,
+    config: &PtxConfig,
+) -> usize {
+    if cursor >= limit {
+        return cursor;
+    }
+
+    let mut next = cursor;
+    if ptx_is_default_word_byte(config, bytes[next]) {
+        while next < limit && ptx_is_default_word_byte(config, bytes[next]) {
+            next += 1;
+        }
+    } else {
+        next += 1;
+    }
+    next
+}
+
+fn ptx_bytes_to_vec(bytes: &[u8], start: usize, end: usize) -> Vec<u8> {
+    if start >= end || start >= bytes.len() {
+        return Vec::new();
+    }
+    bytes[start..end.min(bytes.len())].to_vec()
+}
+
+fn ptx_define_output_fields_bytes_for_width(
+    all_before: &[u8],
+    keyword: &[u8],
+    all_after: &[u8],
+    config: &PtxConfig,
+    line_width: usize,
+    maximum_word_length: usize,
+) -> PtxOutputFieldsBytes {
+    let (half_line_width, before_max_width, keyafter_max_width, _) =
+        ptx_field_dimensions(config, line_width);
+    let truncation_enabled = !config.trunc_str.is_empty();
+
+    let mut bytes = Vec::with_capacity(all_before.len() + keyword.len() + all_after.len());
+    bytes.extend_from_slice(all_before);
+    bytes.extend_from_slice(keyword);
+    bytes.extend_from_slice(all_after);
+
+    let context_start = 0usize;
+    let context_end = bytes.len();
+    let key_start = all_before.len();
+    let key_end = key_start + keyword.len();
+    let left_context_start = context_start;
+    let right_context_end = context_end;
+    let left_field_start = if key_start.saturating_sub(left_context_start)
+        > half_line_width.saturating_add(maximum_word_length)
+    {
+        let jump = half_line_width.saturating_add(maximum_word_length);
+        let mut start = key_start.saturating_sub(jump);
+        start = ptx_skip_something_bytes(&bytes, start, key_start, config);
+        start
+    } else {
+        left_context_start
+    };
+
+    let keyafter_start = key_start;
+    let mut keyafter_end = key_end;
+    let mut cursor = keyafter_end;
+    let keyafter_limit = keyafter_start.saturating_add(keyafter_max_width);
+    while cursor < right_context_end && cursor <= keyafter_limit {
+        keyafter_end = cursor;
+        cursor = ptx_skip_something_bytes(&bytes, cursor, right_context_end, config);
+    }
+    if cursor <= keyafter_limit {
+        keyafter_end = cursor;
+    }
+    let mut keyafter_truncation = truncation_enabled && keyafter_end < right_context_end;
+    keyafter_end = ptx_skip_white_backwards_bytes(&bytes, keyafter_end, keyafter_start);
+
+    let mut before_start = left_field_start;
+    let mut before_end = keyafter_start;
+    before_end = ptx_skip_white_backwards_bytes(&bytes, before_end, before_start);
+    while before_start.saturating_add(before_max_width) < before_end {
+        let next = ptx_skip_something_bytes(&bytes, before_start, before_end, config);
+        if next <= before_start {
+            break;
+        }
+        before_start = next;
+    }
+
+    let mut before_truncation = if truncation_enabled {
+        ptx_skip_white_backwards_bytes(&bytes, before_start, context_start) > left_context_start
+    } else {
+        false
+    };
+    before_start = ptx_skip_white_bytes(&bytes, before_start, context_end);
+
+    let before_len = before_end.saturating_sub(before_start);
+    let tail_max_width = before_max_width
+        .saturating_sub(before_len)
+        .saturating_sub(config.gap_size);
+    let (tail_start, tail_end, tail_truncation) = if tail_max_width > 0 {
+        let tail_start = ptx_skip_white_bytes(&bytes, keyafter_end, context_end);
+        let mut tail_end = tail_start;
+        let mut cursor = tail_end;
+        let tail_limit = tail_start.saturating_add(tail_max_width);
+        while cursor < right_context_end && cursor < tail_limit {
+            tail_end = cursor;
+            cursor = ptx_skip_something_bytes(&bytes, cursor, right_context_end, config);
+        }
+        if cursor < tail_limit {
+            tail_end = cursor;
+        }
+
+        let mut tail_truncation = false;
+        if tail_end > tail_start {
+            keyafter_truncation = false;
+            tail_truncation = truncation_enabled && tail_end < right_context_end;
+        }
+        tail_end = ptx_skip_white_backwards_bytes(&bytes, tail_end, tail_start);
+        (tail_start, tail_end, tail_truncation)
+    } else {
+        (0, 0, false)
+    };
+
+    let keyafter_len = keyafter_end.saturating_sub(keyafter_start);
+    let head_max_width = keyafter_max_width
+        .saturating_sub(keyafter_len)
+        .saturating_sub(config.gap_size);
+    let (head_start, head_end, head_truncation) = if head_max_width > 0 {
+        let head_end = ptx_skip_white_backwards_bytes(&bytes, before_start, context_start);
+        let mut head_start = left_field_start;
+        while head_start.saturating_add(head_max_width) < head_end {
+            let next = ptx_skip_something_bytes(&bytes, head_start, head_end, config);
+            if next <= head_start {
+                break;
+            }
+            head_start = next;
+        }
+
+        let mut head_truncation = false;
+        if head_end > head_start {
+            before_truncation = false;
+            head_truncation = truncation_enabled && head_start > left_context_start;
+        }
+        head_start = ptx_skip_white_bytes(&bytes, head_start, head_end);
+        (head_start, head_end, head_truncation)
+    } else {
+        (0, 0, false)
+    };
+
+    PtxOutputFieldsBytes {
+        tail: ptx_bytes_to_vec(&bytes, tail_start, tail_end),
+        before: ptx_bytes_to_vec(&bytes, before_start, before_end),
+        keyafter: ptx_bytes_to_vec(&bytes, keyafter_start, keyafter_end),
+        head: ptx_bytes_to_vec(&bytes, head_start, head_end),
+        tail_truncation,
+        before_truncation,
+        keyafter_truncation,
+        head_truncation,
+    }
 }
 
 /// 获取格式化的输出文本块
@@ -678,126 +1179,46 @@ fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
 ///
 /// # 返回值
 /// 返回一个元组 (tail, before, after, head)，每个部分都是格式化后的字符串
-fn ptx_get_output_chunks(
+fn ptx_get_output_chunks_for_width_with_max(
     all_before: &[char],
     keyword: &str,
     all_after: &[char],
     config: &PtxConfig,
+    line_width: usize,
+    maximum_word_length: usize,
 ) -> (String, String, String, String) {
-    // 1. 计算基础尺寸
-    let half_line_size = config.line_width / 2;
-    let trunc_len = if config.trunc_str.is_empty() {
-        0
-    } else {
-        config.trunc_str.len()
-    };
-
-    // 2. 计算最大允许尺寸（对齐 coreutils fix_output_parameters 逻辑）
-    let mut max_before_size = half_line_size.saturating_sub(config.gap_size);
-    let mut max_keyafter_size = half_line_size;
-    if trunc_len > 0 {
-        if config.is_gnu_ext {
-            max_before_size = max_before_size.saturating_sub(2 * trunc_len);
-            max_keyafter_size = max_keyafter_size.saturating_sub(2 * trunc_len);
-        } else {
-            max_keyafter_size = max_keyafter_size.saturating_sub(2 * trunc_len + 1);
-        }
-    }
-    let max_after_size = max_keyafter_size.saturating_sub(keyword.len());
-
-    // 3. 预分配字符串缓冲区
-    let mut head = String::with_capacity(half_line_size);
-    let mut before = String::with_capacity(half_line_size);
-    let mut after = String::with_capacity(half_line_size);
-    let mut tail = String::with_capacity(half_line_size);
-
-    // 4. 处理 before 块
-    // 4.1 找到 before 块的结束位置（去除尾部空白）
-    let (_, before_end) = trim_idx(all_before, 0, all_before.len());
-    // 4.2 计算 before 块的起始位置
-    let before_beg = cmp::max(before_end as isize - max_before_size as isize, 0) as usize;
-    // 4.3 避免在单词中间截断
-    let before_beg = trim_broken_word_left(all_before, before_beg, before_end);
-    // 4.4 去除首尾空白
-    let (before_beg, before_end) = trim_idx(all_before, before_beg, before_end);
-    // 4.5 提取 before 文本
-    let before_str: String = all_before[before_beg..before_end].iter().collect();
-    before.push_str(&before_str);
-    if before.is_empty() && !all_before.is_empty() && all_before.iter().all(|c| c.is_whitespace()) {
-        // Keep one spacer for whitespace-only left context, matching coreutils alignment.
-        before.push(' ');
-    }
-
-    // 5. 处理 after 块
-    // 5.1 计算 after 块的结束位置
-    let after_end = cmp::min(max_after_size, all_after.len());
-    // 5.2 避免在单词中间截断
-    let after_end = trim_broken_word_right(all_after, 0, after_end);
-    // 5.3 去除首尾空白
-    let (_, after_end) = trim_idx(all_after, 0, after_end);
-    // 5.4 提取 after 文本
-    let after_str: String = all_after[0..after_end].iter().collect();
-    after.push_str(&after_str);
-
-    // 6. 处理 tail 块
-    // 6.1 计算 tail 块的最大尺寸
-    let max_tail_size = cmp::max(
-        max_before_size as isize - before.len() as isize - config.gap_size as isize,
-        0,
-    ) as usize;
-    // 6.2 找到 tail 块的起始位置
-    let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
-    // 6.3 计算 tail 块的结束位置
-    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size);
-    let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
-    // 6.4 去除首尾空白
-    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
-    // 6.5 提取 tail 文本
-    let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
-    tail.push_str(&tail_str);
-
-    // 7. 处理 head 块
-    // 7.1 计算 head 块的最大尺寸
-    let max_head_size = cmp::max(
-        max_after_size as isize - after.len() as isize - config.gap_size as isize,
-        0,
-    ) as usize;
-    // 7.2 找到 head 块的结束位置
-    let (_, head_end) = trim_idx(all_before, 0, before_beg);
-    // 7.3 计算 head 块的起始位置
-    let head_beg = cmp::max(head_end as isize - max_head_size as isize, 0) as usize;
-    let head_beg = trim_broken_word_left(all_before, head_beg, head_end);
-    // 7.4 去除首尾空白
-    let (head_beg, head_end) = trim_idx(all_before, head_beg, head_end);
-    // 7.5 提取 head 文本
-    let head_str: String = all_before[head_beg..head_end].iter().collect();
-    head.push_str(&head_str);
-
-    // 8. 添加截断标记
-    // 8.1 处理右侧截断
-    if after_end != all_after.len() && tail_beg == tail_end {
-        after.push_str(&config.trunc_str);
-    } else if after_end != all_after.len() && tail_end != all_after.len() {
+    let fields = ptx_define_output_fields_for_width(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        line_width,
+        maximum_word_length,
+    );
+    let mut tail = fields.tail;
+    if fields.tail_truncation {
         tail.push_str(&config.trunc_str);
     }
-    // 8.2 处理左侧截断
-    // Only mark left truncation when we actually dropped non-whitespace context.
-    let left_truncated_non_ws = before_beg != 0
-        && all_before
-            .iter()
-            .take(before_beg)
-            .any(|c| !c.is_whitespace());
-    if left_truncated_non_ws && head_beg == head_end {
-        before = format!("{}{}", config.trunc_str, before);
-    } else if left_truncated_non_ws && head_beg != 0 {
-        head = format!("{}{}", config.trunc_str, head);
+    let before = if fields.before_truncation {
+        format!("{}{}", config.trunc_str, fields.before)
+    } else {
+        fields.before
+    };
+    let mut after: String = fields.keyafter.chars().skip(fields.keyword_len).collect();
+    if fields.keyafter_truncation {
+        after.push_str(&config.trunc_str);
     }
-
+    let head = if fields.head_truncation {
+        format!("{}{}", config.trunc_str, fields.head)
+    } else {
+        fields.head
+    };
     (tail, before, after, head)
 }
 
 fn tex_mapper(x: char) -> String {
     match x {
+        c if c.is_whitespace() => " ".to_string(),
         '\\' => "\\backslash{}".to_owned(),
         '$' | '%' | '#' | '&' | '_' => format!("\\{x}"),
         '}' | '{' => format!("$\\{x}$"),
@@ -817,31 +1238,33 @@ fn ptx_format_tex_line(
     word_ref: &WordRef,
     line: &str,
     chars_line: &[char],
+    text: &str,
+    chars_text: &[char],
     context_reg: &Regex,
     reference: &str,
+    maximum_word_length: usize,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
 
-    // 获取关键词前后的文本范围
-    let before_start = context_base_start(config, line, chars_line, context_reg);
-    let (context_left, context_right) = context_bounds(
+    let (keyword, all_before, all_after, _) = ptx_context_slices(
         config,
+        word_ref,
+        text,
+        chars_text,
         line,
+        chars_line,
         context_reg,
-        word_ref.position,
-        word_ref.position_end,
-        before_start,
     );
-    let before_chars_trim_idx = (context_left, word_ref.position);
-    let after_chars_trim_idx = (word_ref.position_end, context_right);
-
-    // 提取关键词和上下文
-    let keyword = &line[word_ref.position..word_ref.position_end];
-    let all_before = &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1];
-    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
 
     // 获取格式化后的文本块
-    let (tail, before, after, head) = ptx_get_output_chunks(all_before, keyword, all_after, config);
+    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        config.line_width,
+        maximum_word_length,
+    );
 
     // 转义特殊字符并构建输出
     write!(
@@ -865,22 +1288,38 @@ fn ptx_format_tex_line(
 }
 
 fn ptx_format_roff_field(s: &str) -> String {
-    s.replace('\"', "\"\"")
+    s.chars()
+        .map(|c| {
+            if c.is_whitespace() {
+                " ".to_string()
+            } else if c == '"' {
+                "\"\"".to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect::<String>()
 }
 
-/// 格式化输出为 Roff 格式
-fn ptx_format_roff_line(
+fn ptx_context_slices<'a>(
     config: &PtxConfig,
     word_ref: &WordRef,
-    line: &str,
-    chars_line: &[char],
+    text: &'a str,
+    chars_text: &'a [char],
+    line: &'a str,
+    chars_line: &'a [char],
     context_reg: &Regex,
-    reference: &str,
-) -> String {
-    let mut output = String::with_capacity(line.len() * 2);
-    write!(output, ".{}", config.macro_name).unwrap();
+) -> (&'a str, &'a [char], &'a [char], &'a [char]) {
+    if word_ref.context_end > word_ref.context_start
+        && word_ref.global_position_end <= text.len()
+        && word_ref.context_end <= text.len()
+    {
+        let keyword = &text[word_ref.global_position..word_ref.global_position_end];
+        let all_before = &chars_text[word_ref.context_char_start..word_ref.global_char_position];
+        let all_after = &chars_text[word_ref.global_char_position_end..word_ref.context_char_end];
+        return (keyword, all_before, all_after, chars_text);
+    }
 
-    // 获取关键词前后的文本范围
     let before_start = context_base_start(config, line, chars_line, context_reg);
     let (context_left, context_right) = context_bounds(
         config,
@@ -890,16 +1329,49 @@ fn ptx_format_roff_line(
         word_ref.position_end,
         before_start,
     );
-    let before_chars_trim_idx = (context_left, word_ref.position);
-    let after_chars_trim_idx = (word_ref.position_end, context_right);
-
-    // 提取关键词和上下文
     let keyword = &line[word_ref.position..word_ref.position_end];
-    let all_before = &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1];
-    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
+    (
+        keyword,
+        &chars_line[context_left..word_ref.position],
+        &chars_line[word_ref.position_end..context_right],
+        chars_line,
+    )
+}
+
+/// 格式化输出为 Roff 格式
+fn ptx_format_roff_line(
+    config: &PtxConfig,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    text: &str,
+    chars_text: &[char],
+    context_reg: &Regex,
+    reference: &str,
+    maximum_word_length: usize,
+) -> String {
+    let mut output = String::with_capacity(line.len() * 2);
+    write!(output, ".{}", config.macro_name).unwrap();
+
+    let (keyword, all_before, all_after, _) = ptx_context_slices(
+        config,
+        word_ref,
+        text,
+        chars_text,
+        line,
+        chars_line,
+        context_reg,
+    );
 
     // 获取格式化后的文本块
-    let (tail, before, after, head) = ptx_get_output_chunks(all_before, keyword, all_after, config);
+    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        config.line_width,
+        maximum_word_length,
+    );
 
     // 转义特殊字符并构建输出
     write!(
@@ -923,6 +1395,12 @@ fn ptx_format_roff_line(
 
 fn str_cols(s: &str) -> usize {
     s.chars().count()
+}
+
+fn ptx_display_field(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .collect()
 }
 
 fn context_base_start(
@@ -985,32 +1463,38 @@ fn ptx_format_dumb_line(
     word_ref: &WordRef,
     line: &str,
     chars_line: &[char],
+    text: &str,
+    chars_text: &[char],
     context_reg: &Regex,
     reference: &str,
     reference_max_width: usize,
+    maximum_word_length: usize,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
     let before_start = context_base_start(config, line, chars_line, context_reg);
-    let (context_left, context_right) = context_bounds(
+    let (keyword, all_before, all_after, _) = ptx_context_slices(
         config,
+        word_ref,
+        text,
+        chars_text,
         line,
+        chars_line,
         context_reg,
-        word_ref.position,
-        word_ref.position_end,
-        before_start,
     );
-    let before_chars_trim_idx = (context_left, word_ref.position);
-    let after_chars_trim_idx = (word_ref.position_end, context_right);
-    let keyword = &line[word_ref.position..word_ref.position_end];
-    let all_before = &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1];
-    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
-    let (tail, before, after, head) = ptx_get_output_chunks(all_before, keyword, all_after, config);
-    let keyafter = format!("{keyword}{after}");
     let gap_size = config.gap_size;
     let mut effective_line_width = config.line_width;
     if (config.is_auto_ref || config.is_input_ref) && !config.is_right_ref {
         effective_line_width = effective_line_width.saturating_sub(reference_max_width + gap_size);
     }
+    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        effective_line_width,
+        maximum_word_length,
+    );
+    let keyafter = format!("{keyword}{after}");
     let half_line_width = effective_line_width / 2;
 
     let reference_len = str_cols(reference);
@@ -1034,8 +1518,9 @@ fn ptx_format_dumb_line(
     let before_len = str_cols(&before);
     let tail_len = str_cols(&tail);
     let before_is_only_trunc = !config.trunc_str.is_empty() && before == config.trunc_str;
+    let previous_char_is_whitespace = all_before.last().is_some_and(|c| c.is_whitespace());
     if !tail.is_empty() {
-        output.push_str(&tail);
+        output.push_str(&ptx_display_field(&tail));
         let pad = half_line_width
             .saturating_sub(gap_size)
             .saturating_sub(before_len)
@@ -1045,7 +1530,7 @@ fn ptx_format_dumb_line(
         let before_space_adjust = if config.is_gnu_ext
             && before.is_empty()
             && word_ref.position > before_start
-            && chars_line[word_ref.position - 1].is_whitespace()
+            && previous_char_is_whitespace
             && half_line_width <= gap_size + config.trunc_str.len() * 2
         {
             1
@@ -1055,7 +1540,7 @@ fn ptx_format_dumb_line(
         let trunc_only_adjust = if config.is_gnu_ext
             && before_is_only_trunc
             && word_ref.position > before_start
-            && chars_line[word_ref.position - 1].is_whitespace()
+            && previous_char_is_whitespace
             && half_line_width <= gap_size + config.trunc_str.len() * 2
         {
             1
@@ -1077,9 +1562,9 @@ fn ptx_format_dumb_line(
         output.push_str(&" ".repeat(pad));
     }
 
-    output.push_str(&before);
+    output.push_str(&ptx_display_field(&before));
     output.push_str(&" ".repeat(gap_size));
-    output.push_str(&keyafter);
+    output.push_str(&ptx_display_field(&keyafter));
 
     let keyafter_len = str_cols(&keyafter);
     let head_len = str_cols(&head);
@@ -1088,7 +1573,7 @@ fn ptx_format_dumb_line(
             .saturating_sub(keyafter_len)
             .saturating_sub(head_len);
         output.push_str(&" ".repeat(pad));
-        output.push_str(&head);
+        output.push_str(&ptx_display_field(&head));
     } else if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
         let pad = half_line_width.saturating_sub(keyafter_len);
         output.push_str(&" ".repeat(pad));
@@ -1099,6 +1584,221 @@ fn ptx_format_dumb_line(
         output.push_str(reference);
     }
 
+    output
+}
+
+fn ptx_format_roff_field_bytes(s: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    for &b in s {
+        if b.is_ascii_whitespace() {
+            out.push(b' ');
+        } else if b == b'"' {
+            out.push(b'"');
+            out.push(b'"');
+        } else {
+            out.push(b);
+        }
+    }
+    out
+}
+
+fn ptx_display_field_bytes(s: &[u8]) -> Vec<u8> {
+    s.iter()
+        .map(|&b| if b.is_ascii_whitespace() { b' ' } else { b })
+        .collect()
+}
+
+fn ptx_format_dumb_line_bytes(
+    config: &PtxConfig,
+    word_ref: &WordRef,
+    content: &FileContent,
+    reference: &str,
+    reference_max_width: usize,
+    maximum_word_length: usize,
+) -> Vec<u8> {
+    let bytes_text = content.text.as_bytes();
+    let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
+        (
+            &bytes_text[word_ref.global_position..word_ref.global_position_end],
+            &bytes_text[word_ref.context_start..word_ref.global_position],
+            &bytes_text[word_ref.global_position_end..word_ref.context_end],
+        )
+    } else {
+        let line = content.lines[word_ref.local_line_nr].as_bytes();
+        (
+            &line[word_ref.position..word_ref.position_end],
+            &line[..word_ref.position],
+            &line[word_ref.position_end..],
+        )
+    };
+    let gap_size = config.gap_size;
+    let mut effective_line_width = config.line_width;
+    if (config.is_auto_ref || config.is_input_ref) && !config.is_right_ref {
+        effective_line_width = effective_line_width.saturating_sub(reference_max_width + gap_size);
+    }
+    let fields = ptx_define_output_fields_bytes_for_width(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        effective_line_width,
+        maximum_word_length,
+    );
+
+    let mut output = Vec::new();
+    if !config.is_right_ref {
+        let reference_bytes = reference.as_bytes();
+        if config.is_auto_ref {
+            output.extend_from_slice(reference_bytes);
+            output.push(b':');
+            let pad = reference_max_width
+                .saturating_add(gap_size)
+                .saturating_sub(reference.chars().count().saturating_add(1));
+            output.extend(std::iter::repeat(b' ').take(pad));
+        } else {
+            output.extend_from_slice(reference_bytes);
+            let pad = reference_max_width
+                .saturating_add(gap_size)
+                .saturating_sub(reference.chars().count());
+            output.extend(std::iter::repeat(b' ').take(pad));
+        }
+    }
+
+    let half_line_width = effective_line_width / 2;
+    let trunc_len = config.trunc_str.as_bytes().len();
+
+    if !fields.tail.is_empty() {
+        output.extend_from_slice(&ptx_display_field_bytes(&fields.tail));
+        if fields.tail_truncation {
+            output.extend_from_slice(config.trunc_str.as_bytes());
+        }
+        let pad = half_line_width
+            .saturating_sub(gap_size)
+            .saturating_sub(fields.before.len())
+            .saturating_sub(if fields.before_truncation {
+                trunc_len
+            } else {
+                0
+            })
+            .saturating_sub(fields.tail.len())
+            .saturating_sub(if fields.tail_truncation { trunc_len } else { 0 });
+        output.extend(std::iter::repeat(b' ').take(pad));
+    } else {
+        let pad = half_line_width
+            .saturating_sub(gap_size)
+            .saturating_sub(fields.before.len())
+            .saturating_sub(if fields.before_truncation {
+                trunc_len
+            } else {
+                0
+            });
+        output.extend(std::iter::repeat(b' ').take(pad));
+    }
+
+    if fields.before_truncation {
+        output.extend_from_slice(config.trunc_str.as_bytes());
+    }
+    output.extend_from_slice(&ptx_display_field_bytes(&fields.before));
+    output.extend(std::iter::repeat(b' ').take(gap_size));
+    output.extend_from_slice(&ptx_display_field_bytes(&fields.keyafter));
+    if fields.keyafter_truncation {
+        output.extend_from_slice(config.trunc_str.as_bytes());
+    }
+
+    if !fields.head.is_empty() {
+        let pad = half_line_width
+            .saturating_sub(fields.keyafter.len())
+            .saturating_sub(if fields.keyafter_truncation {
+                trunc_len
+            } else {
+                0
+            })
+            .saturating_sub(fields.head.len())
+            .saturating_sub(if fields.head_truncation { trunc_len } else { 0 });
+        output.extend(std::iter::repeat(b' ').take(pad));
+        if fields.head_truncation {
+            output.extend_from_slice(config.trunc_str.as_bytes());
+        }
+        output.extend_from_slice(&ptx_display_field_bytes(&fields.head));
+    } else if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
+        let pad = half_line_width
+            .saturating_sub(fields.keyafter.len())
+            .saturating_sub(if fields.keyafter_truncation {
+                trunc_len
+            } else {
+                0
+            });
+        output.extend(std::iter::repeat(b' ').take(pad));
+    }
+
+    if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
+        output.extend(std::iter::repeat(b' ').take(gap_size));
+        output.extend_from_slice(reference.as_bytes());
+    }
+
+    output
+}
+
+fn ptx_format_roff_line_bytes(
+    config: &PtxConfig,
+    word_ref: &WordRef,
+    content: &FileContent,
+    reference: &str,
+    maximum_word_length: usize,
+) -> Vec<u8> {
+    let bytes_text = content.text.as_bytes();
+    let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
+        (
+            &bytes_text[word_ref.global_position..word_ref.global_position_end],
+            &bytes_text[word_ref.context_start..word_ref.global_position],
+            &bytes_text[word_ref.global_position_end..word_ref.context_end],
+        )
+    } else {
+        let line = content.lines[word_ref.local_line_nr].as_bytes();
+        (
+            &line[word_ref.position..word_ref.position_end],
+            &line[..word_ref.position],
+            &line[word_ref.position_end..],
+        )
+    };
+    let fields = ptx_define_output_fields_bytes_for_width(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        config.line_width,
+        maximum_word_length,
+    );
+
+    let mut output = Vec::new();
+    output.push(b'.');
+    output.extend_from_slice(config.macro_name.as_bytes());
+    output.extend_from_slice(b" \"");
+    output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.tail));
+    if fields.tail_truncation {
+        output.extend_from_slice(config.trunc_str.as_bytes());
+    }
+    output.extend_from_slice(b"\" \"");
+    if fields.before_truncation {
+        output.extend_from_slice(config.trunc_str.as_bytes());
+    }
+    output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.before));
+    output.extend_from_slice(b"\" \"");
+    output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.keyafter));
+    if fields.keyafter_truncation {
+        output.extend_from_slice(config.trunc_str.as_bytes());
+    }
+    output.extend_from_slice(b"\" \"");
+    if fields.head_truncation {
+        output.extend_from_slice(config.trunc_str.as_bytes());
+    }
+    output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.head));
+    output.push(b'"');
+    if config.is_auto_ref || config.is_input_ref {
+        output.extend_from_slice(b" \"");
+        output.extend_from_slice(&ptx_format_roff_field_bytes(reference.as_bytes()));
+        output.push(b'"');
+    }
     output
 }
 
@@ -1146,6 +1846,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     for word_ref in &settings.words {
         // 通过索引直接获取文件内容
         let content = &settings.file_map[word_ref.file_index];
+        let maximum_word_length = ptx_content_maximum_word_length_bytes(content, &settings.config);
 
         let reference = ptx_get_reference(
             &settings.config,
@@ -1161,29 +1862,34 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
                 word_ref,
                 &content.lines[word_ref.local_line_nr],
                 &content.chars_lines[word_ref.local_line_nr],
+                &content.text,
+                &content.chars_text,
                 &context_reg,
                 &reference,
-            ),
-            OutFormat::Roff => ptx_format_roff_line(
+                maximum_word_length,
+            )
+            .into_bytes(),
+            OutFormat::Roff => ptx_format_roff_line_bytes(
                 &settings.config,
                 word_ref,
-                &content.lines[word_ref.local_line_nr],
-                &content.chars_lines[word_ref.local_line_nr],
-                &context_reg,
+                content,
                 &reference,
+                maximum_word_length,
             ),
-            OutFormat::Dumb => ptx_format_dumb_line(
+            OutFormat::Dumb => ptx_format_dumb_line_bytes(
                 &settings.config,
                 word_ref,
-                &content.lines[word_ref.local_line_nr],
-                &content.chars_lines[word_ref.local_line_nr],
-                &context_reg,
+                content,
                 &reference,
                 reference_max_width,
+                maximum_word_length,
             ),
         };
 
-        writeln!(writer, "{output_line}").map_err_context(String::new)?;
+        writer
+            .write_all(&output_line)
+            .map_err_context(String::new)?;
+        writer.write_all(b"\n").map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -1214,6 +1920,7 @@ fn ptx_render_row(
     reference_max_width: usize,
 ) -> PtxSemanticRow {
     let content = &settings.file_map[word_ref.file_index];
+    let maximum_word_length = ptx_content_maximum_word_length(content, &settings.config);
     let line = &content.lines[word_ref.local_line_nr];
     let chars_line = &content.chars_lines[word_ref.local_line_nr];
     let reference = ptx_get_reference(
@@ -1223,51 +1930,70 @@ fn ptx_render_row(
         line,
         context_reg,
     );
-    let before_start = context_base_start(&settings.config, line, chars_line, context_reg);
-    let (context_left, context_right) = context_bounds(
+    let (keyword, all_before, all_after, _) = ptx_context_slices(
         &settings.config,
+        word_ref,
+        &content.text,
+        &content.chars_text,
         line,
+        chars_line,
         context_reg,
-        word_ref.position,
-        word_ref.position_end,
-        before_start,
     );
-    let keyword = line[word_ref.position..word_ref.position_end].to_string();
-    let all_before = &chars_line[context_left..word_ref.position];
-    let all_after = &chars_line[word_ref.position_end..context_right];
-    let (tail, before, after, head) =
-        ptx_get_output_chunks(all_before, &keyword, all_after, &settings.config);
+    let mut effective_line_width = settings.config.line_width;
+    if (settings.config.is_auto_ref || settings.config.is_input_ref)
+        && !settings.config.is_right_ref
+    {
+        effective_line_width =
+            effective_line_width.saturating_sub(reference_max_width + settings.config.gap_size);
+    }
+    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+        all_before,
+        keyword,
+        all_after,
+        &settings.config,
+        effective_line_width,
+        maximum_word_length,
+    );
     let rendered_text = match settings.config.format {
         OutFormat::Tex => ptx_format_tex_line(
             &settings.config,
             word_ref,
             line,
             chars_line,
+            &content.text,
+            &content.chars_text,
             context_reg,
             &reference,
+            maximum_word_length,
         ),
         OutFormat::Roff => ptx_format_roff_line(
             &settings.config,
             word_ref,
             line,
             chars_line,
+            &content.text,
+            &content.chars_text,
             context_reg,
             &reference,
+            maximum_word_length,
         ),
         OutFormat::Dumb => ptx_format_dumb_line(
             &settings.config,
             word_ref,
             line,
             chars_line,
+            &content.text,
+            &content.chars_text,
             context_reg,
             &reference,
             reference_max_width,
+            maximum_word_length,
         ),
     };
 
     PtxSemanticRow {
         row_index: 0,
-        keyword,
+        keyword: keyword.to_string(),
         before,
         after,
         head,
@@ -1328,6 +2054,8 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
 
     for word_ref in &settings.words {
         let file_map_value = &settings.file_map[word_ref.file_index];
+        let maximum_word_length =
+            ptx_content_maximum_word_length_bytes(file_map_value, &settings.config);
 
         let reference = ptx_get_reference(
             &settings.config,
@@ -1343,29 +2071,34 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
                 word_ref,
                 &file_map_value.lines[word_ref.local_line_nr],
                 &file_map_value.chars_lines[word_ref.local_line_nr],
+                &file_map_value.text,
+                &file_map_value.chars_text,
                 &context_reg,
                 &reference,
-            ),
-            OutFormat::Roff => ptx_format_roff_line(
+                maximum_word_length,
+            )
+            .into_bytes(),
+            OutFormat::Roff => ptx_format_roff_line_bytes(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &file_map_value.chars_lines[word_ref.local_line_nr],
-                &context_reg,
+                file_map_value,
                 &reference,
+                maximum_word_length,
             ),
-            OutFormat::Dumb => ptx_format_dumb_line(
+            OutFormat::Dumb => ptx_format_dumb_line_bytes(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &file_map_value.chars_lines[word_ref.local_line_nr],
-                &context_reg,
+                file_map_value,
                 &reference,
                 reference_max_width,
+                maximum_word_length,
             ),
         };
 
-        writeln!(writer, "{output_line}").map_err_context(String::new)?;
+        writer
+            .write_all(&output_line)
+            .map_err_context(String::new)?;
+        writer.write_all(b"\n").map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -1793,6 +2526,52 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
+    fn test_word_ref(
+        word: &str,
+        local_line_nr: usize,
+        position: usize,
+        position_end: usize,
+    ) -> WordRef {
+        WordRef {
+            word: word.to_string(),
+            global_line_nr: local_line_nr,
+            local_line_nr,
+            position,
+            position_end,
+            global_position: position,
+            global_position_end: position_end,
+            context_start: 0,
+            context_end: 0,
+            global_char_position: position,
+            global_char_position_end: position_end,
+            context_char_start: 0,
+            context_char_end: 0,
+            file_index: 0,
+        }
+    }
+
+    fn test_file_content(filename: &str, lines: Vec<String>, offset: usize) -> FileContent {
+        let mut text = String::new();
+        let mut line_starts = Vec::with_capacity(lines.len());
+        for (index, line) in lines.iter().enumerate() {
+            if index > 0 {
+                text.push('\n');
+            }
+            line_starts.push(text.len());
+            text.push_str(line);
+        }
+        FileContent {
+            filename: filename.to_string(),
+            chars_text: text.chars().collect(),
+            byte_to_char: build_byte_to_char_map(&text),
+            text,
+            line_starts,
+            chars_lines: lines.iter().map(|line| line.chars().collect()).collect(),
+            lines,
+            offset,
+        }
+    }
+
     #[test]
     fn test_tool_implementation() {
         let tool = Ptx;
@@ -1913,7 +2692,7 @@ mod tests {
             let filter = WordFilter::new(&matches, &config).unwrap();
             assert!(!filter.is_only_specified);
             assert!(!filter.is_ignore_specified);
-            assert_eq!(filter.word_regex, "\\w+");
+            assert_eq!(filter.word_regex, "[A-Za-z]+");
         }
 
         #[test]
@@ -1943,42 +2722,13 @@ mod tests {
 
         #[test]
         fn test_word_ref_ordering() {
-            let word1 = WordRef {
-                word: "test".to_string(),
-                global_line_nr: 1,
-                local_line_nr: 1,
-                position: 0,
-                position_end: 4,
-                file_index: 0,
-            };
-
+            let word1 = test_word_ref("test", 1, 0, 4);
             let word2 = WordRef {
-                word: "test".to_string(),
                 global_line_nr: 2,
-                local_line_nr: 1,
-                position: 0,
-                position_end: 4,
-                file_index: 0,
+                ..test_word_ref("test", 1, 0, 4)
             };
 
             assert!(word1 < word2);
-        }
-    }
-
-    mod string_manipulation_tests {
-        use super::*;
-
-        #[test]
-        fn test_trim_broken_word_right() {
-            let s: Vec<char> = "hello world".chars().collect();
-            assert_eq!(trim_broken_word_right(&s, 0, 7), 6); // "hello"
-            assert_eq!(trim_broken_word_right(&s, 6, 11), 11); // "world"
-        }
-
-        #[test]
-        fn test_trim_idx() {
-            let s: Vec<char> = "  hello  ".chars().collect();
-            assert_eq!(trim_idx(&s, 0, 8), (2, 7));
         }
     }
 
@@ -1993,17 +2743,11 @@ mod tests {
                 ..Default::default()
             };
 
-            let word_ref = WordRef {
-                word: "test".to_string(),
-                global_line_nr: 1,
-                local_line_nr: 1,
-                position: 6,
-                position_end: 10,
-                file_index: 0,
-            };
+            let word_ref = test_word_ref("test", 1, 6, 10);
 
             let line = "hello test world";
             let chars_line: Vec<char> = line.chars().collect();
+            let maximum_word_length = ptx_maximum_word_length_in_chars(&chars_line, &config);
             let reference = "1";
             let context_reg = compile_regex_lossy(&config.context_regex);
 
@@ -2012,8 +2756,11 @@ mod tests {
                 &word_ref,
                 line,
                 &chars_line,
+                line,
+                &chars_line,
                 &context_reg,
                 reference,
+                maximum_word_length,
             );
             assert!(result.starts_with(".xx"));
             assert!(result.contains("test"));
@@ -2029,17 +2776,21 @@ mod tests {
             };
             let line = "foo bar";
             let chars_line: Vec<char> = line.chars().collect();
-            let word_ref = WordRef {
-                word: "bar".to_string(),
-                global_line_nr: 0,
-                local_line_nr: 0,
-                position: 4,
-                position_end: 7,
-                file_index: 0,
-            };
+            let maximum_word_length = ptx_maximum_word_length_in_chars(&chars_line, &config);
+            let word_ref = test_word_ref("bar", 0, 4, 7);
             let context_reg = compile_regex_lossy(&config.context_regex);
-            let got =
-                ptx_format_dumb_line(&config, &word_ref, line, &chars_line, &context_reg, "", 0);
+            let got = ptx_format_dumb_line(
+                &config,
+                &word_ref,
+                line,
+                &chars_line,
+                line,
+                &chars_line,
+                &context_reg,
+                "",
+                0,
+                maximum_word_length,
+            );
             assert_eq!(got, "     /   bar");
         }
 
@@ -2051,18 +2802,22 @@ mod tests {
             };
             let line = "alpha. beta! gamma?";
             let chars_line: Vec<char> = line.chars().collect();
-            let word_ref = WordRef {
-                word: "beta".to_string(),
-                global_line_nr: 0,
-                local_line_nr: 0,
-                position: 7,
-                position_end: 11,
-                file_index: 0,
-            };
+            let maximum_word_length = ptx_maximum_word_length_in_chars(&chars_line, &config);
+            let word_ref = test_word_ref("beta", 0, 7, 11);
             let context_reg = compile_regex_lossy(&config.context_regex);
-            let got =
-                ptx_format_dumb_line(&config, &word_ref, line, &chars_line, &context_reg, "", 0);
-            assert_eq!(got, "                                        beta!");
+            let got = ptx_format_dumb_line(
+                &config,
+                &word_ref,
+                line,
+                &chars_line,
+                line,
+                &chars_line,
+                &context_reg,
+                "",
+                0,
+                maximum_word_length,
+            );
+            assert_eq!(got, "                                       beta!");
         }
     }
 
@@ -2080,23 +2835,15 @@ mod tests {
                     ..Default::default()
                 },
                 file_map: {
-                    vec![FileContent {
-                        filename: "test.txt".to_string(),
-                        lines: vec!["hello test world".to_string()],
-                        chars_lines: vec!["hello test world".chars().collect()],
-                        offset: 0,
-                    }]
+                    vec![test_file_content(
+                        "test.txt",
+                        vec!["hello test world".to_string()],
+                        0,
+                    )]
                 },
                 words: {
                     let mut set = BTreeSet::new();
-                    set.insert(WordRef {
-                        word: "test".to_string(),
-                        global_line_nr: 1,
-                        local_line_nr: 0,
-                        position: 6,
-                        position_end: 10,
-                        file_index: 0,
-                    });
+                    set.insert(test_word_ref("test", 0, 6, 10));
                     set
                 },
                 output_filename: NamedTempFile::new()
@@ -2118,24 +2865,10 @@ mod tests {
                     format: OutFormat::Dumb,
                     ..Default::default()
                 },
-                file_map: {
-                    vec![FileContent {
-                        filename: "test.txt".to_string(),
-                        lines: vec!["test".to_string()],
-                        chars_lines: vec!["test".chars().collect()],
-                        offset: 0,
-                    }]
-                },
+                file_map: { vec![test_file_content("test.txt", vec!["test".to_string()], 0)] },
                 words: {
                     let mut set = BTreeSet::new();
-                    set.insert(WordRef {
-                        word: "test".to_string(),
-                        global_line_nr: 1,
-                        local_line_nr: 0,
-                        position: 0,
-                        position_end: 4,
-                        file_index: 0,
-                    });
+                    set.insert(test_word_ref("test", 0, 0, 4));
                     set
                 },
                 output_filename: "-".to_string(),
@@ -2161,13 +2894,20 @@ mod tests {
             let before = &['h', 'e', 'l', 'l', 'o', ' '];
             let keyword = "test";
             let after = &[' ', 'w', 'o', 'r', 'l', 'd'];
+            let max_word_len = 5;
 
-            let (tail, before_out, after_out, head) =
-                ptx_get_output_chunks(before, keyword, after, &config);
+            let (tail, before_out, after_out, head) = ptx_get_output_chunks_for_width_with_max(
+                before,
+                keyword,
+                after,
+                &config,
+                config.line_width,
+                max_word_len,
+            );
 
             assert_eq!(tail, "");
             assert_eq!(before_out, "hello");
-            assert_eq!(after_out, " /");
+            assert_eq!(after_out, "/");
             assert_eq!(head, "");
         }
 
@@ -2188,9 +2928,16 @@ mod tests {
             let after = &[
                 ' ', 'h', 'e', 'r', 'e', ' ', 'a', 'n', 'd', ' ', 't', 'h', 'e', 'r', 'e',
             ];
+            let max_word_len = 5;
 
-            let (_tail, before_out, after_out, _head) =
-                ptx_get_output_chunks(before, keyword, after, &config);
+            let (_tail, before_out, after_out, _head) = ptx_get_output_chunks_for_width_with_max(
+                before,
+                keyword,
+                after,
+                &config,
+                config.line_width,
+                max_word_len,
+            );
 
             // 验证长文本被适当截断
             assert!(!before_out.is_empty());
@@ -2206,9 +2953,16 @@ mod tests {
             let before = &[];
             let keyword = "test";
             let after = &[];
+            let max_word_len = 4;
 
-            let (tail, before_out, after_out, head) =
-                ptx_get_output_chunks(before, keyword, after, &config);
+            let (tail, before_out, after_out, head) = ptx_get_output_chunks_for_width_with_max(
+                before,
+                keyword,
+                after,
+                &config,
+                config.line_width,
+                max_word_len,
+            );
 
             assert_eq!(tail, "");
             assert_eq!(before_out, "");
@@ -2226,14 +2980,21 @@ mod tests {
             let before = &[' ', ' ', ' '];
             let keyword = "test";
             let after = &[' ', ' ', ' '];
+            let max_word_len = 4;
 
-            let (tail, before_out, after_out, head) =
-                ptx_get_output_chunks(before, keyword, after, &config);
+            let (tail, before_out, after_out, head) = ptx_get_output_chunks_for_width_with_max(
+                before,
+                keyword,
+                after,
+                &config,
+                config.line_width,
+                max_word_len,
+            );
 
             // 验证空白字符被正确处理
             assert_eq!(tail, "");
-            assert_eq!(before_out, " ");
-            assert_eq!(after_out, "   ");
+            assert_eq!(before_out, "");
+            assert_eq!(after_out, "");
             assert_eq!(head, "");
         }
     }
@@ -2303,12 +3064,11 @@ mod tests {
                 word_regex: r"\w+".to_string(),
             };
 
-            let file_map = vec![FileContent {
-                filename: "test.txt".to_string(),
-                lines: vec!["hello world".to_string()],
-                chars_lines: vec!["hello world".chars().collect()],
-                offset: 0,
-            }];
+            let file_map = vec![test_file_content(
+                "test.txt",
+                vec!["hello world".to_string()],
+                0,
+            )];
 
             let word_set = ptx_create_word_set(&config, &filter, &file_map);
 
@@ -2329,12 +3089,11 @@ mod tests {
                 ..Default::default()
             };
 
-            let file_map = vec![FileContent {
-                filename: "test.txt".to_string(),
-                lines: vec!["Hello WORLD".to_string()],
-                chars_lines: vec!["Hello WORLD".chars().collect()],
-                offset: 0,
-            }];
+            let file_map = vec![test_file_content(
+                "test.txt",
+                vec!["Hello WORLD".to_string()],
+                0,
+            )];
 
             let word_set = ptx_create_word_set(&config, &filter, &file_map);
 
@@ -2354,14 +3113,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let word_ref = WordRef {
-                word: "test".to_string(),
-                file_index: 0,
-                local_line_nr: 0,
-                global_line_nr: 1,
-                position: 0,
-                position_end: 4,
-            };
+            let word_ref = test_word_ref("test", 0, 0, 4);
 
             let context_reg = Regex::new(&config.context_regex).unwrap();
             let reference =
@@ -2390,34 +3142,6 @@ mod tests {
             );
 
             assert_eq!(reference, "123");
-        }
-    }
-
-    mod text_manipulation_tests {
-        use super::*;
-
-        #[test]
-        fn test_trim_broken_word_left() {
-            let text: Vec<char> = "one two three".chars().collect();
-
-            // 测试在单词中间的情况
-            assert_eq!(trim_broken_word_left(&text, 2, text.len()), 3); // "one"的末尾
-
-            // 测试在空格处的情况
-            assert_eq!(trim_broken_word_left(&text, 4, text.len()), 4); // 空格位置
-
-            // 测试在开头的情况
-            assert_eq!(trim_broken_word_left(&text, 0, text.len()), 0);
-
-            // 测试空字符串
-            let empty: Vec<char> = vec![];
-            assert_eq!(trim_broken_word_left(&empty, 0, 0), 0);
-        }
-
-        #[test]
-        fn test_trim_broken_word_left_with_multiple_spaces() {
-            let text: Vec<char> = "one   two".chars().collect();
-            assert_eq!(trim_broken_word_left(&text, 5, text.len()), 5);
         }
     }
 }

@@ -120,6 +120,7 @@ pub(crate) mod od_options {
     pub const OD_READ_BYTES: &str = "read-bytes";
     pub const OD_ENDIAN: &str = "endian";
     pub const OD_STRINGS: &str = "strings";
+    pub const OD_STRINGS_SHORT: &str = "strings-short";
     pub const OD_FORMAT: &str = "format";
     pub const OD_OUTPUT_DUPLICATES: &str = "output-duplicates";
     pub const OD_TRADITIONAL: &str = "traditional";
@@ -194,15 +195,7 @@ impl OdSettings {
         let read_bytes = Self::parse_read_bytes(matches)?;
         let radix = Self::parse_radix(matches)?;
 
-        // --- 解析 -S (--strings) 参数 ---
-        let strings_min_len = matches
-            .get_one::<String>(od_options::OD_STRINGS)
-            .map(|s| {
-                s.parse::<usize>().map_err(|_| {
-                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
-                })
-            })
-            .transpose()?;
+        let strings_min_len = Self::parse_strings_min_len(matches)?;
 
         Ok(Self {
             byte_order,
@@ -216,6 +209,18 @@ impl OdSettings {
             radix,
             strings_min_len,
         })
+    }
+
+    fn parse_strings_min_len(matches: &ArgMatches) -> CTResult<Option<usize>> {
+        for option in [od_options::OD_STRINGS_SHORT, od_options::OD_STRINGS] {
+            if let Some(s) = matches.get_one::<String>(option) {
+                return s.parse::<usize>().map(Some).map_err(|_| {
+                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
+                });
+            }
+        }
+
+        Ok(None)
     }
 
     fn parse_line_width(matches: &ArgMatches) -> CTResult<usize> {
@@ -418,10 +423,16 @@ pub fn ct_app() -> Command {
             .value_parser(["big", "little"])
             .value_name("big|little"),
         Arg::new(od_options::OD_STRINGS)
-            .short('S')
             .long(od_options::OD_STRINGS)
             .help("output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.")
             .default_missing_value("3")
+            .num_args(0..=1)
+            .require_equals(true)
+            .value_name("BYTES"),
+        Arg::new(od_options::OD_STRINGS_SHORT)
+            .short('S')
+            .hide(true)
+            .num_args(1)
             .value_name("BYTES"),
         Arg::new("a").short('a').help(t!("od.clap.a")).action(ArgAction::SetTrue),
         Arg::new("b").short('b').help(t!("od.clap.b")).action(ArgAction::SetTrue),

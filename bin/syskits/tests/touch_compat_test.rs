@@ -2,6 +2,24 @@ use std::process::Command;
 
 use tempfile::TempDir;
 
+fn assert_file_time_contains(file: &std::path::Path, expected_time: &str) {
+    let stat = Command::new("stat")
+        .env("TZ", "Asia/Shanghai")
+        .args(["-c", "%y", file.to_str().unwrap()])
+        .output()
+        .expect("stat touched file");
+    assert!(
+        stat.status.success(),
+        "stat stderr: {}",
+        String::from_utf8_lossy(&stat.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&stat.stdout).contains(expected_time),
+        "stat stdout: {}",
+        String::from_utf8_lossy(&stat.stdout)
+    );
+}
+
 #[test]
 fn touch_date_numeric_operand_is_today_time() {
     let temp_dir = TempDir::new().expect("tempdir");
@@ -22,19 +40,28 @@ fn touch_date_numeric_operand_is_today_time() {
     assert_eq!(output.stdout, b"");
     assert_eq!(output.stderr, b"");
 
-    let stat = Command::new("stat")
+    assert_file_time_contains(&file, " 01:00:00.");
+}
+
+#[test]
+fn touch_date_military_timezone_operand_is_midnight_in_that_zone() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("touchout");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .env("TZ", "Asia/Shanghai")
-        .args(["-c", "%y", file.to_str().unwrap()])
+        .args(["touch", "-d", "a", file.to_str().unwrap()])
         .output()
-        .expect("stat touched file");
+        .expect("run syskits touch -d a");
+
     assert!(
-        stat.status.success(),
-        "stat stderr: {}",
-        String::from_utf8_lossy(&stat.stderr)
+        output.status.success(),
+        "stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
-    assert!(
-        String::from_utf8_lossy(&stat.stdout).contains(" 01:00:00."),
-        "stat stdout: {}",
-        String::from_utf8_lossy(&stat.stdout)
-    );
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+
+    assert_file_time_contains(&file, " 07:00:00.");
 }

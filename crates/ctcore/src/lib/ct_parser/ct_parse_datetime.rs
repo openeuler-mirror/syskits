@@ -87,6 +87,10 @@ pub fn parse_datetime_gnu_compat(
         });
     }
 
+    if let Some(dt) = parse_military_timezone_only(input_trim, reference_time) {
+        return Ok(dt);
+    }
+
     // 军用时区拦截 (Military Timezone: e.g. 09:00B -> UTC+2)
     if input_trim.len() == 6 {
         let bytes = input_trim.as_bytes();
@@ -97,16 +101,9 @@ pub fn parse_datetime_gnu_compat(
             && bytes[4].is_ascii_digit()
         {
             let tz_char = (bytes[5] as char).to_ascii_uppercase();
-            if tz_char.is_ascii_uppercase() && tz_char != 'J' {
+            if let Some(Some(offset_hours)) = military_timezone_offset_hours(tz_char) {
                 let hour = (bytes[0] - b'0') * 10 + (bytes[1] - b'0');
                 let min = (bytes[3] - b'0') * 10 + (bytes[4] - b'0');
-                let offset_hours = match tz_char {
-                    'A'..='I' => (tz_char as i32) - ('A' as i32) + 1,
-                    'K'..='M' => (tz_char as i32) - ('K' as i32) + 10,
-                    'N'..='Y' => -((tz_char as i32) - ('N' as i32) + 1),
-                    'Z' => 0,
-                    _ => 0,
-                };
                 if let Some(offset) = FixedOffset::east_opt(offset_hours * 3600) {
                     if let Some(naive_time) =
                         chrono::NaiveTime::from_hms_opt(hour as u32, min as u32, 0)
@@ -493,6 +490,53 @@ pub fn parse_datetime_gnu_compat(
     }
 }
 
+fn military_timezone_offset_hours(tz_char: char) -> Option<Option<i32>> {
+    match tz_char.to_ascii_uppercase() {
+        'A'..='I' => Some(Some(
+            (tz_char.to_ascii_uppercase() as i32) - ('A' as i32) + 1,
+        )),
+        'J' => Some(None),
+        'K'..='M' => Some(Some(
+            (tz_char.to_ascii_uppercase() as i32) - ('K' as i32) + 10,
+        )),
+        'N'..='Y' => Some(Some(
+            -((tz_char.to_ascii_uppercase() as i32) - ('N' as i32) + 1),
+        )),
+        'Z' => Some(Some(0)),
+        _ => None,
+    }
+}
+
+fn parse_military_timezone_only(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let mut chars = input.chars();
+    let tz_char = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+
+    let offset_hours = military_timezone_offset_hours(tz_char)?;
+    let naive_midnight = reference_time.date_naive().and_hms_opt(0, 0, 0)?;
+
+    match offset_hours {
+        Some(hours) => {
+            let offset = FixedOffset::east_opt(hours * 3600)?;
+            match offset.from_local_datetime(&naive_midnight) {
+                chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => {
+                    Some(dt.with_timezone(&Local))
+                }
+                chrono::LocalResult::None => None,
+            }
+        }
+        None => match Local.from_local_datetime(&naive_midnight) {
+            chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+            chrono::LocalResult::None => None,
+        },
+    }
+}
+
 fn parse_compact_time_of_day(
     input: &str,
     reference_time: DateTime<Local>,
@@ -715,6 +759,32 @@ mod tests {
                 "input {input} should fail"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_military_timezone_only() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, offset_hours) in [("a", 1), ("Z", 0), ("n", -1), ("t", -7)] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let expected = chrono::FixedOffset::east_opt(offset_hours * 3600)
+                .unwrap()
+                .with_ymd_and_hms(2025, 7, 24, 0, 0, 0)
+                .unwrap()
+                .with_timezone(&Local);
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+            assert_eq!(
+                parsed.timestamp_subsec_nanos(),
+                expected.timestamp_subsec_nanos(),
+                "input {input}"
+            );
+        }
+
+        let local = parse_datetime_gnu_compat("j", ref_time).unwrap();
+        assert_eq!(local.date_naive(), ref_time.date_naive());
+        assert_eq!(local.hour(), 0);
+        assert_eq!(local.minute(), 0);
+        assert_eq!(local.second(), 0);
     }
 
     #[test]

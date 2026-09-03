@@ -54,9 +54,14 @@ use std::ffi::{CString, OsStr, OsString};
 use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::fs::OpenOptions;
+use std::io::{self, Read, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::io::AsRawFd;
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
 use std::process;
@@ -81,6 +86,8 @@ pub struct Installer {
     group_id: Option<u32>,
     /// 是否显示详细信息
     verbose: bool,
+    /// 是否显示复制调试信息
+    debug: bool,
     /// 是否保留时间戳
     preserve_timestamps: bool,
     /// 是否比较文件内容
@@ -113,6 +120,7 @@ impl Default for Installer {
             owner_id: None,
             group_id: None,
             verbose: false,
+            debug: false,
             preserve_timestamps: false,
             compare: false,
             strip: false,
@@ -167,6 +175,9 @@ mod install_options {
 
     /// 显示详细操作信息
     pub const INSTALL_VERBOSE: &str = "verbose";
+
+    /// 显示文件复制方式调试信息
+    pub const INSTALL_DEBUG: &str = "debug";
 
     /// 保留文件的安全上下文
     pub const INSTALL_PRESERVE_CONTEXT: &str = "preserve-context";
@@ -474,6 +485,8 @@ impl Installer {
             return Err(1.into());
         }
 
+        let debug = matches.get_flag(install_options::INSTALL_DEBUG);
+
         Ok(Self {
             main_function,
             specified_mode,
@@ -481,7 +494,8 @@ impl Installer {
             suffix: ct_backup_control::determine_backup_suffix(matches),
             owner_id,
             group_id,
-            verbose: matches.get_flag(install_options::INSTALL_VERBOSE),
+            verbose: debug || matches.get_flag(install_options::INSTALL_VERBOSE),
+            debug,
             preserve_timestamps,
             compare,
             strip,
@@ -838,6 +852,10 @@ pub fn ct_app() -> Command {
             .short('v')
             .long(install_options::INSTALL_VERBOSE)
             .help(t!("install.clap.install_verbose"))
+            .action(ArgAction::SetTrue),
+        Arg::new(install_options::INSTALL_DEBUG)
+            .long(install_options::INSTALL_DEBUG)
+            .help(t!("install.clap.install_debug"))
             .action(ArgAction::SetTrue),
         // TODO implement flag
         Arg::new(install_options::INSTALL_PRESERVE_CONTEXT)
@@ -1270,9 +1288,6 @@ fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> Result<(), 
 /// - `None` - 不需要备份（目标文件不存在）
 fn perform_backup(to: &Path, b: &Installer) -> CTResult<Option<PathBuf>> {
     if to.exists() {
-        if b.verbose {
-            println!("{} {}", t!("install.verbose_removed"), to.quote());
-        }
         let backup_path = ct_backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             // TODO!!
@@ -1305,7 +1320,92 @@ fn perform_backup(to: &Path, b: &Installer) -> CTResult<Option<PathBuf>> {
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功完成
-fn copy_file(from: &Path, to: &Path) -> CTResult<()> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CopyDebugValue {
+    Unknown,
+    Yes,
+    Unsupported,
+}
+
+impl CopyDebugValue {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Yes => "yes",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SparseDebugValue {
+    No,
+    SeekHole,
+}
+
+impl SparseDebugValue {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::No => "no",
+            Self::SeekHole => "SEEK_HOLE",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CopyDebugInfo {
+    offload: CopyDebugValue,
+    reflink: CopyDebugValue,
+    sparse_detection: SparseDebugValue,
+}
+
+impl CopyDebugInfo {
+    fn standard() -> Self {
+        Self {
+            offload: CopyDebugValue::Unknown,
+            reflink: CopyDebugValue::Unsupported,
+            sparse_detection: SparseDebugValue::No,
+        }
+    }
+
+    fn unsupported() -> Self {
+        Self {
+            offload: CopyDebugValue::Unsupported,
+            reflink: CopyDebugValue::Unsupported,
+            sparse_detection: SparseDebugValue::No,
+        }
+    }
+
+    fn print(self) {
+        println!(
+            "copy offload: {}, reflink: {}, sparse detection: {}",
+            self.offload.as_str(),
+            self.reflink.as_str(),
+            self.sparse_detection.as_str()
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CopyOffloadStatus {
+    Unknown,
+    Yes,
+    Unsupported,
+}
+
+#[cfg(target_os = "linux")]
+impl CopyOffloadStatus {
+    fn debug_value(self) -> CopyDebugValue {
+        match self {
+            Self::Unknown => CopyDebugValue::Unknown,
+            Self::Yes => CopyDebugValue::Yes,
+            Self::Unsupported => CopyDebugValue::Unsupported,
+        }
+    }
+}
+
+fn remove_existing_file(to: &Path) {
     // fs::copy fails if destination is a invalid symlink.
     // so lets just remove all existing files at destination before copy.
     if let Err(e) = fs::remove_file(to) {
@@ -1317,20 +1417,276 @@ fn copy_file(from: &Path, to: &Path) -> CTResult<()> {
             );
         }
     }
+}
 
+fn copy_file(from: &Path, to: &Path, debug: bool) -> CTResult<Option<CopyDebugInfo>> {
+    remove_existing_file(to);
+
+    let copy_debug = if debug {
+        copy_file_with_debug(from, to)
+    } else {
+        copy_file_regular(from, to).map(|_| None)
+    };
+
+    copy_debug.map_err(|err| {
+        InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into()
+    })
+}
+
+fn copy_file_regular(from: &Path, to: &Path) -> io::Result<()> {
     if from.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
-        if let Err(err) = File::create(to) {
-            return Err(
-                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
-            );
-        }
-    } else if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+        File::create(to).map(|_| ())
+    } else {
+        fs::copy(from, to).map(|_| ())
     }
-    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn copy_file_with_debug(from: &Path, to: &Path) -> io::Result<Option<CopyDebugInfo>> {
+    if from.as_os_str() == "/dev/null" {
+        File::create(to)?;
+        return Ok(Some(CopyDebugInfo::unsupported()));
+    }
+
+    copy_file_linux_debug(from, to).map(Some)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn copy_file_with_debug(from: &Path, to: &Path) -> io::Result<Option<CopyDebugInfo>> {
+    copy_file_regular(from, to)?;
+    Ok(Some(CopyDebugInfo::unsupported()))
+}
+
+#[cfg(target_os = "linux")]
+fn copy_file_linux_debug(from: &Path, to: &Path) -> io::Result<CopyDebugInfo> {
+    let mut source = File::open(from)?;
+    let mut dest = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(to)?;
+
+    let len = source.metadata()?.len();
+    let mut debug_info = CopyDebugInfo::standard();
+    if let Some(offload) = copy_sparse_ranges(&source, &mut dest, len)? {
+        debug_info.sparse_detection = SparseDebugValue::SeekHole;
+        debug_info.offload = offload.debug_value();
+        return Ok(debug_info);
+    }
+
+    source.seek(SeekFrom::Start(0))?;
+    dest.set_len(0)?;
+    dest.seek(SeekFrom::Start(0))?;
+    match copy_file_range_all(&source, &dest) {
+        CopyOffloadStatus::Yes => {
+            debug_info.offload = CopyDebugValue::Yes;
+        }
+        CopyOffloadStatus::Unknown => {}
+        CopyOffloadStatus::Unsupported => {
+            debug_info.offload = CopyDebugValue::Unsupported;
+            source.seek(SeekFrom::Start(0))?;
+            dest.set_len(0)?;
+            dest.seek(SeekFrom::Start(0))?;
+            io::copy(&mut source, &mut dest)?;
+        }
+    };
+
+    Ok(debug_info)
+}
+
+#[cfg(target_os = "linux")]
+fn copy_file_range_all(source: &File, dest: &File) -> CopyOffloadStatus {
+    const COPY_FILE_RANGE_LEN: usize = 1 << 30;
+
+    let src_fd = source.as_raw_fd();
+    let dst_fd = dest.as_raw_fd();
+    let mut used_offload = false;
+
+    loop {
+        let copied = unsafe {
+            libc::copy_file_range(
+                src_fd,
+                std::ptr::null_mut(),
+                dst_fd,
+                std::ptr::null_mut(),
+                COPY_FILE_RANGE_LEN,
+                0,
+            )
+        };
+
+        if copied > 0 {
+            used_offload = true;
+            continue;
+        }
+
+        if copied == 0 {
+            return if used_offload {
+                CopyOffloadStatus::Yes
+            } else {
+                CopyOffloadStatus::Unknown
+            };
+        }
+
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        return CopyOffloadStatus::Unsupported;
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn copy_sparse_ranges(
+    source: &File,
+    dest: &mut File,
+    len: u64,
+) -> io::Result<Option<CopyOffloadStatus>> {
+    if len == 0 {
+        return Ok(None);
+    }
+
+    let src_fd = source.as_raw_fd();
+    let dst_fd = dest.as_raw_fd();
+    let mut offset = 0u64;
+    let mut found_hole = false;
+    let mut ranges = Vec::new();
+
+    while offset < len {
+        let data = match lseek_u64(src_fd, offset, libc::SEEK_DATA) {
+            Ok(data) => data,
+            Err(err) if err.raw_os_error() == Some(libc::ENXIO) => {
+                found_hole = true;
+                break;
+            }
+            Err(err) if err.raw_os_error() == Some(libc::EINVAL) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        if data > offset {
+            found_hole = true;
+        }
+
+        let hole = match lseek_u64(src_fd, data, libc::SEEK_HOLE) {
+            Ok(hole) => hole.min(len),
+            Err(err) if err.raw_os_error() == Some(libc::EINVAL) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        if hole < len {
+            found_hole = true;
+        }
+        ranges.push((data, hole));
+        offset = hole;
+    }
+
+    if !found_hole {
+        return Ok(None);
+    }
+
+    dest.set_len(len)?;
+    let mut offload = CopyOffloadStatus::Unknown;
+    for (data, hole) in ranges {
+        match copy_range_with_fallback(source, dest, data, hole - data)? {
+            CopyOffloadStatus::Yes => offload = CopyOffloadStatus::Yes,
+            CopyOffloadStatus::Unsupported if offload == CopyOffloadStatus::Unknown => {
+                offload = CopyOffloadStatus::Unsupported;
+            }
+            _ => {}
+        }
+    }
+
+    if unsafe { libc::ftruncate(dst_fd, len as libc::off_t) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(Some(offload))
+}
+
+#[cfg(target_os = "linux")]
+fn lseek_u64(fd: libc::c_int, offset: u64, whence: libc::c_int) -> io::Result<u64> {
+    let result = unsafe { libc::lseek(fd, offset as libc::off_t, whence) };
+    if result < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(result as u64)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn copy_range_with_fallback(
+    source: &File,
+    dest: &mut File,
+    offset: u64,
+    len: u64,
+) -> io::Result<CopyOffloadStatus> {
+    if len == 0 {
+        return Ok(CopyOffloadStatus::Unknown);
+    }
+
+    match copy_file_range_at(source, dest, offset, len) {
+        CopyOffloadStatus::Yes => return Ok(CopyOffloadStatus::Yes),
+        CopyOffloadStatus::Unknown => return Ok(CopyOffloadStatus::Unknown),
+        CopyOffloadStatus::Unsupported => {}
+    }
+
+    let mut reader = source.try_clone()?;
+    reader.seek(SeekFrom::Start(offset))?;
+    dest.seek(SeekFrom::Start(offset))?;
+    let mut limited = reader.take(len);
+    io::copy(&mut limited, dest)?;
+    Ok(CopyOffloadStatus::Unsupported)
+}
+
+#[cfg(target_os = "linux")]
+fn copy_file_range_at(source: &File, dest: &File, offset: u64, len: u64) -> CopyOffloadStatus {
+    let src_fd = source.as_raw_fd();
+    let dst_fd = dest.as_raw_fd();
+    let mut src_offset = offset as libc::loff_t;
+    let mut dst_offset = offset as libc::loff_t;
+    let mut remaining = len as usize;
+    let mut used_offload = false;
+
+    while remaining > 0 {
+        let copied = unsafe {
+            libc::copy_file_range(
+                src_fd,
+                &mut src_offset,
+                dst_fd,
+                &mut dst_offset,
+                remaining.min(1 << 30),
+                0,
+            )
+        };
+
+        if copied > 0 {
+            used_offload = true;
+            remaining -= copied as usize;
+            continue;
+        }
+
+        if copied == 0 {
+            return if remaining == 0 && used_offload {
+                CopyOffloadStatus::Yes
+            } else {
+                CopyOffloadStatus::Unsupported
+            };
+        }
+
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        return CopyOffloadStatus::Unsupported;
+    }
+
+    if used_offload {
+        CopyOffloadStatus::Yes
+    } else {
+        CopyOffloadStatus::Unknown
+    }
 }
 
 /// 使用外部程序对文件进行 strip 操作。
@@ -1476,7 +1832,7 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(to, b)?;
 
-    copy_file(from, to)?;
+    let copy_debug = copy_file(from, to, b.debug)?;
 
     if b.set_context {
         if let Some(ref ctx) = b.context {
@@ -1507,6 +1863,10 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
             Some(path) => println!(" (backup: {})", path.quote()),
             None => println!(),
         }
+    }
+
+    if let Some(copy_debug) = copy_debug {
+        copy_debug.print();
     }
 
     Ok(())
@@ -1555,6 +1915,13 @@ mod tests {
     }
 
     #[test]
+    fn test_help_contains_debug() {
+        let help = ct_app().render_help().to_string();
+        assert!(help.contains("--debug"));
+        assert!(help.contains("Implies -v"));
+    }
+
+    #[test]
     fn test_need_copy() {
         let temp = tempdir().unwrap();
         let source = temp.path().join("source");
@@ -1572,16 +1939,7 @@ mod tests {
             owner_id: None,
             group_id: None,
             verbose: false,
-            preserve_timestamps: false,
-            compare: false,
-            strip: false,
-            strip_program: String::from(DEFAULT_STRIP_PROGRAM),
-            create_leading: false,
-            target_dir: None,
-            no_target_dir: false,
-            preserve_context: false,
-            set_context: false,
-            context: None,
+            ..Default::default()
         };
         assert!(installer.need_copy(&source, &dest).unwrap());
 
@@ -1620,10 +1978,44 @@ mod tests {
         std::fs::write(&source, "test content").unwrap();
 
         // 测试复制
-        copy_file(&source, &dest).unwrap();
+        assert!(copy_file(&source, &dest, false).unwrap().is_none());
 
         assert!(dest.exists());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
+    }
+
+    #[test]
+    fn test_copy_file_with_debug() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let dest = temp.path().join("dest");
+
+        std::fs::write(&source, "test content").unwrap();
+
+        let debug = copy_file(&source, &dest, true).unwrap().unwrap();
+
+        assert!(dest.exists());
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
+        assert_eq!(debug.reflink, CopyDebugValue::Unsupported);
+        assert_eq!(debug.sparse_detection, SparseDebugValue::No);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_copy_sparse_file_with_debug_preserves_holes() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let dest = temp.path().join("dest");
+
+        File::create(&source).unwrap().set_len(1024 * 1024).unwrap();
+
+        let debug = copy_file(&source, &dest, true).unwrap().unwrap();
+        let source_blocks = std::fs::metadata(&source).unwrap().blocks();
+        let dest_blocks = std::fs::metadata(&dest).unwrap().blocks();
+
+        assert_eq!(debug.sparse_detection, SparseDebugValue::SeekHole);
+        assert_eq!(std::fs::metadata(&dest).unwrap().len(), 1024 * 1024);
+        assert_eq!(source_blocks, dest_blocks);
     }
 
     #[test]
@@ -1718,6 +2110,11 @@ mod tests {
                     .action(ArgAction::SetTrue),
             )
             .arg(
+                Arg::new(install_options::INSTALL_DEBUG)
+                    .long(install_options::INSTALL_DEBUG)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
                 Arg::new(install_options::INSTALL_MODE)
                     .short('m')
                     .long(install_options::INSTALL_MODE)
@@ -1781,6 +2178,14 @@ mod tests {
         let installer = Installer::new(&matches).unwrap();
         assert_eq!(installer.specified_mode, Some(0o644));
 
+        let matches = cmd
+            .clone()
+            .try_get_matches_from(vec!["test", "--debug"])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        assert!(installer.debug);
+        assert!(installer.verbose);
+
         // 测试互斥选项
         let mut cmd = Command::new("test");
         cmd = cmd
@@ -1826,6 +2231,11 @@ mod tests {
                 Arg::new(install_options::INSTALL_VERBOSE)
                     .short('v')
                     .long(install_options::INSTALL_VERBOSE)
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(install_options::INSTALL_DEBUG)
+                    .long(install_options::INSTALL_DEBUG)
                     .action(ArgAction::SetTrue),
             )
             .arg(
@@ -1895,6 +2305,7 @@ mod tests {
         assert!(!installer.preserve_context);
         assert!(!installer.set_context);
         assert!(installer.context.is_none());
+        assert!(!installer.debug);
     }
 
     #[test]
@@ -1918,16 +2329,8 @@ mod tests {
             owner_id: None,
             group_id: None,
             verbose: true,
-            preserve_timestamps: false,
-            compare: false,
-            strip: false,
-            strip_program: String::from(DEFAULT_STRIP_PROGRAM),
-            create_leading: false,
             target_dir: Some(target_dir.to_string_lossy().into_owned()),
-            no_target_dir: false,
-            preserve_context: false,
-            set_context: false,
-            context: None,
+            ..Default::default()
         };
 
         let paths = vec![source.to_string_lossy().into_owned()];

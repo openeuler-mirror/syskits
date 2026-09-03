@@ -277,7 +277,7 @@ impl OdSettings {
 pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect_ignore();
+    let args = od_normalize_optional_arguments(args.collect_ignore());
 
     let clap_matches = ct_app().try_get_matches_from(&args)?;
 
@@ -317,6 +317,51 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     );
 
     odexec(&mut input_offset, &mut input_decoder, &output_info)
+}
+
+fn od_normalize_optional_arguments(args: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::with_capacity(args.len());
+    let mut parsing_options = true;
+
+    for arg in args {
+        if parsing_options {
+            if arg == "--" {
+                parsing_options = false;
+                normalized.push(arg);
+                continue;
+            }
+
+            if od_is_bare_width_long_option(&arg) {
+                normalized.push(format!("--{}=32", od_options::OD_WIDTH));
+                continue;
+            }
+
+            if od_is_bare_width_short_option(&arg) {
+                normalized.push(format!("{arg}32"));
+                continue;
+            }
+        }
+
+        normalized.push(arg);
+    }
+
+    normalized
+}
+
+fn od_is_bare_width_long_option(arg: &str) -> bool {
+    let Some(name) = arg.strip_prefix("--") else {
+        return false;
+    };
+
+    !name.is_empty() && !name.contains('=') && od_options::OD_WIDTH.starts_with(name)
+}
+
+fn od_is_bare_width_short_option(arg: &str) -> bool {
+    let Some(short_options) = arg.strip_prefix('-') else {
+        return false;
+    };
+
+    !short_options.is_empty() && !short_options.starts_with('-') && short_options.ends_with('w')
 }
 
 // --- 专门用于处理 -S (--strings) 的执行循环 ---
@@ -897,7 +942,7 @@ fn od_collect_strings_semantic<R: Read>(
 pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect_ignore();
+    let args = od_normalize_optional_arguments(args.collect_ignore());
 
     let clap_matches = ct_app().try_get_matches_from(&args)?;
     let od_settings = OdSettings::new(&clap_matches, &args)?;
@@ -1166,8 +1211,7 @@ mod tests {
                     OsString::from("od"),
                     OsString::from("-t"),
                     OsString::from("x2"),
-                    OsString::from("-w"),
-                    OsString::from("32"),
+                    OsString::from("-w32"),
                     OsString::from(&test_file),
                 ]
                 .into_iter(),

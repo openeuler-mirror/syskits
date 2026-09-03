@@ -4260,6 +4260,13 @@ fn display_inode(mdata: &Metadata) -> String {
 
 #[cfg(target_os = "linux")]
 fn get_security_context_from_xattr(p_buf: &Path, must_dereference: bool) -> Option<String> {
+    static SECURITY_XATTR_UNSUPPORTED: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+
+    if SECURITY_XATTR_UNSUPPORTED.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+
     let c_path = CString::new(p_buf.as_os_str().as_bytes()).ok()?;
     let get_xattr = |value: *mut ctcore::libc::c_void, size: usize| unsafe {
         if must_dereference {
@@ -4270,13 +4277,27 @@ fn get_security_context_from_xattr(p_buf: &Path, must_dereference: bool) -> Opti
     };
 
     let len = get_xattr(std::ptr::null_mut(), 0);
-    if len <= 0 {
+    if len < 0 {
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
+            SECURITY_XATTR_UNSUPPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        return None;
+    }
+    if len == 0 {
         return None;
     }
 
     let mut context = vec![0u8; len as usize];
     let len = get_xattr(context.as_mut_ptr().cast(), context.len());
-    if len <= 0 {
+    if len < 0 {
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
+            SECURITY_XATTR_UNSUPPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        return None;
+    }
+    if len == 0 {
         return None;
     }
 
@@ -4313,8 +4334,7 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
 
             // 熔断机制：如果已知系统不支持，直接快速返回
             if supported == -1 {
-                return get_security_context_from_xattr(p_buf, must_dereference)
-                    .unwrap_or(substitute_string);
+                return substitute_string;
             }
 
             // 探针机制：避免第三方 selinux crate 吞掉底层的 errno，使用原生 libc 精准探测
@@ -4341,8 +4361,7 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
                         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
                         if err == ctcore::libc::ENOTSUP || err == ctcore::libc::EOPNOTSUPP {
                             SELINUX_SUPPORTED.store(-1, std::sync::atomic::Ordering::Relaxed);
-                            return get_security_context_from_xattr(p_buf, must_dereference)
-                                .unwrap_or(substitute_string);
+                            return substitute_string;
                         }
                     }
                 }

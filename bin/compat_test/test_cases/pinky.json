@@ -451,6 +451,27 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "pinky",
+            "description": "export LC_ALL='zh_CN.utf8'，export LANG='zh_CN.utf8'，unset POSIXLY_CORRECT；执行pinky -q；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为43字节/1条换行分隔、内容=\\xe7\\x99\\xbb\\xe5\\xbd\\x95\\xe5\\x90\\x8d    TTY      \\xe7\\x99\\xbb\\xe5\\xbd\\x95\\xe6\\x97\\xb6\\xe9\\x97\\xb4        \\n；迁移原Cargo用例pinky_localizes_chinese_output_labels第1次调用",
+            "args": [
+                "-q"
+            ],
+            "setup_commands": [
+                "export LC_ALL='zh_CN.utf8'",
+                "export LANG='zh_CN.utf8'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "登录名    TTY      登录时间        \n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

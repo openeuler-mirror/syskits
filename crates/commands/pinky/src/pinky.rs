@@ -171,7 +171,7 @@ fn pinky_main_with_writer<W: Write>(args: impl ctcore::Args, output: &mut W) -> 
     if !do_short_format && pk.pinky_names.is_empty() {
         return Err(CTsageError::new(
             1,
-            "no username specified; at least one must be specified when using -l",
+            t!("pinky.output.missing_username").to_string(),
         ));
     }
 
@@ -468,7 +468,8 @@ impl PinkyFlags {
         let fullname = CtPasswd::locate_name_bytes(ut.user_bytes())
             .ok()
             .and_then(|pw| gecos_to_fullname_bytes(&pw));
-        write_short_fullname(output, fullname.as_deref())
+        let unknown = t!("pinky.output.unknown_short");
+        write_short_fullname(output, fullname.as_deref(), unknown.as_bytes())
     }
 
     fn print_tty_info<W: Write>(&self, ut: &CtUtmpx, mesg: char, output: &mut W) -> io::Result<()> {
@@ -514,17 +515,26 @@ impl PinkyFlags {
         }
 
         // 使用与coreutils相同的固定格式
-        write!(output, "{:<8}", "Login")?;
+        write_padded_bytes(output, t!("pinky.output.login").as_bytes(), 8)?;
         if self.is_include_fullname {
-            write!(output, " {:<19}", "Name")?;
+            output.write_all(b" ")?;
+            write_padded_bytes(output, t!("pinky.output.name").as_bytes(), 19)?;
         }
-        write!(output, " {:<9}", " TTY")?; // 注意：包含前导空格，总宽度9
+        output.write_all(b" ")?;
+        write_padded_bytes(output, t!("pinky.output.tty").as_bytes(), 9)?;
         if self.is_include_idle {
-            write!(output, " {:<6}", "Idle")?;
+            output.write_all(b" ")?;
+            write_padded_bytes(output, t!("pinky.output.idle").as_bytes(), 6)?;
         }
-        write!(output, " {:<width$}", "When", width = time_format_width())?;
+        output.write_all(b" ")?;
+        write_padded_bytes(
+            output,
+            t!("pinky.output.when").as_bytes(),
+            time_format_width(),
+        )?;
         if self.is_include_where {
-            write!(output, " Where")?;
+            output.write_all(b" ")?;
+            output.write_all(t!("pinky.output.where").as_bytes())?;
         }
         writeln!(output)
     }
@@ -559,9 +569,9 @@ impl PinkyFlags {
     }
 
     fn print_long_user_info<W: Write>(&self, username: &OsStr, output: &mut W) -> io::Result<()> {
-        output.write_all(b"Login name: ")?;
+        output.write_all(t!("pinky.output.login_name").as_bytes())?;
         write_padded_bytes(output, username.as_bytes(), 28)?;
-        output.write_all(b"In real life: ")?;
+        output.write_all(t!("pinky.output.real_life").as_bytes())?;
 
         match CtPasswd::locate_name_bytes(username.as_bytes()) {
             Ok(pw) => {
@@ -577,7 +587,11 @@ impl PinkyFlags {
                 self.print_plan_file(user_dir, output)?;
                 writeln!(output)
             }
-            Err(_) => writeln!(output, " ???"),
+            Err(_) => {
+                output.write_all(b" ")?;
+                output.write_all(t!("pinky.output.unknown").as_bytes())?;
+                output.write_all(b"\n")
+            }
         }
     }
 
@@ -588,9 +602,10 @@ impl PinkyFlags {
         output: &mut W,
     ) -> io::Result<()> {
         if self.is_include_home_and_shell {
-            output.write_all(b"Directory: ")?;
+            output.write_all(t!("pinky.output.directory").as_bytes())?;
             write_padded_bytes(output, user_dir, 29)?;
-            output.write_all(b"Shell:  ")?;
+            output.write_all(t!("pinky.output.shell").as_bytes())?;
+            output.write_all(b" ")?;
             output.write_all(user_shell)?;
             output.write_all(b"\n")?;
         }
@@ -600,7 +615,7 @@ impl PinkyFlags {
     fn print_project_file<W: Write>(&self, user_dir: &[u8], output: &mut W) -> io::Result<()> {
         if self.is_include_project {
             if let Ok(f) = File::open(PathBuf::from(OsStr::from_bytes(user_dir)).join(".project")) {
-                write!(output, "Project: ")?;
+                output.write_all(t!("pinky.output.project").as_bytes())?;
                 read_to_console(f, output)?;
             }
         }
@@ -610,7 +625,7 @@ impl PinkyFlags {
     fn print_plan_file<W: Write>(&self, user_dir: &[u8], output: &mut W) -> io::Result<()> {
         if self.is_include_plan {
             if let Ok(f) = File::open(PathBuf::from(OsStr::from_bytes(user_dir)).join(".plan")) {
-                writeln!(output, "Plan:")?;
+                output.write_all(t!("pinky.output.plan").as_bytes())?;
                 read_to_console(f, output)?;
             }
         }
@@ -868,11 +883,15 @@ fn write_padded_bytes<W: Write>(output: &mut W, value: &[u8], width: usize) -> i
     Ok(())
 }
 
-fn write_short_fullname<W: Write>(output: &mut W, fullname: Option<&[u8]>) -> io::Result<()> {
+fn write_short_fullname<W: Write>(
+    output: &mut W,
+    fullname: Option<&[u8]>,
+    unknown: &[u8],
+) -> io::Result<()> {
     output.write_all(b" ")?;
     match fullname {
         Some(fullname) => write_left_field(output, fullname, 19),
-        None => write_right_field(output, b"        ???", 19),
+        None => write_right_field(output, unknown, 19),
     }
 }
 
@@ -1024,11 +1043,16 @@ mod tests_all {
     #[test]
     fn test_short_fullname_uses_gnu_width_and_alignment() {
         let mut known = Vec::new();
-        write_short_fullname(&mut known, Some(b"Alpha User With A Very Long Name")).unwrap();
+        write_short_fullname(
+            &mut known,
+            Some(b"Alpha User With A Very Long Name"),
+            b"        ???",
+        )
+        .unwrap();
         assert_eq!(known, b" Alpha User With A V");
 
         let mut unknown = Vec::new();
-        write_short_fullname(&mut unknown, None).unwrap();
+        write_short_fullname(&mut unknown, None, b"        ???").unwrap();
         assert_eq!(unknown.len(), 20);
         assert_eq!(&unknown[17..], b"???");
         assert!(unknown[..17].iter().all(|byte| *byte == b' '));

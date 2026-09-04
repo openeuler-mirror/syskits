@@ -93,5 +93,10 @@ fn nproc_does_not_duplicate_errors_or_display_output() {
     assert_eq!(missing.status.code(), Some(1));
     assert!(missing.stdout.is_empty());
     let missing_stderr = String::from_utf8_lossy(&missing.stderr);
-    assert_eq!(missing_stderr.matches("a value is required").count(), 1);
+    assert_eq!(
+        missing_stderr
+            .matches("option '--ignore' requires an argument")
+            .count(),
+        1
+    );
 }

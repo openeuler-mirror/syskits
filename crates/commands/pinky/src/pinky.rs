@@ -389,9 +389,8 @@ impl PinkyFlags {
         }
         let fullname = CtPasswd::locate_name(ut.user().as_ref())
             .ok()
-            .and_then(|pw| gecos_to_fullname(&pw))
-            .unwrap_or_else(|| "???".to_string());
-        write!(output, " {fullname:<19}")
+            .and_then(|pw| gecos_to_fullname(&pw));
+        write_short_fullname(output, fullname.as_deref())
     }
 
     fn print_tty_info<W: Write>(&self, ut: &CtUtmpx, mesg: char, output: &mut W) -> io::Result<()> {
@@ -781,6 +780,30 @@ fn write_padded_bytes<W: Write>(output: &mut W, value: &[u8], width: usize) -> i
     Ok(())
 }
 
+fn write_short_fullname<W: Write>(output: &mut W, fullname: Option<&str>) -> io::Result<()> {
+    output.write_all(b" ")?;
+    match fullname {
+        Some(fullname) => write_left_field(output, fullname.as_bytes(), 19),
+        None => write_right_field(output, b"        ???", 19),
+    }
+}
+
+fn write_left_field<W: Write>(output: &mut W, value: &[u8], width: usize) -> io::Result<()> {
+    let value = &value[..value.len().min(width)];
+    output.write_all(value)?;
+    for _ in value.len()..width {
+        output.write_all(b" ")?;
+    }
+    Ok(())
+}
+
+fn write_right_field<W: Write>(output: &mut W, value: &[u8], width: usize) -> io::Result<()> {
+    for _ in value.len()..width {
+        output.write_all(b" ")?;
+    }
+    output.write_all(value)
+}
+
 fn read_to_console<F: Read, W: Write>(f: F, output: &mut W) -> io::Result<()> {
     let mut reader = BufReader::new(f);
     let mut buffer = [0_u8; 8192];
@@ -900,6 +923,19 @@ mod tests_all {
         read_to_console(input, &mut output).unwrap();
 
         assert_eq!(output, b"profile:\xff\0tail\n");
+    }
+
+    #[test]
+    fn test_short_fullname_uses_gnu_width_and_alignment() {
+        let mut known = Vec::new();
+        write_short_fullname(&mut known, Some("Alpha User With A Very Long Name")).unwrap();
+        assert_eq!(known, b" Alpha User With A V");
+
+        let mut unknown = Vec::new();
+        write_short_fullname(&mut unknown, None).unwrap();
+        assert_eq!(unknown.len(), 20);
+        assert_eq!(&unknown[17..], b"???");
+        assert!(unknown[..17].iter().all(|byte| *byte == b' '));
     }
 
     mod time_format_tests {

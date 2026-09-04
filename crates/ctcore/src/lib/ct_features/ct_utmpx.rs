@@ -64,6 +64,14 @@ macro_rules! chars2string {
     };
 }
 
+fn chars_as_bytes(value: &[libc::c_char]) -> &[u8] {
+    let length = value
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(value.len());
+    unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), length) }
+}
+
 #[cfg(target_os = "linux")]
 mod ct_ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
@@ -129,13 +137,25 @@ impl CtUtmpx {
     pub fn user(&self) -> String {
         chars2string!(self.inner.ut_user)
     }
+    /// Return the native bytes of ut_user up to the first NUL.
+    pub fn user_bytes(&self) -> &[u8] {
+        chars_as_bytes(&self.inner.ut_user)
+    }
     /// A.K.A. ut.ut_host
     pub fn host(&self) -> String {
         chars2string!(self.inner.ut_host)
     }
+    /// Return the native bytes of ut_host up to the first NUL.
+    pub fn host_bytes(&self) -> &[u8] {
+        chars_as_bytes(&self.inner.ut_host)
+    }
     /// A.K.A. ut.ut_line
     pub fn tty_device(&self) -> String {
         chars2string!(self.inner.ut_line)
+    }
+    /// Return the native bytes of ut_line up to the first NUL.
+    pub fn tty_device_bytes(&self) -> &[u8] {
+        chars_as_bytes(&self.inner.ut_line)
     }
     /// Return the login timestamp in epoch seconds.
     pub fn timestamp_seconds(&self) -> i64 {
@@ -171,7 +191,7 @@ impl CtUtmpx {
         self.inner
     }
     pub fn is_user_process(&self) -> bool {
-        !self.user().is_empty() && self.record_type() == USER_PROCESS
+        !self.user_bytes().is_empty() && self.record_type() == USER_PROCESS
     }
 
     /// Canonicalize host name using DNS
@@ -304,7 +324,7 @@ impl Drop for CtUtmpxIter {
 
 #[cfg(test)]
 mod tests {
-    use super::format_canonical_host;
+    use super::{chars_as_bytes, format_canonical_host};
 
     #[test]
     fn canonical_host_preserves_display_on_lookup_failure() {
@@ -316,5 +336,16 @@ mod tests {
             format_canonical_host("alias:7", Some("canonical"), "7"),
             "canonical:7"
         );
+    }
+
+    #[test]
+    fn native_utmp_bytes_stop_only_at_nul() {
+        let bytes = [
+            b'a' as libc::c_char,
+            0xff_u8 as libc::c_char,
+            0,
+            b'z' as libc::c_char,
+        ];
+        assert_eq!(chars_as_bytes(&bytes), b"a\xff");
     }
 }

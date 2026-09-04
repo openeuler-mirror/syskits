@@ -387,7 +387,7 @@ impl PinkyFlags {
     }
 
     fn get_tty_info(&self, ut: &CtUtmpx) -> std::io::Result<(char, i64)> {
-        let tty_path = tty_status_path(&ut.tty_device());
+        let tty_path = tty_status_path(ut.tty_device_bytes());
         match tty_path.metadata() {
             Ok(meta) => Ok((
                 if meta.mode() & S_IWGRP == 0 { '*' } else { ' ' },
@@ -398,21 +398,22 @@ impl PinkyFlags {
     }
 
     fn print_user_info<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
-        write!(output, "{:<8}", ut.user())
+        write_padded_bytes(output, ut.user_bytes(), 8)
     }
 
     fn print_fullname<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
         if !self.is_include_fullname {
             return Ok(());
         }
-        let fullname = CtPasswd::locate_name(ut.user().as_ref())
+        let fullname = CtPasswd::locate_name_bytes(ut.user_bytes())
             .ok()
             .and_then(|pw| gecos_to_fullname(&pw));
         write_short_fullname(output, fullname.as_deref())
     }
 
     fn print_tty_info<W: Write>(&self, ut: &CtUtmpx, mesg: char, output: &mut W) -> io::Result<()> {
-        write!(output, " {}{:<8}", mesg, ut.tty_device())
+        write!(output, " {mesg}")?;
+        write_padded_bytes(output, ut.tty_device_bytes(), 8)
     }
 
     fn print_idle_time<W: Write>(&self, last_change: i64, output: &mut W) -> io::Result<()> {
@@ -435,9 +436,13 @@ impl PinkyFlags {
         if !self.is_include_where {
             return Ok(());
         }
-        let host = ut.host();
+        let host = ut.host_bytes();
         if !host.is_empty() {
-            write!(output, " {}", ut.canon_host()?)?;
+            output.write_all(b" ")?;
+            match std::str::from_utf8(host) {
+                Ok(_) => output.write_all(ut.canon_host()?.as_bytes())?,
+                Err(_) => output.write_all(host)?,
+            }
         }
         Ok(())
     }
@@ -482,7 +487,7 @@ impl PinkyFlags {
                 || self
                     .pinky_names
                     .iter()
-                    .any(|name| name.as_bytes() == ut.user().as_bytes()))
+                    .any(|name| name.as_bytes() == ut.user_bytes()))
     }
 
     /// 以长格式显示用户信息
@@ -663,7 +668,7 @@ impl PinkyFlags {
         let (mesg, last_change) = self.get_tty_info(ut)?;
         let full_name = if self.is_include_fullname {
             Some(
-                CtPasswd::locate_name(ut.user().as_ref())
+                CtPasswd::locate_name_bytes(ut.user_bytes())
                     .ok()
                     .and_then(|pw| gecos_to_fullname(&pw))
                     .unwrap_or_else(|| "???".to_string()),
@@ -822,9 +827,12 @@ fn write_right_field<W: Write>(output: &mut W, value: &[u8], width: usize) -> io
     output.write_all(value)
 }
 
-fn tty_status_path(line: &str) -> PathBuf {
-    let device = line.split_once(' ').map_or(line, |(_, device)| device);
-    PathBuf::from("/dev").join(device)
+fn tty_status_path(line: &[u8]) -> PathBuf {
+    let device = line
+        .iter()
+        .position(|byte| *byte == b' ')
+        .map_or(line, |position| &line[position + 1..]);
+    PathBuf::from("/dev").join(OsStr::from_bytes(device))
 }
 
 fn read_to_console<F: Read, W: Write>(f: F, output: &mut W) -> io::Result<()> {
@@ -963,9 +971,16 @@ mod tests_all {
 
     #[test]
     fn test_tty_status_path_uses_device_after_space() {
-        assert_eq!(tty_status_path("null"), PathBuf::from("/dev/null"));
-        assert_eq!(tty_status_path("/dev/null"), PathBuf::from("/dev/null"));
-        assert_eq!(tty_status_path("prefix null"), PathBuf::from("/dev/null"));
+        assert_eq!(tty_status_path(b"null"), PathBuf::from("/dev/null"));
+        assert_eq!(tty_status_path(b"/dev/null"), PathBuf::from("/dev/null"));
+        assert_eq!(tty_status_path(b"prefix null"), PathBuf::from("/dev/null"));
+    }
+
+    #[test]
+    fn test_short_fields_preserve_native_bytes() {
+        let mut output = Vec::new();
+        write_padded_bytes(&mut output, b"a\xff", 8).unwrap();
+        assert_eq!(output, b"a\xff      ");
     }
 
     mod time_format_tests {

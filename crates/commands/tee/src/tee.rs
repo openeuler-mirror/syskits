@@ -48,6 +48,8 @@ mod stat_flags {
     pub const TEE_OUTPUT_ERROR: &str = "output-error";
 }
 
+const STANDARD_OUTPUT_NAME: &str = "standard output";
+
 #[allow(dead_code)]
 #[derive(Default)]
 struct TeeOptions {
@@ -447,7 +449,7 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
     writers.insert(
         0,
         NamedWriter {
-            name: "'standard output'".to_owned(),
+            name: STANDARD_OUTPUT_NAME.to_owned(),
             inner: Box::new(stdout()),
         },
     );
@@ -570,7 +572,7 @@ impl MultiWriter {
 
     // 新增：检查标准输出是否还在写入列表中
     fn has_stdout(&self) -> bool {
-        self.writers.iter().any(|w| w.name == "'standard output'")
+        self.writers.iter().any(|w| w.name == STANDARD_OUTPUT_NAME)
     }
 
     fn report_broken_pipe_for_stdout(&mut self) -> Result<()> {
@@ -583,7 +585,7 @@ impl MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut aborted = None;
         self.writers.retain_mut(|writer| {
-            if writer.name == "'standard output'" {
+            if writer.name == STANDARD_OUTPUT_NAME {
                 if let Err(e) = process_error(
                     mode.as_ref(),
                     Error::from(IoErrorKind::BrokenPipe),
@@ -647,6 +649,10 @@ impl Write for MultiWriter {
         let mut errors = 0;
         let mut would_block_occurred = false;
         self.writers.retain_mut(|writer| {
+            if aborted.is_some() {
+                return true;
+            }
+
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
@@ -1028,7 +1034,9 @@ mod tests {
 #[cfg(test)]
 mod test_basic {
     use super::*;
+    use std::cell::RefCell;
     use std::io::Cursor;
+    use std::rc::Rc;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -1127,5 +1135,51 @@ mod test_basic {
         );
         assert!(result.is_err());
         assert_eq!(ignored_errors, 0);
+    }
+
+    #[test]
+    fn exit_mode_stops_before_writing_to_later_outputs() {
+        struct BrokenPipeWriter;
+
+        impl Write for BrokenPipeWriter {
+            fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+                Err(Error::from(IoErrorKind::BrokenPipe))
+            }
+
+            fn flush(&mut self) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        struct RecordingWriter(Rc<RefCell<Vec<u8>>>);
+
+        impl Write for RecordingWriter {
+            fn write(&mut self, buf: &[u8]) -> Result<usize> {
+                self.0.borrow_mut().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        let recorded = Rc::new(RefCell::new(Vec::new()));
+        let writers = vec![
+            NamedWriter {
+                name: STANDARD_OUTPUT_NAME.into(),
+                inner: Box::new(BrokenPipeWriter),
+            },
+            NamedWriter {
+                name: "out".into(),
+                inner: Box::new(RecordingWriter(Rc::clone(&recorded))),
+            },
+        ];
+        let mut output = MultiWriter::new(writers, Some(OutputErrorMode::Exit));
+
+        let error = output.write_all(b"current block").unwrap_err();
+
+        assert_eq!(error.kind(), IoErrorKind::BrokenPipe);
+        assert!(recorded.borrow().is_empty());
     }
 }

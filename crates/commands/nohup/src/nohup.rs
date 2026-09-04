@@ -201,7 +201,9 @@ fn nohup_replace_fds() -> CTResult<()> {
     let stderr_is_tty = std::io::stderr().is_terminal();
 
     if stdin_is_tty {
-        let new_stdin = File::open(Path::new("/dev/null"))
+        let new_stdin = OpenOptions::new()
+            .write(true)
+            .open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
             return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());

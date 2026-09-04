@@ -97,8 +97,20 @@ fn write_nohup_msg(msg: &str) -> io::Result<()> {
     handle.flush()
 }
 
-fn nohup_append_msg(path: &str) -> String {
-    format!("ignoring input and appending output to {}", path.quote())
+fn nohup_append_msg(path: &str, ignoring_input: bool) -> String {
+    if ignoring_input {
+        format!("ignoring input and appending output to {}", path.quote())
+    } else {
+        format!("appending output to {}", path.quote())
+    }
+}
+
+fn nohup_stderr_redirect_msg(ignoring_input: bool) -> &'static str {
+    if ignoring_input {
+        "ignoring input and redirecting stderr to stdout"
+    } else {
+        "redirecting stderr to stdout"
+    }
 }
 
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -172,6 +184,7 @@ pub fn ct_app() -> Command {
 fn nohup_replace_fds() -> CTResult<()> {
     let stdin_is_tty = std::io::stdin().is_terminal();
     let stdout_is_tty = std::io::stdout().is_terminal();
+    let stderr_is_tty = std::io::stderr().is_terminal();
 
     if stdin_is_tty {
         let new_stdin = File::open(Path::new("/dev/null"))
@@ -180,27 +193,32 @@ fn nohup_replace_fds() -> CTResult<()> {
             return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
         }
 
-        if !stdout_is_tty && write_nohup_msg("ignoring input").is_err() {
+        if !stdout_is_tty && !stderr_is_tty && write_nohup_msg("ignoring input").is_err() {
             std::process::exit(125);
         }
     }
 
     if stdout_is_tty {
-        let new_stdout = nohup_find_stdout()?;
+        let new_stdout = nohup_find_stdout(stdin_is_tty)?;
         let raw_fd = new_stdout.as_raw_fd();
         if unsafe { dup2(raw_fd, 1) } != 1 {
             return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
         }
     }
 
-    if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
-        return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
+    if stderr_is_tty {
+        if !stdout_is_tty && write_nohup_msg(nohup_stderr_redirect_msg(stdin_is_tty)).is_err() {
+            std::process::exit(125);
+        }
+        if unsafe { dup2(1, 2) } != 2 {
+            return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
+        }
     }
     Ok(())
 }
 
 // 查找或创建nohup输出文件
-fn nohup_find_stdout() -> CTResult<File> {
+fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
     let internal_failure_code = match env::var("POSIXLY_CORRECT") {
         Ok(_) => POSIX_NOHUP_FAILURE,
         Err(_) => EXIT_CANCELED,
@@ -212,7 +230,7 @@ fn nohup_find_stdout() -> CTResult<File> {
         .open(Path::new(NOHUP_OUT))
     {
         Ok(file) => {
-            let msg = nohup_append_msg(NOHUP_OUT);
+            let msg = nohup_append_msg(NOHUP_OUT, ignoring_input);
             if write_nohup_msg(&msg).is_err() {
                 std::process::exit(125);
             }
@@ -228,7 +246,7 @@ fn nohup_find_stdout() -> CTResult<File> {
             let path_buf_str = path_buf.to_str().unwrap();
             match OpenOptions::new().create(true).append(true).open(&path_buf) {
                 Ok(file) => {
-                    let msg = nohup_append_msg(path_buf_str);
+                    let msg = nohup_append_msg(path_buf_str, ignoring_input);
                     if write_nohup_msg(&msg).is_err() {
                         std::process::exit(125);
                     }
@@ -270,13 +288,29 @@ impl Tool for Nohup {
 #[cfg(test)]
 mod tests {
     mod tests_messages {
-        use crate::nohup_append_msg;
+        use crate::{nohup_append_msg, nohup_stderr_redirect_msg};
 
         #[test]
         fn test_nohup_append_msg_uses_actual_path() {
             assert_eq!(
-                nohup_append_msg("/tmp/home/nohup.out"),
+                nohup_append_msg("/tmp/home/nohup.out", true),
                 "ignoring input and appending output to '/tmp/home/nohup.out'"
+            );
+            assert_eq!(
+                nohup_append_msg("nohup.out", false),
+                "appending output to 'nohup.out'"
+            );
+        }
+
+        #[test]
+        fn test_nohup_stderr_redirect_message_tracks_input() {
+            assert_eq!(
+                nohup_stderr_redirect_msg(false),
+                "redirecting stderr to stdout"
+            );
+            assert_eq!(
+                nohup_stderr_redirect_msg(true),
+                "ignoring input and redirecting stderr to stdout"
             );
         }
     }

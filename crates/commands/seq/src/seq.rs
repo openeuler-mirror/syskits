@@ -23,10 +23,12 @@ use std::ffi::OsString;
 use sys_locale::get_locale;
 mod error;
 mod extendedbigdecimal;
+mod long_double_format;
 mod number;
 mod numberparse;
 use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
+use crate::long_double_format::GnuFloatFormat;
 use crate::number::PreciseNumber;
 
 const SEQ_SEPARATOR: &str = "separator";
@@ -86,8 +88,7 @@ struct PrintConfig<'a> {
     terminator: &'a str,
     pad: bool,
     padding: usize,
-    format: &'a Option<Format<num_format::Float>>,
-    format_str: Option<&'a str>,
+    format: &'a Option<GnuFloatFormat>,
     buffer: Option<&'a mut Vec<u8>>,
 }
 
@@ -160,7 +161,6 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
         pad: options.is_equal_width,
         padding,
         format: &format,
-        format_str: options.format.as_deref(),
         buffer: None,
     };
 
@@ -215,7 +215,6 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
             pad: options.is_equal_width,
             padding,
             format: &format,
-            format_str: options.format.as_deref(),
         },
         &mut rows,
         &mut classic_buffer,
@@ -298,13 +297,14 @@ fn calculate_largest_decimal(first: &PreciseNumber, increment: &PreciseNumber) -
         .max(increment.num_fractional_digits)
 }
 
-fn parse_format_option(format_str: Option<&str>) -> CTResult<Option<Format<num_format::Float>>> {
-    match format_str {
-        Some(f) => Format::<num_format::Float>::parse(f)
-            .map(Some)
-            .map_err(|e| Box::new(e) as Box<dyn CTError>),
-        None => Ok(None),
-    }
+fn parse_format_option(format_str: Option<&str>) -> CTResult<Option<GnuFloatFormat>> {
+    let Some(format_str) = format_str else {
+        return Ok(None);
+    };
+
+    Format::<num_format::Float>::parse(format_str).map_err(|e| Box::new(e) as Box<dyn CTError>)?;
+
+    Ok(Some(GnuFloatFormat::parse(format_str)))
 }
 
 pub fn ct_app() -> Command {
@@ -486,8 +486,7 @@ struct SeqRenderConfig<'a> {
     terminator: &'a str,
     pad: bool,
     padding: usize,
-    format: &'a Option<Format<num_format::Float>>,
-    format_str: Option<&'a str>,
+    format: &'a Option<GnuFloatFormat>,
 }
 
 fn render_seq_value(
@@ -508,14 +507,7 @@ fn render_seq_value(
     let mut buffer = Vec::new();
     match config.format {
         Some(f) => {
-            let float = match value {
-                ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
-                ExtendedBigDecimal::Infinity => f64::INFINITY,
-                ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
-                ExtendedBigDecimal::MinusZero => -0.0,
-                ExtendedBigDecimal::Nan => f64::NAN,
-            };
-            format_with_zero_padding(&mut buffer, f, float, config.format_str)?;
+            format_long_double(&mut buffer, f, value)?;
         }
         None => write_value_float(&mut buffer, value, padding, config.largest_dec)?,
     }
@@ -553,101 +545,12 @@ fn collect_seq_rows(
     Ok(())
 }
 
-/// Custom format function that handles zero-padding with signs correctly
-/// This fixes the issue where ctcore's Format doesn't handle the '0' flag properly with signs
-/// 直接使用底层的格式化器，移除之前破坏 printf 标准的魔改逻辑
-fn format_with_zero_padding(
+fn format_long_double(
     writer: &mut impl Write,
-    format: &Format<num_format::Float>,
-    float: f64,
-    orig_format: Option<&str>,
+    format: &GnuFloatFormat,
+    value: &ExtendedBigDecimal,
 ) -> std::io::Result<()> {
-    let mut temp_buf = Vec::new();
-    format.fmt(&mut temp_buf, float)?;
-    let mut formatted = String::from_utf8_lossy(&temp_buf).to_string();
-
-    if let Some(fmt) = orig_format {
-        if let Some(pct) = fmt.find('%') {
-            let mut has_minus = false;
-            let mut has_plus = false;
-            let mut has_space = false;
-            let mut has_zero = false;
-
-            for c in fmt[pct + 1..].chars() {
-                match c {
-                    '-' => has_minus = true,
-                    '+' => has_plus = true,
-                    ' ' => has_space = true,
-                    '0' => has_zero = true,
-                    '1'..='9' | '.' | 'f' | 'g' | 'e' | 'E' | 'G' | 'F' => break,
-                    _ => {}
-                }
-            }
-
-            let prefix_len = pct;
-            let mut dir_end = pct + 1;
-            for (i, c) in fmt[pct + 1..].char_indices() {
-                if "fFeEgG".contains(c) {
-                    dir_end = pct + 1 + i + c.len_utf8();
-                    break;
-                }
-            }
-            let suffix_len = fmt.len() - dir_end;
-
-            if formatted.len() > prefix_len + suffix_len {
-                let num_part = &formatted[prefix_len..formatted.len() - suffix_len];
-
-                let is_negative = float < 0.0 || float.is_sign_negative();
-
-                // ctcore Bug: 处理非负数且要求显示 '+' 或 ' ' 标志时，
-                // 它会在填充完宽度后，硬塞一个符号，导致总字符串超长 1 个字符。
-                if !is_negative
-                    && (has_plus || has_space)
-                    && !num_part.is_empty()
-                    && (num_part.starts_with('+') || num_part.starts_with(' '))
-                {
-                    if has_minus {
-                        // 左对齐：多余的填充字符在尾部，直接削掉最后一个空格
-                        if let Some(fixed_num) = num_part.strip_suffix(' ') {
-                            formatted =
-                                format!("{}{}{}", &fmt[..prefix_len], fixed_num, &fmt[dir_end..]);
-                        }
-                    } else {
-                        // 右对齐：多余的填充字符在头部（但在符号之后），削掉一个字符并重排位置
-                        let sign_char = num_part.chars().next().unwrap();
-                        let rest = &num_part[1..];
-                        if rest.starts_with(' ') || rest.starts_with('0') {
-                            let fixed_rest = &rest[1..];
-                            if has_zero {
-                                // 零填充：将错误的内部空格替换为 0 (如 "+ 1" -> "+01")
-                                let spaces_to_zeros = fixed_rest.replace(" ", "0");
-                                let fixed_num = format!("{sign_char}{spaces_to_zeros}");
-                                formatted = format!(
-                                    "{}{}{}",
-                                    &fmt[..prefix_len],
-                                    fixed_num,
-                                    &fmt[dir_end..]
-                                );
-                            } else {
-                                // 空格填充：将空格推到符号外部 (如 "+  1" -> " +1")
-                                let trimmed = fixed_rest.trim_start_matches(' ');
-                                let spaces = " ".repeat(fixed_rest.len() - trimmed.len());
-                                let fixed_num = format!("{spaces}{sign_char}{trimmed}");
-                                formatted = format!(
-                                    "{}{}{}",
-                                    &fmt[..prefix_len],
-                                    fixed_num,
-                                    &fmt[dir_end..]
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    writer.write_all(formatted.as_bytes())
+    writer.write_all(format.format(value).as_bytes())
 }
 
 /// Floating point based code path
@@ -678,14 +581,7 @@ fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
         }
         match config.format {
             Some(f) => {
-                let float = match &value {
-                    ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
-                    ExtendedBigDecimal::Infinity => f64::INFINITY,
-                    ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
-                    ExtendedBigDecimal::MinusZero => -0.0,
-                    ExtendedBigDecimal::Nan => f64::NAN,
-                };
-                format_with_zero_padding(&mut writer, f, float, config.format_str)?;
+                format_long_double(&mut writer, f, &value)?;
             }
             None => write_value_float(&mut writer, &value, padding, config.largest_dec)?,
         }
@@ -862,7 +758,6 @@ mod tests {
                 pad: false,
                 padding: 1,
                 format: &None,
-                format_str: None,
                 buffer: Some(&mut output),
             },
         )
@@ -886,7 +781,6 @@ mod tests {
                 pad: true,
                 padding: 2,
                 format: &None,
-                format_str: None,
                 buffer: Some(&mut output),
             },
         )

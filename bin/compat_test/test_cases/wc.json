@@ -495,6 +495,77 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行wc -m utf8；stdin为0字节、内容=空；输入fixture：file utf8，mode=644，7字节，内容=\\xc3\\xa9 \\xe4\\xb8\\xad\\n；预期RC=0，stderr为0字节、内容=空，stdout为23字节/1条换行分隔、内容=7 utf8\\n；迁移原Cargo用例wc_c_locale_counts_multibyte_input_as_bytes第1次调用",
+            "args": [
+                "-m",
+                "utf8"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf '%b' '\\165\\164\\146\\070'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\303\\251\\040\\344\\270\\255\\012' > \"$p\"; chmod 644 -- \"$p\""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "7 utf8\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "export LC_ALL='C.UTF-8'，export LANG='C.UTF-8'，unset POSIXLY_CORRECT；执行wc -m -c utf8；stdin为0字节、内容=空；输入fixture：file utf8，mode=644，7字节，内容=\\xc3\\xa9 \\xe4\\xb8\\xad\\n；预期RC=0，stderr为0字节、内容=空，stdout为25字节/1条换行分隔、内容=4 7 utf8\\n；迁移原Cargo用例wc_prints_chars_before_bytes_regardless_of_option_order第1次调用",
+            "args": [
+                "-m",
+                "-c",
+                "utf8"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C.UTF-8'",
+                "export LANG='C.UTF-8'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf '%b' '\\165\\164\\146\\070'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\303\\251\\040\\344\\270\\255\\012' > \"$p\"; chmod 644 -- \"$p\""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4 7 utf8\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "export LC_ALL='C.UTF-8'，export LANG='C.UTF-8'，unset POSIXLY_CORRECT；执行wc -c -m utf8；stdin为0字节、内容=空；输入fixture：file utf8，mode=644，7字节，内容=\\xc3\\xa9 \\xe4\\xb8\\xad\\n；预期RC=0，stderr为0字节、内容=空，stdout为25字节/1条换行分隔、内容=4 7 utf8\\n；迁移原Cargo用例wc_prints_chars_before_bytes_regardless_of_option_order第2次调用",
+            "args": [
+                "-c",
+                "-m",
+                "utf8"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C.UTF-8'",
+                "export LANG='C.UTF-8'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf '%b' '\\165\\164\\146\\070'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\303\\251\\040\\344\\270\\255\\012' > \"$p\"; chmod 644 -- \"$p\""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4 7 utf8\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

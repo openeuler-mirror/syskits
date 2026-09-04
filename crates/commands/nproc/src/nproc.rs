@@ -198,7 +198,8 @@ pub fn ct_app() -> Command {
         Arg::new(OPT_IGNORE)
             .long(OPT_IGNORE)
             .value_name("N")
-            .help(t!("nproc.clap.opt_ignore")),
+            .help(t!("nproc.clap.opt_ignore"))
+            .overrides_with(OPT_IGNORE),
     ];
 
     Command::new(utility_name)
@@ -378,6 +379,19 @@ mod tests {
             let result = nproc_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_nproc_semantic_repeated_ignore_uses_last_value() {
+            for (options, expected) in [
+                (["--ignore=1", "--ignore=2"], 2),
+                (["--ignore=2", "--ignore=1"], 1),
+            ] {
+                let args = [ctcore::ct_util_name(), options[0], options[1]];
+                let result = nproc_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+                assert_eq!(result.ignore, expected, "options: {options:?}");
+            }
         }
 
         #[test]

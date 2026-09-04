@@ -179,7 +179,7 @@ impl CtUtmpx {
         let host = self.host();
 
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-
+        let mut canonical = None;
         if !hostname.is_empty() {
             use dns_lookup::{AddrInfoHints, getaddrinfo};
 
@@ -189,23 +189,18 @@ impl CtUtmpx {
                 ..AddrInfoHints::default()
             };
             if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
-                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
                 for socket in sockets {
-                    if let Some(ai_canonname) = socket.canonname {
-                        return Ok(if display.is_empty() {
-                            ai_canonname
-                        } else {
-                            format!("{ai_canonname}:{display}")
-                        });
+                    if let Ok(socket) = socket
+                        && let Some(ai_canonname) = socket.canonname
+                    {
+                        canonical = Some(ai_canonname);
+                        break;
                     }
                 }
-            } else {
-                // GNU coreutils具有这种行为
-                return Ok(hostname.to_string());
             }
         }
 
-        Ok(host.to_string())
+        Ok(format_canonical_host(&host, canonical.as_deref(), display))
     }
 
     /// Iterate through all the utmp records.
@@ -244,6 +239,14 @@ impl CtUtmpx {
             setutxent();
         }
         iter
+    }
+}
+
+fn format_canonical_host(host: &str, canonical: Option<&str>, display: &str) -> String {
+    match canonical {
+        Some(canonical) if !display.is_empty() => format!("{canonical}:{display}"),
+        Some(canonical) => canonical.to_string(),
+        None => host.to_string(),
     }
 }
 
@@ -296,5 +299,22 @@ impl Drop for CtUtmpxIter {
         unsafe {
             endutxent();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_canonical_host;
+
+    #[test]
+    fn canonical_host_preserves_display_on_lookup_failure() {
+        assert_eq!(
+            format_canonical_host("missing.invalid:7", None, "7"),
+            "missing.invalid:7"
+        );
+        assert_eq!(
+            format_canonical_host("alias:7", Some("canonical"), "7"),
+            "canonical:7"
+        );
     }
 }

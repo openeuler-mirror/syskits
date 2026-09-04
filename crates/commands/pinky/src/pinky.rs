@@ -783,9 +783,12 @@ fn write_padded_bytes<W: Write>(output: &mut W, value: &[u8], width: usize) -> i
 
 fn read_to_console<F: Read, W: Write>(f: F, output: &mut W) -> io::Result<()> {
     let mut reader = BufReader::new(f);
-    let mut iobuf = Vec::new();
-    if reader.read_to_end(&mut iobuf).is_ok() {
-        write!(output, "{}", String::from_utf8_lossy(&iobuf))?;
+    let mut buffer = [0_u8; 8192];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(bytes_read) => output.write_all(&buffer[..bytes_read])?,
+        }
     }
     Ok(())
 }
@@ -887,6 +890,16 @@ mod tests_all {
             .unwrap();
         assert!(long.get_flag(pinky_options::PINKY_LONG_FORMAT));
         assert!(!long.get_flag(pinky_options::PINKY_SHORT_FORMAT));
+    }
+
+    #[test]
+    fn test_profile_files_preserve_bytes() {
+        let input = io::Cursor::new(b"profile:\xff\0tail\n");
+        let mut output = Vec::new();
+
+        read_to_console(input, &mut output).unwrap();
+
+        assert_eq!(output, b"profile:\xff\0tail\n");
     }
 
     mod time_format_tests {

@@ -252,6 +252,11 @@ static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 impl CtPasswd {
     /// Look up an account strictly by name, even when the name is numeric.
     pub fn locate_name(name: &str) -> IOResult<Self> {
+        Self::locate_name_bytes(name.as_bytes())
+    }
+
+    /// Look up an account by its native byte name.
+    pub fn locate_name_bytes(name: &[u8]) -> IOResult<Self> {
         let _guard = PW_LOCK.lock();
         let name = CString::new(name).map_err(|_| {
             IOError::new(ErrorKind::InvalidInput, "username contains an embedded NUL")

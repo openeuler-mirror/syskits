@@ -40,10 +40,11 @@ use ctcore::ct_error::{CTResult, CTsageError, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::S_IWGRP;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use sys_locale::get_locale;
 
@@ -105,6 +106,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_USER)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::Username),
         // Redefine the help argument to not include the short flag
         // since that conflicts with omit_project_file.
@@ -249,7 +251,7 @@ struct PinkyFlags {
     is_include_plan: bool,
     is_include_where: bool,
     is_include_home_and_shell: bool,
-    pinky_names: Vec<String>,
+    pinky_names: Vec<OsString>,
 }
 
 /// 计算用户空闲时间的字符串表示
@@ -319,9 +321,9 @@ fn gecos_to_fullname(pw: &CtPasswd) -> Option<String> {
 impl PinkyFlags {
     /// 从命令行参数创建新的 Pinky 实例
     fn new(matches: &clap::ArgMatches) -> Self {
-        let users: Vec<String> = matches
-            .get_many::<String>(pinky_options::PINKY_USER)
-            .map(|v| v.map(ToString::to_string).collect())
+        let users: Vec<OsString> = matches
+            .get_many::<OsString>(pinky_options::PINKY_USER)
+            .map(|values| values.cloned().collect())
             .unwrap_or_default();
 
         let mut include_idle = true;
@@ -460,7 +462,10 @@ impl PinkyFlags {
     fn should_display_user(&self, ut: &CtUtmpx) -> bool {
         ut.is_user_process()
             && (self.pinky_names.is_empty()
-                || self.pinky_names.iter().any(|n| n.as_str() == ut.user()))
+                || self
+                    .pinky_names
+                    .iter()
+                    .any(|name| name.as_bytes() == ut.user().as_bytes()))
     }
 
     /// 以长格式显示用户信息
@@ -471,10 +476,12 @@ impl PinkyFlags {
         Ok(())
     }
 
-    fn print_long_user_info<W: Write>(&self, username: &str, output: &mut W) -> io::Result<()> {
-        write!(output, "Login name: {username:<28}In real life: ")?;
+    fn print_long_user_info<W: Write>(&self, username: &OsStr, output: &mut W) -> io::Result<()> {
+        output.write_all(b"Login name: ")?;
+        write_padded_bytes(output, username.as_bytes(), 28)?;
+        output.write_all(b"In real life: ")?;
 
-        match CtPasswd::locate_name(username) {
+        match CtPasswd::locate_name_bytes(username.as_bytes()) {
             Ok(pw) => {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
                 let user_dir = pw.user_dir.unwrap_or_default();
@@ -523,8 +530,9 @@ impl PinkyFlags {
         Ok(())
     }
 
-    fn long_profile_row(&self, username: &str) -> PinkyRow {
-        match CtPasswd::locate_name(username) {
+    fn long_profile_row(&self, username: &OsStr) -> PinkyRow {
+        let username_lossy = username.to_string_lossy().into_owned();
+        match CtPasswd::locate_name_bytes(username.as_bytes()) {
             Ok(pw) => {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
                 let user_dir = pw.user_dir.unwrap_or_default();
@@ -542,7 +550,7 @@ impl PinkyFlags {
 
                 PinkyRow {
                     kind: "profile".into(),
-                    user: username.to_string(),
+                    user: username_lossy,
                     full_name: Some(fullname),
                     tty_device: None,
                     mesg: None,
@@ -565,7 +573,7 @@ impl PinkyFlags {
             }
             Err(_) => PinkyRow {
                 kind: "profile".into(),
-                user: username.to_string(),
+                user: username_lossy,
                 full_name: None,
                 tty_device: None,
                 mesg: None,
@@ -763,6 +771,14 @@ fn read_optional_file(path: PathBuf) -> Option<String> {
     let mut buf = Vec::new();
     reader.read_to_end(&mut buf).ok()?;
     Some(String::from_utf8_lossy(&buf).to_string())
+}
+
+fn write_padded_bytes<W: Write>(output: &mut W, value: &[u8], width: usize) -> io::Result<()> {
+    output.write_all(value)?;
+    for _ in value.len()..width {
+        output.write_all(b" ")?;
+    }
+    Ok(())
 }
 
 fn read_to_console<F: Read, W: Write>(f: F, output: &mut W) -> io::Result<()> {

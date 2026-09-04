@@ -713,7 +713,7 @@ fn word_count_from_reader<T: WcWordCountable>(
     mut reader: T,
     settings: &WcSettings,
 ) -> (WcWordCount, Option<io::Error>) {
-    match (
+    let (mut total, error) = match (
         settings.is_show_bytes,
         settings.is_show_chars,
         settings.is_show_lines,
@@ -743,11 +743,11 @@ fn word_count_from_reader<T: WcWordCountable>(
         }
         // 显示chars
         (false, true, false, false, false) => {
-            count_bytes_chars_lines_from_stream::<_, false, true, false>(&mut reader)
+            count_bytes_chars_lines_from_stream::<_, true, true, false>(&mut reader)
         }
         // 显示lines, 显示chars
         (false, true, true, false, false) => {
-            count_bytes_chars_lines_from_stream::<_, false, true, true>(&mut reader)
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut reader)
         }
         // 显示bytes, 显示lines
         (true, false, true, false, false) => {
@@ -809,6 +809,24 @@ fn word_count_from_reader<T: WcWordCountable>(
         (_, true, true, true, true) => {
             word_count_from_specialized_reader::<_, true, true, true, true>(reader)
         }
+    };
+
+    if settings.is_show_chars && current_ctype_is_c_locale() {
+        total.chars = total.bytes;
+    }
+
+    (total, error)
+}
+
+fn current_ctype_is_c_locale() -> bool {
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .find(|value| !value.is_empty());
+
+    match locale.as_deref() {
+        None => true,
+        Some(value) => value == "C" || value == "POSIX",
     }
 }
 

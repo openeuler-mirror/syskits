@@ -472,6 +472,27 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "pinky",
+            "description": "export LC_ALL='zh_CN.utf8'，export LANG='zh_CN.utf8'，unset POSIXLY_CORRECT；执行pinky -l；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为134字节、内容=pinky: \\xe6\\xb2\\xa1\\xe6\\x9c\\x89\\xe6\\x8c\\x87\\xe5\\xae\\x9a\\xe7\\x94\\xa8\\xe6\\x88\\xb7\\xe5\\x90\\x8d\\xef\\xbc\\x9b\\xe5\\xbd\\x93\\xe4\\xbd\\xbf\\xe7\\x94\\xa8 -l \\xe9\\x80\\x89\\xe9\\xa1\\xb9\\xe6\\x97\\xb6\\...，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例pinky_localizes_missing_username_diagnostic第1次调用",
+            "args": [
+                "-l"
+            ],
+            "setup_commands": [
+                "export LC_ALL='zh_CN.utf8'",
+                "export LANG='zh_CN.utf8'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pinky: 没有指定用户名；当使用 -l 选项时至少需要指定一个\n请尝试执行 \"pinky --help\" 来获取更多信息。\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

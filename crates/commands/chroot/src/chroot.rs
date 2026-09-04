@@ -186,6 +186,8 @@ fn args_init() -> Vec<Arg> {
                      Same as -u USER -g GROUP. \
                      Userspec has higher preference than -u and/or -g",
             )
+            .action(ArgAction::Set)
+            .overrides_with(opt_flags::USERSPEC)
             .value_name("USER:GROUP"),
         Arg::new(opt_flags::SKIP_CHDIR)
             .long(opt_flags::SKIP_CHDIR)
@@ -631,6 +633,25 @@ mod tests {
             assert_eq!(
                 matches.get_one::<String>(opt_flags::USERSPEC).unwrap(),
                 "testuser:testgroup"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_repeated_userspec_uses_last_value() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--userspec=root:root",
+                "--userspec=alpha:testgrp",
+                "path/to/newroot",
+            ];
+            let matches = command
+                .try_get_matches_from(args)
+                .expect("repeated --userspec must be accepted");
+
+            assert_eq!(
+                matches.get_one::<String>(opt_flags::USERSPEC).unwrap(),
+                "alpha:testgrp"
             );
         }
 

@@ -409,6 +409,33 @@
                 "rm -rf ./chroot_test_dir"
             ],
             "requires_root": true
+        },
+        {
+            "command": "chroot",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行chroot --userspec=+1235:+2345 --userspec=+0:+0 --skip-chdir / /usr/bin/id -u；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=0\\n；迁移原Cargo用例chroot_repeated_userspec_uses_last_value第1次调用",
+            "args": [
+                "--userspec=+1235:+2345",
+                "--userspec=+0:+0",
+                "--skip-chdir",
+                "/",
+                "/usr/bin/id",
+                "-u"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "requires_root": true
         }
     ]
 }

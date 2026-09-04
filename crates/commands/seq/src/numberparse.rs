@@ -126,9 +126,11 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
         }
         Err(_) => match s.to_ascii_lowercase().as_str() {
             "inf" | "infinity" | "+inf" | "+infinity" => {
-                Ok(PreciseNumber::new(ExtendedBigDecimal::Infinity, 0, 0))
+                Ok(PreciseNumber::new_non_fixed(ExtendedBigDecimal::Infinity))
             }
-            "-inf" | "-infinity" => Ok(PreciseNumber::new(ExtendedBigDecimal::MinusInfinity, 0, 0)),
+            "-inf" | "-infinity" => Ok(PreciseNumber::new_non_fixed(
+                ExtendedBigDecimal::MinusInfinity,
+            )),
             "nan" | "-nan" | "+nan" => Err(ParseNumberError::Nan),
             _ => Err(ParseNumberError::Float),
         },
@@ -392,9 +394,15 @@ fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     let bd = if is_neg { -bd } else { bd };
     let is_zero = bd == BigDecimal::zero();
 
-    match (is_neg, is_zero) {
-        (true, true) => Ok(PreciseNumber::new(ExtendedBigDecimal::MinusZero, 2, 0)),
-        _ => Ok(PreciseNumber::new(ExtendedBigDecimal::BigDecimal(bd), 0, 0)),
+    let number = if is_neg && is_zero {
+        ExtendedBigDecimal::MinusZero
+    } else {
+        ExtendedBigDecimal::BigDecimal(bd)
+    };
+    if exp_str.is_some() {
+        Ok(PreciseNumber::new_non_fixed(number))
+    } else {
+        Ok(PreciseNumber::new(number, 0, 0))
     }
 }
 

@@ -25,6 +25,7 @@ pub struct PreciseNumber {
     pub number: ExtendedBigDecimal,
     pub num_integral_digits: usize,
     pub num_fractional_digits: usize,
+    pub is_fixed_precision: bool,
 }
 
 impl PreciseNumber {
@@ -37,6 +38,16 @@ impl PreciseNumber {
             number,
             num_integral_digits,
             num_fractional_digits,
+            is_fixed_precision: true,
+        }
+    }
+
+    pub fn new_non_fixed(number: ExtendedBigDecimal) -> Self {
+        Self {
+            number,
+            num_integral_digits: 0,
+            num_fractional_digits: 0,
+            is_fixed_precision: false,
         }
     }
 

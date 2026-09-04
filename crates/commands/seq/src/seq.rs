@@ -87,8 +87,13 @@ struct PrintConfig<'a> {
     terminator: &'a str,
     pad: bool,
     padding: usize,
-    format: &'a Option<GnuFloatFormat>,
+    format: &'a SeqOutputFormat,
     buffer: Option<&'a mut Vec<u8>>,
+}
+
+enum SeqOutputFormat {
+    Float(GnuFloatFormat),
+    ExactInteger,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,7 +156,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let padding = calculate_padding(&first, &increment, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
-    let format = parse_format_option(options.format.as_deref())?;
+    let format = select_output_format(&options, &first, &increment, &last, padding, largest_dec)?;
 
     let config = PrintConfig {
         largest_dec,
@@ -197,7 +202,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
 
     let padding = calculate_padding(&first, &increment, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
-    let format = parse_format_option(options.format.as_deref())?;
+    let format = select_output_format(&options, &first, &increment, &last, padding, largest_dec)?;
 
     let mut classic_buffer = Vec::new();
     let mut rows = Vec::new();
@@ -314,6 +319,64 @@ fn parse_format_option(format_str: Option<&str>) -> CTResult<Option<GnuFloatForm
     GnuFloatFormat::try_parse(format_str)
         .map(Some)
         .map_err(|error| Box::new(error) as Box<dyn CTError>)
+}
+
+fn select_output_format(
+    options: &SeqOptions,
+    first: &PreciseNumber,
+    increment: &PreciseNumber,
+    last: &PreciseNumber,
+    padding: usize,
+    precision: usize,
+) -> CTResult<SeqOutputFormat> {
+    if let Some(format) = parse_format_option(options.format.as_deref())? {
+        return Ok(SeqOutputFormat::Float(format));
+    }
+    if uses_exact_integer_output(first, increment, last, options) {
+        return Ok(SeqOutputFormat::ExactInteger);
+    }
+
+    let format =
+        if !is_fixed_decimal(first) || !is_fixed_decimal(increment) || !is_fixed_decimal(last) {
+            "%g".to_string()
+        } else if options.is_equal_width {
+            let width = padding + if precision > 0 { precision + 1 } else { 0 };
+            format!("%0{width}.{precision}f")
+        } else {
+            format!("%.{precision}f")
+        };
+    Ok(SeqOutputFormat::Float(
+        GnuFloatFormat::try_parse(&format).expect("generated seq format must be valid"),
+    ))
+}
+
+fn is_fixed_decimal(number: &PreciseNumber) -> bool {
+    number.is_fixed_precision
+}
+
+fn uses_exact_integer_output(
+    first: &PreciseNumber,
+    increment: &PreciseNumber,
+    last: &PreciseNumber,
+    options: &SeqOptions,
+) -> bool {
+    if options.is_equal_width
+        || options.separator.len() != 1
+        || first.num_fractional_digits != 0
+        || increment.num_fractional_digits != 0
+        || last.num_fractional_digits != 0
+        || first.number < ExtendedBigDecimal::zero()
+        || last.number < ExtendedBigDecimal::zero()
+        || !matches!(&first.number, ExtendedBigDecimal::BigDecimal(_))
+    {
+        return false;
+    }
+
+    matches!(
+        &increment.number,
+        ExtendedBigDecimal::BigDecimal(value)
+            if value.to_u64().is_some_and(|step| step > 0 && step <= SEQ_FAST_STEP_LIMIT)
+    )
 }
 
 pub fn ct_app() -> Command {
@@ -497,7 +560,7 @@ struct SeqRenderConfig<'a> {
     terminator: &'a str,
     pad: bool,
     padding: usize,
-    format: &'a Option<GnuFloatFormat>,
+    format: &'a SeqOutputFormat,
 }
 
 fn render_seq_value(
@@ -517,10 +580,10 @@ fn render_seq_value(
 
     let mut buffer = Vec::new();
     match config.format {
-        Some(f) => {
+        SeqOutputFormat::Float(f) => {
             format_long_double(&mut buffer, f, value)?;
         }
-        None => write_value_float(&mut buffer, value, padding, config.largest_dec)?,
+        SeqOutputFormat::ExactInteger => write_value_float(&mut buffer, value, padding, 0)?,
     }
     Ok(String::from_utf8(buffer).expect("seq rendered value should be utf-8"))
 }
@@ -591,10 +654,10 @@ fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
             write!(writer, "{}", config.separator)?;
         }
         match config.format {
-            Some(f) => {
+            SeqOutputFormat::Float(f) => {
                 format_long_double(&mut writer, f, &value)?;
             }
-            None => write_value_float(&mut writer, &value, padding, config.largest_dec)?,
+            SeqOutputFormat::ExactInteger => write_value_float(&mut writer, &value, padding, 0)?,
         }
         value = value + increment.clone();
         is_first_iteration = false;
@@ -817,7 +880,7 @@ mod tests {
                 terminator: "\n",
                 pad: false,
                 padding: 1,
-                format: &None,
+                format: &SeqOutputFormat::ExactInteger,
                 buffer: Some(&mut output),
             },
         )
@@ -840,7 +903,7 @@ mod tests {
                 terminator: "\n",
                 pad: true,
                 padding: 2,
-                format: &None,
+                format: &SeqOutputFormat::ExactInteger,
                 buffer: Some(&mut output),
             },
         )

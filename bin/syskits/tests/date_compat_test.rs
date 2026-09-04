@@ -17,7 +17,7 @@ fn date_debug_for_ymd_date_reports_parse_trace() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("date: parsed date part: (Y-M-D) 2020-01-02"));
-    assert!(stderr.contains("date: input timezone: system default"));
+    assert!(stderr.contains("date: input timezone: TZ=\"Asia/Shanghai\" environment value"));
     assert!(stderr.contains("date: warning: using midnight as starting time: 00:00:00"));
     assert!(stderr.contains("date: starting date/time: '(Y-M-D) 2020-01-02 00:00:00'"));
     assert!(stderr.contains("date: final: 1577894400.000000000 (epoch-seconds)"));

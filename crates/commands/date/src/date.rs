@@ -12,9 +12,9 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use chrono::{DateTime, Datelike, FixedOffset, Local, Offset, Timelike, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Local, NaiveDate, NaiveTime, Offset, Timelike, Utc};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_show;
@@ -368,18 +368,21 @@ fn date_ymd_label(date: &DateTime<FixedOffset>) -> String {
 
 fn date_offset_label(date: &DateTime<FixedOffset>) -> String {
     let offset = date.offset().local_minus_utc();
-    if offset == 0 {
-        "UTC".to_string()
+    format!("UTC{}", debug_timezone_offset(offset))
+}
+
+fn debug_timezone_offset(offset: i32) -> String {
+    let sign = if offset < 0 { '-' } else { '+' };
+    let abs = offset.abs();
+    let hours = abs / 3600;
+    let minutes = (abs % 3600) / 60;
+    let seconds = abs % 60;
+    if seconds != 0 {
+        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
+    } else if minutes != 0 {
+        format!("{sign}{hours:02}:{minutes:02}")
     } else {
-        let sign = if offset < 0 { '-' } else { '+' };
-        let abs = offset.abs();
-        let hours = abs / 3600;
-        let minutes = (abs % 3600) / 60;
-        if minutes == 0 {
-            format!("UTC{sign}{hours:02}")
-        } else {
-            format!("UTC{sign}{hours:02}:{minutes:02}")
-        }
+        format!("{sign}{hours:02}")
     }
 }
 
@@ -393,34 +396,279 @@ fn date_file_reader(path: &Path) -> CTResult<Box<dyn BufRead>> {
     Ok(Box::new(BufReader::new(file)))
 }
 
-fn custom_input_looks_ymd_date(input: &str) -> bool {
-    input.len() == 10
-        && input.as_bytes()[4] == b'-'
-        && input.as_bytes()[7] == b'-'
-        && input[..4].chars().all(|c| c.is_ascii_digit())
-        && input[5..7].chars().all(|c| c.is_ascii_digit())
-        && input[8..].chars().all(|c| c.is_ascii_digit())
+#[derive(Debug, PartialEq, Eq)]
+struct DateDebugTime {
+    parsed: String,
+    hms: String,
 }
 
-fn emit_date_debug(input: &str, date: &DateTime<FixedOffset>, format_string: &str) {
-    if custom_input_looks_ymd_date(input) {
-        eprintln!("date: parsed date part: {}", date_ymd_label(date));
+#[derive(Debug, PartialEq, Eq)]
+struct DateDebugZone {
+    offset: i32,
+    separate_part: bool,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct DateDebugParts {
+    date: Option<String>,
+    time: Option<DateDebugTime>,
+    zone: Option<DateDebugZone>,
+    embedded_timezone: Option<String>,
+}
+
+fn parse_debug_date(input: &str) -> Option<String> {
+    let date = NaiveDate::parse_from_str(input, "%Y-%m-%d").ok()?;
+    Some(format!(
+        "(Y-M-D) {:04}-{:02}-{:02}",
+        date.year(),
+        date.month(),
+        date.day()
+    ))
+}
+
+fn parse_debug_time(input: &str) -> Option<DateDebugTime> {
+    let time = ["%H:%M:%S%.f", "%H:%M:%S", "%H:%M"]
+        .into_iter()
+        .find_map(|format| NaiveTime::parse_from_str(input, format).ok())?;
+    let hms = format!(
+        "{:02}:{:02}:{:02}",
+        time.hour(),
+        time.minute(),
+        time.second()
+    );
+    let parsed = if time.nanosecond() == 0 {
+        hms.clone()
+    } else {
+        format!("{hms}.{:09}", time.nanosecond())
+    };
+    Some(DateDebugTime { parsed, hms })
+}
+
+fn parse_debug_timezone(input: &str) -> Option<DateDebugZone> {
+    let uppercase = input.to_ascii_uppercase();
+    let (offset, separate_part) = if matches!(uppercase.as_str(), "UTC" | "GMT" | "Z") {
+        (0, true)
+    } else {
+        let (offset, separate_part) = if let Some(offset) = uppercase.strip_prefix("UTC") {
+            (offset, true)
+        } else if let Some(offset) = uppercase.strip_prefix("GMT") {
+            (offset, true)
+        } else {
+            (uppercase.as_str(), false)
+        };
+        let sign = match offset.as_bytes().first() {
+            Some(b'+') => 1,
+            Some(b'-') => -1,
+            _ => return None,
+        };
+        let digits = &offset[1..];
+        let (hours, minutes, seconds) = if let Some((hours, rest)) = digits.split_once(':') {
+            let (minutes, seconds) = rest.split_once(':').unwrap_or((rest, "0"));
+            (
+                hours.parse::<i32>().ok()?,
+                minutes.parse::<i32>().ok()?,
+                seconds.parse::<i32>().ok()?,
+            )
+        } else {
+            match digits.len() {
+                1 | 2 => (digits.parse::<i32>().ok()?, 0, 0),
+                4 => (
+                    digits[..2].parse::<i32>().ok()?,
+                    digits[2..].parse::<i32>().ok()?,
+                    0,
+                ),
+                6 => (
+                    digits[..2].parse::<i32>().ok()?,
+                    digits[2..4].parse::<i32>().ok()?,
+                    digits[4..].parse::<i32>().ok()?,
+                ),
+                _ => return None,
+            }
+        };
+        if hours > 24 || minutes > 59 || seconds > 59 {
+            return None;
+        }
+        (
+            sign * (hours * 3600 + minutes * 60 + seconds),
+            separate_part,
+        )
+    };
+
+    Some(DateDebugZone {
+        offset,
+        separate_part,
+    })
+}
+
+fn split_embedded_timezone(input: &str) -> (Option<String>, &str) {
+    let Some(rest) = input.strip_prefix("TZ=\"") else {
+        return (None, input);
+    };
+    let Some(end_quote) = rest.find('"') else {
+        return (None, input);
+    };
+    let timezone = rest[..end_quote].to_string();
+    let remaining = rest[end_quote + 1..].trim_start();
+    (Some(timezone), remaining)
+}
+
+fn analyze_date_debug_input(input: &str) -> DateDebugParts {
+    let (embedded_timezone, input) = split_embedded_timezone(input.trim());
+    let mut parts = DateDebugParts {
+        embedded_timezone,
+        ..DateDebugParts::default()
+    };
+    let tokens: Vec<&str> = input.split_whitespace().collect();
+    let Some(first) = tokens.first() else {
+        return parts;
+    };
+
+    if let Some((date, time_and_zone)) = first.split_once('T') {
+        parts.date = parse_debug_date(date);
+        let zone_start = time_and_zone
+            .char_indices()
+            .skip(1)
+            .find_map(|(index, ch)| matches!(ch, '+' | '-' | 'Z').then_some(index));
+        if let Some(zone_start) = zone_start {
+            parts.time = parse_debug_time(&time_and_zone[..zone_start]);
+            parts.zone = parse_debug_timezone(&time_and_zone[zone_start..]);
+        } else {
+            parts.time = parse_debug_time(time_and_zone);
+        }
+    } else {
+        parts.date = parse_debug_date(first);
+        if let Some(time) = tokens.get(1).and_then(|value| parse_debug_time(value)) {
+            parts.time = Some(time);
+            parts.zone = tokens.get(2).and_then(|value| parse_debug_timezone(value));
+        } else {
+            parts.zone = tokens.get(1).and_then(|value| parse_debug_timezone(value));
+        }
     }
-    eprintln!("date: input timezone: system default");
-    if date.hour() == 0 && date.minute() == 0 && date.second() == 0 && date.nanosecond() == 0 {
-        eprintln!("date: warning: using midnight as starting time: 00:00:00");
+
+    parts
+}
+
+fn input_timezone_debug_label(parts: &DateDebugParts, env_timezone: Option<&str>) -> String {
+    if let Some(timezone) = &parts.embedded_timezone {
+        format!("TZ=\"{timezone}\" in date string")
+    } else if let Some(zone) = &parts.zone {
+        format!(
+            "parsed date/time string ({})",
+            debug_timezone_offset(zone.offset)
+        )
+    } else if let Some(timezone) = env_timezone.filter(|timezone| !timezone.is_empty()) {
+        if timezone == "UTC0" {
+            "TZ=\"UTC0\" environment value or -u".to_string()
+        } else {
+            format!("TZ=\"{timezone}\" environment value")
+        }
+    } else {
+        "system default".to_string()
     }
-    let local_label = date_ymd_hms_label(date);
-    eprintln!("date: starting date/time: '{local_label}'");
-    eprintln!("date: '{local_label}' = {} epoch-seconds", date.timestamp());
-    eprintln!("date: timezone: system default");
-    eprintln!(
+}
+
+fn final_timezone_debug_label(parts: &DateDebugParts, env_timezone: Option<&str>) -> String {
+    if let Some(timezone) = &parts.embedded_timezone {
+        format!("TZ=\"{timezone}\" environment value")
+    } else if let Some(timezone) = env_timezone.filter(|timezone| !timezone.is_empty()) {
+        if timezone == "UTC0" {
+            "Universal Time".to_string()
+        } else {
+            format!("TZ=\"{timezone}\" environment value")
+        }
+    } else {
+        "system default".to_string()
+    }
+}
+
+fn date_debug_text(
+    input: &str,
+    date: &DateTime<FixedOffset>,
+    format_string: &str,
+    env_timezone: Option<&str>,
+) -> String {
+    use std::fmt::Write as _;
+
+    let parts = analyze_date_debug_input(input);
+    let mut output = String::new();
+    if let Some(parsed_date) = &parts.date {
+        let _ = writeln!(output, "date: parsed date part: {parsed_date}");
+    }
+    if let Some(time) = &parts.time {
+        let numeric_zone = parts
+            .zone
+            .as_ref()
+            .filter(|zone| !zone.separate_part)
+            .map(|zone| format!(" UTC{}", debug_timezone_offset(zone.offset)))
+            .unwrap_or_default();
+        let _ = writeln!(
+            output,
+            "date: parsed time part: {}{numeric_zone}",
+            time.parsed
+        );
+    }
+    if let Some(zone) = parts.zone.as_ref().filter(|zone| zone.separate_part) {
+        let _ = writeln!(
+            output,
+            "date: parsed zone part: UTC{}",
+            debug_timezone_offset(zone.offset)
+        );
+    }
+    let _ = writeln!(
+        output,
+        "date: input timezone: {}",
+        input_timezone_debug_label(&parts, env_timezone)
+    );
+    if let Some(time) = &parts.time {
+        let _ = writeln!(
+            output,
+            "date: using specified time as starting value: '{}'",
+            time.hms
+        );
+    } else if date.hour() == 0 && date.minute() == 0 && date.second() == 0 && date.nanosecond() == 0
+    {
+        output.push_str("date: warning: using midnight as starting time: 00:00:00\n");
+    }
+
+    let starting_date = parts.date.clone().unwrap_or_else(|| date_ymd_label(date));
+    let starting_time = parts
+        .time
+        .as_ref()
+        .map(|time| time.hms.clone())
+        .unwrap_or_else(|| {
+            format!(
+                "{:02}:{:02}:{:02}",
+                date.hour(),
+                date.minute(),
+                date.second()
+            )
+        });
+    let starting_zone = parts
+        .zone
+        .as_ref()
+        .map(|zone| format!(" TZ={}", debug_timezone_offset(zone.offset)))
+        .unwrap_or_default();
+    let starting_label = format!("{starting_date} {starting_time}{starting_zone}");
+    let _ = writeln!(output, "date: starting date/time: '{starting_label}'");
+    let _ = writeln!(
+        output,
+        "date: '{starting_label}' = {} epoch-seconds",
+        date.timestamp()
+    );
+    let _ = writeln!(
+        output,
+        "date: timezone: {}",
+        final_timezone_debug_label(&parts, env_timezone)
+    );
+    let _ = writeln!(
+        output,
         "date: final: {}.{:09} (epoch-seconds)",
         date.timestamp(),
         date.timestamp_subsec_nanos()
     );
     let utc = date.with_timezone(&Utc);
-    eprintln!(
+    let _ = writeln!(
+        output,
         "date: final: (Y-M-D) {:04}-{:02}-{:02} {:02}:{:02}:{:02} (UTC)",
         utc.year(),
         utc.month(),
@@ -429,15 +677,26 @@ fn emit_date_debug(input: &str, date: &DateTime<FixedOffset>, format_string: &st
         utc.minute(),
         utc.second()
     );
-    eprintln!(
+    let _ = writeln!(
+        output,
         "date: final: {} ({})",
         date_ymd_hms_label(date),
         date_offset_label(date)
     );
-    eprintln!(
-        "{}: output format: ‘{}’",
+    let _ = writeln!(
+        output,
+        "{}: output format: {}",
         ctcore::ct_util_name(),
-        format_string
+        locale_quote(format_string)
+    );
+    output
+}
+
+fn emit_date_debug(input: &str, date: &DateTime<FixedOffset>, format_string: &str) {
+    let env_timezone = std::env::var("TZ").ok();
+    eprint!(
+        "{}",
+        date_debug_text(input, date, format_string, env_timezone.as_deref())
     );
 }
 
@@ -1618,6 +1877,25 @@ mod tests {
         let wide_nsec = format_using_strftime(&dt, "%99N").unwrap();
         assert_eq!(wide_nsec.len(), 99);
         assert!(wide_nsec.chars().all(|c| c == '0'));
+    }
+
+    #[test]
+    fn test_analyze_date_debug_input_with_explicit_utc() {
+        assert_eq!(
+            analyze_date_debug_input("2024-02-29 12:34:56 UTC"),
+            DateDebugParts {
+                date: Some("(Y-M-D) 2024-02-29".to_string()),
+                time: Some(DateDebugTime {
+                    parsed: "12:34:56".to_string(),
+                    hms: "12:34:56".to_string(),
+                }),
+                zone: Some(DateDebugZone {
+                    offset: 0,
+                    separate_part: true,
+                }),
+                embedded_timezone: None,
+            }
+        );
     }
 
     #[test]

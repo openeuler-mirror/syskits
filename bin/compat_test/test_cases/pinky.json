@@ -406,6 +406,28 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "pinky",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行pinky -l 0；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为59字节/1条换行分隔、内容=Login name: 0                           In real life:  ???\\n；迁移原Cargo用例pinky_treats_numeric_users_as_names第1次调用",
+            "args": [
+                "-l",
+                "0"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Login name: 0                           In real life:  ???\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

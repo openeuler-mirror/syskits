@@ -249,6 +249,26 @@ pub trait Locate<K> {
 // （从技术上讲，我们也必须确保程序其他地方没有调用这些原始函数。）
 static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
+impl CtPasswd {
+    /// Look up an account strictly by name, even when the name is numeric.
+    pub fn locate_name(name: &str) -> IOResult<Self> {
+        let _guard = PW_LOCK.lock();
+        let name = CString::new(name).map_err(|_| {
+            IOError::new(ErrorKind::InvalidInput, "username contains an embedded NUL")
+        })?;
+        let data = unsafe { getpwnam(name.as_ptr()) };
+        if data.is_null() {
+            Err(IOError::new(
+                ErrorKind::NotFound,
+                format!("Not found: {}", name.to_string_lossy()),
+            ))
+        } else {
+            // SAFETY: PW_LOCK protects the static storage returned by getpwnam.
+            Ok(unsafe { Self::from_raw(ptr::read(data as *const _)) })
+        }
+    }
+}
+
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
         impl Locate<$t> for $st {

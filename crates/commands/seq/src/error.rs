@@ -28,6 +28,9 @@ pub enum SeqError {
     /// 缺少必需的参数
     NoArguments,
 
+    /// 等宽输出不能与自定义格式同时使用
+    FormatWithEqualWidth,
+
     /// IO错误
     IoError(String),
 }
@@ -35,14 +38,14 @@ pub enum SeqError {
 impl CTError for SeqError {
     fn code(&self) -> i32 {
         match self {
-            Self::NoArguments => 1,
+            Self::NoArguments | Self::FormatWithEqualWidth => 1,
             Self::ParseError(_, _) | Self::ZeroIncrement(_) => 1,
             Self::IoError(_) => 3,
         }
     }
 
     fn usage(&self) -> bool {
-        matches!(self, Self::NoArguments)
+        matches!(self, Self::NoArguments | Self::FormatWithEqualWidth)
     }
 }
 
@@ -61,6 +64,10 @@ impl Display for SeqError {
             }
             Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
             Self::NoArguments => write!(f, "missing operand"),
+            Self::FormatWithEqualWidth => write!(
+                f,
+                "format string may not be specified when printing equal width strings"
+            ),
             Self::IoError(s) => write!(f, "IO error: {s}"),
         }
     }
@@ -79,6 +86,7 @@ mod tests {
     #[test]
     fn test_error_codes() {
         assert_eq!(SeqError::NoArguments.code(), 1);
+        assert_eq!(SeqError::FormatWithEqualWidth.code(), 1);
         assert_eq!(
             SeqError::ParseError("123".into(), ParseNumberError::Float).code(),
             1
@@ -99,6 +107,10 @@ mod tests {
         );
         assert_eq!(SeqError::NoArguments.to_string(), "missing operand");
         assert_eq!(
+            SeqError::FormatWithEqualWidth.to_string(),
+            "format string may not be specified when printing equal width strings"
+        );
+        assert_eq!(
             SeqError::IoError("test".into()).to_string(),
             "IO error: test"
         );
@@ -107,6 +119,7 @@ mod tests {
     #[test]
     fn test_error_usage() {
         assert!(SeqError::NoArguments.usage());
+        assert!(SeqError::FormatWithEqualWidth.usage());
         assert!(!SeqError::ParseError("123".into(), ParseNumberError::Float).usage());
         assert!(!SeqError::ZeroIncrement("0".into()).usage());
         assert!(!SeqError::IoError("test".into()).usage());

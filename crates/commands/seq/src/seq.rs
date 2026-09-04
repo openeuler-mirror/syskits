@@ -129,6 +129,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let options = SeqOptions::new(&matches);
 
     let numbers = parse_number_args(&matches)?;
+    validate_option_compatibility(&options)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
     // Try fast path optimization first
@@ -192,6 +193,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
     let matches = ct_app().try_get_matches_from(modified_args)?;
     let options = SeqOptions::new(&matches);
     let numbers = parse_number_args(&matches)?;
+    validate_option_compatibility(&options)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
     let padding = calculate_padding(&first, &increment, &last);
@@ -238,6 +240,13 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
             }
         })
         .collect::<Vec<_>>())
+}
+
+fn validate_option_compatibility(options: &SeqOptions) -> CTResult<()> {
+    if options.is_equal_width && options.format.is_some() {
+        return Err(SeqError::FormatWithEqualWidth.into());
+    }
+    Ok(())
 }
 
 fn get_sequence_range(
@@ -759,6 +768,22 @@ mod tests {
             let options = SeqOptions::new(&matches);
 
             assert_eq!(options.separator, expected);
+        }
+    }
+
+    #[test]
+    fn test_equal_width_conflicts_with_format() {
+        for args in [
+            ["seq", "-w", "-f", "%f", "1", "2"],
+            ["seq", "-f", "%f", "-w", "1", "2"],
+        ] {
+            let error = seq_main(args.into_iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.to_string(),
+                "format string may not be specified when printing equal width strings"
+            );
         }
     }
 

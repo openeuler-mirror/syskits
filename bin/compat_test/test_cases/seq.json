@@ -517,6 +517,56 @@
                     }
                 ]
             }
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -s , --separator=: 1 3；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为6字节/1条换行分隔、内容=1:2:3\\n；迁移原Cargo用例seq_repeated_separator_uses_last_value第1次调用",
+            "args": [
+                "-s",
+                ",",
+                "--separator=:",
+                "1",
+                "3"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1:2:3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq --separator=: -s , 1 3；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为6字节/1条换行分隔、内容=1,2,3\\n；迁移原Cargo用例seq_repeated_separator_uses_last_value第2次调用",
+            "args": [
+                "--separator=:",
+                "-s",
+                ",",
+                "1",
+                "3"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1,2,3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

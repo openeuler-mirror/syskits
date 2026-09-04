@@ -369,7 +369,7 @@ impl PinkyFlags {
     }
 
     fn get_tty_info(&self, ut: &CtUtmpx) -> std::io::Result<(char, i64)> {
-        let tty_path = PathBuf::from("/dev").join(ut.tty_device().as_str());
+        let tty_path = tty_status_path(&ut.tty_device());
         match tty_path.metadata() {
             Ok(meta) => Ok((
                 if meta.mode() & S_IWGRP == 0 { '*' } else { ' ' },
@@ -804,6 +804,11 @@ fn write_right_field<W: Write>(output: &mut W, value: &[u8], width: usize) -> io
     output.write_all(value)
 }
 
+fn tty_status_path(line: &str) -> PathBuf {
+    let device = line.split_once(' ').map_or(line, |(_, device)| device);
+    PathBuf::from("/dev").join(device)
+}
+
 fn read_to_console<F: Read, W: Write>(f: F, output: &mut W) -> io::Result<()> {
     let mut reader = BufReader::new(f);
     let mut buffer = [0_u8; 8192];
@@ -936,6 +941,13 @@ mod tests_all {
         assert_eq!(unknown.len(), 20);
         assert_eq!(&unknown[17..], b"???");
         assert!(unknown[..17].iter().all(|byte| *byte == b' '));
+    }
+
+    #[test]
+    fn test_tty_status_path_uses_device_after_space() {
+        assert_eq!(tty_status_path("null"), PathBuf::from("/dev/null"));
+        assert_eq!(tty_status_path("/dev/null"), PathBuf::from("/dev/null"));
+        assert_eq!(tty_status_path("prefix null"), PathBuf::from("/dev/null"));
     }
 
     mod time_format_tests {

@@ -28,7 +28,8 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
-use std::os::unix::prelude::*;
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -111,6 +112,19 @@ fn nohup_stderr_redirect_msg(ignoring_input: bool) -> &'static str {
     } else {
         "redirecting stderr to stdout"
     }
+}
+
+fn open_nohup_out(path: &Path) -> io::Result<File> {
+    // GNU nohup temporarily restricts the umask so newly created files are
+    // always user-readable and user-writable, regardless of the caller's umask.
+    let previous_umask = unsafe { libc::umask(!0o600) };
+    let result = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path);
+    unsafe { libc::umask(previous_umask) };
+    result
 }
 
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -224,11 +238,7 @@ fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
         Err(_) => EXIT_CANCELED,
     };
 
-    match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(Path::new(NOHUP_OUT))
-    {
+    match open_nohup_out(Path::new(NOHUP_OUT)) {
         Ok(file) => {
             let msg = nohup_append_msg(NOHUP_OUT, ignoring_input);
             if write_nohup_msg(&msg).is_err() {
@@ -244,7 +254,7 @@ fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
             let mut path_buf = PathBuf::from(home);
             path_buf.push(NOHUP_OUT);
             let path_buf_str = path_buf.to_str().unwrap();
-            match OpenOptions::new().create(true).append(true).open(&path_buf) {
+            match open_nohup_out(&path_buf) {
                 Ok(file) => {
                     let msg = nohup_append_msg(path_buf_str, ignoring_input);
                     if write_nohup_msg(&msg).is_err() {

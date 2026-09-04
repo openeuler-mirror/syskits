@@ -61,6 +61,9 @@ use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self};
 
+#[cfg(unix)]
+type SignalDispositions = (Option<Vec<Signal>>, Option<Vec<Signal>>);
+
 #[derive(Debug, PartialEq)]
 struct EnvOptions<'a> {
     ignore_env: bool,
@@ -676,6 +679,54 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
 }
 
 #[cfg(unix)]
+fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDispositions> {
+    let mut operations = Vec::new();
+    for (name, set_default) in [("default-signal", true), ("ignore-signal", false)] {
+        if let (Some(indices), Some(values)) = (
+            args_match.indices_of(name),
+            args_match.get_many::<String>(name),
+        ) {
+            operations.extend(
+                indices
+                    .zip(values)
+                    .map(|(index, value)| (index, set_default, value)),
+            );
+        }
+    }
+    operations.sort_unstable_by_key(|(index, _, _)| *index);
+
+    let saw_default = operations.iter().any(|(_, set_default, _)| *set_default);
+    let saw_ignore = operations.iter().any(|(_, set_default, _)| !set_default);
+    let mut default_signals = Vec::new();
+    let mut ignore_signals = Vec::new();
+
+    for (_, set_default, value) in operations {
+        let signals = if value.is_empty() {
+            Signal::iterator().collect()
+        } else {
+            parse_signal_list(value)?
+        };
+
+        for signal in signals {
+            let (selected, overridden) = if set_default {
+                (&mut default_signals, &mut ignore_signals)
+            } else {
+                (&mut ignore_signals, &mut default_signals)
+            };
+            overridden.retain(|candidate| *candidate != signal);
+            if !selected.contains(&signal) {
+                selected.push(signal);
+            }
+        }
+    }
+
+    Ok((
+        saw_default.then_some(default_signals),
+        saw_ignore.then_some(ignore_signals),
+    ))
+}
+
+#[cfg(unix)]
 fn ensure_child_status_is_waitable() {
     unsafe {
         let _ = sigaction(
@@ -863,9 +914,7 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
     };
 
     #[cfg(unix)]
-    let default_signals = get_signals(args_match, "default-signal")?;
-    #[cfg(unix)]
-    let ignore_signals = get_signals(args_match, "ignore-signal")?;
+    let (default_signals, ignore_signals) = get_signal_dispositions(args_match)?;
     #[cfg(unix)]
     let block_signals = get_signals(args_match, "block-signal")?;
     #[cfg(unix)]
@@ -1125,6 +1174,34 @@ mod tests {
     fn test_parse_signal_accepts_poll_alias() {
         assert_eq!(parse_signal("POLL").unwrap(), Signal::SIGIO);
         assert_eq!(parse_signal("SIGPOLL").unwrap(), Signal::SIGIO);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_signal_dispositions_follow_argument_order() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--ignore-signal=HUP",
+                "--default-signal=HUP",
+                "true",
+            ])
+            .unwrap();
+        let (default_signals, ignore_signals) = get_signal_dispositions(&matches).unwrap();
+        assert_eq!(default_signals, Some(vec![Signal::SIGHUP]));
+        assert_eq!(ignore_signals, Some(vec![]));
+
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--default-signal=HUP",
+                "--ignore-signal=HUP",
+                "true",
+            ])
+            .unwrap();
+        let (default_signals, ignore_signals) = get_signal_dispositions(&matches).unwrap();
+        assert_eq!(default_signals, Some(vec![]));
+        assert_eq!(ignore_signals, Some(vec![Signal::SIGHUP]));
     }
 
     #[test]

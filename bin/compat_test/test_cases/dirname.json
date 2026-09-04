@@ -155,6 +155,28 @@
             },
             "cleanup_commands": [
             ]
+        },
+        {
+            "command": "dirname",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='en_US.UTF-8'，unset POSIXLY_CORRECT；执行dirname /tmp/missing-\\xff/file；参数完整十六进制=2f746d702f6d697373696e672dff2f66696c65；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为15字节/1条换行分隔、完整十六进制=2f746d702f6d697373696e672dff0a；迁移原Cargo用例dirname_accepts_non_utf8_missing_path第1次调用",
+            "args": [
+                "2f746d702f6d697373696e672dff2f66696c65"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='en_US.UTF-8'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2f746d702f6d697373696e672dff0a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
   }

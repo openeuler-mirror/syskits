@@ -11,6 +11,7 @@
 
 use std::cmp::Ordering;
 use std::error::Error;
+use std::ffi::CStr;
 use std::fmt::{Display, Formatter};
 
 use num_bigint::BigUint;
@@ -37,6 +38,7 @@ const LONG_DOUBLE_PRECISION: usize = 53;
 
 const LONG_DOUBLE_MAX_EXPONENT: i32 = 16383;
 const LONG_DOUBLE_MIN_NORMAL_EXPONENT: i32 = -16382;
+const GROUPING_STOP: u8 = ctcore::libc::c_char::MAX.to_ne_bytes()[0];
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 const X87_HEX_LAYOUT: bool = true;
@@ -50,6 +52,7 @@ struct Flags {
     space: bool,
     alternate: bool,
     zero: bool,
+    grouping: bool,
 }
 
 #[derive(Debug)]
@@ -119,7 +122,7 @@ impl GnuFloatFormat {
                 b' ' => flags.space = true,
                 b'#' => flags.alternate = true,
                 b'0' => flags.zero = true,
-                b'\'' => {}
+                b'\'' => flags.grouping = true,
                 _ => break,
             }
             index += 1;
@@ -204,6 +207,7 @@ impl GnuFloatFormat {
                 (number.negative, body)
             }
         };
+        let body = if finite { self.localize(body) } else { body };
 
         let sign = if negative {
             "-"
@@ -223,6 +227,97 @@ impl GnuFloatFormat {
         );
         format!("{}{}{}", self.prefix, number, self.suffix)
     }
+
+    fn localize(&self, mut body: String) -> String {
+        let locale = LocaleInfo::current();
+        let exponent = body.find(['e', 'E', 'p', 'P']).unwrap_or(body.len());
+        let point = body[..exponent].find('.');
+
+        if locale.decimal_point != "." {
+            if let Some(point) = point {
+                body.replace_range(point..=point, &locale.decimal_point);
+            }
+        }
+
+        if self.flags.grouping && !self.conversion.eq_ignore_ascii_case(&b'a') {
+            let integer_end = point.unwrap_or(exponent);
+            let grouped = group_integer(&body[..integer_end], &locale);
+            body.replace_range(..integer_end, &grouped);
+        }
+
+        body
+    }
+}
+
+struct LocaleInfo {
+    decimal_point: String,
+    thousands_separator: String,
+    grouping: Vec<u8>,
+}
+
+impl LocaleInfo {
+    fn current() -> Self {
+        // SAFETY: localeconv returns pointers to process-locale storage that
+        // remains valid until the next locale change; values are copied here.
+        unsafe {
+            let locale = ctcore::libc::localeconv();
+            let decimal_point = CStr::from_ptr((*locale).decimal_point)
+                .to_string_lossy()
+                .into_owned();
+            let thousands_separator = CStr::from_ptr((*locale).thousands_sep)
+                .to_string_lossy()
+                .into_owned();
+            let mut grouping = Vec::new();
+            let mut current = (*locale).grouping.cast::<u8>();
+            while *current != 0 {
+                grouping.push(*current);
+                if *current == GROUPING_STOP {
+                    break;
+                }
+                current = current.add(1);
+            }
+            if !grouping.is_empty() && *current == 0 {
+                grouping.push(0);
+            }
+            Self {
+                decimal_point,
+                thousands_separator,
+                grouping,
+            }
+        }
+    }
+}
+
+fn group_integer(integer: &str, locale: &LocaleInfo) -> String {
+    if locale.thousands_separator.is_empty()
+        || locale.grouping.is_empty()
+        || locale.grouping[0] == 0
+        || locale.grouping[0] == GROUPING_STOP
+    {
+        return integer.to_string();
+    }
+
+    let mut groups = Vec::new();
+    let mut end = integer.len();
+    let mut pattern_index = 0;
+    let mut group_size = locale.grouping[0] as usize;
+    while end > group_size {
+        groups.push(&integer[end - group_size..end]);
+        end -= group_size;
+        if let Some(&next) = locale.grouping.get(pattern_index + 1) {
+            match next {
+                0 => {}
+                GROUPING_STOP => break,
+                value => {
+                    pattern_index += 1;
+                    group_size = value as usize;
+                }
+            }
+        }
+    }
+    groups.push(&integer[..end]);
+    groups.reverse();
+    groups.join(&locale.thousands_separator)
 }
 
 fn parse_usize(value: &str) -> usize {

@@ -160,7 +160,7 @@ mod tests {
     fn test_no_such_user_error() {
         let error = ChrootError::NoSuchUser("unknown_user".into());
 
-        assert_eq!(format!("{}", error), "no such user: unknown_user");
+        assert_eq!(format!("{error}"), "no such user: unknown_user");
         assert_eq!(error.code(), 125);
     }
 

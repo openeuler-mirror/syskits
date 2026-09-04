@@ -28,3 +28,4 @@ pinky:
     project: '项目：'
     plan: "计划：\n"
     missing_username: '没有指定用户名；当使用 -l 选项时至少需要指定一个'
+    try_help: '请尝试执行 "pinky --help" 来获取更多信息。'

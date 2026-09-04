@@ -28,3 +28,4 @@ pinky:
     project: 'Project: '
     plan: "Plan:\n"
     missing_username: 'no username specified; at least one must be specified when using -l'
+    try_help: "Try 'pinky --help' for more information."

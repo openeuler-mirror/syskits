@@ -36,7 +36,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_entries::CtPasswd;
-use ctcore::ct_error::{CTResult, CTsageError, FromIo};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::S_IWGRP;
@@ -169,9 +169,13 @@ fn pinky_main_with_writer<W: Write>(args: impl ctcore::Args, output: &mut W) -> 
     let pk = PinkyFlags::new(&matches);
     let do_short_format = !matches.get_flag(pinky_options::PINKY_LONG_FORMAT);
     if !do_short_format && pk.pinky_names.is_empty() {
-        return Err(CTsageError::new(
+        return Err(CtSimpleError::new(
             1,
-            t!("pinky.output.missing_username").to_string(),
+            format!(
+                "{}\n{}",
+                t!("pinky.output.missing_username"),
+                t!("pinky.output.try_help")
+            ),
         ));
     }
 

@@ -125,34 +125,55 @@ fn nproc_query_from_matches(args_match: &ArgMatches) -> NprocQuery {
 }
 
 fn nproc_available() -> usize {
-    // 尝试使用环境变量 OMP_NUM_THREADS 强制设置线程数
-    match env::var("OMP_NUM_THREADS") {
-        // 解析并处理 OMP_NUM_THREADS，特殊处理 "x,y,z" 格式的情况
-        Ok(thread_str) => {
-            let thread: Vec<&str> = thread_str.split_terminator(',').collect();
-            match &thread[..] {
-                [] => available_parallelism(),
-                [s, ..] => match s.parse() {
-                    Ok(0) | Err(_) => available_parallelism(),
-                    Ok(n) => n,
-                },
-            }
-        }
-        // OMP_NUM_THREADS 环境变量不存在，退回到默认的核心检测
-        Err(_) => available_parallelism(),
+    let omp_threads = env::var_os("OMP_NUM_THREADS")
+        .as_deref()
+        .map(parse_omp_threads)
+        .unwrap_or(0);
+    if omp_threads == 0 {
+        available_parallelism()
+    } else {
+        omp_threads
     }
 }
 
 fn nproc_parse_limit_thread() -> Option<usize> {
-    match env::var("OMP_THREAD_LIMIT") {
-        // 使用 OpenMP 变量限制线程数；解析失败时视为未设置，OMP_THREAD_LIMIT=0 时也视为未设置
-        Ok(thread_str) => match thread_str.parse() {
-            Ok(0) | Err(_) => None,
-            Ok(n) => Some(n),
-        },
-        // OMP_THREAD_LIMIT 环境变量不存在，视为未设置
-        Err(_) => None,
+    let limit = env::var_os("OMP_THREAD_LIMIT")
+        .as_deref()
+        .map(parse_omp_threads)
+        .unwrap_or(0);
+    (limit != 0).then_some(limit)
+}
+
+fn parse_omp_threads(threads: &std::ffi::OsStr) -> usize {
+    let bytes = threads.as_encoded_bytes();
+    let mut index = 0;
+    while bytes.get(index).is_some_and(|byte| is_ascii_space(*byte)) {
+        index += 1;
     }
+    if !bytes.get(index).is_some_and(u8::is_ascii_digit) {
+        return 0;
+    }
+
+    let mut value = 0usize;
+    while let Some(digit) = bytes.get(index).filter(|byte| byte.is_ascii_digit()) {
+        value = value
+            .saturating_mul(10)
+            .saturating_add(usize::from(*digit - b'0'));
+        index += 1;
+    }
+
+    while bytes.get(index).is_some_and(|byte| is_ascii_space(*byte)) {
+        index += 1;
+    }
+    if index == bytes.len() || bytes[index] == b',' {
+        value
+    } else {
+        0
+    }
+}
+
+fn is_ascii_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
 }
 
 fn nproc_effective_limit(query: NprocQuery, thread_limit: Option<usize>) -> usize {
@@ -301,7 +322,10 @@ mod tests {
     }
 
     mod tests_nproc_process {
-        use crate::{NprocQuery, nproc_cores_num_process, nproc_effective_limit};
+        use crate::{
+            NprocQuery, nproc_cores_num_process, nproc_effective_limit, parse_omp_threads,
+        };
+        use std::ffi::OsStr;
 
         #[test]
         fn test_nproc_cores_num_process_normal() {
@@ -335,6 +359,23 @@ mod tests {
         fn test_nproc_all_ignores_openmp_thread_limit() {
             assert_eq!(nproc_effective_limit(NprocQuery::Available, Some(1)), 1);
             assert_eq!(nproc_effective_limit(NprocQuery::All, Some(1)), usize::MAX);
+        }
+
+        #[test]
+        fn test_parse_omp_threads_matches_gnu_rules() {
+            for (input, expected) in [
+                ("", 0),
+                (" 2 ", 2),
+                ("2,ignored", 2),
+                ("2 ,ignored", 2),
+                ("+2", 0),
+                ("-2", 0),
+                ("2bad", 0),
+                ("0", 0),
+                ("18446744073709551616", usize::MAX),
+            ] {
+                assert_eq!(parse_omp_threads(OsStr::new(input)), expected, "{input:?}");
+            }
         }
     }
 

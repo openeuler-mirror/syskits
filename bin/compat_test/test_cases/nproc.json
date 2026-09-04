@@ -269,6 +269,216 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS=' 2 '，unset OMP_THREAD_LIMIT；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=2\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第1次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS=' 2 '",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='2,ignored'，unset OMP_THREAD_LIMIT；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=2\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第2次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='2,ignored'",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='2 ,ignored'，unset OMP_THREAD_LIMIT；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=2\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第3次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='2 ,ignored'",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='+2'，unset OMP_THREAD_LIMIT；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为3字节/1条换行分隔、内容=16\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第4次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='+2'",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "16\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，unset OMP_NUM_THREADS，unset OMP_THREAD_LIMIT；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为3字节/1条换行分隔、内容=16\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第5次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "unset OMP_NUM_THREADS",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "16\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='18446744073709551616'，unset OMP_THREAD_LIMIT；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为21字节/1条换行分隔、内容=18446744073709551615\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第6次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='18446744073709551616'",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "18446744073709551615\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='4'，export OMP_THREAD_LIMIT=' 2 '；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=2\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第7次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='4'",
+                "export OMP_THREAD_LIMIT=' 2 '"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='4'，export OMP_THREAD_LIMIT='2,ignored'；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=2\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第8次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='4'",
+                "export OMP_THREAD_LIMIT='2,ignored'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='4'，export OMP_THREAD_LIMIT='2 ,ignored'；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=2\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第9次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='4'",
+                "export OMP_THREAD_LIMIT='2 ,ignored'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "nproc",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export OMP_NUM_THREADS='4'，export OMP_THREAD_LIMIT='+2'；执行nproc；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为2字节/1条换行分隔、内容=4\\n；迁移原Cargo用例nproc_parses_openmp_environment_like_gnu第10次调用",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "export OMP_NUM_THREADS='4'",
+                "export OMP_THREAD_LIMIT='+2'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 } 

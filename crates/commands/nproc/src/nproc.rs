@@ -19,9 +19,10 @@ use crate::opt_flags::OPT_IGNORE;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use std::ffi::OsString;
 use std::fmt::Display;
+use std::io::{self, Write};
 use std::{env, thread};
 use sys_locale::get_locale;
 
@@ -267,7 +268,12 @@ impl Tool for Nproc {
         let result = nproc_main(args.iter().cloned());
         match result {
             Ok(nproc_info) => {
-                println!("{nproc_info}");
+                let stdout = io::stdout();
+                let mut output = stdout.lock();
+                writeln!(output, "{nproc_info}").map_err_context(|| String::from("write error"))?;
+                output
+                    .flush()
+                    .map_err_context(|| String::from("write error"))?;
                 Ok(())
             }
             Err(e) => {

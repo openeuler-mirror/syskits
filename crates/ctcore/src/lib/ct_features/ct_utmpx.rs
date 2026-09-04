@@ -137,6 +137,10 @@ impl CtUtmpx {
     pub fn tty_device(&self) -> String {
         chars2string!(self.inner.ut_line)
     }
+    /// Return the login timestamp in epoch seconds.
+    pub fn timestamp_seconds(&self) -> i64 {
+        self.inner.ut_tv.tv_sec
+    }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {
         #[allow(clippy::unnecessary_cast)]

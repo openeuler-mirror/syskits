@@ -95,6 +95,21 @@ fn parse_bigdecimal_compat(s: &str) -> Result<BigDecimal, ParseNumberError> {
     Ok(BigDecimal::new(num, frac_len as i64))
 }
 
+fn parse_exponent(exponent: &str) -> Result<i64, ParseNumberError> {
+    let digits = exponent.strip_prefix(['+', '-']).unwrap_or(exponent);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(ParseNumberError::Float);
+    }
+
+    Ok(exponent.parse::<i64>().unwrap_or_else(|_| {
+        if exponent.starts_with('-') {
+            i64::MIN
+        } else {
+            i64::MAX
+        }
+    }))
+}
+
 /// Parse a number with neither a decimal point nor an exponent.
 fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     match parse_bigdecimal_compat(s) {
@@ -123,12 +138,9 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
 /// Parse a number with an exponent but no decimal point.
 fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNumberError> {
     let exp_str = &s[j + 1..];
-    let is_exp_neg = exp_str.starts_with('-');
 
     // 如果指数大到无法放入 i64，根据符号给予最大/最小值
-    let exponent = exp_str
-        .parse::<i64>()
-        .unwrap_or(if is_exp_neg { i64::MIN } else { i64::MAX });
+    let exponent = parse_exponent(exp_str)?;
 
     // 拦截极其离谱的指数，防止 BigDecimal 崩溃或内存耗尽 (模拟 strtod 的 Overflow/Underflow)
     if exponent > 100_000 {
@@ -236,11 +248,8 @@ fn parse_decimal_and_exponent(
 ) -> Result<PreciseNumber, ParseNumberError> {
     let num_digits_between_decimal_point_and_e = (j - (i + 1)) as i64;
     let exp_str = &s[j + 1..];
-    let is_exp_neg = exp_str.starts_with('-');
 
-    let exponent = exp_str
-        .parse::<i64>()
-        .unwrap_or(if is_exp_neg { i64::MIN } else { i64::MAX });
+    let exponent = parse_exponent(exp_str)?;
 
     // 同上，拦截极其离谱的指数
     if exponent > 100_000 {
@@ -533,8 +542,13 @@ mod tests {
             "1.2.3".parse::<PreciseNumber>().unwrap_err(),
             ParseNumberError::Float
         );
-        // "1e2e3" now parses as Infinity due to implementation changes
-        assert!("1e2e3".parse::<PreciseNumber>().is_ok());
+        for invalid in ["1e2e3", "1efoo", "1e+", "1e-", "1.e", "infinite"] {
+            assert_eq!(
+                invalid.parse::<PreciseNumber>().unwrap_err(),
+                ParseNumberError::Float,
+                "input: {invalid}"
+            );
+        }
         assert_eq!(
             "1e2.3".parse::<PreciseNumber>().unwrap_err(),
             ParseNumberError::Float

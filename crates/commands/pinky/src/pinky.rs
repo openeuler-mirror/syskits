@@ -339,7 +339,7 @@ fn gecos_to_fullname_bytes(pw: &CtPasswd) -> Option<Vec<u8>> {
     let username = pw.name_bytes();
     let mut capitalized = username.to_vec();
     if let Some(first) = capitalized.first_mut() {
-        first.make_ascii_uppercase();
+        *first = locale_uppercase(*first);
     }
 
     let mut fullname = Vec::with_capacity(gecos.len());
@@ -351,6 +351,49 @@ fn gecos_to_fullname_bytes(pw: &CtPasswd) -> Option<Vec<u8>> {
         }
     }
     Some(fullname)
+}
+
+fn locale_uppercase(byte: u8) -> u8 {
+    let locale_name = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| OsString::from("C"));
+    locale_uppercase_in(byte, &locale_name)
+}
+
+fn locale_uppercase_in(byte: u8, locale_name: &OsStr) -> u8 {
+    let Ok(locale_name) = std::ffi::CString::new(locale_name.as_bytes()) else {
+        return byte.to_ascii_uppercase();
+    };
+
+    unsafe {
+        let locale = ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        );
+        if locale.is_null() {
+            return byte.to_ascii_uppercase();
+        }
+        let value = if islower_l(i32::from(byte), locale) != 0 {
+            toupper_l(i32::from(byte), locale) as u8
+        } else {
+            byte
+        };
+        ctcore::libc::freelocale(locale);
+        value
+    }
+}
+
+unsafe extern "C" {
+    fn islower_l(
+        character: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
+    fn toupper_l(
+        character: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
 }
 
 impl PinkyFlags {
@@ -1103,6 +1146,14 @@ mod tests_all {
             };
 
             assert_eq!(gecos_to_fullname_bytes(&pw), Some(b"Alpha\xff".to_vec()));
+        }
+
+        #[test]
+        fn test_gecos_capitalization_uses_single_byte_locale() {
+            assert_eq!(
+                locale_uppercase_in(0xe9, OsStr::new("en_US.iso88591")),
+                0xc9
+            );
         }
     }
 }

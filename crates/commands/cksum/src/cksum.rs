@@ -48,6 +48,7 @@ const CKSUM_ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const CKSUM_ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const CKSUM_ALGORITHM_OPTIONS_SM3: &str = "sm3";
 const CKSUM_ALGORITHM_OPTIONS_SHA3: &str = "sha3";
+const BLAKE2B_MAX_OUTPUT_BYTES: usize = 64;
 
 #[derive(Debug)]
 enum CkSumError {
@@ -496,6 +497,15 @@ fn crc_debug_message(debug: bool, algo_name: &str) -> Option<&'static str> {
     }
 }
 
+fn blake2b_tag(length: Option<usize>) -> String {
+    match length {
+        Some(length) if length < BLAKE2B_MAX_OUTPUT_BYTES => {
+            format!("BLAKE2b-{}", length * 8)
+        }
+        _ => "BLAKE2b".to_string(),
+    }
+}
+
 fn clean_io_error(err: &io::Error) -> String {
     let err_msg = err.to_string();
     err_msg
@@ -846,13 +856,10 @@ fn render_cksum_compute_classic(
             None => format!("{sum} {size}{line_end}"),
         },
         CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !invocation.untagged => {
-            match (invocation.length, file) {
-                (Some(length), Some(file)) => {
-                    format!("BLAKE2b-{} ({file}) = {sum}{line_end}", length * 8)
-                }
-                (Some(length), None) => format!("BLAKE2b-{} (-) = {sum}{line_end}", length * 8),
-                (None, Some(file)) => format!("BLAKE2b ({file}) = {sum}{line_end}"),
-                (None, None) => format!("BLAKE2b (-) = {sum}{line_end}"),
+            let tag = blake2b_tag(invocation.length);
+            match file {
+                Some(file) => format!("{tag} ({file}) = {sum}{line_end}"),
+                None => format!("{tag} (-) = {sum}{line_end}"),
             }
         }
         _ => {
@@ -1538,11 +1545,8 @@ where
                 print!("{sum} {sz}{line_end}")
             }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
-                if let Some(length) = cksum_opts.length {
-                    print!("BLAKE2b-{} (-) = {sum}{}", length * 8, line_end);
-                } else {
-                    print!("BLAKE2b (-) = {sum}{line_end}");
-                }
+                let tag = blake2b_tag(cksum_opts.length);
+                print!("{tag} (-) = {sum}{line_end}");
             }
             _ => {
                 if cksum_opts.untagged {
@@ -1646,16 +1650,8 @@ where
                 print!("{sum} {sz} {}{}", filename.display(), line_end)
             }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
-                if let Some(length) = cksum_opts.length {
-                    print!(
-                        "BLAKE2b-{} ({}) = {sum}{}",
-                        length * 8,
-                        filename.display(),
-                        line_end
-                    );
-                } else {
-                    print!("BLAKE2b ({}) = {sum}{}", filename.display(), line_end);
-                }
+                let tag = blake2b_tag(cksum_opts.length);
+                print!("{tag} ({}) = {sum}{line_end}", filename.display());
             }
             _ => {
                 if cksum_opts.untagged {
@@ -4163,8 +4159,8 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SM3;
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
         use crate::{
-            CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, cksum_native_semantic,
-            crc_debug_message, ct_app, opt_flags,
+            CksumOptions, CksumOutputFormat, blake2b_tag, cksum, cksum_detect_algo,
+            cksum_native_semantic, crc_debug_message, ct_app, opt_flags,
         };
         use std::ffi::{OsStr, OsString};
         use std::fs;
@@ -6017,6 +6013,47 @@ mod tests {
             assert_eq!(semantic.rows[0].bytes, Some(3));
             assert_eq!(semantic.rows[0].reported_size, Some(3));
             assert!(semantic.classic_text.contains("1219131554 3 "));
+        }
+
+        #[test]
+        fn test_blake2b_tag_omits_the_full_length_suffix() {
+            assert_eq!(blake2b_tag(None), "BLAKE2b");
+            assert_eq!(blake2b_tag(Some(64)), "BLAKE2b");
+            assert_eq!(blake2b_tag(Some(32)), "BLAKE2b-256");
+        }
+
+        #[test]
+        fn test_cksum_native_semantic_blake2b_full_length_tag() {
+            let temp_dir = Builder::new()
+                .prefix("test_cksum_native_semantic_blake2b_full_length_tag")
+                .tempdir()
+                .unwrap();
+            let test_file_path = temp_dir.path().join("sample.txt");
+            fs::write(&test_file_path, "alpha\nbeta\ngamma\n").unwrap();
+
+            let semantic = cksum_native_semantic(
+                vec![
+                    OsString::from("cksum"),
+                    OsString::from("--algorithm=blake2b"),
+                    OsString::from("--length"),
+                    OsString::from("512"),
+                    OsString::from(test_file_path.to_string_lossy().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].algorithm, "blake2b");
+            assert_eq!(
+                semantic.classic_text,
+                format!(
+                    "BLAKE2b ({}) = e68e2f5b10cb778901b89ca26a5576f535eeec2185d0349c0486c41a1caf7e0eedfb289a6058298cc7c39887d0d051023fd4a0d7e1abb47fdc623dd40fb36c7b\n",
+                    test_file_path.display()
+                )
+            );
         }
 
         #[test]

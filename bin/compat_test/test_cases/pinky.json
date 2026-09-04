@@ -341,6 +341,27 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "pinky",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行pinky -l；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为116字节、内容=pinky: no username specified; at least one must be specified when using -l\\nTry 'pinky --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例pinky_reports_missing_long_format_username第1次调用",
+            "args": [
+                "-l"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pinky: no username specified; at least one must be specified when using -l\nTry 'pinky --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

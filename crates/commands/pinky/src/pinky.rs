@@ -327,13 +327,30 @@ fn time_format_width() -> usize {
 
 /// 从 GECOS 字段提取用户全名
 fn gecos_to_fullname(pw: &CtPasswd) -> Option<String> {
-    pw.user_info.as_ref().map(|gecos| {
-        let name = match gecos.find(',') {
-            Some(pos) => &gecos[..pos],
-            None => gecos,
-        };
-        name.replace('&', &pw.name.capitalize())
-    })
+    gecos_to_fullname_bytes(pw).map(|name| String::from_utf8_lossy(&name).into_owned())
+}
+
+fn gecos_to_fullname_bytes(pw: &CtPasswd) -> Option<Vec<u8>> {
+    let gecos = pw.user_info_bytes()?;
+    let gecos = gecos
+        .iter()
+        .position(|byte| *byte == b',')
+        .map_or(gecos, |position| &gecos[..position]);
+    let username = pw.name_bytes();
+    let mut capitalized = username.to_vec();
+    if let Some(first) = capitalized.first_mut() {
+        first.make_ascii_uppercase();
+    }
+
+    let mut fullname = Vec::with_capacity(gecos.len());
+    for byte in gecos {
+        if *byte == b'&' {
+            fullname.extend_from_slice(&capitalized);
+        } else {
+            fullname.push(*byte);
+        }
+    }
+    Some(fullname)
 }
 
 impl PinkyFlags {
@@ -407,7 +424,7 @@ impl PinkyFlags {
         }
         let fullname = CtPasswd::locate_name_bytes(ut.user_bytes())
             .ok()
-            .and_then(|pw| gecos_to_fullname(&pw));
+            .and_then(|pw| gecos_to_fullname_bytes(&pw));
         write_short_fullname(output, fullname.as_deref())
     }
 
@@ -505,14 +522,16 @@ impl PinkyFlags {
 
         match CtPasswd::locate_name_bytes(username.as_bytes()) {
             Ok(pw) => {
-                let fullname = gecos_to_fullname(&pw).unwrap_or_default();
-                let user_dir = pw.user_dir.unwrap_or_default();
-                let user_shell = pw.user_shell.unwrap_or_default();
+                let fullname = gecos_to_fullname_bytes(&pw).unwrap_or_default();
+                let user_dir = pw.user_dir_bytes().unwrap_or_default();
+                let user_shell = pw.user_shell_bytes().unwrap_or_default();
 
-                writeln!(output, " {fullname}")?;
-                self.print_home_and_shell(&user_dir, &user_shell, output)?;
-                self.print_project_file(&user_dir, output)?;
-                self.print_plan_file(&user_dir, output)?;
+                output.write_all(b" ")?;
+                output.write_all(&fullname)?;
+                output.write_all(b"\n")?;
+                self.print_home_and_shell(user_dir, user_shell, output)?;
+                self.print_project_file(user_dir, output)?;
+                self.print_plan_file(user_dir, output)?;
                 writeln!(output)
             }
             Err(_) => writeln!(output, " ???"),
@@ -521,20 +540,23 @@ impl PinkyFlags {
 
     fn print_home_and_shell<W: Write>(
         &self,
-        user_dir: &str,
-        user_shell: &str,
+        user_dir: &[u8],
+        user_shell: &[u8],
         output: &mut W,
     ) -> io::Result<()> {
         if self.is_include_home_and_shell {
-            write!(output, "Directory: {user_dir:<29}")?;
-            writeln!(output, "Shell:  {user_shell}")?;
+            output.write_all(b"Directory: ")?;
+            write_padded_bytes(output, user_dir, 29)?;
+            output.write_all(b"Shell:  ")?;
+            output.write_all(user_shell)?;
+            output.write_all(b"\n")?;
         }
         Ok(())
     }
 
-    fn print_project_file<W: Write>(&self, user_dir: &str, output: &mut W) -> io::Result<()> {
+    fn print_project_file<W: Write>(&self, user_dir: &[u8], output: &mut W) -> io::Result<()> {
         if self.is_include_project {
-            if let Ok(f) = File::open(PathBuf::from(user_dir).join(".project")) {
+            if let Ok(f) = File::open(PathBuf::from(OsStr::from_bytes(user_dir)).join(".project")) {
                 write!(output, "Project: ")?;
                 read_to_console(f, output)?;
             }
@@ -542,9 +564,9 @@ impl PinkyFlags {
         Ok(())
     }
 
-    fn print_plan_file<W: Write>(&self, user_dir: &str, output: &mut W) -> io::Result<()> {
+    fn print_plan_file<W: Write>(&self, user_dir: &[u8], output: &mut W) -> io::Result<()> {
         if self.is_include_plan {
-            if let Ok(f) = File::open(PathBuf::from(user_dir).join(".plan")) {
+            if let Ok(f) = File::open(PathBuf::from(OsStr::from_bytes(user_dir)).join(".plan")) {
                 writeln!(output, "Plan:")?;
                 read_to_console(f, output)?;
             }
@@ -803,10 +825,10 @@ fn write_padded_bytes<W: Write>(output: &mut W, value: &[u8], width: usize) -> i
     Ok(())
 }
 
-fn write_short_fullname<W: Write>(output: &mut W, fullname: Option<&str>) -> io::Result<()> {
+fn write_short_fullname<W: Write>(output: &mut W, fullname: Option<&[u8]>) -> io::Result<()> {
     output.write_all(b" ")?;
     match fullname {
-        Some(fullname) => write_left_field(output, fullname.as_bytes(), 19),
+        Some(fullname) => write_left_field(output, fullname, 19),
         None => write_right_field(output, b"        ???", 19),
     }
 }
@@ -959,7 +981,7 @@ mod tests_all {
     #[test]
     fn test_short_fullname_uses_gnu_width_and_alignment() {
         let mut known = Vec::new();
-        write_short_fullname(&mut known, Some("Alpha User With A Very Long Name")).unwrap();
+        write_short_fullname(&mut known, Some(b"Alpha User With A Very Long Name")).unwrap();
         assert_eq!(known, b" Alpha User With A V");
 
         let mut unknown = Vec::new();
@@ -1068,6 +1090,19 @@ mod tests_all {
                 ..Default::default()
             };
             assert_eq!(gecos_to_fullname(&pw), Some("Test User".to_string()));
+        }
+
+        #[test]
+        fn test_gecos_to_fullname_preserves_native_bytes() {
+            let pw = CtPasswd {
+                name: "alpha".to_string(),
+                user_info: Some("ignored".to_string()),
+                raw_name: Some(b"alpha".to_vec()),
+                raw_user_info: Some(b"&\xff,ignored".to_vec()),
+                ..Default::default()
+            };
+
+            assert_eq!(gecos_to_fullname_bytes(&pw), Some(b"Alpha\xff".to_vec()));
         }
     }
 }

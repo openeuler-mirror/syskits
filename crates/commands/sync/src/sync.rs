@@ -18,10 +18,14 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 use ctcore::Tool;
+#[cfg(not(target_os = "linux"))]
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+#[cfg(not(target_os = "linux"))]
+use ctcore::ct_error::FromIo;
+use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use std::ffi::OsString;
+#[cfg(not(target_os = "linux"))]
 use std::fs::File;
 use sys_locale::get_locale;
 
@@ -76,20 +80,29 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(CtSimpleError::new(1, err_message));
     }
 
-    for f in &files {
-        check_files(f)?;
+    #[cfg(not(target_os = "linux"))]
+    for file in &files {
+        check_files(file)?;
     }
 
     match select_sync_mode(is_has_data, is_file_system, !files.is_empty()) {
         SyncMode::Global => {
             sync();
         }
-        SyncMode::File => sync_files(&files)?,
+        SyncMode::File => {
+            #[cfg(target_os = "linux")]
+            platform::sync_files(&files)?;
+            #[cfg(not(target_os = "linux"))]
+            sync_files(&files)?;
+        }
         SyncMode::Data => {
             #[cfg(target_os = "linux")]
-            platform::fdatasync(files);
+            platform::sync_data(&files)?;
         }
         SyncMode::FileSystem => {
+            #[cfg(target_os = "linux")]
+            platform::sync_file_systems(&files)?;
+            #[cfg(not(target_os = "linux"))]
             sync_fs(files);
         }
     }
@@ -130,10 +143,12 @@ fn sync() -> isize {
     unsafe { platform::do_sync() }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn sync_fs(files: Vec<String>) -> isize {
     unsafe { platform::do_syncfs(files) }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn sync_files(files: &[String]) -> CTResult<()> {
     for path in files {
         let file =
@@ -144,6 +159,7 @@ fn sync_files(files: &[String]) -> CTResult<()> {
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn check_files(f: &String) -> CTResult<()> {
     platform::check_files(f)
 }

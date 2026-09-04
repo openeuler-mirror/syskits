@@ -252,10 +252,47 @@ fn nproc_parse_ignore_num(args_match: &ArgMatches) -> CTResult<usize> {
 }
 
 fn parse_ignore_value(value: &str) -> CTResult<usize> {
-    value
-        .trim()
-        .parse()
-        .map_err(|_| CtSimpleError::new(1, format!("invalid number: {}", value.quote())))
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while bytes.get(index).is_some_and(|byte| is_ascii_space(*byte)) {
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'+') {
+        index += 1;
+    }
+
+    let digits_start = index;
+    let mut number = 0usize;
+    let mut overflow = false;
+    while let Some(digit) = bytes.get(index).filter(|byte| byte.is_ascii_digit()) {
+        number = match number
+            .checked_mul(10)
+            .and_then(|number| number.checked_add(usize::from(*digit - b'0')))
+        {
+            Some(number) => number,
+            None => {
+                overflow = true;
+                usize::MAX
+            }
+        };
+        index += 1;
+    }
+
+    if digits_start == index || index != bytes.len() {
+        return Err(invalid_ignore_value(value, false));
+    }
+    if overflow {
+        return Err(invalid_ignore_value(value, true));
+    }
+    Ok(number)
+}
+
+fn invalid_ignore_value(value: &str, overflow: bool) -> Box<dyn CTError> {
+    let mut message = format!("invalid number: {}", value.quote());
+    if overflow {
+        message.push_str(": Value too large for defined data type");
+    }
+    CtSimpleError::new(1, message)
 }
 
 /**
@@ -435,6 +472,24 @@ mod tests {
             ] {
                 assert_eq!(parse_omp_threads(OsStr::new(input)), expected, "{input:?}");
             }
+        }
+
+        #[test]
+        fn test_parse_ignore_value_matches_gnu_rules() {
+            use crate::parse_ignore_value;
+
+            for (input, expected) in [("0", 0), (" 1", 1), ("+1", 1), ("01", 1)] {
+                assert_eq!(parse_ignore_value(input).expect(input), expected);
+            }
+            for input in ["", "-1", "1 ", "1x", "0x10"] {
+                assert!(parse_ignore_value(input).is_err(), "{input:?}");
+            }
+            assert_eq!(
+                parse_ignore_value("18446744073709551616")
+                    .expect_err("overflow")
+                    .to_string(),
+                "invalid number: '18446744073709551616': Value too large for defined data type"
+            );
         }
     }
 

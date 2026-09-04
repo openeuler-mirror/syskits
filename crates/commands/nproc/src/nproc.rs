@@ -274,7 +274,8 @@ pub fn ct_app() -> Command {
         Arg::new(OPT_ALL)
             .long(OPT_ALL)
             .help(t!("nproc.clap.opt_all"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(OPT_ALL),
         Arg::new(OPT_IGNORE)
             .long(OPT_IGNORE)
             .value_name("N")
@@ -556,6 +557,15 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_accepts_repeated_all() {
+            let args = vec![ctcore::ct_util_name(), "--all", "--all"];
+            let result = ct_app().try_get_matches_from(args);
+
+            assert!(result.is_ok());
+            assert!(result.expect("matches").get_flag("all"));
         }
 
         #[test]

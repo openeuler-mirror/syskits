@@ -21,3 +21,28 @@ fn pinky_reports_stdout_write_errors() {
     assert!(stderr.contains("write error"), "stderr: {stderr:?}");
     assert!(!stderr.contains("panicked"), "stderr: {stderr:?}");
 }
+
+#[test]
+fn pinky_reports_help_and_version_write_errors() {
+    for option in ["--help", "--version"] {
+        let full = OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .expect("open /dev/full");
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args(["pinky", option])
+            .env("LC_ALL", "C")
+            .env("LANG", "C")
+            .stdout(Stdio::from(full))
+            .output()
+            .expect("run syskits pinky");
+
+        assert_eq!(output.status.code(), Some(1), "option: {option}");
+        assert!(output.stdout.is_empty(), "option: {option}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "pinky: write error: No space left on device\n",
+            "option: {option}"
+        );
+    }
+}

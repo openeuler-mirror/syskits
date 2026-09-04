@@ -47,3 +47,37 @@ fn nproc_reports_stdout_write_errors() {
         "nproc: write error: No space left on device\n"
     );
 }
+
+#[test]
+fn nproc_does_not_duplicate_errors_or_display_output() {
+    let help = run_nproc(&["--help"], false);
+    assert!(help.status.success());
+    assert!(help.stderr.is_empty());
+    let help_text = String::from_utf8(help.stdout).expect("UTF-8 help");
+    assert_eq!(help_text.matches("Usage: nproc [OPTIONS]...").count(), 1);
+
+    let version = run_nproc(&["--version"], false);
+    assert!(version.status.success());
+    assert!(version.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(version.stdout)
+            .expect("UTF-8 version")
+            .lines()
+            .count(),
+        1
+    );
+
+    let invalid = run_nproc(&["--ignore=x"], false);
+    assert_eq!(invalid.status.code(), Some(1));
+    assert!(invalid.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&invalid.stderr),
+        "nproc: invalid number: 'x'\n"
+    );
+
+    let missing = run_nproc(&["--ignore"], false);
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(missing.stdout.is_empty());
+    let missing_stderr = String::from_utf8_lossy(&missing.stderr);
+    assert_eq!(missing_stderr.matches("a value is required").count(), 1);
+}

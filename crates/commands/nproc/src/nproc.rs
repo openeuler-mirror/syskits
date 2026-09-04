@@ -265,24 +265,14 @@ impl Tool for Nproc {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        let result = nproc_main(args.iter().cloned());
-        match result {
-            Ok(nproc_info) => {
-                let stdout = io::stdout();
-                let mut output = stdout.lock();
-                writeln!(output, "{nproc_info}").map_err_context(|| String::from("write error"))?;
-                output
-                    .flush()
-                    .map_err_context(|| String::from("write error"))?;
-                Ok(())
-            }
-            Err(e) => {
-                // 加上 nproc: 前缀以符合 GNU 规范，并使用 eprintln! 换行
-                eprintln!("nproc: {e}");
-                // 把真实的错误 e 传出去，框架会自动把前面设置的 exit code 1 返回给系统
-                Err(e)
-            }
-        }
+        let nproc_info = nproc_main(args.iter().cloned())?;
+        let stdout = io::stdout();
+        let mut output = stdout.lock();
+        writeln!(output, "{nproc_info}").map_err_context(|| String::from("write error"))?;
+        output
+            .flush()
+            .map_err_context(|| String::from("write error"))?;
+        Ok(())
     }
 }
 

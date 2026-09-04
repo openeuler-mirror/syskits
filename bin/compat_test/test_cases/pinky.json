@@ -362,6 +362,50 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "pinky",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行pinky root -l；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为125字节/3条换行分隔、内容=Login name: root                        In real life:  Super User\\nDirectory: /root                        Shell:  /bin/bash\\n\\n；迁移原Cargo用例pinky_stops_parsing_options_after_operand_in_posix_mode第1次调用",
+            "args": [
+                "root",
+                "-l"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Login name: root                        In real life:  Super User\nDirectory: /root                        Shell:  /bin/bash\n\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "pinky",
+            "description": "export LC_ALL='C'，export LANG='C'，export POSIXLY_CORRECT='1'；执行pinky root -l；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为65字节/1条换行分隔、内容=Login    Name                 TTY      Idle   When         Where\\n；迁移原Cargo用例pinky_stops_parsing_options_after_operand_in_posix_mode第2次调用",
+            "args": [
+                "root",
+                "-l"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT='1'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "Login    Name                 TTY      Idle   When         Where\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

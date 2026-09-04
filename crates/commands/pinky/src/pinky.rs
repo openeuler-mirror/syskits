@@ -285,17 +285,35 @@ fn pinky_idle_string(when: i64) -> String {
 /// 格式化登录时间，根据locale决定格式
 /// hard_locale为true时使用 "%Y-%m-%d %H:%M"，否则使用 "%b %e %H:%M"
 fn time_string(ut: &CtUtmpx) -> String {
-    if hard_locale_time() {
-        // 使用ISO格式，包含年份
-        const TIME_FORMAT: &str = "[year]-[month]-[day] [hour]:[minute]";
-        let format = time::format_description::parse(TIME_FORMAT).unwrap();
-        ut.login_time().format(&format).unwrap()
+    format_login_time(ut.timestamp_seconds())
+}
+
+fn format_login_time(seconds: i64) -> String {
+    let timestamp = seconds as ctcore::libc::time_t;
+    let mut local_time = std::mem::MaybeUninit::<ctcore::libc::tm>::uninit();
+    let local_time = unsafe {
+        let result = ctcore::libc::localtime_r(&timestamp, local_time.as_mut_ptr());
+        if result.is_null() {
+            return seconds.to_string();
+        }
+        local_time.assume_init()
+    };
+
+    let format = if hard_locale_time() {
+        b"%Y-%m-%d %H:%M\0".as_slice()
     } else {
-        // 使用传统格式，不包含年份
-        const TIME_FORMAT: &str = "[month repr:short] [day padding:space] [hour]:[minute]";
-        let format = time::format_description::parse(TIME_FORMAT).unwrap();
-        ut.login_time().format(&format).unwrap()
-    }
+        b"%b %e %H:%M\0".as_slice()
+    };
+    let mut output = [0_u8; 64];
+    let length = unsafe {
+        ctcore::libc::strftime(
+            output.as_mut_ptr().cast(),
+            output.len(),
+            format.as_ptr().cast(),
+            &local_time,
+        )
+    };
+    String::from_utf8_lossy(&output[..length]).into_owned()
 }
 
 /// 获取时间字符串的显示宽度
@@ -962,6 +980,11 @@ mod tests_all {
                 width == 12 || width == 16,
                 "time_format_width should return 12 or 16, got {width}"
             );
+        }
+
+        #[test]
+        fn test_unrepresentable_login_time_falls_back_to_epoch() {
+            assert_eq!(format_login_time(i64::MAX), i64::MAX.to_string());
         }
     }
 

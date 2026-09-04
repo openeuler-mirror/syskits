@@ -35,7 +35,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_entries::{CtPasswd, Locate};
+use ctcore::ct_entries::CtPasswd;
 use ctcore::ct_error::{CTResult, CTsageError, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
@@ -385,7 +385,7 @@ impl PinkyFlags {
         if !self.is_include_fullname {
             return Ok(());
         }
-        let fullname = CtPasswd::locate(ut.user().as_ref())
+        let fullname = CtPasswd::locate_name(ut.user().as_ref())
             .ok()
             .and_then(|pw| gecos_to_fullname(&pw))
             .unwrap_or_else(|| "???".to_string());
@@ -474,7 +474,7 @@ impl PinkyFlags {
     fn print_long_user_info<W: Write>(&self, username: &str, output: &mut W) -> io::Result<()> {
         write!(output, "Login name: {username:<28}In real life: ")?;
 
-        match CtPasswd::locate(username) {
+        match CtPasswd::locate_name(username) {
             Ok(pw) => {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
                 let user_dir = pw.user_dir.unwrap_or_default();
@@ -524,7 +524,7 @@ impl PinkyFlags {
     }
 
     fn long_profile_row(&self, username: &str) -> PinkyRow {
-        match CtPasswd::locate(username) {
+        match CtPasswd::locate_name(username) {
             Ok(pw) => {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
                 let user_dir = pw.user_dir.unwrap_or_default();
@@ -638,7 +638,7 @@ impl PinkyFlags {
         let (mesg, last_change) = self.get_tty_info(ut)?;
         let full_name = if self.is_include_fullname {
             Some(
-                CtPasswd::locate(ut.user().as_ref())
+                CtPasswd::locate_name(ut.user().as_ref())
                     .ok()
                     .and_then(|pw| gecos_to_fullname(&pw))
                     .unwrap_or_else(|| "???".to_string()),

@@ -162,7 +162,7 @@ fn pinky_main_with_writer<W: Write>(args: impl ctcore::Args, output: &mut W) -> 
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
         .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(pinky_args(args))?;
 
     let pk = PinkyFlags::new(&matches);
     let do_short_format = !matches.get_flag(pinky_options::PINKY_LONG_FORMAT);
@@ -187,7 +187,7 @@ pub fn pinky_native_semantic(args: impl ctcore::Args) -> CTResult<PinkySemantic>
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
         .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(pinky_args(args))?;
 
     let flags = PinkyFlags::new(&matches);
     let do_short_format = !matches.get_flag(pinky_options::PINKY_LONG_FORMAT);
@@ -197,6 +197,23 @@ pub fn pinky_native_semantic(args: impl ctcore::Args) -> CTResult<PinkySemantic>
     } else {
         Ok(flags.long_semantic())
     }
+}
+
+fn pinky_args(args: impl ctcore::Args) -> Vec<OsString> {
+    let mut args: Vec<OsString> = args.collect();
+    if std::env::var_os("POSIXLY_CORRECT").is_some() {
+        for index in 1..args.len() {
+            let bytes = args[index].as_encoded_bytes();
+            if bytes == b"--" {
+                break;
+            }
+            if bytes.is_empty() || bytes == b"-" || bytes[0] != b'-' {
+                args.insert(index, OsString::from("--"));
+                break;
+            }
+        }
+    }
+    args
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

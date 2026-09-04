@@ -177,6 +177,297 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "dirname",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname -z -z /a/b；参数完整十六进制=2d7a 2d7a 2f612f62；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为3字节/0条换行分隔、完整十六进制=2f6100；迁移原Cargo用例dirname_accepts_repeated_zero_options第1次调用",
+            "args": [
+                "2d7a",
+                "2d7a",
+                "2f612f62"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2f6100",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
+            "command": "dirname",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname --zero --zero /a/b；参数完整十六进制=2d2d7a65726f 2d2d7a65726f 2f612f62；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为3字节/0条换行分隔、完整十六进制=2f6100；迁移原Cargo用例dirname_accepts_repeated_zero_options第2次调用",
+            "args": [
+                "2d2d7a65726f",
+                "2d2d7a65726f",
+                "2f612f62"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2f6100",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
+            "command": "dirname",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname -zz /a/b；参数完整十六进制=2d7a7a 2f612f62；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为3字节/0条换行分隔、完整十六进制=2f6100；迁移原Cargo用例dirname_accepts_repeated_zero_options第3次调用",
+            "args": [
+                "2d7a7a",
+                "2f612f62"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2f6100",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，export POSIXLY_CORRECT='1'；执行dirname a/b -z；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为4字节/2条换行分隔、内容=a\\n.\\n；迁移原Cargo用例dirname_honors_posixly_correct_option_order第1次调用",
+            "args": [
+                "a/b",
+                "-z"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT='1'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n.\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，export POSIXLY_CORRECT='1'；执行dirname a/b --zero；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为4字节/2条换行分隔、内容=a\\n.\\n；迁移原Cargo用例dirname_honors_posixly_correct_option_order第2次调用",
+            "args": [
+                "a/b",
+                "--zero"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT='1'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n.\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，export POSIXLY_CORRECT='1'；执行dirname a/b --help；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为4字节/2条换行分隔、内容=a\\n.\\n；迁移原Cargo用例dirname_honors_posixly_correct_option_order第3次调用",
+            "args": [
+                "a/b",
+                "--help"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT='1'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n.\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname --bogus name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为82字节、内容=dirname: unrecognized option '--bogus'\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第1次调用",
+            "args": [
+                "--bogus",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: unrecognized option '--bogus'\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname --bogus=x name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为84字节、内容=dirname: unrecognized option '--bogus=x'\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第2次调用",
+            "args": [
+                "--bogus=x",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: unrecognized option '--bogus=x'\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname --zero=x name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为94字节、内容=dirname: option '--zero' doesn't allow an argument\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第3次调用",
+            "args": [
+                "--zero=x",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: option '--zero' doesn't allow an argument\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname --z=x name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为94字节、内容=dirname: option '--zero' doesn't allow an argument\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第4次调用",
+            "args": [
+                "--z=x",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: option '--zero' doesn't allow an argument\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname -x name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为74字节、内容=dirname: invalid option -- 'x'\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第5次调用",
+            "args": [
+                "-x",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: invalid option -- 'x'\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname -zx name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为74字节、内容=dirname: invalid option -- 'x'\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第6次调用",
+            "args": [
+                "-zx",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: invalid option -- 'x'\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "dirname",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行dirname -z=x name；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为74字节、内容=dirname: invalid option -- '='\\nTry 'dirname --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例dirname_uses_gnu_option_error_messages第7次调用",
+            "args": [
+                "-z=x",
+                "name"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: invalid option -- '='\nTry 'dirname --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
   }

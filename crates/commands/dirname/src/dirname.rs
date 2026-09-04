@@ -16,10 +16,10 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_display::ct_print_verbatim;
-use ctcore::ct_error::{CTResult, CTsageError};
+use ctcore::ct_error::{CTResult, CTsageError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::{OsStr, OsString};
+use std::io::{self, Write};
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -85,10 +85,11 @@ pub fn dirname_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app()
         .after_help(t!("dirname.after_help"))
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(dirname_args(args)?)?;
 
     let options = DirnameOptions::from_matches(&args_match)?;
-    dirname_classic_from_options(&options)?;
+    let stdout = io::stdout();
+    dirname_classic_from_options(&options, &mut stdout.lock())?;
 
     Ok(())
 }
@@ -98,20 +99,132 @@ pub fn dirname_native_semantic(args: impl ctcore::Args) -> CTResult<DirnameSeman
     rust_i18n::set_locale(&lang_code);
     let args_match = ct_app()
         .after_help(t!("dirname.after_help"))
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(dirname_args(args)?)?;
     let options = DirnameOptions::from_matches(&args_match)?;
     dirname_semantic_from_options(&options)
 }
 
-fn dirname_classic_from_options(options: &DirnameOptions) -> CTResult<()> {
-    let line_ending = options.line_ending.to_string();
+fn dirname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let mut args: Vec<OsString> = args.collect();
+    if std::env::var_os("POSIXLY_CORRECT").is_some() {
+        // GNU getopt stops option processing at the first operand in POSIX mode.
+        for index in 1..args.len() {
+            let bytes = args[index].as_encoded_bytes();
+            if bytes == b"--" {
+                break;
+            }
+            if bytes.is_empty() || bytes == b"-" || bytes[0] != b'-' {
+                args.insert(index, OsString::from("--"));
+                break;
+            }
+        }
+    }
 
-    for input in &options.inputs {
-        ct_print_verbatim(compute_dirname_os(input))?;
-        ct_print_verbatim(&line_ending)?;
+    validate_dirname_options(&args)?;
+    Ok(args)
+}
+
+fn validate_dirname_options(args: &[OsString]) -> CTResult<()> {
+    // dirname has no value-taking options, so prevalidation can preserve GNU's
+    // concise diagnostics while clap still owns successful option parsing.
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            continue;
+        }
+
+        if bytes[1] == b'-' {
+            let option = &bytes[2..];
+            let (name, has_value) = option
+                .iter()
+                .position(|byte| *byte == b'=')
+                .map_or((option, false), |equals| (&option[..equals], true));
+            let canonical = canonical_long_option(name);
+            if has_value {
+                if let Some(canonical) = canonical {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("option '--{canonical}' doesn't allow an argument"),
+                    ));
+                }
+                return Err(CTsageError::new(
+                    1,
+                    format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
+                ));
+            }
+            match canonical {
+                Some("help" | "version") => return Ok(()),
+                Some(_) => continue,
+                None => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
+                    ));
+                }
+            }
+        }
+
+        for option in &bytes[1..] {
+            match option {
+                b'z' => {}
+                b'h' | b'V' => return Ok(()),
+                invalid => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("invalid option -- '{}'", char::from(*invalid)),
+                    ));
+                }
+            }
+        }
     }
 
     Ok(())
+}
+
+fn canonical_long_option(option: &[u8]) -> Option<&'static str> {
+    let mut matches = ["zero", "help", "version"].into_iter().filter(|candidate| {
+        !option.is_empty()
+            && option.len() <= candidate.len()
+            && candidate.as_bytes().starts_with(option)
+    });
+    let canonical = matches.next()?;
+    matches.next().is_none().then_some(canonical)
+}
+
+fn dirname_classic_from_options<W: Write>(
+    options: &DirnameOptions,
+    output: &mut W,
+) -> CTResult<()> {
+    let write_error = || String::from("write error");
+
+    for input in &options.inputs {
+        write_verbatim(output, &compute_dirname_os(input)).map_err_context(write_error)?;
+        output
+            .write_all(&[u8::from(options.line_ending)])
+            .map_err_context(write_error)?;
+    }
+    output.flush().map_err_context(write_error)?;
+
+    Ok(())
+}
+
+fn write_verbatim<W: Write>(output: &mut W, text: &OsStr) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        output.write_all(text.as_bytes())
+    }
+    #[cfg(windows)]
+    {
+        write!(output, "{}", std::path::Path::new(text).display())
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        write!(output, "{}", text.to_string_lossy())
+    }
 }
 
 fn dirname_semantic_from_options(options: &DirnameOptions) -> CTResult<DirnameSemantic> {
@@ -139,10 +252,11 @@ fn dirname_process(line_ending: CtLineEnding, dirnames: &Vec<String>) -> Option<
     if dirnames.is_empty() {
         return Some(Err(CTsageError::new(1, "missing operand")));
     } else {
+        let stdout = io::stdout();
+        let mut output = stdout.lock();
         for item in dirnames {
             let dirname = compute_dirname(item);
-            ct_print_verbatim(&dirname).unwrap();
-            print!("{line_ending}");
+            write!(output, "{dirname}{line_ending}").unwrap();
         }
     }
     None
@@ -197,7 +311,8 @@ pub fn ct_app() -> Command {
             .long(opt_flags::ZERO)
             .short('z')
             .help(t!("dirname.clap.zero"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(opt_flags::ZERO),
         Arg::new(opt_flags::DIR)
             .hide(true)
             .action(ArgAction::Append)

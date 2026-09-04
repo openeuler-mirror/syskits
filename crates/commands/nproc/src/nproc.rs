@@ -67,7 +67,7 @@ impl Display for NprocInfo {
 pub fn nproc_semantic(args: impl ctcore::Args) -> CTResult<NprocSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = ct_app().try_get_matches_from(nproc_args(args)?)?;
 
     let ignore = nproc_parse_ignore_num(&args_match)?;
     let query = nproc_query_from_matches(&args_match);
@@ -92,6 +92,67 @@ pub fn nproc_semantic(args: impl ctcore::Args) -> CTResult<NprocSemantic> {
         ignore,
         thread_limit,
     })
+}
+
+fn nproc_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args: Vec<OsString> = args.collect();
+    validate_ignore_occurrences(&args)?;
+    Ok(args)
+}
+
+fn validate_ignore_occurrences(args: &[OsString]) -> CTResult<()> {
+    let posix = env::var_os("POSIXLY_CORRECT").is_some();
+    let mut index = 1;
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posix {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+        if bytes[1] != b'-' {
+            break;
+        }
+
+        let option = &bytes[2..];
+        let equals = option.iter().position(|byte| *byte == b'=');
+        let name = equals.map_or(option, |position| &option[..position]);
+        match canonical_long_option(name) {
+            Some("ignore") => {
+                let value = if let Some(position) = equals {
+                    std::str::from_utf8(&option[position + 1..]).ok()
+                } else {
+                    index += 1;
+                    args.get(index).and_then(|value| value.to_str())
+                };
+                if let Some(value) = value {
+                    parse_ignore_value(value)?;
+                }
+            }
+            Some("help" | "version") | None => break,
+            Some("all") => {}
+            Some(_) => unreachable!(),
+        }
+        index += 1;
+    }
+    Ok(())
+}
+
+fn canonical_long_option(option: &[u8]) -> Option<&'static str> {
+    let mut matches = ["all", "ignore", "help", "version"]
+        .into_iter()
+        .filter(|candidate| {
+            !option.is_empty()
+                && option.len() <= candidate.len()
+                && candidate.as_bytes().starts_with(option)
+        });
+    let canonical = matches.next()?;
+    matches.next().is_none().then_some(canonical)
 }
 
 fn nproc_main(args: impl ctcore::Args) -> CTResult<NprocInfo> {
@@ -184,20 +245,17 @@ fn nproc_effective_limit(query: NprocQuery, thread_limit: Option<usize>) -> usiz
 }
 
 fn nproc_parse_ignore_num(args_match: &ArgMatches) -> CTResult<usize> {
-    let ignore_num = match args_match.get_one::<String>(OPT_IGNORE) {
-        Some(num_str) => match num_str.trim().parse() {
-            Ok(num) => num,
-            Err(_) => {
-                // 直接返回退出码为 1 的标准错误格式，例如 "invalid number: '-1'"
-                return Err(CtSimpleError::new(
-                    1,
-                    format!("invalid number: {}", num_str.quote()),
-                ));
-            }
-        },
-        None => 0,
-    };
-    Ok(ignore_num)
+    match args_match.get_one::<String>(OPT_IGNORE) {
+        Some(num_str) => parse_ignore_value(num_str),
+        None => Ok(0),
+    }
+}
+
+fn parse_ignore_value(value: &str) -> CTResult<usize> {
+    value
+        .trim()
+        .parse()
+        .map_err(|_| CtSimpleError::new(1, format!("invalid number: {}", value.quote())))
 }
 
 /**
@@ -428,6 +486,16 @@ mod tests {
                 let result = nproc_semantic(args.iter().map(OsString::from)).expect("semantic");
 
                 assert_eq!(result.ignore, expected, "options: {options:?}");
+            }
+        }
+
+        #[test]
+        fn test_nproc_semantic_validates_each_repeated_ignore() {
+            for options in [["--ignore=x", "--ignore=1"], ["--ignore=-1", "--ignore=1"]] {
+                let args = [ctcore::ct_util_name(), options[0], options[1]];
+                let result = nproc_semantic(args.iter().map(OsString::from));
+
+                assert!(result.is_err(), "options: {options:?}");
             }
         }
 

@@ -953,6 +953,30 @@
         "userdel -r testuser_deref"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行chown root. file.bin；stdin为0字节、内容=空；输入fixture：file file.bin，mode=644，4字节，内容=data；预期RC=0，stderr为43字节、内容=chown: warning: '.' should be ':': 'root.'\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例chown_warns_for_legacy_dot_separator第1次调用",
+      "args": [
+        "root.",
+        "file.bin"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145\\056\\142\\151\\156'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\141\\164\\141' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": "chown: warning: '.' should be ':': 'root.'\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": "",
+      "requires_root": true
     }
   ]
 } 

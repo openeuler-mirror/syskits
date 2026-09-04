@@ -152,7 +152,7 @@ pub fn ct_app() -> Command {
 fn chown_parsing_gid_uid_and_filter(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFilter> {
     // 解析 `-from` 参数，确定UID和GID的变更条件。
     let filter_info = if let Some(spec) = args_match.get_one::<String>(opt_flags::FROM) {
-        match chown_parse_spec(spec, ':')? {
+        match chown_parse_user_spec_warn(spec)? {
             (Some(uid), None) => CtIfFrom::User(uid),
             (None, Some(gid)) => CtIfFrom::Group(gid),
             (Some(uid), Some(gid)) => CtIfFrom::UserGroup(uid, gid),
@@ -186,7 +186,7 @@ fn chown_parsing_gid_uid_and_filter(args_match: &ArgMatches) -> CTResult<CtGidUi
             .get_one::<String>(opt_flags::ARG_OWNER)
             .unwrap()
             .into();
-        let (u, g) = chown_parse_spec(&raw_owner, ':')?;
+        let (u, g) = chown_parse_user_spec_warn(&raw_owner)?;
         dest_uid = u;
         dest_gid = g;
     }
@@ -315,6 +315,19 @@ fn chown_parse_spec(spec_str: &str, sep: char) -> CTResult<(Option<u32>, Option<
 
     // 返回解析结果
     Ok((uid_value, gid_value))
+}
+
+fn chown_parse_user_spec_warn(spec_str: &str) -> CTResult<(Option<u32>, Option<u32>)> {
+    if !spec_str.contains(':')
+        && spec_str.contains('.')
+        && CtPasswd::locate(spec_str).is_err()
+        && let Ok(ids) = chown_parse_spec(spec_str, '.')
+    {
+        ctcore::ct_show_warning!("'.' should be ':': {}", spec_str.quote());
+        return Ok(ids);
+    }
+
+    chown_parse_spec(spec_str, ':')
 }
 
 #[derive(Default)]
@@ -484,6 +497,18 @@ mod tests {
             chown_parse_spec("12345:54321", ':'),
             Ok((Some(12345), Some(54321)))
         ));
+    }
+
+    #[test]
+    fn test_parse_user_spec_dot_uses_login_group() {
+        let passwd = CtPasswd::locate(unsafe { ctcore::libc::geteuid() })
+            .expect("locate current passwd entry");
+        let spec = format!("{}.", passwd.name);
+
+        assert_eq!(
+            chown_parse_user_spec_warn(&spec).expect("parse legacy user spec"),
+            (Some(passwd.uid), Some(passwd.gid))
+        );
     }
 
     #[test]

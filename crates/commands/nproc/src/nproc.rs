@@ -392,14 +392,26 @@ pub fn ct_app() -> Command {
  */
 #[cfg(target_os = "linux")]
 fn nproc_all() -> usize {
-    let nprocs_num = unsafe { libc::sysconf(_SC_NUM_PROCESSORS_CONF) };
-    if nprocs_num == 1 {
-        // 在某些情况下，/proc 和 /sys 未被挂载，sysconf 返回 1。但我们希望 `nproc --all` >= `nproc`。
+    let configured = unsafe { libc::sysconf(_SC_NUM_PROCESSORS_CONF) };
+    let current = if configured == 1 || configured == 2 {
         available_parallelism()
-    } else if nprocs_num > 0 {
-        nprocs_num as usize
     } else {
         1
+    };
+    nproc_all_from_configured(configured, current)
+}
+
+#[cfg(target_os = "linux")]
+fn nproc_all_from_configured(configured: libc::c_long, current: usize) -> usize {
+    if configured <= 0 {
+        return 1;
+    }
+
+    let configured = configured as usize;
+    if configured == 1 || configured == 2 {
+        configured.max(current)
+    } else {
+        configured
     }
 }
 
@@ -544,6 +556,18 @@ mod tests {
                     .to_string(),
                 "invalid number: '18446744073709551616': Value too large for defined data type"
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_nproc_all_recovers_from_small_glibc_counts() {
+            use crate::nproc_all_from_configured;
+
+            assert_eq!(nproc_all_from_configured(1, 8), 8);
+            assert_eq!(nproc_all_from_configured(2, 8), 8);
+            assert_eq!(nproc_all_from_configured(2, 1), 2);
+            assert_eq!(nproc_all_from_configured(4, 2), 4);
+            assert_eq!(nproc_all_from_configured(-1, 8), 1);
         }
     }
 

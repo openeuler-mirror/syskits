@@ -14,7 +14,8 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter};
 
-use num_bigint::BigUint;
+use bigdecimal::BigDecimal;
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
@@ -180,6 +181,19 @@ impl GnuFloatFormat {
     }
 
     pub fn format(&self, value: &ExtendedBigDecimal) -> String {
+        format!(
+            "{}{}{}",
+            self.prefix,
+            self.format_numeric(value, true),
+            self.suffix
+        )
+    }
+
+    pub fn format_unlocalized_numeric(&self, value: &ExtendedBigDecimal) -> String {
+        self.format_numeric(value, false)
+    }
+
+    fn format_numeric(&self, value: &ExtendedBigDecimal, localize: bool) -> String {
         let value = BinaryLongDouble::from(value);
         let uppercase = self.conversion.is_ascii_uppercase();
         let finite = matches!(value, BinaryLongDouble::Finite(_));
@@ -207,7 +221,11 @@ impl GnuFloatFormat {
                 (number.negative, body)
             }
         };
-        let body = if finite { self.localize(body) } else { body };
+        let body = if finite && localize {
+            self.localize(body)
+        } else {
+            body
+        };
 
         let sign = if negative {
             "-"
@@ -218,14 +236,13 @@ impl GnuFloatFormat {
         } else {
             ""
         };
-        let number = pad_number(
+        pad_number(
             sign,
             &body,
             self.width,
             self.flags.left,
             self.flags.zero && finite,
-        );
-        format!("{}{}{}", self.prefix, number, self.suffix)
+        )
     }
 
     fn localize(&self, mut body: String) -> String {
@@ -387,6 +404,40 @@ impl From<&ExtendedBigDecimal> for BinaryLongDouble {
     }
 }
 
+pub fn quantize_long_double(value: &ExtendedBigDecimal) -> ExtendedBigDecimal {
+    match BinaryLongDouble::from(value) {
+        BinaryLongDouble::Finite(value) => value.to_extended_decimal(),
+        BinaryLongDouble::Infinity { negative: false } => ExtendedBigDecimal::Infinity,
+        BinaryLongDouble::Infinity { negative: true } => ExtendedBigDecimal::MinusInfinity,
+        BinaryLongDouble::Nan { .. } => ExtendedBigDecimal::Nan,
+    }
+}
+
+pub fn long_double_linear_value(
+    first: &ExtendedBigDecimal,
+    increment: &ExtendedBigDecimal,
+    index: u64,
+) -> ExtendedBigDecimal {
+    if index == 0 {
+        return quantize_long_double(first);
+    }
+
+    let product = match quantize_long_double(increment) {
+        ExtendedBigDecimal::BigDecimal(increment) => {
+            let index = ExtendedBigDecimal::BigDecimal(BigDecimal::from(index));
+            let ExtendedBigDecimal::BigDecimal(index) = quantize_long_double(&index) else {
+                unreachable!("u64 index is finite")
+            };
+            quantize_long_double(&ExtendedBigDecimal::BigDecimal(increment * index))
+        }
+        ExtendedBigDecimal::Infinity => ExtendedBigDecimal::Infinity,
+        ExtendedBigDecimal::MinusInfinity => ExtendedBigDecimal::MinusInfinity,
+        ExtendedBigDecimal::MinusZero => ExtendedBigDecimal::MinusZero,
+        ExtendedBigDecimal::Nan => ExtendedBigDecimal::Nan,
+    };
+    quantize_long_double(&(quantize_long_double(first) + product))
+}
+
 pub fn overflows_long_double(value: &ExtendedBigDecimal) -> bool {
     let ExtendedBigDecimal::BigDecimal(value) = value else {
         return false;
@@ -466,6 +517,32 @@ impl BinaryFinite {
         let point = digits.len() - precision;
         digits.insert(point, '.');
         digits
+    }
+
+    fn to_extended_decimal(&self) -> ExtendedBigDecimal {
+        if self.significand.is_zero() {
+            return if self.negative {
+                ExtendedBigDecimal::MinusZero
+            } else {
+                ExtendedBigDecimal::BigDecimal(BigDecimal::zero())
+            };
+        }
+
+        let sign = if self.negative {
+            Sign::Minus
+        } else {
+            Sign::Plus
+        };
+        let mut integer = BigInt::from_biguint(sign, self.significand.clone());
+        let binary_shift = self.exponent - (LONG_DOUBLE_PRECISION as i32 - 1);
+        if binary_shift >= 0 {
+            integer <<= binary_shift as usize;
+            ExtendedBigDecimal::BigDecimal(BigDecimal::from(integer))
+        } else {
+            let scale = binary_shift.unsigned_abs();
+            integer *= BigInt::from(5_u8).pow(scale);
+            ExtendedBigDecimal::BigDecimal(BigDecimal::new(integer, i64::from(scale)))
+        }
     }
 
     fn scientific(&self, precision: usize, alternate: bool, uppercase: bool) -> String {

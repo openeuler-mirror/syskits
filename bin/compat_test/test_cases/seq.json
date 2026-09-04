@@ -1390,6 +1390,79 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %a -9.544 -0.003 -9.5619；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为222字节/6条换行分隔、内容=-0x1.316872b020c49ba5e353f7ced917p+3\\n-0x1.31810624dd2f1a9fbe76c8b43959p+3\\n-0x1.319999999999999999999999999ap+3\\n-0x1.31b22d0e5604189374bc6a7ef9dcp+3\\n-0x1.31cac083126e978d4fdf3b6...；迁移原Cargo用例seq_uses_long_double_sequence_arithmetic第1次调用",
+            "args": [
+                "-f",
+                "%a",
+                "-9.544",
+                "-0.003",
+                "-9.5619"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-0x1.316872b020c49ba5e353f7ced917p+3\n-0x1.31810624dd2f1a9fbe76c8b43959p+3\n-0x1.319999999999999999999999999ap+3\n-0x1.31b22d0e5604189374bc6a7ef9dcp+3\n-0x1.31cac083126e978d4fdf3b645a1dp+3\n-0x1.31e353f7ced916872b020c49ba5fp+3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %.2f 0.0002284 -0.0000017 0.0002267；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为5字节/1条换行分隔、内容=0.00\\n；迁移原Cargo用例seq_uses_long_double_sequence_arithmetic第2次调用",
+            "args": [
+                "-f",
+                "%.2f",
+                "0.0002284",
+                "-0.0000017",
+                "0.0002267"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0.00\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq 0 0.000001 0.000003；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为36字节/4条换行分隔、内容=0.000000\\n0.000001\\n0.000002\\n0.000003\\n；迁移原Cargo用例seq_uses_long_double_sequence_arithmetic第3次调用",
+            "args": [
+                "0",
+                "0.000001",
+                "0.000003"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0.000000\n0.000001\n0.000002\n0.000003\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

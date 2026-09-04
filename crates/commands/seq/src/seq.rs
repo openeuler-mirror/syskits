@@ -27,7 +27,9 @@ mod number;
 mod numberparse;
 use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::long_double_format::{GnuFloatFormat, overflows_long_double};
+use crate::long_double_format::{
+    GnuFloatFormat, long_double_linear_value, overflows_long_double, quantize_long_double,
+};
 use crate::number::PreciseNumber;
 
 const SEQ_SEPARATOR: &str = "separator";
@@ -598,19 +600,76 @@ fn render_seq_value(
     Ok(String::from_utf8(buffer).expect("seq rendered value should be utf-8"))
 }
 
+fn walk_sequence(
+    range: RangeFloat,
+    format: &SeqOutputFormat,
+    mut emit: impl FnMut(&ExtendedBigDecimal) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let (first, increment, last) = range;
+    if matches!(format, SeqOutputFormat::ExactInteger) {
+        let mut value = first;
+        while !done_printing(&value, &increment, &last) {
+            emit(&value)?;
+            value = value + increment.clone();
+        }
+        return Ok(());
+    }
+
+    let SeqOutputFormat::Float(format) = format else {
+        unreachable!()
+    };
+    let first = quantize_long_double(&first);
+    let increment = quantize_long_double(&increment);
+    let last = quantize_long_double(&last);
+    if done_printing(&first, &increment, &last) {
+        return Ok(());
+    }
+
+    let mut index = 0_u64;
+    let mut value = first.clone();
+    loop {
+        emit(&value)?;
+        let Some(next_index) = index.checked_add(1) else {
+            break;
+        };
+        let next = long_double_linear_value(&first, &increment, next_index);
+        if done_printing(&next, &increment, &last) {
+            if should_print_extra_number(format, &value, &next, &last) {
+                emit(&next)?;
+            }
+            break;
+        }
+        value = next;
+        index = next_index;
+    }
+    Ok(())
+}
+
+fn should_print_extra_number(
+    format: &GnuFloatFormat,
+    current: &ExtendedBigDecimal,
+    next: &ExtendedBigDecimal,
+    last: &ExtendedBigDecimal,
+) -> bool {
+    let next_text = format.format_unlocalized_numeric(next);
+    let Ok(parsed) = next_text.parse::<PreciseNumber>() else {
+        return false;
+    };
+    quantize_long_double(&parsed.number) == *last
+        && next_text != format.format_unlocalized_numeric(current)
+}
+
 fn collect_seq_rows(
     range: RangeFloat,
     config: &SeqRenderConfig<'_>,
     rows: &mut Vec<SeqRow>,
     writer: &mut Vec<u8>,
 ) -> std::io::Result<()> {
-    let (first, increment, last) = range;
-    let mut value = first;
     let mut is_first_iteration = true;
     let mut index = 0usize;
 
-    while !done_printing(&value, &increment, &last) {
-        let rendered = render_seq_value(&value, config)?;
+    walk_sequence(range, config.format, |value| {
+        let rendered = render_seq_value(value, config)?;
         if !is_first_iteration {
             write!(writer, "{}", config.separator)?;
         }
@@ -619,10 +678,10 @@ fn collect_seq_rows(
             index,
             value: rendered,
         });
-        value = value + increment.clone();
         is_first_iteration = false;
         index += 1;
-    }
+        Ok(())
+    })?;
     if !is_first_iteration {
         write!(writer, "{}", config.terminator)?;
     }
@@ -639,8 +698,6 @@ fn format_long_double(
 
 /// Floating point based code path
 fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
-    let (first, increment, last) = range;
-    let mut value = first;
     let padding = if config.pad {
         config.padding
             + if config.largest_dec > 0 {
@@ -659,19 +716,19 @@ fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
     };
 
     let mut is_first_iteration = true;
-    while !done_printing(&value, &increment, &last) {
+    walk_sequence(range, config.format, |value| {
         if !is_first_iteration {
             write!(writer, "{}", config.separator)?;
         }
         match config.format {
             SeqOutputFormat::Float(f) => {
-                format_long_double(&mut writer, f, &value)?;
+                format_long_double(&mut writer, f, value)?;
             }
-            SeqOutputFormat::ExactInteger => write_value_float(&mut writer, &value, padding, 0)?,
+            SeqOutputFormat::ExactInteger => write_value_float(&mut writer, value, padding, 0)?,
         }
-        value = value + increment.clone();
         is_first_iteration = false;
-    }
+        Ok(())
+    })?;
     if !is_first_iteration {
         write!(writer, "{}", config.terminator)?;
     }

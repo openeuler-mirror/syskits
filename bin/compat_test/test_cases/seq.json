@@ -567,6 +567,56 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -w -f %f 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为113字节、内容=seq: format string may not be specified when printing equal width strings\\nTry 'seq --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_equal_width_with_format第1次调用",
+            "args": [
+                "-w",
+                "-f",
+                "%f",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format string may not be specified when printing equal width strings\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %f -w 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为113字节、内容=seq: format string may not be specified when printing equal width strings\\nTry 'seq --help' for more information.\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_equal_width_with_format第2次调用",
+            "args": [
+                "-f",
+                "%f",
+                "-w",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format string may not be specified when printing equal width strings\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

@@ -45,7 +45,13 @@ impl CTError for SeqError {
     }
 
     fn usage(&self) -> bool {
-        matches!(self, Self::NoArguments | Self::FormatWithEqualWidth)
+        matches!(
+            self,
+            Self::ParseError(_, _)
+                | Self::ZeroIncrement(_)
+                | Self::NoArguments
+                | Self::FormatWithEqualWidth
+        )
     }
 }
 
@@ -120,8 +126,8 @@ mod tests {
     fn test_error_usage() {
         assert!(SeqError::NoArguments.usage());
         assert!(SeqError::FormatWithEqualWidth.usage());
-        assert!(!SeqError::ParseError("123".into(), ParseNumberError::Float).usage());
-        assert!(!SeqError::ZeroIncrement("0".into()).usage());
+        assert!(SeqError::ParseError("123".into(), ParseNumberError::Float).usage());
+        assert!(SeqError::ZeroIncrement("0".into()).usage());
         assert!(!SeqError::IoError("test".into()).usage());
     }
 }

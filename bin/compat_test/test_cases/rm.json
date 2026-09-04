@@ -329,6 +329,29 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "rm",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行rm -i victim.bin；stdin为2字节、内容=n\\n；输入fixture：file victim.bin，mode=644，4字节，内容=data；预期RC=0，stderr为38字节、内容=rm: remove regular file 'victim.bin'? ，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例rm_interactive_prompt_identifies_a_regular_file第1次调用",
+            "args": [
+                "-i",
+                "victim.bin"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf '%b' '\\166\\151\\143\\164\\151\\155\\056\\142\\151\\156'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\141\\164\\141' > \"$p\"; chmod 644 -- \"$p\""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "rm: remove regular file 'victim.bin'? "
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "n\n"
         }
     ]
 } 

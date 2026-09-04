@@ -746,7 +746,7 @@ fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
                 return if metadata.len() == 0 {
                     ct_prompt_yes!("remove regular empty file {}?", display_path.quote())
                 } else {
-                    ct_prompt_yes!("remove file {}?", display_path.quote())
+                    ct_prompt_yes!("remove regular file {}?", display_path.quote())
                 };
             }
         }

@@ -12,3 +12,19 @@ pinky:
     pinky_help: Print help information
   usage: pinky [OPTION]... [USER]...
   about: Displays brief user information on Unix-based systems
+  output:
+    login: 'Login'
+    name: 'Name'
+    tty: ' TTY'
+    idle: 'Idle'
+    when: 'When'
+    where: 'Where'
+    login_name: 'Login name: '
+    real_life: 'In real life: '
+    unknown_short: '        ???'
+    unknown: '???'
+    directory: 'Directory: '
+    shell: 'Shell: '
+    project: 'Project: '
+    plan: "Plan:\n"
+    missing_username: 'no username specified; at least one must be specified when using -l'

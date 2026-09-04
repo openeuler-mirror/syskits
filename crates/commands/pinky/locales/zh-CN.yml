@@ -12,3 +12,19 @@ pinky:
     pinky_help: 打印帮助信息
   usage: pinky [选项]... [用户]...
   about: '在基于Unix的系统上显示简要用户信息'
+  output:
+    login: '登录名  '
+    name: '名字               '
+    tty: ' TTY'
+    idle: '空闲  '
+    when: '登录时间        '
+    where: '主机'
+    login_name: '登录名： '
+    real_life: '真名：'
+    unknown_short: '        ???'
+    unknown: '???'
+    directory: '主目录：'
+    shell: 'Shell: '
+    project: '项目：'
+    plan: "计划：\n"
+    missing_username: '没有指定用户名；当使用 -l 选项时至少需要指定一个'

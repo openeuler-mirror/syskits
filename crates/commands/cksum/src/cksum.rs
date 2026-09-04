@@ -428,6 +428,7 @@ struct CksumSemanticInvocation {
     algo_name: &'static str,
     output_bits: usize,
     length: Option<usize>,
+    debug: bool,
     files: Vec<String>,
     untagged: bool,
     output_format: CksumOutputFormat,
@@ -471,6 +472,28 @@ fn push_stderr_line(buffer: &mut String, line: impl AsRef<str>) {
     buffer.push_str("cksum: ");
     buffer.push_str(line.as_ref());
     buffer.push('\n');
+}
+
+fn crc_debug_message(debug: bool, algo_name: &str) -> Option<&'static str> {
+    if !debug || algo_name != CKSUM_ALGORITHM_OPTIONS_CRC {
+        return None;
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if std::arch::is_x86_feature_detected!("pclmulqdq")
+            && std::arch::is_x86_feature_detected!("avx")
+        {
+            Some("using pclmul hardware support")
+        } else {
+            Some("pclmul support not detected")
+        }
+    }
+
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        None
+    }
 }
 
 fn clean_io_error(err: &io::Error) -> String {
@@ -729,6 +752,7 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         algo_name: name,
         output_bits: bits,
         length,
+        debug: matches.get_flag(opt_flags::DEBUG),
         files,
         untagged,
         output_format,
@@ -869,6 +893,9 @@ fn cksum_open_for_semantic(file_name: &str) -> Result<Box<dyn Read>, String> {
 
 fn cksum_native_compute(invocation: &CksumSemanticInvocation) -> CTResult<CksumSemantic> {
     let mut semantic = empty_cksum_semantic();
+    if let Some(message) = crc_debug_message(invocation.debug, invocation.algo_name) {
+        push_stderr_line(&mut semantic.stderr_text, message);
+    }
     let mut digest = cksum_detect_algo(invocation.algo_name, invocation.length).1;
 
     if invocation.files.is_empty() {
@@ -1937,6 +1964,10 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             None => vec![OsStr::new("-")],
         };
         return cksum_check(opts, files);
+    }
+
+    if let Some(message) = crc_debug_message(matches.get_flag(opt_flags::DEBUG), opts.algo_name) {
+        ctcore::ct_show_error!("{message}");
     }
 
     match matches.get_many::<String>(opt_flags::FILE) {
@@ -4133,7 +4164,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
         use crate::{
             CksumOptions, CksumOutputFormat, cksum, cksum_detect_algo, cksum_native_semantic,
-            ct_app, opt_flags,
+            crc_debug_message, ct_app, opt_flags,
         };
         use std::ffi::{OsStr, OsString};
         use std::fs;
@@ -5986,6 +6017,53 @@ mod tests {
             assert_eq!(semantic.rows[0].bytes, Some(3));
             assert_eq!(semantic.rows[0].reported_size, Some(3));
             assert!(semantic.classic_text.contains("1219131554 3 "));
+        }
+
+        #[test]
+        fn test_crc_debug_message_is_limited_to_crc_debug_mode() {
+            assert_eq!(crc_debug_message(false, CKSUM_ALGORITHM_OPTIONS_CRC), None);
+            assert_eq!(
+                crc_debug_message(true, CKSUM_ALGORITHM_OPTIONS_SHA256),
+                None
+            );
+
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            assert!(matches!(
+                crc_debug_message(true, CKSUM_ALGORITHM_OPTIONS_CRC),
+                Some("using pclmul hardware support" | "pclmul support not detected")
+            ));
+
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            assert_eq!(crc_debug_message(true, CKSUM_ALGORITHM_OPTIONS_CRC), None);
+        }
+
+        #[test]
+        fn test_cksum_native_semantic_crc_debug() {
+            let temp_dir = Builder::new()
+                .prefix("test_cksum_native_semantic_crc_debug")
+                .tempdir()
+                .unwrap();
+            let test_file_path = temp_dir.path().join("sample.txt");
+            fs::write(&test_file_path, "abc").unwrap();
+
+            let semantic = cksum_native_semantic(
+                vec![
+                    OsString::from("cksum"),
+                    OsString::from("--algorithm=crc"),
+                    OsString::from("--debug"),
+                    OsString::from(test_file_path.to_string_lossy().to_string()),
+                ]
+                .into_iter(),
+            )
+            .expect("semantic");
+
+            let expected_stderr = crc_debug_message(true, CKSUM_ALGORITHM_OPTIONS_CRC)
+                .map(|message| format!("cksum: {message}\n"))
+                .unwrap_or_default();
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.stderr_text, expected_stderr);
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].checksum, "1219131554");
         }
 
         #[test]

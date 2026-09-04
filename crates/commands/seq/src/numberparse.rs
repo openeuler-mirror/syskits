@@ -144,16 +144,7 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
 
     // 拦截极其离谱的指数，防止 BigDecimal 崩溃或内存耗尽 (模拟 strtod 的 Overflow/Underflow)
     if exponent > 100_000 {
-        let is_neg = s.starts_with('-');
-        return Ok(PreciseNumber::new(
-            if is_neg {
-                ExtendedBigDecimal::MinusInfinity
-            } else {
-                ExtendedBigDecimal::Infinity
-            },
-            0,
-            0,
-        ));
+        return Err(ParseNumberError::Float);
     }
     if exponent < -100_000 {
         return Ok(PreciseNumber::new(
@@ -253,16 +244,7 @@ fn parse_decimal_and_exponent(
 
     // 同上，拦截极其离谱的指数
     if exponent > 100_000 {
-        let is_neg = s.starts_with('-');
-        return Ok(PreciseNumber::new(
-            if is_neg {
-                ExtendedBigDecimal::MinusInfinity
-            } else {
-                ExtendedBigDecimal::Infinity
-            },
-            0,
-            0,
-        ));
+        return Err(ParseNumberError::Float);
     }
     if exponent < -100_000 {
         return Ok(PreciseNumber::new(

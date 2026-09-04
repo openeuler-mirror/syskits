@@ -35,6 +35,9 @@ const LONG_DOUBLE_PRECISION: usize = 113;
 )))]
 const LONG_DOUBLE_PRECISION: usize = 53;
 
+const LONG_DOUBLE_MAX_EXPONENT: i32 = 16383;
+const LONG_DOUBLE_MIN_NORMAL_EXPONENT: i32 = -16382;
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 const X87_HEX_LAYOUT: bool = true;
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
@@ -279,35 +282,54 @@ impl From<&ExtendedBigDecimal> for BinaryLongDouble {
                 exponent: 0,
             }),
             ExtendedBigDecimal::BigDecimal(value) => {
-                let (integer, scale) = value.as_bigint_and_exponent();
-                let negative = integer.sign() == num_bigint::Sign::Minus;
-                let mut numerator = integer.magnitude().clone();
-                let mut denominator = BigUint::one();
-
-                if scale >= 0 {
-                    denominator = power_of_ten(scale as usize);
-                } else {
-                    numerator *= power_of_ten(scale.unsigned_abs() as usize);
+                let (negative, numerator, denominator) = decimal_ratio(value);
+                match BinaryFinite::from_ratio(negative, numerator, denominator) {
+                    Some(value) => Self::Finite(value),
+                    None => Self::Infinity { negative },
                 }
-
-                Self::Finite(BinaryFinite::from_ratio(negative, numerator, denominator))
             }
         }
     }
 }
 
+pub fn overflows_long_double(value: &ExtendedBigDecimal) -> bool {
+    let ExtendedBigDecimal::BigDecimal(value) = value else {
+        return false;
+    };
+    let (negative, numerator, denominator) = decimal_ratio(value);
+    BinaryFinite::from_ratio(negative, numerator, denominator).is_none()
+}
+
+fn decimal_ratio(value: &bigdecimal::BigDecimal) -> (bool, BigUint, BigUint) {
+    let (integer, scale) = value.as_bigint_and_exponent();
+    let negative = integer.sign() == num_bigint::Sign::Minus;
+    let mut numerator = integer.magnitude().clone();
+    let mut denominator = BigUint::one();
+
+    if scale >= 0 {
+        denominator = power_of_ten(scale as usize);
+    } else {
+        numerator *= power_of_ten(scale.unsigned_abs() as usize);
+    }
+    (negative, numerator, denominator)
+}
+
 impl BinaryFinite {
-    fn from_ratio(negative: bool, numerator: BigUint, denominator: BigUint) -> Self {
+    fn from_ratio(negative: bool, numerator: BigUint, denominator: BigUint) -> Option<Self> {
         if numerator.is_zero() {
-            return Self {
+            return Some(Self {
                 negative,
                 significand: BigUint::zero(),
                 exponent: 0,
-            };
+            });
         }
 
         let mut exponent = floor_log2_ratio(&numerator, &denominator);
-        let binary_shift = LONG_DOUBLE_PRECISION as i32 - 1 - exponent;
+        if exponent > LONG_DOUBLE_MAX_EXPONENT {
+            return None;
+        }
+        let stored_exponent = exponent.max(LONG_DOUBLE_MIN_NORMAL_EXPONENT);
+        let binary_shift = LONG_DOUBLE_PRECISION as i32 - 1 - stored_exponent;
         let significand = if binary_shift >= 0 {
             round_ratio(numerator << binary_shift as usize, denominator)
         } else {
@@ -322,12 +344,15 @@ impl BinaryFinite {
         } else {
             significand
         };
+        if exponent > LONG_DOUBLE_MAX_EXPONENT {
+            return None;
+        }
 
-        Self {
+        Some(Self {
             negative,
             significand,
-            exponent,
-        }
+            exponent: exponent.max(LONG_DOUBLE_MIN_NORMAL_EXPONENT),
+        })
     }
 
     fn fixed(&self, precision: usize, alternate: bool) -> String {
@@ -632,6 +657,15 @@ mod tests {
         assert_eq!(render("%a", "1"), "0x8p-3");
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
         assert_eq!(render("%a", "1"), "0x1p+0");
+    }
+
+    #[test]
+    fn detects_values_outside_the_long_double_range() {
+        let maximum_range = "1e4932".parse::<PreciseNumber>().unwrap().number;
+        let overflow = "2e4932".parse::<PreciseNumber>().unwrap().number;
+
+        assert!(!overflows_long_double(&maximum_range));
+        assert!(overflows_long_double(&overflow));
     }
 
     #[test]

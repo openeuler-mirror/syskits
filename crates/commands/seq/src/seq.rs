@@ -27,7 +27,7 @@ mod number;
 mod numberparse;
 use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::long_double_format::GnuFloatFormat;
+use crate::long_double_format::{GnuFloatFormat, overflows_long_double};
 use crate::number::PreciseNumber;
 
 const SEQ_SEPARATOR: &str = "separator";
@@ -255,17 +255,13 @@ fn get_sequence_range(
     numbers: &[String],
 ) -> CTResult<(PreciseNumber, PreciseNumber, PreciseNumber)> {
     let first = if numbers.len() > 1 {
-        numbers[0]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[0].clone(), e))?
+        parse_number_arg(&numbers[0])?
     } else {
         PreciseNumber::one()
     };
 
     let increment = if numbers.len() > 2 {
-        let inc: PreciseNumber = numbers[1]
-            .parse()
-            .map_err(|e| SeqError::ParseError(numbers[1].clone(), e))?;
+        let inc = parse_number_arg(&numbers[1])?;
         if inc.is_zero() {
             return Err(SeqError::ZeroIncrement(numbers[1].clone()).into());
         }
@@ -274,13 +270,23 @@ fn get_sequence_range(
         PreciseNumber::one()
     };
 
-    let last = numbers
-        .last()
-        .unwrap()
-        .parse()
-        .map_err(|e| SeqError::ParseError(numbers.last().unwrap().clone(), e))?;
+    let last = parse_number_arg(numbers.last().unwrap())?;
 
     Ok((first, increment, last))
+}
+
+fn parse_number_arg(value: &str) -> CTResult<PreciseNumber> {
+    let number: PreciseNumber = value
+        .parse()
+        .map_err(|error| SeqError::ParseError(value.to_string(), error))?;
+    if overflows_long_double(&number.number) {
+        return Err(SeqError::ParseError(
+            value.to_string(),
+            crate::numberparse::ParseNumberError::Float,
+        )
+        .into());
+    }
+    Ok(number)
 }
 
 fn calculate_padding(
@@ -722,6 +728,19 @@ mod tests {
         assert_eq!(error.code(), 1);
         assert_eq!(error.to_string(), "extra operand 'four'");
         assert!(error.usage());
+    }
+
+    #[test]
+    fn test_rejects_long_double_overflow() {
+        for value in ["2e4932", "1e4933", "-2e4932"] {
+            let error = seq_main(["seq", value].map(OsString::from).into_iter()).unwrap_err();
+
+            assert_eq!(error.code(), 1, "input: {value}");
+            assert_eq!(
+                error.to_string(),
+                format!("invalid floating point argument: '{value}'")
+            );
+        }
     }
 
     #[test]

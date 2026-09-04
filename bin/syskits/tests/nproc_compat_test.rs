@@ -25,6 +25,20 @@ fn run_nproc(args: &[&str], openmp_limit: bool) -> Output {
     command.output().expect("run syskits nproc")
 }
 
+fn run_nproc_with_openmp(threads: Option<&str>, limit: Option<&str>) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command.arg("nproc").env("LC_ALL", "C").env("LANG", "C");
+    match threads {
+        Some(value) => command.env("OMP_NUM_THREADS", value),
+        None => command.env_remove("OMP_NUM_THREADS"),
+    };
+    match limit {
+        Some(value) => command.env("OMP_THREAD_LIMIT", value),
+        None => command.env_remove("OMP_THREAD_LIMIT"),
+    };
+    command.output().expect("run syskits nproc")
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn nproc_reports_stdout_write_errors() {

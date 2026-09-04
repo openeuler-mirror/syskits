@@ -19,7 +19,7 @@ use ctcore::Tool;
 use ctcore::ct_display::ct_print_verbatim;
 use ctcore::ct_error::{CTResult, CTsageError};
 use ctcore::ct_line_ending::CtLineEnding;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -41,14 +41,14 @@ pub struct DirnameSemantic {
 
 struct DirnameOptions {
     line_ending: CtLineEnding,
-    inputs: Vec<String>,
+    inputs: Vec<OsString>,
 }
 
 impl DirnameOptions {
     fn from_matches(args_match: &ArgMatches) -> CTResult<Self> {
         let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::ZERO));
-        let inputs: Vec<String> = args_match
-            .get_many::<String>(opt_flags::DIR)
+        let inputs: Vec<OsString> = args_match
+            .get_many::<OsString>(opt_flags::DIR)
             .unwrap_or_default()
             .cloned()
             .collect();
@@ -88,8 +88,7 @@ pub fn dirname_main(args: impl ctcore::Args) -> CTResult<()> {
         .try_get_matches_from(args)?;
 
     let options = DirnameOptions::from_matches(&args_match)?;
-    let semantic = dirname_semantic_from_options(&options);
-    ct_print_verbatim(&semantic.classic_text).unwrap();
+    dirname_classic_from_options(&options)?;
 
     Ok(())
 }
@@ -101,24 +100,38 @@ pub fn dirname_native_semantic(args: impl ctcore::Args) -> CTResult<DirnameSeman
         .after_help(t!("dirname.after_help"))
         .try_get_matches_from(args)?;
     let options = DirnameOptions::from_matches(&args_match)?;
-    Ok(dirname_semantic_from_options(&options))
+    dirname_semantic_from_options(&options)
 }
 
-fn dirname_semantic_from_options(options: &DirnameOptions) -> DirnameSemantic {
+fn dirname_classic_from_options(options: &DirnameOptions) -> CTResult<()> {
+    let line_ending = options.line_ending.to_string();
+
+    for input in &options.inputs {
+        ct_print_verbatim(compute_dirname_os(input))?;
+        ct_print_verbatim(&line_ending)?;
+    }
+
+    Ok(())
+}
+
+fn dirname_semantic_from_options(options: &DirnameOptions) -> CTResult<DirnameSemantic> {
     let mut rows = Vec::with_capacity(options.inputs.len());
     let mut classic_text = String::new();
 
     for input in &options.inputs {
+        let input = input.to_str().ok_or_else(|| {
+            CTsageError::new(1, "dirname native semantics require UTF-8 arguments")
+        })?;
         let directory_path = compute_dirname(input);
         classic_text.push_str(&directory_path);
         classic_text.push_str(&options.line_ending.to_string());
         rows.push(DirnameRow {
-            input: input.clone(),
+            input: input.to_owned(),
             directory_path,
         });
     }
 
-    DirnameSemantic { rows, classic_text }
+    Ok(DirnameSemantic { rows, classic_text })
 }
 
 #[cfg(test)]
@@ -136,33 +149,41 @@ fn dirname_process(line_ending: CtLineEnding, dirnames: &Vec<String>) -> Option<
 }
 
 pub fn compute_dirname(path: &str) -> String {
-    if path.is_empty() {
-        return ".".to_string();
-    }
-    // 1. 去掉末尾所有 '/'
-    let mut s = path.trim_end_matches('/');
-    // 如果去掉后变为空（说明全是 /），设为 "/"
-    if s.is_empty() {
-        return "/".to_string();
-    }
-    // 2. 找最后一个 '/'
-    if let Some(pos) = s.rfind('/') {
-        // 截断到该 '/'
-        s = &s[..pos];
+    compute_dirname_os(OsStr::new(path))
+        .into_string()
+        .expect("valid UTF-8 input must produce valid UTF-8 output")
+}
 
-        // 3. 再去掉末尾 '/'
-        s = s.trim_end_matches('/');
-
-        // 4. 处理截断结果为空的情况
-        if s.is_empty() {
-            "/".to_string()
-        } else {
-            s.to_string()
-        }
-    } else {
-        // 没有 '/' → 返回 "."
-        ".".to_string()
+pub fn compute_dirname_os(path: &OsStr) -> OsString {
+    let bytes = path.as_encoded_bytes();
+    if bytes.is_empty() {
+        return OsString::from(".");
     }
+
+    let Some(last_non_slash) = bytes.iter().rposition(|byte| *byte != b'/') else {
+        return OsString::from("/");
+    };
+    let path_without_trailing_slashes = &bytes[..=last_non_slash];
+
+    let Some(last_slash) = path_without_trailing_slashes
+        .iter()
+        .rposition(|byte| *byte == b'/')
+    else {
+        return OsString::from(".");
+    };
+
+    let directory = &path_without_trailing_slashes[..last_slash];
+    let directory_end = directory
+        .iter()
+        .rposition(|byte| *byte != b'/')
+        .map_or(0, |position| position + 1);
+    if directory_end == 0 {
+        return OsString::from("/");
+    }
+
+    // The slice is split only at ASCII '/' boundaries, so it remains a valid
+    // subset of the platform-specific encoding returned by as_encoded_bytes.
+    unsafe { OsString::from_encoded_bytes_unchecked(directory[..directory_end].to_vec()) }
 }
 
 pub fn ct_app() -> Command {
@@ -180,6 +201,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::DIR)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath),
     ];
 
@@ -195,6 +217,17 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_compute_dirname_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let path = OsString::from_vec(b"/tmp/missing-\xff/file".to_vec());
+        let directory = compute_dirname_os(&path);
+
+        assert_eq!(directory.as_os_str().as_bytes(), b"/tmp/missing-\xff");
+    }
 
     #[test]
     fn test_tool_implementation() {

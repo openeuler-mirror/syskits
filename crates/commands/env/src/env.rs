@@ -611,6 +611,14 @@ fn apply_removal_of_all_env_vars(options: &EnvOptions<'_>, is_debug_printing: bo
 #[cfg(unix)]
 fn parse_signal(sig_str: &str) -> CTResult<Signal> {
     let sig_str = sig_str.to_uppercase();
+    #[cfg(target_os = "linux")]
+    if let Some(signal_number) = ctcore::ct_signals::get_ct_signal_by_name_or_value(&sig_str)
+        && let Ok(signal_number) = i32::try_from(signal_number)
+        && let Ok(signal) = Signal::try_from(signal_number)
+    {
+        return Ok(signal);
+    }
+
     let s = if sig_str.starts_with("SIG") {
         sig_str.clone()
     } else {
@@ -1111,6 +1119,13 @@ pub fn env_native_semantic(args: impl ctcore::Args) -> CTResult<EnvSemantic> {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_signal_accepts_poll_alias() {
+        assert_eq!(parse_signal("POLL").unwrap(), Signal::SIGIO);
+        assert_eq!(parse_signal("SIGPOLL").unwrap(), Signal::SIGIO);
+    }
 
     #[test]
     fn test_tool_implementation() {

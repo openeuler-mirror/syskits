@@ -241,6 +241,44 @@
             },
             "cleanup_commands": [],
             "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "tty": true,
+            "command": "nohup",
+            "description": "LC_ALL=C的TTY环境执行nohup /bin/sh -c 'read x; echo read_rc=$?'；输入为空；预期RC=0，子进程stdin为不可读描述符，nohup.out包含Bad file descriptor并以read_rc=1结尾；迁移原Cargo用例nohup_makes_tty_stdin_unreadable",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "read x; echo read_rc=$?"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' 'nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "od -An -v -tx1 'nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "timeout": 5
         }
     ]
 } 

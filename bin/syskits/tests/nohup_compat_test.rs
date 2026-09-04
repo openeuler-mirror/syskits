@@ -3,7 +3,7 @@ use std::fs::{self, File};
 #[cfg(all(unix, feature = "nohup"))]
 use std::io::Read;
 #[cfg(all(unix, feature = "nohup"))]
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 #[cfg(all(unix, feature = "nohup"))]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(all(unix, feature = "nohup"))]
@@ -30,16 +30,21 @@ fn read_terminal_output(mut master: File) -> String {
 }
 
 #[cfg(all(unix, feature = "nohup"))]
-fn run_with_tty_output(current_dir: &Path, home: &Path) -> (ExitStatus, String) {
-    let pty = nix::pty::openpty(None, None).expect("open pty");
-    let master = File::from(pty.master);
-    let stdout_fd = unsafe { libc::dup(pty.slave.as_raw_fd()) };
+fn duplicate_fd(fd: RawFd) -> File {
+    let duplicated_fd = unsafe { libc::dup(fd) };
     assert!(
-        stdout_fd >= 0,
+        duplicated_fd >= 0,
         "dup pty slave: {}",
         std::io::Error::last_os_error()
     );
-    let stdout = unsafe { File::from_raw_fd(stdout_fd) };
+    unsafe { File::from_raw_fd(duplicated_fd) }
+}
+
+#[cfg(all(unix, feature = "nohup"))]
+fn run_with_tty_output(current_dir: &Path, home: &Path) -> (ExitStatus, String) {
+    let pty = nix::pty::openpty(None, None).expect("open pty");
+    let master = File::from(pty.master);
+    let stdout = duplicate_fd(pty.slave.as_raw_fd());
 
     let status = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["nohup", "/bin/sh", "-c", "printf output"])
@@ -50,6 +55,27 @@ fn run_with_tty_output(current_dir: &Path, home: &Path) -> (ExitStatus, String) 
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(pty.slave))
+        .status()
+        .expect("run syskits nohup");
+
+    (status, read_terminal_output(master))
+}
+
+#[cfg(all(unix, feature = "nohup"))]
+fn run_with_tty_stdio(current_dir: &Path) -> (ExitStatus, String) {
+    let pty = nix::pty::openpty(None, None).expect("open pty");
+    let master = File::from(pty.master);
+    let stdout = duplicate_fd(pty.slave.as_raw_fd());
+    let stderr = duplicate_fd(pty.slave.as_raw_fd());
+
+    let status = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["nohup", "/bin/sh", "-c", "read x; echo read_rc=$?"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .current_dir(current_dir)
+        .stdin(Stdio::from(pty.slave))
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
         .status()
         .expect("run syskits nohup");
 

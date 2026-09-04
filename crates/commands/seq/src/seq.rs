@@ -321,6 +321,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_EQUAL_WIDTH)
             .short('w')
             .long("equal-width")
+            .overrides_with(SEQ_EQUAL_WIDTH)
             .help(t!("seq.clap.seq_equal_width"))
             .action(ArgAction::SetTrue),
         Arg::new(SEQ_FORMAT)
@@ -679,6 +680,15 @@ mod tests {
 
             assert_eq!(options.format.as_deref(), Some(expected));
         }
+    }
+
+    #[test]
+    fn test_repeated_equal_width_is_accepted() {
+        let matches = ct_app()
+            .try_get_matches_from(["seq", "-w", "--equal-width", "1", "3"])
+            .unwrap();
+
+        assert!(SeqOptions::new(&matches).is_equal_width);
     }
 
     #[test]

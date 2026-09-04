@@ -151,6 +151,14 @@ pub struct CtPasswd {
     pub user_dir: Option<String>,
     /// AKA passwd.pw_passwd
     pub user_passwd: Option<String>,
+    #[doc(hidden)]
+    pub raw_name: Option<Vec<u8>>,
+    #[doc(hidden)]
+    pub raw_user_info: Option<Vec<u8>>,
+    #[doc(hidden)]
+    pub raw_user_shell: Option<Vec<u8>>,
+    #[doc(hidden)]
+    pub raw_user_dir: Option<Vec<u8>>,
 }
 
 /// SAFETY: ptr must point to a valid C string.
@@ -163,19 +171,64 @@ unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     }
 }
 
+/// SAFETY: ptr must point to a valid C string.
+unsafe fn cstr2bytes(ptr: *const c_char) -> Option<Vec<u8>> {
+    if ptr.is_null() {
+        None
+    } else {
+        unsafe { Some(CStr::from_ptr(ptr).to_bytes().to_vec()) }
+    }
+}
+
 impl CtPasswd {
     /// SAFETY: All the pointed-to strings must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
+        let raw_name = unsafe { cstr2bytes(raw.pw_name) }.expect("passwd without name");
+        let raw_user_info = unsafe { cstr2bytes(raw.pw_gecos) };
+        let raw_user_shell = unsafe { cstr2bytes(raw.pw_shell) };
+        let raw_user_dir = unsafe { cstr2bytes(raw.pw_dir) };
         Self {
-            name: unsafe { cstr2string(raw.pw_name) }.expect("passwd without name"),
+            name: String::from_utf8_lossy(&raw_name).into_owned(),
             uid: raw.pw_uid,
             gid: raw.pw_gid,
-            user_info: unsafe { cstr2string(raw.pw_gecos) },
-            user_shell: unsafe { cstr2string(raw.pw_shell) },
-            user_dir: unsafe { cstr2string(raw.pw_dir) },
+            user_info: raw_user_info
+                .as_deref()
+                .map(|value| String::from_utf8_lossy(value).into_owned()),
+            user_shell: raw_user_shell
+                .as_deref()
+                .map(|value| String::from_utf8_lossy(value).into_owned()),
+            user_dir: raw_user_dir
+                .as_deref()
+                .map(|value| String::from_utf8_lossy(value).into_owned()),
             user_passwd: unsafe { cstr2string(raw.pw_passwd) },
+            raw_name: Some(raw_name),
+            raw_user_info,
+            raw_user_shell,
+            raw_user_dir,
         }
+    }
+
+    pub fn name_bytes(&self) -> &[u8] {
+        self.raw_name.as_deref().unwrap_or(self.name.as_bytes())
+    }
+
+    pub fn user_info_bytes(&self) -> Option<&[u8]> {
+        self.raw_user_info
+            .as_deref()
+            .or_else(|| self.user_info.as_deref().map(str::as_bytes))
+    }
+
+    pub fn user_shell_bytes(&self) -> Option<&[u8]> {
+        self.raw_user_shell
+            .as_deref()
+            .or_else(|| self.user_shell.as_deref().map(str::as_bytes))
+    }
+
+    pub fn user_dir_bytes(&self) -> Option<&[u8]> {
+        self.raw_user_dir
+            .as_deref()
+            .or_else(|| self.user_dir.as_deref().map(str::as_bytes))
     }
 
     /// This is a wrapper function for `libc::getgrouplist`.

@@ -120,6 +120,127 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "tty": true,
+            "command": "nohup",
+            "description": "LC_ALL=C的TTY环境执行nohup /bin/sh -c 'printf output'；输入为空；预期RC=0并创建内容为output、权限0600的nohup.out；迁移原Cargo用例nohup_creates_output_with_private_permissions",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "printf output"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' 'nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "od -An -v -tx1 'nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "tty": true,
+            "command": "nohup",
+            "description": "LC_ALL=C的TTY环境执行nohup /bin/sh -c 'printf output'；当前目录nohup.out为目录且HOME指向home；预期RC=0并回退创建内容为output、权限0600的home/nohup.out；迁移原Cargo用例nohup_falls_back_to_home_with_private_permissions",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "printf output"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "mkdir -p home nohup.out",
+                "export HOME='home'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stderr": true
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' 'home/nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "od -An -v -tx1 'home/nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "tty": true,
+            "command": "nohup",
+            "description": "LC_ALL=C的TTY环境执行nohup /bin/sh -c 'printf output'；输入fixture为权限0640且内容existing的nohup.out；预期RC=0、追加为existingoutput并保留0640权限；迁移原Cargo用例nohup_preserves_existing_output_permissions",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "printf output"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "printf existing > nohup.out",
+                "chmod 640 nohup.out"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' 'nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "od -An -v -tx1 'nohup.out'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "timeout": 5
         }
     ]
 } 

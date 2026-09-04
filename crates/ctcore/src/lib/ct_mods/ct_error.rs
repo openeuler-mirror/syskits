@@ -739,7 +739,10 @@ impl CTError for ClapErrorWrapper {
     }
 
     fn usage(&self) -> bool {
-        true
+        !matches!(
+            self.error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        )
     }
 }
 
@@ -766,12 +769,12 @@ impl ClapErrorWrapper {
 
 // 这是对Display特性的滥用
 impl Display for ClapErrorWrapper {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self.print_without_clap_help_footer() {
             Ok(_) => Ok(()),
-            Err(_) => {
+            Err(error) => {
                 self.note_output_failed();
-                Ok(())
+                write!(f, "write error: {}", strip_errno(&error))
             }
         }
     }

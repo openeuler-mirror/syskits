@@ -303,6 +303,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_SEPARATOR)
             .short('s')
             .long("separator")
+            .overrides_with(SEQ_SEPARATOR)
             .help(t!("seq.clap.seq_separator")),
         Arg::new(SEQ_TERMINATOR)
             .short('t')
@@ -746,6 +747,19 @@ mod tests {
         assert_eq!(options.terminator, "\n");
         assert!(options.is_equal_width);
         assert!(options.format.is_none());
+    }
+
+    #[test]
+    fn test_repeated_separator_uses_last_value() {
+        for (args, expected) in [
+            (["seq", "-s", ",", "--separator=:", "1", "3"], ":"),
+            (["seq", "--separator=:", "-s", ",", "1", "3"], ","),
+        ] {
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let options = SeqOptions::new(&matches);
+
+            assert_eq!(options.separator, expected);
+        }
     }
 
     #[test]

@@ -19,7 +19,7 @@ use crate::opt_flags::OPT_IGNORE;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::io::{self, Write};
@@ -95,9 +95,57 @@ pub fn nproc_semantic(args: impl ctcore::Args) -> CTResult<NprocSemantic> {
 }
 
 fn nproc_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
-    let args: Vec<OsString> = args.collect();
+    let mut args: Vec<OsString> = args.collect();
     validate_ignore_occurrences(&args)?;
+    if env::var_os("POSIXLY_CORRECT").is_none() {
+        args = permute_nproc_args(args);
+    }
     Ok(args)
+}
+
+fn permute_nproc_args(args: Vec<OsString>) -> Vec<OsString> {
+    let Some(program) = args.first().cloned() else {
+        return args;
+    };
+    let mut options = Vec::new();
+    let mut operands = Vec::new();
+    let mut explicit_separator = false;
+    let mut index = 1;
+
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            explicit_separator = true;
+            operands.extend(args[index + 1..].iter().cloned());
+            break;
+        }
+        if bytes.len() > 1 && bytes[0] == b'-' {
+            options.push(args[index].clone());
+            if ignore_takes_next_value(bytes) && index + 1 < args.len() {
+                index += 1;
+                options.push(args[index].clone());
+            }
+        } else {
+            operands.push(args[index].clone());
+        }
+        index += 1;
+    }
+
+    let mut permuted = Vec::with_capacity(args.len() + usize::from(explicit_separator));
+    permuted.push(program);
+    permuted.extend(options);
+    if explicit_separator {
+        permuted.push(OsString::from("--"));
+    }
+    permuted.extend(operands);
+    permuted
+}
+
+fn ignore_takes_next_value(argument: &[u8]) -> bool {
+    if !argument.starts_with(b"--") || argument.contains(&b'=') {
+        return false;
+    }
+    canonical_long_option(&argument[2..]) == Some("ignore")
 }
 
 fn validate_ignore_occurrences(args: &[OsString]) -> CTResult<()> {
@@ -128,7 +176,13 @@ fn validate_ignore_occurrences(args: &[OsString]) -> CTResult<()> {
                     std::str::from_utf8(&option[position + 1..]).ok()
                 } else {
                     index += 1;
-                    args.get(index).and_then(|value| value.to_str())
+                    let Some(value) = args.get(index) else {
+                        return Err(CTsageError::new(
+                            1,
+                            "option '--ignore' requires an argument",
+                        ));
+                    };
+                    value.to_str()
                 };
                 if let Some(value) = value {
                     parse_ignore_value(value)?;
@@ -494,7 +548,7 @@ mod tests {
     }
 
     mod tests_nproc_main {
-        use crate::{NprocQuery, nproc_main, nproc_semantic};
+        use crate::{NprocQuery, nproc_main, nproc_semantic, permute_nproc_args};
 
         use std::ffi::OsString;
 
@@ -577,6 +631,22 @@ mod tests {
             assert_eq!(result.query, NprocQuery::All);
             assert!(result.selected >= 1);
             assert!(result.all >= 1);
+        }
+
+        #[test]
+        fn test_permute_nproc_args_moves_options_before_operands() {
+            let args = ["nproc", "operand", "--ignore", "1", "--all"]
+                .into_iter()
+                .map(OsString::from)
+                .collect();
+
+            assert_eq!(
+                permute_nproc_args(args),
+                ["nproc", "--ignore", "1", "--all", "operand"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 

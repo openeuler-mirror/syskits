@@ -68,6 +68,7 @@ pub fn ct_app() -> Command {
         Arg::new(pinky_options::PINKY_LONG_FORMAT)
             .short('l')
             .requires(pinky_options::PINKY_USER)
+            .overrides_with(pinky_options::PINKY_SHORT_FORMAT)
             .help(t!("pinky.clap.pinky_long_format"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_HOME_DIR)
@@ -84,6 +85,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_SHORT_FORMAT)
             .short('s')
+            .overrides_with(pinky_options::PINKY_LONG_FORMAT)
             .help(t!("pinky.clap.pinky_short_format"))
             .action(ArgAction::SetTrue),
         Arg::new(pinky_options::PINKY_OMIT_HEADINGS)
@@ -816,6 +818,21 @@ mod tests_all {
         assert!(!flags.is_include_fullname);
         assert!(!flags.is_include_where);
         assert!(!flags.is_include_idle);
+    }
+
+    #[test]
+    fn test_last_format_option_wins() {
+        let short = ct_app()
+            .try_get_matches_from(["pinky", "-l", "-s"])
+            .unwrap();
+        assert!(!short.get_flag(pinky_options::PINKY_LONG_FORMAT));
+        assert!(short.get_flag(pinky_options::PINKY_SHORT_FORMAT));
+
+        let long = ct_app()
+            .try_get_matches_from(["pinky", "-s", "-l", "root"])
+            .unwrap();
+        assert!(long.get_flag(pinky_options::PINKY_LONG_FORMAT));
+        assert!(!long.get_flag(pinky_options::PINKY_SHORT_FORMAT));
     }
 
     mod time_format_tests {

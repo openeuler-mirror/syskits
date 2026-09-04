@@ -617,6 +617,174 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %e 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为26字节/2条换行分隔、内容=1.000000e+00\\n2.000000e+00\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第1次调用",
+            "args": [
+                "-f",
+                "%e",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.000000e+00\n2.000000e+00\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %E 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为26字节/2条换行分隔、内容=1.000000E+00\\n2.000000E+00\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第2次调用",
+            "args": [
+                "-f",
+                "%E",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.000000E+00\n2.000000E+00\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %f 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为18字节/2条换行分隔、内容=1.000000\\n2.000000\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第3次调用",
+            "args": [
+                "-f",
+                "%f",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.000000\n2.000000\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %F 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为18字节/2条换行分隔、内容=1.000000\\n2.000000\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第4次调用",
+            "args": [
+                "-f",
+                "%F",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1.000000\n2.000000\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %a 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为14字节/2条换行分隔、内容=0x1p+0\\n0x1p+1\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第5次调用",
+            "args": [
+                "-f",
+                "%a",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0x1p+0\n0x1p+1\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %A 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为14字节/2条换行分隔、内容=0X1P+0\\n0X1P+1\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第6次调用",
+            "args": [
+                "-f",
+                "%A",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0X1P+0\n0X1P+1\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %05.1f 1 2；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为12字节/2条换行分隔、内容=001.0\\n002.0\\n；迁移原Cargo用例seq_float_formats_match_gnu_long_double_printf第7次调用",
+            "args": [
+                "-f",
+                "%05.1f",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "001.0\n002.0\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

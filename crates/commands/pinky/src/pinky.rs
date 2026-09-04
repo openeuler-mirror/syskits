@@ -42,8 +42,8 @@ use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::S_IWGRP;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::BufReader;
 use std::io::prelude::*;
+use std::io::{self, BufReader};
 use std::os::unix::fs::MetadataExt;
 use sys_locale::get_locale;
 
@@ -150,6 +150,15 @@ impl Tool for Pinky {
 }
 
 pub fn pinky_main(args: impl ctcore::Args) -> CTResult<()> {
+    let stdout = io::stdout();
+    let mut output = stdout.lock();
+    pinky_main_with_writer(args, &mut output)?;
+    output
+        .flush()
+        .map_err_context(|| String::from("write error"))
+}
+
+fn pinky_main_with_writer<W: Write>(args: impl ctcore::Args, output: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
@@ -160,13 +169,11 @@ pub fn pinky_main(args: impl ctcore::Args) -> CTResult<()> {
     let do_short_format = !matches.get_flag(pinky_options::PINKY_LONG_FORMAT);
 
     if do_short_format {
-        match pk.short_pinky() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.map_err_context(String::new)),
-        }
+        pk.short_pinky(output)
+            .map_err_context(|| String::from("write error"))
     } else {
-        pk.long_pinky();
-        Ok(())
+        pk.long_pinky(output)
+            .map_err_context(|| String::from("write error"))
     }
 }
 
@@ -326,16 +333,15 @@ impl PinkyFlags {
     }
 
     /// 打印单个用户的登录信息
-    fn print_entry(&self, ut: &CtUtmpx) -> std::io::Result<()> {
+    fn print_entry<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
         let (mesg, last_change) = self.get_tty_info(ut)?;
-        self.print_user_info(ut);
-        self.print_fullname(ut);
-        self.print_tty_info(ut, mesg);
-        self.print_idle_time(last_change);
-        self.print_login_time(ut);
-        self.print_host_info(ut)?;
-        println!();
-        Ok(())
+        self.print_user_info(ut, output)?;
+        self.print_fullname(ut, output)?;
+        self.print_tty_info(ut, mesg, output)?;
+        self.print_idle_time(last_change, output)?;
+        self.print_login_time(ut, output)?;
+        self.print_host_info(ut, output)?;
+        writeln!(output)
     }
 
     fn get_tty_info(&self, ut: &CtUtmpx) -> std::io::Result<(char, i64)> {
@@ -349,81 +355,81 @@ impl PinkyFlags {
         }
     }
 
-    fn print_user_info(&self, ut: &CtUtmpx) {
-        print!("{:<8}", ut.user());
+    fn print_user_info<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
+        write!(output, "{:<8}", ut.user())
     }
 
-    fn print_fullname(&self, ut: &CtUtmpx) {
+    fn print_fullname<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
         if !self.is_include_fullname {
-            return;
+            return Ok(());
         }
         let fullname = CtPasswd::locate(ut.user().as_ref())
             .ok()
             .and_then(|pw| gecos_to_fullname(&pw))
             .unwrap_or_else(|| "???".to_string());
-        print!(" {fullname:<19}");
+        write!(output, " {fullname:<19}")
     }
 
-    fn print_tty_info(&self, ut: &CtUtmpx, mesg: char) {
-        print!(" {}{:<8}", mesg, ut.tty_device());
+    fn print_tty_info<W: Write>(&self, ut: &CtUtmpx, mesg: char, output: &mut W) -> io::Result<()> {
+        write!(output, " {}{:<8}", mesg, ut.tty_device())
     }
 
-    fn print_idle_time(&self, last_change: i64) {
+    fn print_idle_time<W: Write>(&self, last_change: i64, output: &mut W) -> io::Result<()> {
         if !self.is_include_idle {
-            return;
+            return Ok(());
         }
         let idle = if last_change == 0 {
             "?????".to_string()
         } else {
             pinky_idle_string(last_change)
         };
-        print!(" {idle:<6}");
+        write!(output, " {idle:<6}")
     }
 
-    fn print_login_time(&self, ut: &CtUtmpx) {
-        print!(" {}", time_string(ut));
+    fn print_login_time<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
+        write!(output, " {}", time_string(ut))
     }
 
-    fn print_host_info(&self, ut: &CtUtmpx) -> std::io::Result<()> {
+    fn print_host_info<W: Write>(&self, ut: &CtUtmpx, output: &mut W) -> io::Result<()> {
         if !self.is_include_where {
             return Ok(());
         }
         let host = ut.host();
         if !host.is_empty() {
-            print!(" {}", ut.canon_host()?);
+            write!(output, " {}", ut.canon_host()?)?;
         }
         Ok(())
     }
 
     /// 打印列标题，使用固定格式匹配coreutils
-    fn print_heading(&self) {
+    fn print_heading<W: Write>(&self, output: &mut W) -> io::Result<()> {
         if !self.is_include_heading {
-            return;
+            return Ok(());
         }
 
         // 使用与coreutils相同的固定格式
-        print!("{:<8}", "Login");
+        write!(output, "{:<8}", "Login")?;
         if self.is_include_fullname {
-            print!(" {:<19}", "Name");
+            write!(output, " {:<19}", "Name")?;
         }
-        print!(" {:<9}", " TTY"); // 注意：包含前导空格，总宽度9
+        write!(output, " {:<9}", " TTY")?; // 注意：包含前导空格，总宽度9
         if self.is_include_idle {
-            print!(" {:<6}", "Idle");
+            write!(output, " {:<6}", "Idle")?;
         }
-        print!(" {:<width$}", "When", width = time_format_width());
+        write!(output, " {:<width$}", "When", width = time_format_width())?;
         if self.is_include_where {
-            print!(" Where");
+            write!(output, " Where")?;
         }
-        println!();
+        writeln!(output)
     }
 
     /// 以短格式显示用户信息
-    fn short_pinky(&self) -> std::io::Result<()> {
-        self.print_heading();
+    fn short_pinky<W: Write>(&self, output: &mut W) -> io::Result<()> {
+        self.print_heading(output)?;
 
         for ut in CtUtmpx::iter_all_records() {
             if self.should_display_user(&ut) {
-                self.print_entry(&ut)?;
+                self.print_entry(&ut, output)?;
             }
         }
         Ok(())
@@ -436,14 +442,15 @@ impl PinkyFlags {
     }
 
     /// 以长格式显示用户信息
-    fn long_pinky(&self) {
+    fn long_pinky<W: Write>(&self, output: &mut W) -> io::Result<()> {
         for username in &self.pinky_names {
-            self.print_long_user_info(username);
+            self.print_long_user_info(username, output)?;
         }
+        Ok(())
     }
 
-    fn print_long_user_info(&self, username: &str) {
-        print!("Login name: {username:<28}In real life: ");
+    fn print_long_user_info<W: Write>(&self, username: &str, output: &mut W) -> io::Result<()> {
+        write!(output, "Login name: {username:<28}In real life: ")?;
 
         match CtPasswd::locate(username) {
             Ok(pw) => {
@@ -451,39 +458,47 @@ impl PinkyFlags {
                 let user_dir = pw.user_dir.unwrap_or_default();
                 let user_shell = pw.user_shell.unwrap_or_default();
 
-                println!(" {fullname}");
-                self.print_home_and_shell(&user_dir, &user_shell);
-                self.print_project_file(&user_dir);
-                self.print_plan_file(&user_dir);
-                println!();
+                writeln!(output, " {fullname}")?;
+                self.print_home_and_shell(&user_dir, &user_shell, output)?;
+                self.print_project_file(&user_dir, output)?;
+                self.print_plan_file(&user_dir, output)?;
+                writeln!(output)
             }
-            Err(_) => println!(" ???"),
+            Err(_) => writeln!(output, " ???"),
         }
     }
 
-    fn print_home_and_shell(&self, user_dir: &str, user_shell: &str) {
+    fn print_home_and_shell<W: Write>(
+        &self,
+        user_dir: &str,
+        user_shell: &str,
+        output: &mut W,
+    ) -> io::Result<()> {
         if self.is_include_home_and_shell {
-            print!("Directory: {user_dir:<29}");
-            println!("Shell:  {user_shell}");
+            write!(output, "Directory: {user_dir:<29}")?;
+            writeln!(output, "Shell:  {user_shell}")?;
         }
+        Ok(())
     }
 
-    fn print_project_file(&self, user_dir: &str) {
+    fn print_project_file<W: Write>(&self, user_dir: &str, output: &mut W) -> io::Result<()> {
         if self.is_include_project {
             if let Ok(f) = File::open(PathBuf::from(user_dir).join(".project")) {
-                print!("Project: ");
-                read_to_console(f);
+                write!(output, "Project: ")?;
+                read_to_console(f, output)?;
             }
         }
+        Ok(())
     }
 
-    fn print_plan_file(&self, user_dir: &str) {
+    fn print_plan_file<W: Write>(&self, user_dir: &str, output: &mut W) -> io::Result<()> {
         if self.is_include_plan {
             if let Ok(f) = File::open(PathBuf::from(user_dir).join(".plan")) {
-                println!("Plan:");
-                read_to_console(f);
+                writeln!(output, "Plan:")?;
+                read_to_console(f, output)?;
             }
         }
+        Ok(())
     }
 
     fn long_profile_row(&self, username: &str) -> PinkyRow {
@@ -728,12 +743,13 @@ fn read_optional_file(path: PathBuf) -> Option<String> {
     Some(String::from_utf8_lossy(&buf).to_string())
 }
 
-fn read_to_console<F: Read>(f: F) {
+fn read_to_console<F: Read, W: Write>(f: F, output: &mut W) -> io::Result<()> {
     let mut reader = BufReader::new(f);
     let mut iobuf = Vec::new();
     if reader.read_to_end(&mut iobuf).is_ok() {
-        print!("{}", String::from_utf8_lossy(&iobuf));
+        write!(output, "{}", String::from_utf8_lossy(&iobuf))?;
     }
+    Ok(())
 }
 
 /// 为字符串提供首字母大写功能的 trait

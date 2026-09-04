@@ -838,6 +838,55 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=blake2b --length 512 text.txt；stdin为0字节、内容=空；输入fixture：file text.txt，mode=644，17字节，内容=alpha\\nbeta\\ngamma\\n；预期RC=0，stderr为0字节、内容=空，stdout为166字节/1条换行分隔、内容=BLAKE2b (text.txt) = e68e2f5b10cb778901b89ca26a5576f535eeec2185d0349c0486c41a1caf7e0eedfb289a6058298cc7c39887d0d051023fd4a0d7e1abb47fdc623dd40fb36c7b\\n；迁移原Cargo用例cksum_blake2b_full_length_uses_canonical_tag第1次调用",
+      "args": [
+        "--algorithm=blake2b",
+        "--length",
+        "512",
+        "text.txt"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\164\\145\\170\\164\\056\\164\\170\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\142\\145\\164\\141\\012\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "BLAKE2b (text.txt) = e68e2f5b10cb778901b89ca26a5576f535eeec2185d0349c0486c41a1caf7e0eedfb289a6058298cc7c39887d0d051023fd4a0d7e1abb47fdc623dd40fb36c7b\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=blake2b --length=512 text.txt；stdin为0字节、内容=空；输入fixture：file text.txt，mode=644，17字节，内容=alpha\\nbeta\\ngamma\\n；预期RC=0，stderr为0字节、内容=空，stdout为166字节/1条换行分隔、内容=BLAKE2b (text.txt) = e68e2f5b10cb778901b89ca26a5576f535eeec2185d0349c0486c41a1caf7e0eedfb289a6058298cc7c39887d0d051023fd4a0d7e1abb47fdc623dd40fb36c7b\\n；迁移原Cargo用例cksum_blake2b_full_length_uses_canonical_tag第2次调用",
+      "args": [
+        "--algorithm=blake2b",
+        "--length=512",
+        "text.txt"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\164\\145\\170\\164\\056\\164\\170\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\142\\145\\164\\141\\012\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "BLAKE2b (text.txt) = e68e2f5b10cb778901b89ca26a5576f535eeec2185d0349c0486c41a1caf7e0eedfb289a6058298cc7c39887d0d051023fd4a0d7e1abb47fdc623dd40fb36c7b\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

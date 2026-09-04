@@ -827,7 +827,7 @@ fn process_chunk<
         if SHOW_WORDS {
             if ch.is_whitespace() {
                 *in_word = false;
-            } else if !(*in_word) {
+            } else if !ch.is_control() && !(*in_word) {
                 *in_word = true;
                 total.words = total.words.saturating_add(1);
             }
@@ -1819,6 +1819,20 @@ mod tests {
             &mut in_word,
         );
         assert_eq!(total.words, 1, "Should count one long word");
+    }
+
+    #[test]
+    fn test_c_locale_binary_high_bytes_word_count() {
+        let input = (0_u8..=u8::MAX).cycle().take(3 * 256).collect::<Vec<_>>();
+        let settings = WcSettings::default();
+        let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(input));
+
+        let (count, error) = word_count_from_reader(reader, &settings);
+
+        assert!(error.is_none());
+        assert_eq!(count.lines, 3);
+        assert_eq!(count.words, 3);
+        assert_eq!(count.bytes, 768);
     }
 
     #[test]

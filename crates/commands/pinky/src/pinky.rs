@@ -117,6 +117,7 @@ pub fn ct_app() -> Command {
         .version(crate_version!())
         .about(t!("pinky.about"))
         .override_usage(t!("pinky.usage"))
+        .args_override_self(true)
         .infer_long_args(true)
         .disable_help_flag(true)
         .args(args)
@@ -804,6 +805,18 @@ mod tests {
 mod tests_all {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn test_repeated_q_is_idempotent() {
+        let matches = ct_app()
+            .try_get_matches_from(["pinky", "-q", "-q"])
+            .unwrap();
+        let flags = PinkyFlags::new(&matches);
+
+        assert!(!flags.is_include_fullname);
+        assert!(!flags.is_include_where);
+        assert!(!flags.is_include_idle);
+    }
 
     mod time_format_tests {
         use super::*;

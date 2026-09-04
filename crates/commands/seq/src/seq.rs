@@ -18,7 +18,6 @@ use num_traits::{ToPrimitive, Zero};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
-use ctcore::ct_format::{Format, num_format};
 use std::ffi::OsString;
 use sys_locale::get_locale;
 mod error;
@@ -302,9 +301,9 @@ fn parse_format_option(format_str: Option<&str>) -> CTResult<Option<GnuFloatForm
         return Ok(None);
     };
 
-    Format::<num_format::Float>::parse(format_str).map_err(|e| Box::new(e) as Box<dyn CTError>)?;
-
-    Ok(Some(GnuFloatFormat::parse(format_str)))
+    GnuFloatFormat::try_parse(format_str)
+        .map(Some)
+        .map_err(|error| Box::new(error) as Box<dyn CTError>)
 }
 
 pub fn ct_app() -> Command {

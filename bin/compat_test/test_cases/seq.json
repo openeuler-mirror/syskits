@@ -859,6 +859,121 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %lf 1；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为43字节、内容=seq: format '%lf' has unknown %l directive\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_non_gnu_float_directives_without_panicking第1次调用",
+            "args": [
+                "-f",
+                "%lf",
+                "1"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format '%lf' has unknown %l directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %hf 1；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为43字节、内容=seq: format '%hf' has unknown %h directive\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_non_gnu_float_directives_without_panicking第2次调用",
+            "args": [
+                "-f",
+                "%hf",
+                "1"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format '%hf' has unknown %h directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %1$f 1；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为44字节、内容=seq: format '%1$f' has unknown %$ directive\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_non_gnu_float_directives_without_panicking第3次调用",
+            "args": [
+                "-f",
+                "%1$f",
+                "1"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format '%1$f' has unknown %$ directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %*f 1；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为43字节、内容=seq: format '%*f' has unknown %* directive\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_non_gnu_float_directives_without_panicking第4次调用",
+            "args": [
+                "-f",
+                "%*f",
+                "1"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format '%*f' has unknown %* directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f %g%g 1；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stderr为45字节、内容=seq: format '%g%g' has too many % directives\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例seq_rejects_non_gnu_float_directives_without_panicking第5次调用",
+            "args": [
+                "-f",
+                "%g%g",
+                "1"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format '%g%g' has too many % directives\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

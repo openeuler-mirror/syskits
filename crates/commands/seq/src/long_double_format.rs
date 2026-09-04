@@ -10,6 +10,8 @@
  */
 
 use std::cmp::Ordering;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
@@ -38,7 +40,7 @@ const X87_HEX_LAYOUT: bool = true;
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
 const X87_HEX_LAYOUT: bool = false;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct Flags {
     left: bool,
     plus: bool,
@@ -47,6 +49,7 @@ struct Flags {
     zero: bool,
 }
 
+#[derive(Debug)]
 pub struct GnuFloatFormat {
     prefix: String,
     suffix: String,
@@ -56,8 +59,39 @@ pub struct GnuFloatFormat {
     conversion: u8,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum GnuFormatError {
+    NoDirective(String),
+    EndsInPercent(String),
+    UnknownDirective(String, u8),
+    TooManyDirectives(String),
+}
+
+impl Error for GnuFormatError {}
+
+impl ctcore::ct_error::CTError for GnuFormatError {}
+
+impl Display for GnuFormatError {
+    fn fmt(&self, output: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoDirective(format) => {
+                write!(output, "format '{format}' has no % directive")
+            }
+            Self::EndsInPercent(format) => write!(output, "format '{format}' ends in %"),
+            Self::UnknownDirective(format, directive) => write!(
+                output,
+                "format '{format}' has unknown %{} directive",
+                char::from(*directive)
+            ),
+            Self::TooManyDirectives(format) => {
+                write!(output, "format '{format}' has too many % directives")
+            }
+        }
+    }
+}
+
 impl GnuFloatFormat {
-    pub fn parse(format: &str) -> Self {
+    pub fn try_parse(format: &str) -> Result<Self, GnuFormatError> {
         let bytes = format.as_bytes();
         let mut percent = 0;
         while percent < bytes.len() {
@@ -68,6 +102,9 @@ impl GnuFloatFormat {
             } else {
                 break;
             }
+        }
+        if percent == bytes.len() {
+            return Err(GnuFormatError::NoDirective(format.to_string()));
         }
 
         let mut index = percent + 1;
@@ -105,16 +142,35 @@ impl GnuFloatFormat {
         if bytes.get(index) == Some(&b'L') {
             index += 1;
         }
-        let conversion = bytes[index];
+        let Some(&conversion) = bytes.get(index) else {
+            return Err(GnuFormatError::EndsInPercent(format.to_string()));
+        };
+        if !b"aAeEfFgG".contains(&conversion) {
+            return Err(GnuFormatError::UnknownDirective(
+                format.to_string(),
+                conversion,
+            ));
+        }
 
-        Self {
+        let mut suffix_index = index + 1;
+        while suffix_index < bytes.len() {
+            if bytes[suffix_index] != b'%' {
+                suffix_index += 1;
+            } else if bytes.get(suffix_index + 1) == Some(&b'%') {
+                suffix_index += 2;
+            } else {
+                return Err(GnuFormatError::TooManyDirectives(format.to_string()));
+            }
+        }
+
+        Ok(Self {
             prefix: unescape_percent(&format[..percent]),
             suffix: unescape_percent(&format[index + 1..]),
             flags,
             width,
             precision,
             conversion,
-        }
+        })
     }
 
     pub fn format(&self, value: &ExtendedBigDecimal) -> String {
@@ -542,7 +598,7 @@ mod tests {
 
     fn render(format: &str, value: &str) -> String {
         let value = value.parse::<PreciseNumber>().unwrap().number;
-        GnuFloatFormat::parse(format).format(&value)
+        GnuFloatFormat::try_parse(format).unwrap().format(&value)
     }
 
     #[test]
@@ -576,5 +632,27 @@ mod tests {
         assert_eq!(render("%a", "1"), "0x8p-3");
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
         assert_eq!(render("%a", "1"), "0x1p+0");
+    }
+
+    #[test]
+    fn rejects_non_gnu_directives_without_panicking() {
+        for (format, expected) in [
+            ("%%g", GnuFormatError::NoDirective("%%g".to_string())),
+            ("%", GnuFormatError::EndsInPercent("%".to_string())),
+            (
+                "%lf",
+                GnuFormatError::UnknownDirective("%lf".to_string(), b'l'),
+            ),
+            (
+                "%1$f",
+                GnuFormatError::UnknownDirective("%1$f".to_string(), b'$'),
+            ),
+            (
+                "%g%g",
+                GnuFormatError::TooManyDirectives("%g%g".to_string()),
+            ),
+        ] {
+            assert_eq!(GnuFloatFormat::try_parse(format).unwrap_err(), expected);
+        }
     }
 }

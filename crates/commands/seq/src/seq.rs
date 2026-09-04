@@ -227,7 +227,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
 }
 
 fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
-    Ok(matches
+    let numbers = matches
         .get_many::<String>(SEQ_NUMBERS)
         .ok_or(SeqError::NoArguments)?
         .map(|s| {
@@ -237,7 +237,11 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
                 s.to_string()
             }
         })
-        .collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    if numbers.len() > 3 {
+        return Err(SeqError::ExtraOperand(numbers[3].clone()).into());
+    }
+    Ok(numbers)
 }
 
 fn validate_option_compatibility(options: &SeqOptions) -> CTResult<()> {
@@ -330,7 +334,7 @@ pub fn ct_app() -> Command {
             .help(t!("seq.clap.seq_format")),
         Arg::new(SEQ_NUMBERS)
             .action(ArgAction::Append)
-            .num_args(1..=3),
+            .num_args(1..),
     ];
 
     Command::new(ctcore::ct_util_name())
@@ -704,6 +708,20 @@ mod tests {
                 "format string may not be specified when printing equal width strings"
             );
         }
+    }
+
+    #[test]
+    fn test_extra_operand_reports_the_fourth_value() {
+        let error = seq_main(
+            ["seq", "1", "2", "3", "four"]
+                .map(OsString::from)
+                .into_iter(),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), "extra operand 'four'");
+        assert!(error.usage());
     }
 
     #[test]

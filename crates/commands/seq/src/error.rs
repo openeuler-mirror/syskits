@@ -28,6 +28,9 @@ pub enum SeqError {
     /// 缺少必需的参数
     NoArguments,
 
+    /// 操作数超过三个
+    ExtraOperand(String),
+
     /// 等宽输出不能与自定义格式同时使用
     FormatWithEqualWidth,
 
@@ -38,7 +41,7 @@ pub enum SeqError {
 impl CTError for SeqError {
     fn code(&self) -> i32 {
         match self {
-            Self::NoArguments | Self::FormatWithEqualWidth => 1,
+            Self::NoArguments | Self::ExtraOperand(_) | Self::FormatWithEqualWidth => 1,
             Self::ParseError(_, _) | Self::ZeroIncrement(_) => 1,
             Self::IoError(_) => 3,
         }
@@ -50,6 +53,7 @@ impl CTError for SeqError {
             Self::ParseError(_, _)
                 | Self::ZeroIncrement(_)
                 | Self::NoArguments
+                | Self::ExtraOperand(_)
                 | Self::FormatWithEqualWidth
         )
     }
@@ -69,6 +73,7 @@ impl Display for SeqError {
             }
             Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
             Self::NoArguments => write!(f, "missing operand"),
+            Self::ExtraOperand(operand) => write!(f, "extra operand {}", operand.quote()),
             Self::FormatWithEqualWidth => write!(
                 f,
                 "format string may not be specified when printing equal width strings"
@@ -91,6 +96,7 @@ mod tests {
     #[test]
     fn test_error_codes() {
         assert_eq!(SeqError::NoArguments.code(), 1);
+        assert_eq!(SeqError::ExtraOperand("4".into()).code(), 1);
         assert_eq!(SeqError::FormatWithEqualWidth.code(), 1);
         assert_eq!(
             SeqError::ParseError("123".into(), ParseNumberError::Float).code(),
@@ -116,6 +122,10 @@ mod tests {
         );
         assert_eq!(SeqError::NoArguments.to_string(), "missing operand");
         assert_eq!(
+            SeqError::ExtraOperand("4".into()).to_string(),
+            "extra operand '4'"
+        );
+        assert_eq!(
             SeqError::FormatWithEqualWidth.to_string(),
             "format string may not be specified when printing equal width strings"
         );
@@ -128,6 +138,7 @@ mod tests {
     #[test]
     fn test_error_usage() {
         assert!(SeqError::NoArguments.usage());
+        assert!(SeqError::ExtraOperand("4".into()).usage());
         assert!(SeqError::FormatWithEqualWidth.usage());
         assert!(SeqError::ParseError("123".into(), ParseNumberError::Float).usage());
         assert!(SeqError::ZeroIncrement("0".into()).usage());

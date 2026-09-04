@@ -111,6 +111,7 @@ pub struct SeqSemantic {
 pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    set_process_locale();
 
     // 核心拦截器：在参数送入 clap 之前进行“易容伪装”。
     // 将所有形如负数的参数（如 -1e-3, -.1）伪装成 CT_NEG_xxx，完美绕过 clap 的死板校验。
@@ -178,6 +179,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    set_process_locale();
 
     let mut modified_args: Vec<OsString> = Vec::new();
     for arg in args {
@@ -229,6 +231,14 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
         rows,
         classic_text: String::from_utf8(classic_buffer).expect("seq output should be utf-8"),
     })
+}
+
+fn set_process_locale() {
+    // SAFETY: setlocale receives a static NUL-terminated string and is called
+    // before seq starts formatting values.
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
 }
 
 fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {

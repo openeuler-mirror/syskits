@@ -966,6 +966,31 @@
       "cleanup_commands": [
         "rm -f ref_file_long"
       ]
+    },
+    {
+      "command": "date",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT，export TZ='UTC0'；执行date --debug -d 2024-02-29 12:34:56 UTC +%F %T %z；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为559字节、内容=date: parsed date part: (Y-M-D) 2024-02-29\\ndate: parsed time part: 12:34:56\\ndate: parsed zone part: UTC+00\\ndate: input timezone: parsed date/time string (+00)\\ndate: using speci...，stdout为26字节/1条换行分隔、内容=2024-02-29 12:34:56 +0000\\n；迁移原Cargo用例date_debug_reports_explicit_utc_parse_trace第1次调用",
+      "args": [
+        "--debug",
+        "-d",
+        "2024-02-29 12:34:56 UTC",
+        "+%F %T %z"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "export TZ='UTC0'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-02-29 12:34:56 +0000\n",
+          "stderr": "date: parsed date part: (Y-M-D) 2024-02-29\ndate: parsed time part: 12:34:56\ndate: parsed zone part: UTC+00\ndate: input timezone: parsed date/time string (+00)\ndate: using specified time as starting value: '12:34:56'\ndate: starting date/time: '(Y-M-D) 2024-02-29 12:34:56 TZ=+00'\ndate: '(Y-M-D) 2024-02-29 12:34:56 TZ=+00' = 1709210096 epoch-seconds\ndate: timezone: Universal Time\ndate: final: 1709210096.000000000 (epoch-seconds)\ndate: final: (Y-M-D) 2024-02-29 12:34:56 (UTC)\ndate: final: (Y-M-D) 2024-02-29 12:34:56 (UTC+00)\ndate: output format: '%F %T %z'\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

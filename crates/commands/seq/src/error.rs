@@ -62,9 +62,8 @@ impl Display for SeqError {
         match self {
             Self::ParseError(s, e) => {
                 let error_type = match e {
-                    ParseNumberError::Float => "floating point",
+                    ParseNumberError::Float | ParseNumberError::Hex => "floating point",
                     ParseNumberError::Nan => "'not-a-number'",
-                    ParseNumberError::Hex => "hexadecimal",
                 };
                 write!(f, "invalid {error_type} argument: {}", s.quote())
             }
@@ -106,6 +105,10 @@ mod tests {
         assert_eq!(
             SeqError::ParseError("abc".into(), ParseNumberError::Float).to_string(),
             "invalid floating point argument: 'abc'"
+        );
+        assert_eq!(
+            SeqError::ParseError("0x.p0".into(), ParseNumberError::Hex).to_string(),
+            "invalid floating point argument: '0x.p0'"
         );
         assert_eq!(
             SeqError::ZeroIncrement("0".into()).to_string(),

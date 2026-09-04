@@ -326,6 +326,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_FORMAT)
             .short('f')
             .long(SEQ_FORMAT)
+            .overrides_with(SEQ_FORMAT)
             .help(t!("seq.clap.seq_format")),
         Arg::new(SEQ_NUMBERS)
             .action(ArgAction::Append)
@@ -664,6 +665,19 @@ mod tests {
             let options = SeqOptions::new(&matches);
 
             assert_eq!(options.separator, expected);
+        }
+    }
+
+    #[test]
+    fn test_repeated_format_uses_last_value() {
+        for (args, expected) in [
+            (["seq", "-f", "%.1f", "--format=%.2f", "1", "2"], "%.2f"),
+            (["seq", "--format=%.2f", "-f", "%.1f", "1", "2"], "%.1f"),
+        ] {
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let options = SeqOptions::new(&matches);
+
+            assert_eq!(options.format.as_deref(), Some(expected));
         }
     }
 

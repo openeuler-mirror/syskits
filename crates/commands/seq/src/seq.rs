@@ -10,7 +10,7 @@
  */
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::io::{ErrorKind, Write, stdout};
+use std::io::{Write, stdout};
 rust_i18n::i18n!("locales", fallback = "en-US");
 
 use clap::{Arg, ArgAction, Command, crate_version};
@@ -114,6 +114,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     set_process_locale();
+    configure_sigpipe();
 
     // 核心拦截器：在参数送入 clap 之前进行“易容伪装”。
     // 将所有形如负数的参数（如 -1e-3, -.1）伪装成 CT_NEG_xxx，完美绕过 clap 的死板校验。
@@ -152,7 +153,6 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
             &options.terminator,
         ) {
             Ok(_) => Ok(()),
-            Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
             Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
         };
     }
@@ -173,7 +173,6 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     match print_seq((first.number, increment.number, last.number), config) {
         Ok(_) => Ok(()),
-        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
     }
 }
@@ -241,6 +240,29 @@ fn set_process_locale() {
     unsafe {
         ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
     }
+}
+
+fn configure_sigpipe() {
+    if !parent_ignores_sigpipe() {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    }
+}
+
+fn parent_ignores_sigpipe() -> bool {
+    // Rust ignores SIGPIPE before main. On Linux the parent's signal mask
+    // preserves whether an invoking shell explicitly ignored it for children.
+    let parent = unsafe { ctcore::libc::getppid() };
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (ctcore::libc::SIGPIPE - 1)) != 0
 }
 
 fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {

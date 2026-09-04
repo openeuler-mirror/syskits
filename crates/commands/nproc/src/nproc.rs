@@ -77,8 +77,11 @@ pub fn nproc_semantic(args: impl ctcore::Args) -> CTResult<NprocSemantic> {
         NprocQuery::Available => available,
         NprocQuery::All => all,
     };
-    let selected =
-        nproc_cores_num_process(ignore, nproc_effective_limit(thread_limit), selected_base)?;
+    let selected = nproc_cores_num_process(
+        ignore,
+        nproc_effective_limit(query, thread_limit),
+        selected_base,
+    )?;
 
     Ok(NprocSemantic {
         query,
@@ -151,8 +154,11 @@ fn nproc_parse_limit_thread() -> Option<usize> {
     }
 }
 
-fn nproc_effective_limit(thread_limit: Option<usize>) -> usize {
-    thread_limit.unwrap_or(usize::MAX)
+fn nproc_effective_limit(query: NprocQuery, thread_limit: Option<usize>) -> usize {
+    match query {
+        NprocQuery::Available => thread_limit.unwrap_or(usize::MAX),
+        NprocQuery::All => usize::MAX,
+    }
 }
 
 fn nproc_parse_ignore_num(args_match: &ArgMatches) -> CTResult<usize> {
@@ -298,7 +304,7 @@ mod tests {
     }
 
     mod tests_nproc_process {
-        use crate::nproc_cores_num_process;
+        use crate::{NprocQuery, nproc_cores_num_process, nproc_effective_limit};
 
         #[test]
         fn test_nproc_cores_num_process_normal() {
@@ -326,6 +332,12 @@ mod tests {
             let result = nproc_cores_num_process(5, 100, 4);
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), 1); // 返回最少1个核心
+        }
+
+        #[test]
+        fn test_nproc_all_ignores_openmp_thread_limit() {
+            assert_eq!(nproc_effective_limit(NprocQuery::Available, Some(1)), 1);
+            assert_eq!(nproc_effective_limit(NprocQuery::All, Some(1)), usize::MAX);
         }
     }
 

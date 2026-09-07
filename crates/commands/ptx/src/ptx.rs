@@ -210,19 +210,17 @@ impl Default for PtxConfig {
 fn read_word_filter_file(
     matches: &clap::ArgMatches,
     option: &str,
-) -> std::io::Result<HashSet<String>> {
+) -> std::io::Result<HashSet<Vec<u8>>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut file = File::open(filename)?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
-    let byte_mode = std::str::from_utf8(&contents).is_err();
-    let mut words: HashSet<String> = HashSet::new();
+    let mut words: HashSet<Vec<u8>> = HashSet::new();
     for line in contents.split(|&byte| byte == b'\n') {
-        let word = ptx_internal_text(line, byte_mode);
-        if !word.is_empty() {
-            words.insert(word);
+        if !line.is_empty() {
+            words.insert(line.to_vec());
         }
     }
     Ok(words)
@@ -295,9 +293,9 @@ struct WordFilter {
     /// 是否忽略指定的单词
     is_ignore_specified: bool,
     /// 要包含的单词集合
-    only_set: HashSet<String>,
+    only_set: HashSet<Vec<u8>>,
     /// 要忽略的单词集合
-    ignore_set: HashSet<String>,
+    ignore_set: HashSet<Vec<u8>>,
     /// 用于匹配单词的正则表达式
     word_regex: String,
     /// break-file中的边界字符。
@@ -309,23 +307,35 @@ struct WordFilter {
 impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &PtxConfig) -> CTResult<Self> {
-        let (o, oset): (bool, HashSet<String>) = if matches.contains_id(ptx_options::PTX_ONLY_FILE)
+        let (o, oset): (bool, HashSet<Vec<u8>>) = if matches.contains_id(ptx_options::PTX_ONLY_FILE)
         {
             let mut words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)
                 .map_err_context(String::new)?;
             if config.is_ignore_case {
-                words = words.into_iter().map(|word| word.to_lowercase()).collect();
+                words = words
+                    .into_iter()
+                    .map(|mut word| {
+                        word.make_ascii_uppercase();
+                        word
+                    })
+                    .collect();
             }
             (!words.is_empty(), words)
         } else {
             (false, HashSet::new())
         };
-        let (i, iset): (bool, HashSet<String>) =
+        let (i, iset): (bool, HashSet<Vec<u8>>) =
             if matches.contains_id(ptx_options::PTX_IGNORE_FILE) {
                 let mut words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)
                     .map_err_context(String::new)?;
                 if config.is_ignore_case {
-                    words = words.into_iter().map(|word| word.to_lowercase()).collect();
+                    words = words
+                        .into_iter()
+                        .map(|mut word| {
+                            word.make_ascii_uppercase();
+                            word
+                        })
+                        .collect();
                 }
                 (!words.is_empty(), words)
             } else {
@@ -965,23 +975,23 @@ fn ptx_create_word_set(
                 }
 
                 let mut word = content.text[global_beg..global_end].to_owned();
+                let mut raw_word = content.raw_text[global_beg..global_end].to_vec();
                 let filter_word = if config.is_ignore_case {
                     word.to_lowercase()
                 } else {
                     word.clone()
                 };
-                if filter.is_only_specified && !filter.only_set.contains(&filter_word) {
+                if config.is_ignore_case {
+                    raw_word.make_ascii_uppercase();
+                }
+                if filter.is_only_specified && !filter.only_set.contains(&raw_word) {
                     continue;
                 }
-                if filter.is_ignore_specified && filter.ignore_set.contains(&filter_word) {
+                if filter.is_ignore_specified && filter.ignore_set.contains(&raw_word) {
                     continue;
                 }
                 if config.is_ignore_case {
                     word = filter_word;
-                }
-                let mut raw_word = content.raw_text[global_beg..global_end].to_vec();
-                if config.is_ignore_case {
-                    raw_word.make_ascii_uppercase();
                 }
 
                 let context_start = if config.is_input_ref {
@@ -3244,9 +3254,9 @@ mod tests {
 
             let words = read_word_filter_file(&matches, ptx_options::PTX_ONLY_FILE).unwrap();
             assert_eq!(words.len(), 3);
-            assert!(words.contains("word1"));
-            assert!(words.contains("word2"));
-            assert!(words.contains("word3"));
+            assert!(words.contains(b"word1".as_slice()));
+            assert!(words.contains(b"word2".as_slice()));
+            assert!(words.contains(b"word3".as_slice()));
         }
 
         #[test]

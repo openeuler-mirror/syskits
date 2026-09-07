@@ -13,12 +13,14 @@ use rust_i18n::t;
 use std::io::{Write, stdout};
 rust_i18n::i18n!("locales", fallback = "en-US");
 
+use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use std::ffi::OsString;
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 mod error;
 mod extendedbigdecimal;
@@ -44,7 +46,7 @@ const SEQ_FAST_STEP_LIMIT: u64 = 200;
 
 #[derive(Clone, Default)]
 struct SeqOptions {
-    separator: String,
+    separator: OsString,
     terminator: String,
     is_equal_width: bool,
     format: Option<String>,
@@ -62,9 +64,14 @@ impl SeqOptions {
 
         Self {
             separator: matches
-                .get_one::<String>(SEQ_SEPARATOR)
-                .map(|s| unescape(s.as_str()))
-                .unwrap_or_else(|| "\n".to_string()),
+                .get_one::<OsString>(SEQ_SEPARATOR)
+                .map(|value| {
+                    value
+                        .to_str()
+                        .map(unescape)
+                        .map_or_else(|| value.clone(), OsString::from)
+                })
+                .unwrap_or_else(|| "\n".into()),
             terminator: matches
                 .get_one::<String>(SEQ_TERMINATOR)
                 .map(|s| unescape(s.as_str()))
@@ -85,7 +92,7 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 /// 序列打印的配置参数
 struct PrintConfig<'a> {
     largest_dec: usize,
-    separator: &'a str,
+    separator: &'a [u8],
     terminator: &'a str,
     pad: bool,
     padding: usize,
@@ -149,7 +156,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
             first_u64,
             last_u64,
             step_u64,
-            &options.separator,
+            options.separator.as_bytes(),
             &options.terminator,
         ) {
             Ok(_) => Ok(()),
@@ -163,7 +170,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let config = PrintConfig {
         largest_dec,
-        separator: &options.separator,
+        separator: options.separator.as_bytes(),
         terminator: &options.terminator,
         pad: options.is_equal_width,
         padding,
@@ -217,7 +224,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
         ),
         &SeqRenderConfig {
             largest_dec,
-            separator: &options.separator,
+            separator: options.separator.as_bytes(),
             terminator: &options.terminator,
             pad: options.is_equal_width,
             padding,
@@ -230,7 +237,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
 
     Ok(SeqSemantic {
         rows,
-        classic_text: String::from_utf8(classic_buffer).expect("seq output should be utf-8"),
+        classic_text: String::from_utf8_lossy(&classic_buffer).into_owned(),
     })
 }
 
@@ -395,7 +402,7 @@ fn uses_exact_integer_output(
     options: &SeqOptions,
 ) -> bool {
     if options.is_equal_width
-        || options.separator.len() != 1
+        || options.separator.as_bytes().len() != 1
         || first.num_fractional_digits != 0
         || increment.num_fractional_digits != 0
         || last.num_fractional_digits != 0
@@ -418,6 +425,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_SEPARATOR)
             .short('s')
             .long("separator")
+            .value_parser(OsStringValueParser::new())
             .overrides_with(SEQ_SEPARATOR)
             .help(t!("seq.clap.seq_separator")),
         Arg::new(SEQ_TERMINATOR)
@@ -464,7 +472,7 @@ fn seq_fast(
     first: u64,
     last: u64,
     step: u64,
-    separator: &str,
+    separator: &[u8],
     terminator: &str,
 ) -> std::io::Result<()> {
     use std::io::BufWriter;
@@ -476,7 +484,7 @@ fn seq_fast(
 
     while current <= last {
         if !is_first {
-            write!(writer, "{separator}")?;
+            writer.write_all(separator)?;
         }
         write!(writer, "{current}")?;
 
@@ -509,7 +517,8 @@ fn can_use_fast_path(
     // 4. All numbers are non-negative integers
     // 5. Step is positive and <= SEQ_FAST_STEP_LIMIT
 
-    if options.format.is_some() || options.is_equal_width || options.separator.len() != 1 {
+    if options.format.is_some() || options.is_equal_width || options.separator.as_bytes().len() != 1
+    {
         return None;
     }
 
@@ -590,7 +599,7 @@ fn write_value_float(
 
 struct SeqRenderConfig<'a> {
     largest_dec: usize,
-    separator: &'a str,
+    separator: &'a [u8],
     terminator: &'a str,
     pad: bool,
     padding: usize,
@@ -693,7 +702,7 @@ fn collect_seq_rows(
     walk_sequence(range, config.format, |value| {
         let rendered = render_seq_value(value, config)?;
         if !is_first_iteration {
-            write!(writer, "{}", config.separator)?;
+            writer.write_all(config.separator)?;
         }
         write!(writer, "{rendered}")?;
         rows.push(SeqRow {
@@ -740,7 +749,7 @@ fn print_seq(range: RangeFloat, config: PrintConfig) -> std::io::Result<()> {
     let mut is_first_iteration = true;
     walk_sequence(range, config.format, |value| {
         if !is_first_iteration {
-            write!(writer, "{}", config.separator)?;
+            writer.write_all(config.separator)?;
         }
         match config.format {
             SeqOutputFormat::Float(f) => {
@@ -965,7 +974,7 @@ mod tests {
             range,
             PrintConfig {
                 largest_dec: 0,
-                separator: ",",
+                separator: b",",
                 terminator: "\n",
                 pad: false,
                 padding: 1,
@@ -988,7 +997,7 @@ mod tests {
             range,
             PrintConfig {
                 largest_dec: 0,
-                separator: "\n",
+                separator: b"\n",
                 terminator: "\n",
                 pad: true,
                 padding: 2,

@@ -1568,6 +1568,31 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -s \\xff 1 2；参数完整十六进制=2d73 ff 31 32；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为4字节/1条换行分隔、完整十六进制=31ff320a；迁移原Cargo用例seq_preserves_non_utf8_separator_bytes第1次调用",
+            "args": [
+                "2d73",
+                "ff",
+                "31",
+                "32"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "31ff320a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

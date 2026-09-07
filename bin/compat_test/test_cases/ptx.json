@@ -1325,6 +1325,50 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -i filter input；输入为filter=\\n\\n（2字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共94字节的dumb索引；对应Cargo用例ptx_empty_word_filter_files_do_not_filter_keywords第1次调用",
+      "args": [
+        "-i",
+        "filter",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                       alpha beta\n                               alpha   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -o filter input；输入为filter=\\n\\n（2字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共94字节的dumb索引；对应Cargo用例ptx_empty_word_filter_files_do_not_filter_keywords第2次调用",
+      "args": [
+        "-o",
+        "filter",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                       alpha beta\n                               alpha   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

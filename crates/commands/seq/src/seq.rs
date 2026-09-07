@@ -277,16 +277,19 @@ fn parent_ignores_sigpipe() -> bool {
 
 fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
     let numbers = matches
-        .get_many::<String>(SEQ_NUMBERS)
+        .get_many::<OsString>(SEQ_NUMBERS)
         .ok_or(SeqError::NoArguments)?
-        .map(|s| {
-            if let Some(stripped) = s.strip_prefix("CT_NEG_") {
-                format!("-{stripped}")
+        .map(|value| {
+            let Some(value) = value.to_str() else {
+                return Err(SeqError::NonUtf8Argument(value.clone()));
+            };
+            if let Some(stripped) = value.strip_prefix("CT_NEG_") {
+                Ok(format!("-{stripped}"))
             } else {
-                s.to_string()
+                Ok(value.to_string())
             }
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, _>>()?;
     if numbers.len() > 3 {
         return Err(SeqError::ExtraOperand(numbers[3].clone()).into());
     }
@@ -441,6 +444,7 @@ pub fn ct_app() -> Command {
             .overrides_with(SEQ_FORMAT)
             .help(t!("seq.clap.seq_format")),
         Arg::new(SEQ_NUMBERS)
+            .value_parser(OsStringValueParser::new())
             .action(ArgAction::Append)
             .num_args(1..),
     ];

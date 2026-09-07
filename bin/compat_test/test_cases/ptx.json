@@ -2825,6 +2825,31 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -F \\xff -w 8 input；输入为input=alpha beta gamma\\n（17字节 616c70686120626574612067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为3条换行分隔、共42字节的dumb索引，首条stdout可读为“       alpha\\xff\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d46",
+        "ff",
+        "2d77",
+        "38",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "20202020202020616c706861ff0a20202020ff20202062657461ff0a20202020ff20202067616d6d610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

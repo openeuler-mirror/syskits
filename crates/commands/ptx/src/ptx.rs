@@ -175,6 +175,8 @@ struct PtxConfig {
     trunc_bytes: Vec<u8>,
     /// 宏名称
     macro_name: String,
+    /// Linux输出使用的宏名称原始字节。
+    macro_bytes: Vec<u8>,
     /// 上下文正则表达式
     context_regex: String,
     /// break-file定义的分词边界，输出布局阶段必须复用同一规则。
@@ -193,6 +195,7 @@ impl Default for PtxConfig {
             is_right_ref: false,
             is_ignore_case: false,
             macro_name: "xx".to_owned(),
+            macro_bytes: b"xx".to_vec(),
             trunc_str: "/".to_owned(),
             trunc_bytes: b"/".to_vec(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
@@ -584,10 +587,12 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     config.is_right_ref = matches.get_flag(ptx_options::PTX_RIGHT_SIDE_REFS);
     config.is_ignore_case = matches.get_flag(ptx_options::PTX_IGNORE_CASE);
     if matches.contains_id(ptx_options::PTX_MACRO_NAME) {
-        config.macro_name = matches
-            .get_one::<String>(ptx_options::PTX_MACRO_NAME)
-            .expect(err_msg)
-            .to_string();
+        let value = matches
+            .get_one::<OsString>(ptx_options::PTX_MACRO_NAME)
+            .expect(err_msg);
+        config.macro_bytes = value.as_os_str().as_bytes().to_vec();
+        let byte_mode = std::str::from_utf8(&config.macro_bytes).is_err();
+        config.macro_name = ptx_internal_text(&config.macro_bytes, byte_mode);
     }
     if matches.contains_id(ptx_options::PTX_FLAG_TRUNCATION) {
         let value = matches
@@ -2245,7 +2250,7 @@ fn ptx_format_roff_line_bytes(
 
     let mut output = Vec::new();
     output.push(b'.');
-    output.extend_from_slice(config.macro_name.as_bytes());
+    output.extend_from_slice(&config.macro_bytes);
     output.extend_from_slice(b" \"");
     output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.tail));
     if fields.tail_truncation {
@@ -2310,7 +2315,7 @@ fn ptx_format_tex_line_bytes(
 
     let mut output = Vec::new();
     output.push(b'\\');
-    output.extend_from_slice(config.macro_name.as_bytes());
+    output.extend_from_slice(&config.macro_bytes);
     output.extend_from_slice(b" {");
     output.extend_from_slice(&ptx_format_tex_field_bytes(&fields.tail));
     output.extend_from_slice(b"}{");
@@ -2892,7 +2897,8 @@ pub fn ct_app() -> Command {
             .short('M')
             .long(ptx_options::PTX_MACRO_NAME)
             .help(t!("ptx.clap.ptx_macro_name"))
-            .value_name("STRING"),
+            .value_name("STRING")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(ptx_options::PTX_FORMAT_ROFF)
             .short('O')
             .help(t!("ptx.clap.ptx_format_roff"))

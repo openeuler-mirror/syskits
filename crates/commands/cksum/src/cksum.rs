@@ -25,6 +25,7 @@ use ctcore::{
 };
 use hex::decode;
 use hex::encode;
+use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::ffi::OsString;
@@ -65,7 +66,7 @@ enum CksumOutputFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CheckLineFormat {
     Tagged,
-    Standard,
+    Standard(u8),
     Reversed,
 }
 
@@ -1125,6 +1126,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
     let mut no_file_verified = false;
     let mut no_file_verified_manifests = Vec::new();
     let show_warnings = !invocation.status || invocation.warn;
+    let mut reversed_format = None;
 
     for cksum_file in files {
         let manifest_name = cksum_file.to_string();
@@ -1171,25 +1173,25 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 continue;
             }
 
-            let (digest_str, filename_str, line_algo, _line_format) = match parse_check_line(&line)
-            {
-                Some(values) => values,
-                None => {
-                    bad_format += 1;
-                    if invocation.warn {
-                        push_stderr_line(
-                            &mut semantic.stderr_text,
-                            format!(
-                                "{}: {}: improperly formatted {} checksum line",
-                                f_name.display(),
-                                line_num + 1,
-                                algo_display_name(current_default_algo)
-                            ),
-                        );
+            let (digest_str, parsed_filename, line_algo, line_format) =
+                match parse_check_line(&line) {
+                    Some(values) => values,
+                    None => {
+                        bad_format += 1;
+                        if invocation.warn {
+                            push_stderr_line(
+                                &mut semantic.stderr_text,
+                                format!(
+                                    "{}: {}: improperly formatted {} checksum line",
+                                    f_name.display(),
+                                    line_num + 1,
+                                    algo_display_name(current_default_algo)
+                                ),
+                            );
+                        }
+                        continue;
                     }
-                    continue;
-                }
-            };
+                };
 
             let (current_algo_name, mut current_digest, current_bits) = if let Some(tag) = line_algo
             {
@@ -1287,22 +1289,6 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 cksum_detect_algo(current_default_algo, inferred_len)
             };
 
-            if manifest_is_stdin && filename_str == "-" {
-                bad_format += 1;
-                if invocation.warn {
-                    push_stderr_line(
-                        &mut semantic.stderr_text,
-                        format!(
-                            "{}: {}: improperly formatted {} checksum line",
-                            manifest_display,
-                            line_num + 1,
-                            algo_display_name(current_default_algo)
-                        ),
-                    );
-                }
-                continue;
-            }
-
             if matches!(
                 current_algo_name,
                 CKSUM_ALGORITHM_OPTIONS_CRC
@@ -1379,6 +1365,53 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                         )
                     };
                     push_stderr_line(&mut semantic.stderr_text, message);
+                }
+                continue;
+            }
+
+            let filename: Cow<'_, str> = match line_format {
+                CheckLineFormat::Tagged => Cow::Borrowed(parsed_filename),
+                CheckLineFormat::Reversed => {
+                    if reversed_format == Some(false) {
+                        bad_format += 1;
+                        if invocation.warn {
+                            push_stderr_line(
+                                &mut semantic.stderr_text,
+                                format!(
+                                    "{}: {}: improperly formatted {} checksum line",
+                                    manifest_display,
+                                    line_num + 1,
+                                    algo_display_name(current_default_algo)
+                                ),
+                            );
+                        }
+                        continue;
+                    }
+                    reversed_format = Some(true);
+                    Cow::Borrowed(parsed_filename)
+                }
+                CheckLineFormat::Standard(marker) if reversed_format == Some(true) => {
+                    Cow::Owned(format!("{}{parsed_filename}", char::from(marker)))
+                }
+                CheckLineFormat::Standard(_) => {
+                    reversed_format = Some(false);
+                    Cow::Borrowed(parsed_filename)
+                }
+            };
+            let filename_str = filename.as_ref();
+
+            if manifest_is_stdin && filename_str == "-" {
+                bad_format += 1;
+                if invocation.warn {
+                    push_stderr_line(
+                        &mut semantic.stderr_text,
+                        format!(
+                            "{}: {}: improperly formatted {} checksum line",
+                            manifest_display,
+                            line_num + 1,
+                            algo_display_name(current_default_algo)
+                        ),
+                    );
                 }
                 continue;
             }
@@ -2078,6 +2111,7 @@ fn cksum_check(
     let mut no_file_verified_manifests = Vec::new();
 
     let show_warnings = !opts.status || opts.warn;
+    let mut reversed_format = None;
 
     for cksum_file in files {
         let f_name = Path::new(cksum_file);
@@ -2121,22 +2155,22 @@ fn cksum_check(
                 continue;
             }
 
-            let (digest_str, filename_str, line_algo, _line_format) = match parse_check_line(&line)
-            {
-                Some((d, f, a, format)) => (d, f, a, format),
-                None => {
-                    bad_format += 1;
-                    if opts.warn {
-                        ctcore::ct_show_error!(
-                            "{}: {}: improperly formatted {} checksum line",
-                            f_name.display(),
-                            line_num + 1,
-                            algo_display_name(current_default_algo)
-                        );
+            let (digest_str, parsed_filename, line_algo, line_format) =
+                match parse_check_line(&line) {
+                    Some((d, f, a, format)) => (d, f, a, format),
+                    None => {
+                        bad_format += 1;
+                        if opts.warn {
+                            ctcore::ct_show_error!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                f_name.display(),
+                                line_num + 1,
+                                algo_display_name(current_default_algo)
+                            );
+                        }
+                        continue;
                     }
-                    continue;
-                }
-            };
+                };
 
             let (current_algo_name, mut current_digest, current_bits) = if let Some(tag) = line_algo
             {
@@ -2230,19 +2264,6 @@ fn cksum_check(
                 cksum_detect_algo(current_default_algo, inferred_len)
             };
 
-            if manifest_is_stdin && filename_str == "-" {
-                bad_format += 1;
-                if opts.warn {
-                    ctcore::ct_show_error!(
-                        "{}: {}: improperly formatted {} checksum line",
-                        manifest_display,
-                        line_num + 1,
-                        algo_display_name(current_default_algo)
-                    );
-                }
-                continue;
-            }
-
             if matches!(
                 current_algo_name,
                 CKSUM_ALGORITHM_OPTIONS_CRC
@@ -2319,6 +2340,47 @@ fn cksum_check(
                             algo_display_name(current_default_algo)
                         );
                     }
+                }
+                continue;
+            }
+
+            let filename: Cow<'_, str> = match line_format {
+                CheckLineFormat::Tagged => Cow::Borrowed(parsed_filename),
+                CheckLineFormat::Reversed => {
+                    if reversed_format == Some(false) {
+                        bad_format += 1;
+                        if opts.warn {
+                            ctcore::ct_show_error!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                manifest_display,
+                                line_num + 1,
+                                algo_display_name(current_default_algo)
+                            );
+                        }
+                        continue;
+                    }
+                    reversed_format = Some(true);
+                    Cow::Borrowed(parsed_filename)
+                }
+                CheckLineFormat::Standard(marker) if reversed_format == Some(true) => {
+                    Cow::Owned(format!("{}{parsed_filename}", char::from(marker)))
+                }
+                CheckLineFormat::Standard(_) => {
+                    reversed_format = Some(false);
+                    Cow::Borrowed(parsed_filename)
+                }
+            };
+            let filename_str = filename.as_ref();
+
+            if manifest_is_stdin && filename_str == "-" {
+                bad_format += 1;
+                if opts.warn {
+                    ctcore::ct_show_error!(
+                        "{}: {}: improperly formatted {} checksum line",
+                        manifest_display,
+                        line_num + 1,
+                        algo_display_name(current_default_algo)
+                    );
                 }
                 continue;
             }
@@ -2503,7 +2565,12 @@ fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFo
     if rest.len() == 1 || !matches!(rest.as_bytes().first(), Some(b' ' | b'*')) {
         Some((digest, rest, None, CheckLineFormat::Reversed))
     } else {
-        Some((digest, &rest[1..], None, CheckLineFormat::Standard))
+        Some((
+            digest,
+            &rest[1..],
+            None,
+            CheckLineFormat::Standard(rest.as_bytes()[0]),
+        ))
     }
 }
 

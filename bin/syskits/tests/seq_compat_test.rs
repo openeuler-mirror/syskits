@@ -1,5 +1,8 @@
 use std::process::Command;
 
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
+
 fn locale_available(locale: &str) -> bool {
     let output = Command::new("locale")
         .arg("-a")

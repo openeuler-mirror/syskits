@@ -19,7 +19,7 @@ use num_traits::{ToPrimitive, Zero};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 mod error;
@@ -49,7 +49,7 @@ struct SeqOptions {
     separator: OsString,
     terminator: String,
     is_equal_width: bool,
-    format: Option<String>,
+    format: Option<OsString>,
 }
 
 impl SeqOptions {
@@ -77,9 +77,12 @@ impl SeqOptions {
                 .map(|s| unescape(s.as_str()))
                 .unwrap_or_else(|| "\n".to_string()),
             is_equal_width: matches.get_flag(SEQ_EQUAL_WIDTH),
-            format: matches
-                .get_one::<String>(SEQ_FORMAT)
-                .map(|s| unescape(s.as_str())),
+            format: matches.get_one::<OsString>(SEQ_FORMAT).map(|value| {
+                value
+                    .to_str()
+                    .map(unescape)
+                    .map_or_else(|| value.clone(), OsString::from)
+            }),
         }
     }
 }
@@ -352,12 +355,12 @@ fn calculate_largest_decimal(first: &PreciseNumber, increment: &PreciseNumber) -
         .max(increment.num_fractional_digits)
 }
 
-fn parse_format_option(format_str: Option<&str>) -> CTResult<Option<GnuFloatFormat>> {
+fn parse_format_option(format_str: Option<&OsStr>) -> CTResult<Option<GnuFloatFormat>> {
     let Some(format_str) = format_str else {
         return Ok(None);
     };
 
-    GnuFloatFormat::try_parse(format_str)
+    GnuFloatFormat::try_parse(format_str.as_bytes())
         .map(Some)
         .map_err(|error| Box::new(error) as Box<dyn CTError>)
 }
@@ -387,7 +390,7 @@ fn select_output_format(
             format!("%.{precision}f")
         };
     Ok(SeqOutputFormat::Float(
-        GnuFloatFormat::try_parse(&format).expect("generated seq format must be valid"),
+        GnuFloatFormat::try_parse(format.as_bytes()).expect("generated seq format must be valid"),
     ))
 }
 
@@ -441,6 +444,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_FORMAT)
             .short('f')
             .long(SEQ_FORMAT)
+            .value_parser(OsStringValueParser::new())
             .overrides_with(SEQ_FORMAT)
             .help(t!("seq.clap.seq_format")),
         Arg::new(SEQ_NUMBERS)
@@ -628,7 +632,7 @@ fn render_seq_value(
         }
         SeqOutputFormat::ExactInteger => write_value_float(&mut buffer, value, padding, 0)?,
     }
-    Ok(String::from_utf8(buffer).expect("seq rendered value should be utf-8"))
+    Ok(String::from_utf8_lossy(&buffer).into_owned())
 }
 
 fn walk_sequence(
@@ -724,7 +728,7 @@ fn format_long_double(
     format: &GnuFloatFormat,
     value: &ExtendedBigDecimal,
 ) -> std::io::Result<()> {
-    writer.write_all(format.format(value).as_bytes())
+    writer.write_all(&format.format(value))
 }
 
 /// Floating point based code path
@@ -848,7 +852,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let options = SeqOptions::new(&matches);
 
-            assert_eq!(options.format.as_deref(), Some(expected));
+            assert_eq!(options.format.as_deref(), Some(OsStr::new(expected)));
         }
     }
 

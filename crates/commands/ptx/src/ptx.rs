@@ -766,6 +766,7 @@ struct PtxOutputFields {
     keyafter: String,
     head: String,
     keyword_len: usize,
+    before_padding_adjustment: usize,
     tail_truncation: bool,
     before_truncation: bool,
     keyafter_truncation: bool,
@@ -958,7 +959,9 @@ fn ptx_define_output_fields_for_width(
     before_start = ptx_skip_white(&chars, before_start, context_end);
 
     let before_len = before_end.saturating_sub(before_start);
+    let before_padding_adjustment = before_start.saturating_sub(before_end);
     let tail_max_width = before_max_width
+        .saturating_add(before_padding_adjustment)
         .saturating_sub(before_len)
         .saturating_sub(config.gap_size);
     let (tail_start, tail_end, tail_truncation) = if tail_max_width > 0 {
@@ -1017,6 +1020,7 @@ fn ptx_define_output_fields_for_width(
         keyafter: ptx_chars_to_string(&chars, keyafter_start, keyafter_end),
         head: ptx_chars_to_string(&chars, head_start, head_end),
         keyword_len: keyword_chars.len(),
+        before_padding_adjustment,
         tail_truncation,
         before_truncation,
         keyafter_truncation,
@@ -1030,6 +1034,7 @@ struct PtxOutputFieldsBytes {
     before: Vec<u8>,
     keyafter: Vec<u8>,
     head: Vec<u8>,
+    before_padding_adjustment: usize,
     tail_truncation: bool,
     before_truncation: bool,
     keyafter_truncation: bool,
@@ -1156,7 +1161,9 @@ fn ptx_define_output_fields_bytes_for_width(
     before_start = ptx_skip_white_bytes(&bytes, before_start, context_end);
 
     let before_len = before_end.saturating_sub(before_start);
+    let before_padding_adjustment = before_start.saturating_sub(before_end);
     let tail_max_width = before_max_width
+        .saturating_add(before_padding_adjustment)
         .saturating_sub(before_len)
         .saturating_sub(config.gap_size);
     let (tail_start, tail_end, tail_truncation) = if tail_max_width > 0 {
@@ -1214,6 +1221,7 @@ fn ptx_define_output_fields_bytes_for_width(
         before: ptx_bytes_to_vec(&bytes, before_start, before_end),
         keyafter: ptx_bytes_to_vec(&bytes, keyafter_start, keyafter_end),
         head: ptx_bytes_to_vec(&bytes, head_start, head_end),
+        before_padding_adjustment,
         tail_truncation,
         before_truncation,
         keyafter_truncation,
@@ -1249,7 +1257,7 @@ fn ptx_get_output_chunks_for_width_with_max(
     config: &PtxConfig,
     line_width: usize,
     maximum_word_length: usize,
-) -> (String, String, String, String) {
+) -> (String, String, String, String, usize) {
     let fields = ptx_define_output_fields_for_width(
         all_before,
         keyword,
@@ -1276,7 +1284,7 @@ fn ptx_get_output_chunks_for_width_with_max(
     } else {
         fields.head
     };
-    (tail, before, after, head)
+    (tail, before, after, head, fields.before_padding_adjustment)
 }
 
 fn tex_mapper(x: char) -> String {
@@ -1320,8 +1328,7 @@ fn ptx_format_tex_line(
         context_reg,
     );
 
-    // 获取格式化后的文本块
-    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+    let fields = ptx_define_output_fields_for_width(
         all_before,
         keyword,
         all_after,
@@ -1329,17 +1336,17 @@ fn ptx_format_tex_line(
         config.line_width,
         maximum_word_length,
     );
+    let after: String = fields.keyafter.chars().skip(fields.keyword_len).collect();
 
-    // 转义特殊字符并构建输出
     write!(
         output,
         "\\{} {{{}}}{{{}}}{{{}}}{{{}}}{{{}}}",
         config.macro_name,
-        format_tex_field(&tail),
-        format_tex_field(&before),
+        format_tex_field(&fields.tail),
+        format_tex_field(&fields.before),
         format_tex_field(keyword),
         format_tex_field(&after),
-        format_tex_field(&head),
+        format_tex_field(&fields.head),
     )
     .unwrap();
 
@@ -1429,7 +1436,7 @@ fn ptx_format_roff_line(
     );
 
     // 获取格式化后的文本块
-    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+    let (tail, before, after, head, _) = ptx_get_output_chunks_for_width_with_max(
         all_before,
         keyword,
         all_after,
@@ -1528,7 +1535,6 @@ fn ptx_format_dumb_line(
     maximum_word_length: usize,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
-    let before_start = context_base_start(config, line, chars_line, context_reg);
     let (keyword, all_before, all_after, _) = ptx_context_slices(
         config,
         word_ref,
@@ -1543,14 +1549,15 @@ fn ptx_format_dumb_line(
     if (config.is_auto_ref || config.is_input_ref) && !config.is_right_ref {
         effective_line_width = effective_line_width.saturating_sub(reference_max_width + gap_size);
     }
-    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
-        all_before,
-        keyword,
-        all_after,
-        config,
-        effective_line_width,
-        maximum_word_length,
-    );
+    let (tail, before, after, head, before_padding_adjustment) =
+        ptx_get_output_chunks_for_width_with_max(
+            all_before,
+            keyword,
+            all_after,
+            config,
+            effective_line_width,
+            maximum_word_length,
+        );
     let keyafter = format!("{keyword}{after}");
     let half_line_width = effective_line_width / 2;
 
@@ -1574,36 +1581,15 @@ fn ptx_format_dumb_line(
 
     let before_len = str_cols(&before);
     let tail_len = str_cols(&tail);
-    let before_is_only_trunc = !config.trunc_str.is_empty() && before == config.trunc_str;
-    let previous_char_is_whitespace = all_before.last().is_some_and(|c| c.is_whitespace());
     if !tail.is_empty() {
         output.push_str(&ptx_display_field(&tail));
         let pad = half_line_width
+            .saturating_add(before_padding_adjustment)
             .saturating_sub(gap_size)
             .saturating_sub(before_len)
             .saturating_sub(tail_len);
         output.push_str(&" ".repeat(pad));
     } else {
-        let before_space_adjust = if config.is_gnu_ext
-            && before.is_empty()
-            && word_ref.position > before_start
-            && previous_char_is_whitespace
-            && half_line_width <= gap_size + config.trunc_str.len() * 2
-        {
-            1
-        } else {
-            0
-        };
-        let trunc_only_adjust = if config.is_gnu_ext
-            && before_is_only_trunc
-            && word_ref.position > before_start
-            && previous_char_is_whitespace
-            && half_line_width <= gap_size + config.trunc_str.len() * 2
-        {
-            1
-        } else {
-            0
-        };
         let whitespace_before_adjust =
             if config.is_gnu_ext && !before.is_empty() && before.chars().all(char::is_whitespace) {
                 1
@@ -1611,10 +1597,9 @@ fn ptx_format_dumb_line(
                 0
             };
         let pad = half_line_width
+            .saturating_add(before_padding_adjustment)
             .saturating_sub(gap_size)
             .saturating_sub(before_len)
-            .saturating_add(before_space_adjust)
-            .saturating_add(trunc_only_adjust)
             .saturating_add(whitespace_before_adjust);
         output.push_str(&" ".repeat(pad));
     }
@@ -1730,6 +1715,7 @@ fn ptx_format_dumb_line_bytes(
             output.extend_from_slice(config.trunc_str.as_bytes());
         }
         let pad = half_line_width
+            .saturating_add(fields.before_padding_adjustment)
             .saturating_sub(gap_size)
             .saturating_sub(fields.before.len())
             .saturating_sub(if fields.before_truncation {
@@ -1741,20 +1727,6 @@ fn ptx_format_dumb_line_bytes(
             .saturating_sub(if fields.tail_truncation { trunc_len } else { 0 });
         output.extend(std::iter::repeat_n(b' ', pad));
     } else {
-        let previous_byte_is_whitespace = all_before
-            .last()
-            .is_some_and(|byte| byte.is_ascii_whitespace());
-        let trunc_only_adjust = if config.is_gnu_ext
-            && fields.before_truncation
-            && fields.before.is_empty()
-            && word_ref.position > 0
-            && previous_byte_is_whitespace
-            && half_line_width <= gap_size + trunc_len * 2
-        {
-            1
-        } else {
-            0
-        };
         let whitespace_before_adjust = if config.is_gnu_ext
             && !fields.before.is_empty()
             && fields.before.iter().all(|byte| byte.is_ascii_whitespace())
@@ -1764,6 +1736,7 @@ fn ptx_format_dumb_line_bytes(
             0
         };
         let pad = half_line_width
+            .saturating_add(fields.before_padding_adjustment)
             .saturating_sub(gap_size)
             .saturating_sub(fields.before.len())
             .saturating_sub(if fields.before_truncation {
@@ -1771,7 +1744,6 @@ fn ptx_format_dumb_line_bytes(
             } else {
                 0
             })
-            .saturating_add(trunc_only_adjust)
             .saturating_add(whitespace_before_adjust);
         output.extend(std::iter::repeat_n(b' ', pad));
     }
@@ -2027,7 +1999,7 @@ fn ptx_render_row(
         effective_line_width =
             effective_line_width.saturating_sub(reference_max_width + settings.config.gap_size);
     }
-    let (tail, before, after, head) = ptx_get_output_chunks_for_width_with_max(
+    let (tail, before, after, head, _) = ptx_get_output_chunks_for_width_with_max(
         all_before,
         keyword,
         all_after,
@@ -2988,7 +2960,7 @@ mod tests {
                 0,
                 maximum_word_length,
             );
-            assert_eq!(got, "                                       beta!");
+            assert_eq!(got, "                                        beta!");
         }
     }
 
@@ -3067,7 +3039,7 @@ mod tests {
             let after = &[' ', 'w', 'o', 'r', 'l', 'd'];
             let max_word_len = 5;
 
-            let (tail, before_out, after_out, head) = ptx_get_output_chunks_for_width_with_max(
+            let (tail, before_out, after_out, head, _) = ptx_get_output_chunks_for_width_with_max(
                 before,
                 keyword,
                 after,
@@ -3101,7 +3073,7 @@ mod tests {
             ];
             let max_word_len = 5;
 
-            let (_tail, before_out, after_out, _head) = ptx_get_output_chunks_for_width_with_max(
+            let (_tail, before_out, after_out, _head, _) = ptx_get_output_chunks_for_width_with_max(
                 before,
                 keyword,
                 after,
@@ -3126,7 +3098,7 @@ mod tests {
             let after = &[];
             let max_word_len = 4;
 
-            let (tail, before_out, after_out, head) = ptx_get_output_chunks_for_width_with_max(
+            let (tail, before_out, after_out, head, _) = ptx_get_output_chunks_for_width_with_max(
                 before,
                 keyword,
                 after,
@@ -3153,7 +3125,7 @@ mod tests {
             let after = &[' ', ' ', ' '];
             let max_word_len = 4;
 
-            let (tail, before_out, after_out, head) = ptx_get_output_chunks_for_width_with_max(
+            let (tail, before_out, after_out, head, _) = ptx_get_output_chunks_for_width_with_max(
                 before,
                 keyword,
                 after,

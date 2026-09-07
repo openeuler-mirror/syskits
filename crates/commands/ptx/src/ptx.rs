@@ -584,6 +584,18 @@ fn compile_regex_case_lossy(pattern: &str, ignore_case: bool) -> Regex {
     build(r"$^").expect("fallback regex must be valid")
 }
 
+fn compile_user_regex(pattern: &str, ignore_case: bool) -> CTResult<Regex> {
+    RegexBuilder::new(pattern)
+        .case_insensitive(ignore_case)
+        .build()
+        .map_err(|_| {
+            CtSimpleError::new(
+                1,
+                format!("Invalid regular expression (for regexp '{pattern}')"),
+            )
+        })
+}
+
 /// 文件内容
 ///
 /// 存储文件的行内容和字符级表示
@@ -2683,6 +2695,11 @@ impl PtxSettings {
 
         // 获取配置
         let mut config = get_config(&matches)?;
+        if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
+            && config.context_regex != NEVER_MATCH_REGEX
+        {
+            compile_user_regex(&config.context_regex, config.is_ignore_case)?;
+        }
         if !config.is_gnu_ext && input_files.len() > 2 {
             return Err(CtSimpleError::new(
                 1,
@@ -2694,10 +2711,10 @@ impl PtxSettings {
         let word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_chars = word_filter.break_set.clone();
         if word_filter.uses_custom_regex {
-            config.word_regex = Some(compile_regex_case_lossy(
+            config.word_regex = Some(compile_user_regex(
                 &word_filter.word_regex,
                 config.is_ignore_case,
-            ));
+            )?);
         }
 
         // 读取输入文件

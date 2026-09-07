@@ -1059,6 +1059,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
     let mut missing_files = 0usize;
     let mut failed_open = 0usize;
     let mut no_file_verified = false;
+    let mut no_file_verified_manifests = Vec::new();
     let show_warnings = !invocation.status || invocation.warn;
 
     for cksum_file in files {
@@ -1299,7 +1300,54 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
             let target_file = match File::open(target_path) {
                 Ok(file) => file,
                 Err(err) => {
-                    if !invocation.ignore_missing {
+                    if invocation.ignore_missing && err.kind() == io::ErrorKind::NotFound {
+                        continue;
+                    }
+                    push_stderr_line(
+                        &mut semantic.stderr_text,
+                        format!("{filename_str}: {}", clean_io_error(&err)),
+                    );
+                    if !invocation.status {
+                        push_stdout_line(
+                            &mut semantic.classic_text,
+                            format!(
+                                "{}: {}",
+                                filename_str,
+                                t!("cksum.check.failed_open_or_read")
+                            ),
+                        );
+                    }
+                    semantic.rows.push(CksumRow {
+                        kind: "check".into(),
+                        algorithm: current_algo_name.into(),
+                        input: "manifest".into(),
+                        file: Some(filename_str.into()),
+                        manifest_file: Some(manifest_name.clone()),
+                        checksum: digest_str.into(),
+                        actual_checksum: None,
+                        bytes: None,
+                        reported_size: None,
+                        size_kind: None,
+                        block_size: None,
+                        output_format: row_output_format.into(),
+                        tagged: line_algo.is_some(),
+                        binary: false,
+                        status: Some("failed_open_or_read".into()),
+                        matched: Some(false),
+                    });
+                    missing_files += 1;
+                    continue;
+                }
+            };
+
+            let mut target_reader = BufReader::new(target_file);
+            let (sum_hex, bytes) =
+                match cksum_digest_read(&mut current_digest, &mut target_reader, current_bits) {
+                    Ok(values) => {
+                        n_verified_this_file += 1;
+                        values
+                    }
+                    Err(err) => {
                         push_stderr_line(
                             &mut semantic.stderr_text,
                             format!("{filename_str}: {}", clean_io_error(&err)),
@@ -1333,54 +1381,6 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                             matched: Some(false),
                         });
                         missing_files += 1;
-                    }
-                    continue;
-                }
-            };
-
-            let mut target_reader = BufReader::new(target_file);
-            let (sum_hex, bytes) =
-                match cksum_digest_read(&mut current_digest, &mut target_reader, current_bits) {
-                    Ok(values) => {
-                        n_verified_this_file += 1;
-                        values
-                    }
-                    Err(err) => {
-                        if !invocation.ignore_missing {
-                            push_stderr_line(
-                                &mut semantic.stderr_text,
-                                format!("{filename_str}: {}", clean_io_error(&err)),
-                            );
-                            if !invocation.status {
-                                push_stdout_line(
-                                    &mut semantic.classic_text,
-                                    format!(
-                                        "{}: {}",
-                                        filename_str,
-                                        t!("cksum.check.failed_open_or_read")
-                                    ),
-                                );
-                            }
-                            semantic.rows.push(CksumRow {
-                                kind: "check".into(),
-                                algorithm: current_algo_name.into(),
-                                input: "manifest".into(),
-                                file: Some(filename_str.into()),
-                                manifest_file: Some(manifest_name.clone()),
-                                checksum: digest_str.into(),
-                                actual_checksum: None,
-                                bytes: None,
-                                reported_size: None,
-                                size_kind: None,
-                                block_size: None,
-                                output_format: row_output_format.into(),
-                                tagged: line_algo.is_some(),
-                                binary: false,
-                                status: Some("failed_open_or_read".into()),
-                                matched: Some(false),
-                            });
-                            missing_files += 1;
-                        }
                         continue;
                     }
                 };
@@ -1445,14 +1445,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
             no_file_verified = true;
         } else if invocation.ignore_missing && n_verified_this_file == 0 {
             if show_warnings {
-                push_stderr_line(
-                    &mut semantic.stderr_text,
-                    format!(
-                        "{}: {}",
-                        f_name.display(),
-                        t!("cksum.check.no_file_verified")
-                    ),
-                );
+                no_file_verified_manifests.push(f_name.display().to_string());
             }
             no_file_verified = true;
         }
@@ -1500,6 +1493,12 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 }
             }
             semantic.exit_code = 1;
+        }
+        for manifest in &no_file_verified_manifests {
+            push_stderr_line(
+                &mut semantic.stderr_text,
+                format!("{}: {}", manifest, t!("cksum.check.no_file_verified")),
+            );
         }
 
         if bad_format > 0 && invocation.strict {
@@ -1975,6 +1974,7 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
     let mut missing_files = 0;
     let mut failed_open = 0;
     let mut no_file_verified = false;
+    let mut no_file_verified_manifests = Vec::new();
 
     let show_warnings = !opts.status || opts.warn;
 
@@ -2209,19 +2209,20 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
             let mut target_file: Box<dyn Read> = match File::open(target_path) {
                 Ok(f) => Box::new(BufReader::new(f)),
                 Err(e) => {
-                    if !opts.ignore_missing {
-                        let err_msg = e.to_string();
-                        let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-                        ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
-                        if !opts.status {
-                            println!(
-                                "{}: {}",
-                                filename_str,
-                                t!("cksum.check.failed_open_or_read")
-                            );
-                        }
-                        missing_files += 1;
+                    if opts.ignore_missing && e.kind() == io::ErrorKind::NotFound {
+                        continue;
                     }
+                    let err_msg = e.to_string();
+                    let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                    ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
+                    if !opts.status {
+                        println!(
+                            "{}: {}",
+                            filename_str,
+                            t!("cksum.check.failed_open_or_read")
+                        );
+                    }
+                    missing_files += 1;
                     continue;
                 }
             };
@@ -2236,19 +2237,17 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                     s
                 }
                 Err(e) => {
-                    if !opts.ignore_missing {
-                        let err_msg = e.to_string();
-                        let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-                        ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
-                        if !opts.status {
-                            println!(
-                                "{}: {}",
-                                filename_str,
-                                t!("cksum.check.failed_open_or_read")
-                            );
-                        }
-                        missing_files += 1;
+                    let err_msg = e.to_string();
+                    let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                    ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
+                    if !opts.status {
+                        println!(
+                            "{}: {}",
+                            filename_str,
+                            t!("cksum.check.failed_open_or_read")
+                        );
                     }
+                    missing_files += 1;
                     continue;
                 }
             };
@@ -2286,11 +2285,7 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
             no_file_verified = true;
         } else if opts.ignore_missing && n_verified_this_file == 0 {
             if show_warnings {
-                ctcore::ct_show_error!(
-                    "{}: {}",
-                    f_name.display(),
-                    t!("cksum.check.no_file_verified")
-                );
+                no_file_verified_manifests.push(f_name.display().to_string());
             }
             no_file_verified = true;
         }
@@ -2325,6 +2320,9 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
                 }
             }
             exit_code = 1;
+        }
+        for manifest in &no_file_verified_manifests {
+            ctcore::ct_show_error!("{}: {}", manifest, t!("cksum.check.no_file_verified"));
         }
 
         if bad_format > 0 && opts.strict {

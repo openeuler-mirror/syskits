@@ -1394,6 +1394,57 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check --ignore-missing sums；stdin为0字节、内容=空；输入fixture：file blocker，mode=644，3字节，内容=abc；file sums，mode=644，90字节，内容=SHA256 (blocker/child) = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\\n；预期RC=1，stderr为120字节、内容=cksum: blocker/child: Not a directory\\ncksum: WARNING: 1 listed file could not be read\\ncksum: sums: no file was verified\\n，stdout为35字节/1条换行分隔、内容=blocker/child: FAILED open or read\\n；迁移原Cargo用例cksum_ignore_missing_only_suppresses_enoent第1次调用",
+      "args": [
+        "--check",
+        "--ignore-missing",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\142\\154\\157\\143\\153\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\123\\110\\101\\062\\065\\066\\040\\050\\142\\154\\157\\143\\153\\145\\162\\057\\143\\150\\151\\154\\144\\051\\040\\075\\040\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "blocker/child: FAILED open or read\n",
+          "stderr": "cksum: blocker/child: Not a directory\ncksum: WARNING: 1 listed file could not be read\ncksum: sums: no file was verified\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check --ignore-missing --status sums；stdin为0字节、内容=空；输入fixture：file blocker，mode=644，3字节，内容=abc；file sums，mode=644，90字节，内容=SHA256 (blocker/child) = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\\n；预期RC=1，stderr为38字节、内容=cksum: blocker/child: Not a directory\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例cksum_ignore_missing_only_suppresses_enoent第2次调用",
+      "args": [
+        "--check",
+        "--ignore-missing",
+        "--status",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\142\\154\\157\\143\\153\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\123\\110\\101\\062\\065\\066\\040\\050\\142\\154\\157\\143\\153\\145\\162\\057\\143\\150\\151\\154\\144\\051\\040\\075\\040\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: blocker/child: Not a directory\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

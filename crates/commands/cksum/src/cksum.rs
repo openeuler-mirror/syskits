@@ -265,6 +265,59 @@ fn is_valid_base64_digest(digest: &str, expected_bits: usize) -> bool {
     base64_digest_bits(digest) == Some(expected_bits)
 }
 
+fn filename_needs_escape(filename: &str) -> bool {
+    filename.contains(['\\', '\n', '\r'])
+}
+
+fn escape_checksum_filename(filename: &str) -> String {
+    let mut escaped = String::with_capacity(filename.len());
+    for character in filename.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            _ => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+fn unescape_checksum_filename(filename: &str) -> Option<String> {
+    let mut unescaped = String::with_capacity(filename.len());
+    let mut characters = filename.chars();
+    while let Some(character) = characters.next() {
+        if character != '\\' {
+            unescaped.push(character);
+            continue;
+        }
+
+        match characters.next()? {
+            '\\' => unescaped.push('\\'),
+            'n' => unescaped.push('\n'),
+            'r' => unescaped.push('\r'),
+            _ => return None,
+        }
+    }
+    Some(unescaped)
+}
+
+fn checksum_output_filename(filename: &str, escape: bool) -> (bool, Cow<'_, str>) {
+    if escape && filename_needs_escape(filename) {
+        (true, Cow::Owned(escape_checksum_filename(filename)))
+    } else {
+        (false, Cow::Borrowed(filename))
+    }
+}
+
+fn checksum_status_filename(filename: &str) -> Cow<'_, str> {
+    let (escaped, filename) = checksum_output_filename(filename, true);
+    if escaped {
+        Cow::Owned(format!("\\{filename}"))
+    } else {
+        filename
+    }
+}
+
 fn parse_base_zero_usize(value: &str) -> Option<usize> {
     let value = value.strip_prefix('+').unwrap_or(value);
     let (digits, radix) = if let Some(digits) = value
@@ -982,7 +1035,11 @@ fn render_cksum_compute_classic(
         CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !invocation.untagged => {
             let tag = blake2b_tag(invocation.length);
             match file {
-                Some(file) => format!("{tag} ({file}) = {sum}{line_end}"),
+                Some(file) => {
+                    let (escaped, file) = checksum_output_filename(file, !invocation.zero);
+                    let prefix = if escaped { "\\" } else { "" };
+                    format!("{prefix}{tag} ({file}) = {sum}{line_end}")
+                }
                 None => format!("{tag} (-) = {sum}{line_end}"),
             }
         }
@@ -990,15 +1047,23 @@ fn render_cksum_compute_classic(
             if invocation.untagged {
                 let marker = if invocation.binary { "*" } else { " " };
                 match file {
-                    Some(file) => format!("{sum} {marker}{file}{line_end}"),
+                    Some(file) => {
+                        let (escaped, file) = checksum_output_filename(file, !invocation.zero);
+                        let prefix = if escaped { "\\" } else { "" };
+                        format!("{prefix}{sum} {marker}{file}{line_end}")
+                    }
                     None => format!("{sum} {marker}-{line_end}"),
                 }
             } else {
                 match file {
-                    Some(file) => format!(
-                        "{} ({file}) = {sum}{line_end}",
-                        invocation.algo_name.to_ascii_uppercase()
-                    ),
+                    Some(file) => {
+                        let (escaped, file) = checksum_output_filename(file, !invocation.zero);
+                        let prefix = if escaped { "\\" } else { "" };
+                        format!(
+                            "{prefix}{} ({file}) = {sum}{line_end}",
+                            invocation.algo_name.to_ascii_uppercase()
+                        )
+                    }
                     None => format!(
                         "{} (-) = {sum}{line_end}",
                         invocation.algo_name.to_ascii_uppercase()
@@ -1173,7 +1238,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 continue;
             }
 
-            let (digest_str, parsed_filename, line_algo, line_format) =
+            let (digest_str, parsed_filename, line_algo, line_format, escaped_filename) =
                 match parse_check_line(&line) {
                     Some(values) => values,
                     None => {
@@ -1398,7 +1463,30 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                     Cow::Borrowed(parsed_filename)
                 }
             };
+            let filename = if escaped_filename {
+                match unescape_checksum_filename(&filename) {
+                    Some(filename) => Cow::Owned(filename),
+                    None => {
+                        bad_format += 1;
+                        if invocation.warn {
+                            push_stderr_line(
+                                &mut semantic.stderr_text,
+                                format!(
+                                    "{}: {}: improperly formatted {} checksum line",
+                                    manifest_display,
+                                    line_num + 1,
+                                    algo_display_name(current_default_algo)
+                                ),
+                            );
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                filename
+            };
             let filename_str = filename.as_ref();
+            let status_filename = checksum_status_filename(filename_str);
 
             if manifest_is_stdin && filename_str == "-" {
                 bad_format += 1;
@@ -1438,7 +1526,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                                 &mut semantic.classic_text,
                                 format!(
                                     "{}: {}",
-                                    filename_str,
+                                    status_filename,
                                     t!("cksum.check.failed_open_or_read")
                                 ),
                             );
@@ -1484,7 +1572,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                                 &mut semantic.classic_text,
                                 format!(
                                     "{}: {}",
-                                    filename_str,
+                                    status_filename,
                                     t!("cksum.check.failed_open_or_read")
                                 ),
                             );
@@ -1528,14 +1616,14 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 if !invocation.quiet && !invocation.status {
                     push_stdout_line(
                         &mut semantic.classic_text,
-                        format!("{}: {}", filename_str, t!("cksum.check.ok")),
+                        format!("{}: {}", status_filename, t!("cksum.check.ok")),
                     );
                 }
             } else {
                 if !invocation.status {
                     push_stdout_line(
                         &mut semantic.classic_text,
-                        format!("{}: {}", filename_str, t!("cksum.check.failed")),
+                        format!("{}: {}", status_filename, t!("cksum.check.failed")),
                     );
                 }
                 bad_checksum += 1;
@@ -1831,18 +1919,22 @@ where
             }
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
                 let tag = blake2b_tag(cksum_opts.length);
-                print!("{tag} ({}) = {sum}{line_end}", filename.display());
+                let filename = filename.to_string_lossy();
+                let (escaped, filename) = checksum_output_filename(&filename, !cksum_opts.zero);
+                let prefix = if escaped { "\\" } else { "" };
+                print!("{prefix}{tag} ({filename}) = {sum}{line_end}");
             }
             _ => {
+                let filename = filename.to_string_lossy();
+                let (escaped, filename) = checksum_output_filename(&filename, !cksum_opts.zero);
+                let prefix = if escaped { "\\" } else { "" };
                 if cksum_opts.untagged {
                     let marker = if cksum_opts.binary { "*" } else { " " };
-                    print!("{sum} {marker}{}{}", filename.display(), line_end);
+                    print!("{prefix}{sum} {marker}{filename}{line_end}");
                 } else {
                     print!(
-                        "{} ({}) = {sum}{}",
+                        "{prefix}{} ({filename}) = {sum}{line_end}",
                         cksum_opts.algo_name.to_ascii_uppercase(),
-                        filename.display(),
-                        line_end
                     );
                 }
             }
@@ -2155,9 +2247,9 @@ fn cksum_check(
                 continue;
             }
 
-            let (digest_str, parsed_filename, line_algo, line_format) =
+            let (digest_str, parsed_filename, line_algo, line_format, escaped_filename) =
                 match parse_check_line(&line) {
-                    Some((d, f, a, format)) => (d, f, a, format),
+                    Some((d, f, a, format, escaped)) => (d, f, a, format, escaped),
                     None => {
                         bad_format += 1;
                         if opts.warn {
@@ -2370,7 +2462,27 @@ fn cksum_check(
                     Cow::Borrowed(parsed_filename)
                 }
             };
+            let filename = if escaped_filename {
+                match unescape_checksum_filename(&filename) {
+                    Some(filename) => Cow::Owned(filename),
+                    None => {
+                        bad_format += 1;
+                        if opts.warn {
+                            ctcore::ct_show_error!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                manifest_display,
+                                line_num + 1,
+                                algo_display_name(current_default_algo)
+                            );
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                filename
+            };
             let filename_str = filename.as_ref();
+            let status_filename = checksum_status_filename(filename_str);
 
             if manifest_is_stdin && filename_str == "-" {
                 bad_format += 1;
@@ -2403,7 +2515,7 @@ fn cksum_check(
                         if !opts.status {
                             println!(
                                 "{}: {}",
-                                filename_str,
+                                status_filename,
                                 t!("cksum.check.failed_open_or_read")
                             );
                         }
@@ -2429,7 +2541,7 @@ fn cksum_check(
                     if !opts.status {
                         println!(
                             "{}: {}",
-                            filename_str,
+                            status_filename,
                             t!("cksum.check.failed_open_or_read")
                         );
                     }
@@ -2453,11 +2565,11 @@ fn cksum_check(
 
             if checksum_match {
                 if !opts.quiet && !opts.status {
-                    println!("{}: {}", filename_str, t!("cksum.check.ok"));
+                    println!("{}: {}", status_filename, t!("cksum.check.ok"));
                 }
             } else {
                 if !opts.status {
-                    println!("{}: {}", filename_str, t!("cksum.check.failed"));
+                    println!("{}: {}", status_filename, t!("cksum.check.failed"));
                 }
                 bad_checksum += 1;
             }
@@ -2528,11 +2640,13 @@ fn cksum_check(
     Ok(exit_code)
 }
 
-fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFormat)> {
+fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFormat, bool)> {
     let mut input = line.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let mut escaped_filename = false;
 
     if let Some(stripped) = input.strip_prefix('\\') {
         input = stripped;
+        escaped_filename = true;
     }
 
     if let (Some(first_paren), Some(last_paren)) = (input.find('('), input.rfind(')')) {
@@ -2550,7 +2664,13 @@ fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFo
                 if let Some(digest) = after_paren.strip_prefix('=') {
                     let digest = digest.trim_start_matches([' ', '\t']);
                     let filename = &input[first_paren + 1..last_paren];
-                    return Some((digest, filename, Some(algo), CheckLineFormat::Tagged));
+                    return Some((
+                        digest,
+                        filename,
+                        Some(algo),
+                        CheckLineFormat::Tagged,
+                        escaped_filename,
+                    ));
                 }
             }
         }
@@ -2563,13 +2683,20 @@ fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFo
     let rest = &input[separator_index + 1..];
 
     if rest.len() == 1 || !matches!(rest.as_bytes().first(), Some(b' ' | b'*')) {
-        Some((digest, rest, None, CheckLineFormat::Reversed))
+        Some((
+            digest,
+            rest,
+            None,
+            CheckLineFormat::Reversed,
+            escaped_filename,
+        ))
     } else {
         Some((
             digest,
             &rest[1..],
             None,
             CheckLineFormat::Standard(rest.as_bytes()[0]),
+            escaped_filename,
         ))
     }
 }

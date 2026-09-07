@@ -1691,6 +1691,27 @@ fn ptx_format_roff_field_bytes(s: &[u8]) -> Vec<u8> {
     out
 }
 
+fn ptx_format_tex_field_bytes(s: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    for &byte in s {
+        match byte {
+            byte if byte.is_ascii_whitespace() => out.push(b' '),
+            b'\\' => out.extend_from_slice(b"\\backslash{}"),
+            b'$' | b'%' | b'#' | b'&' | b'_' => {
+                out.push(b'\\');
+                out.push(byte);
+            }
+            b'{' | b'}' => {
+                out.extend_from_slice(b"$\\");
+                out.push(byte);
+                out.push(b'$');
+            }
+            _ => out.push(byte),
+        }
+    }
+    out
+}
+
 fn ptx_display_field_bytes(s: &[u8]) -> Vec<u8> {
     s.iter()
         .map(|&b| if b.is_ascii_whitespace() { b' ' } else { b })
@@ -1903,6 +1924,61 @@ fn ptx_format_roff_line_bytes(
     output
 }
 
+fn ptx_format_tex_line_bytes(
+    config: &PtxConfig,
+    word_ref: &WordRef,
+    content: &FileContent,
+    reference: &str,
+    line_width: usize,
+    maximum_word_length: usize,
+) -> Vec<u8> {
+    let bytes_text = content.text.as_bytes();
+    let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
+        (
+            &bytes_text[word_ref.global_position..word_ref.global_position_end],
+            &bytes_text[word_ref.context_start..word_ref.global_position],
+            &bytes_text[word_ref.global_position_end..word_ref.context_end],
+        )
+    } else {
+        let line = content.lines[word_ref.local_line_nr].as_bytes();
+        (
+            &line[word_ref.position..word_ref.position_end],
+            &line[..word_ref.position],
+            &line[word_ref.position_end..],
+        )
+    };
+    let fields = ptx_define_output_fields_bytes_for_width(
+        all_before,
+        keyword,
+        all_after,
+        config,
+        line_width,
+        maximum_word_length,
+    );
+    let after = &fields.keyafter[keyword.len().min(fields.keyafter.len())..];
+
+    let mut output = Vec::new();
+    output.push(b'\\');
+    output.extend_from_slice(config.macro_name.as_bytes());
+    output.extend_from_slice(b" {");
+    output.extend_from_slice(&ptx_format_tex_field_bytes(&fields.tail));
+    output.extend_from_slice(b"}{");
+    output.extend_from_slice(&ptx_format_tex_field_bytes(&fields.before));
+    output.extend_from_slice(b"}{");
+    output.extend_from_slice(&ptx_format_tex_field_bytes(keyword));
+    output.extend_from_slice(b"}{");
+    output.extend_from_slice(&ptx_format_tex_field_bytes(after));
+    output.extend_from_slice(b"}{");
+    output.extend_from_slice(&ptx_format_tex_field_bytes(&fields.head));
+    output.push(b'}');
+    if config.is_auto_ref || config.is_input_ref {
+        output.push(b'{');
+        output.extend_from_slice(&ptx_format_tex_field_bytes(reference.as_bytes()));
+        output.push(b'}');
+    }
+    output
+}
+
 /// 执行 PTX 命令的核心逻辑
 fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
@@ -1959,19 +2035,14 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
         );
 
         let output_line = match settings.config.format {
-            OutFormat::Tex => ptx_format_tex_line(
+            OutFormat::Tex => ptx_format_tex_line_bytes(
                 &settings.config,
                 word_ref,
-                &content.lines[word_ref.local_line_nr],
-                &content.chars_lines[word_ref.local_line_nr],
-                &content.text,
-                &content.chars_text,
-                &context_reg,
+                content,
                 &reference,
                 effective_line_width,
                 maximum_word_length,
-            )
-            .into_bytes(),
+            ),
             OutFormat::Roff => ptx_format_roff_line_bytes(
                 &settings.config,
                 word_ref,
@@ -2167,19 +2238,14 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
         );
 
         let output_line = match settings.config.format {
-            OutFormat::Tex => ptx_format_tex_line(
+            OutFormat::Tex => ptx_format_tex_line_bytes(
                 &settings.config,
                 word_ref,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &file_map_value.chars_lines[word_ref.local_line_nr],
-                &file_map_value.text,
-                &file_map_value.chars_text,
-                &context_reg,
+                file_map_value,
                 &reference,
                 effective_line_width,
                 maximum_word_length,
-            )
-            .into_bytes(),
+            ),
             OutFormat::Roff => ptx_format_roff_line_bytes(
                 &settings.config,
                 word_ref,

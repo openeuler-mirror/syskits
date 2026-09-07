@@ -2551,6 +2551,7 @@ pub fn ct_app() -> Command {
         .disable_help_flag(true)
         .disable_version_flag(true)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new("help")
                 .long("help")

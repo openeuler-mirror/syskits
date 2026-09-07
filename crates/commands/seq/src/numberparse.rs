@@ -411,7 +411,12 @@ impl FromStr for PreciseNumber {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim_start();
-        let s = s.strip_prefix('+').unwrap_or(s);
+        let (s, had_plus) = s
+            .strip_prefix('+')
+            .map_or((s, false), |value| (value, true));
+        if had_plus && (s.starts_with('+') || s.starts_with('-')) {
+            return Err(ParseNumberError::Float);
+        }
 
         // 处理十六进制数字及浮点数 (如 0x1p-1)
         if s.to_ascii_lowercase().contains("0x") {
@@ -422,6 +427,13 @@ impl FromStr for PreciseNumber {
         // 找到小数点和指数位置
         let decimal_pos = s.find('.');
         let exp_pos = s.find('e').or_else(|| s.find('E')); // 兼容大写 E
+        if decimal_pos.is_some()
+            && !s[..exp_pos.unwrap_or(s.len())]
+                .bytes()
+                .any(|byte| byte.is_ascii_digit())
+        {
+            return Err(ParseNumberError::Float);
+        }
 
         match (decimal_pos, exp_pos) {
             (None, None) => parse_no_decimal_no_exponent(s),
@@ -532,7 +544,9 @@ mod tests {
             "1.2.3".parse::<PreciseNumber>().unwrap_err(),
             ParseNumberError::Float
         );
-        for invalid in ["1e2e3", "1efoo", "1e+", "1e-", "1.e", "infinite"] {
+        for invalid in [
+            "1e2e3", "1efoo", "1e+", "1e-", "1.e", "infinite", "++1", "+-1", ".", "+.", "-.",
+        ] {
             assert_eq!(
                 invalid.parse::<PreciseNumber>().unwrap_err(),
                 ParseNumberError::Float,

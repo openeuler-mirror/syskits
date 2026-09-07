@@ -1881,6 +1881,53 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check sums；stdin为3字节、内容=abc；输入fixture：file sums，mode=644，68字节，内容=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  -\\n；预期RC=0，stderr为0字节、内容=空，stdout为6字节/1条换行分隔、内容=-: OK\\n；迁移原Cargo用例cksum_check_uses_stdin_for_a_dash_target第1次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\040\\040\\055\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "-: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": "abc"
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check -；stdin为68字节、内容=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  -\\n；输入fixture：无文件fixture；预期RC=1，stderr为68字节、内容=cksum: 'standard input': no properly formatted checksum lines found\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例cksum_check_rejects_a_dash_target_in_a_stdin_manifest第1次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "-"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: 'standard input': no properly formatted checksum lines found\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  -\n"
     }
   ]
 }

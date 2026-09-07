@@ -101,6 +101,8 @@ struct PtxConfig {
     gap_size: usize,
     /// 截断标记字符串
     trunc_str: String,
+    /// 截断标记的原始字节，Linux命令输出及字段宽度按GNU字节语义处理。
+    trunc_bytes: Vec<u8>,
     /// 宏名称
     macro_name: String,
     /// 上下文正则表达式
@@ -122,6 +124,7 @@ impl Default for PtxConfig {
             is_ignore_case: false,
             macro_name: "xx".to_owned(),
             trunc_str: "/".to_owned(),
+            trunc_bytes: b"/".to_vec(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
             word_break_chars: None,
             word_regex: None,
@@ -392,91 +395,98 @@ fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
     Ok(parsed as usize)
 }
 
-fn ptx_unescape_option(value: &str) -> String {
-    let chars: Vec<char> = value.chars().collect();
-    let mut output = String::with_capacity(value.len());
+fn ptx_unescape_option_bytes(value: &str) -> Vec<u8> {
+    let bytes = value.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
     let mut index = 0usize;
-    while index < chars.len() {
-        if chars[index] != '\\' {
-            output.push(chars[index]);
+    while index < bytes.len() {
+        if bytes[index] != b'\\' {
+            output.push(bytes[index]);
             index += 1;
             continue;
         }
 
         index += 1;
-        let Some(&escaped) = chars.get(index) else {
+        let Some(&escaped) = bytes.get(index) else {
             break;
         };
         match escaped {
-            'x' => {
+            b'x' => {
                 index += 1;
                 let start = index;
                 let mut number = 0u32;
-                while index < chars.len() && index - start < 3 {
-                    let Some(digit) = chars[index].to_digit(16) else {
+                while index < bytes.len() && index - start < 3 {
+                    let Some(digit) = char::from(bytes[index]).to_digit(16) else {
                         break;
                     };
                     number = number * 16 + digit;
                     index += 1;
                 }
                 if index == start {
-                    output.push_str("\\x");
-                } else if let Some(character) = char::from_u32(number) {
-                    output.push(character);
+                    output.extend_from_slice(b"\\x");
+                } else {
+                    output.push(number as u8);
                 }
             }
-            '0' => {
+            b'0' => {
                 index += 1;
                 let start = index;
                 let mut number = 0u32;
-                while index < chars.len() && index - start < 3 {
-                    let Some(digit) = chars[index].to_digit(8) else {
+                while index < bytes.len() && index - start < 3 {
+                    let Some(digit) = char::from(bytes[index]).to_digit(8) else {
                         break;
                     };
                     number = number * 8 + digit;
                     index += 1;
                 }
-                if let Some(character) = char::from_u32(number) {
-                    output.push(character);
-                }
+                output.push(number as u8);
             }
-            'a' => {
-                output.push('\x07');
+            b'a' => {
+                output.push(b'\x07');
                 index += 1;
             }
-            'b' => {
-                output.push('\x08');
+            b'b' => {
+                output.push(b'\x08');
                 index += 1;
             }
-            'c' => break,
-            'f' => {
-                output.push('\x0c');
+            b'c' => break,
+            b'f' => {
+                output.push(b'\x0c');
                 index += 1;
             }
-            'n' => {
-                output.push('\n');
+            b'n' => {
+                output.push(b'\n');
                 index += 1;
             }
-            'r' => {
-                output.push('\r');
+            b'r' => {
+                output.push(b'\r');
                 index += 1;
             }
-            't' => {
-                output.push('\t');
+            b't' => {
+                output.push(b'\t');
                 index += 1;
             }
-            'v' => {
-                output.push('\x0b');
+            b'v' => {
+                output.push(b'\x0b');
                 index += 1;
             }
             _ => {
-                output.push('\\');
+                output.push(b'\\');
                 output.push(escaped);
                 index += 1;
             }
         }
     }
+    if let Some(nul) = output.iter().position(|&byte| byte == 0) {
+        output.truncate(nul);
+    }
     output
+}
+
+fn ptx_unescape_option(value: &str) -> String {
+    let bytes = ptx_unescape_option_bytes(value);
+    let byte_mode = std::str::from_utf8(&bytes).is_err();
+    ptx_internal_text(&bytes, byte_mode)
 }
 
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
@@ -511,11 +521,12 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
             .to_string();
     }
     if matches.contains_id(ptx_options::PTX_FLAG_TRUNCATION) {
-        config.trunc_str = ptx_unescape_option(
-            matches
-                .get_one::<String>(ptx_options::PTX_FLAG_TRUNCATION)
-                .expect(err_msg),
-        );
+        let value = matches
+            .get_one::<String>(ptx_options::PTX_FLAG_TRUNCATION)
+            .expect(err_msg);
+        config.trunc_bytes = ptx_unescape_option_bytes(value);
+        let byte_mode = std::str::from_utf8(&config.trunc_bytes).is_err();
+        config.trunc_str = ptx_internal_text(&config.trunc_bytes, byte_mode);
     }
     if matches.contains_id(ptx_options::PTX_WIDTH) {
         let value = matches
@@ -1087,13 +1098,12 @@ fn ptx_skip_something(chars: &[char], cursor: usize, limit: usize, config: &PtxC
     next
 }
 
-fn ptx_field_dimensions(config: &PtxConfig, line_width: usize) -> (usize, usize, usize, usize) {
+fn ptx_field_dimensions_for_trunc_len(
+    config: &PtxConfig,
+    line_width: usize,
+    trunc_len: usize,
+) -> (usize, usize, usize, usize) {
     let half_line_width = line_width / 2;
-    let trunc_len = if config.trunc_str.is_empty() {
-        0
-    } else {
-        config.trunc_str.chars().count()
-    };
 
     let mut before_max_width = half_line_width.saturating_sub(config.gap_size);
     let mut keyafter_max_width = half_line_width;
@@ -1112,6 +1122,17 @@ fn ptx_field_dimensions(config: &PtxConfig, line_width: usize) -> (usize, usize,
         keyafter_max_width,
         trunc_len,
     )
+}
+
+fn ptx_field_dimensions(config: &PtxConfig, line_width: usize) -> (usize, usize, usize, usize) {
+    ptx_field_dimensions_for_trunc_len(config, line_width, config.trunc_str.chars().count())
+}
+
+fn ptx_field_dimensions_bytes(
+    config: &PtxConfig,
+    line_width: usize,
+) -> (usize, usize, usize, usize) {
+    ptx_field_dimensions_for_trunc_len(config, line_width, config.trunc_bytes.len())
 }
 
 fn ptx_content_maximum_word_length(content: &FileContent, config: &PtxConfig) -> usize {
@@ -1393,8 +1414,8 @@ fn ptx_define_output_fields_bytes_for_width(
     maximum_word_length: usize,
 ) -> PtxOutputFieldsBytes {
     let (half_line_width, before_max_width, keyafter_max_width, _) =
-        ptx_field_dimensions(config, line_width);
-    let truncation_enabled = !config.trunc_str.is_empty();
+        ptx_field_dimensions_bytes(config, line_width);
+    let truncation_enabled = !config.trunc_bytes.is_empty();
 
     let mut bytes = Vec::with_capacity(all_before.len() + keyword.len() + all_after.len());
     bytes.extend_from_slice(all_before);
@@ -2029,12 +2050,12 @@ fn ptx_format_dumb_line_bytes(
     }
 
     let half_line_width = effective_line_width / 2;
-    let trunc_len = config.trunc_str.len();
+    let trunc_len = config.trunc_bytes.len();
 
     if !fields.tail.is_empty() {
         output.extend_from_slice(&ptx_display_field_bytes(&fields.tail));
         if fields.tail_truncation {
-            output.extend_from_slice(config.trunc_str.as_bytes());
+            output.extend_from_slice(&config.trunc_bytes);
         }
         let pad = half_line_width
             .saturating_add(fields.before_padding_adjustment)
@@ -2071,13 +2092,13 @@ fn ptx_format_dumb_line_bytes(
     }
 
     if fields.before_truncation {
-        output.extend_from_slice(config.trunc_str.as_bytes());
+        output.extend_from_slice(&config.trunc_bytes);
     }
     output.extend_from_slice(&ptx_display_field_bytes(&fields.before));
     output.extend(std::iter::repeat_n(b' ', gap_size));
     output.extend_from_slice(&ptx_display_field_bytes(&fields.keyafter));
     if fields.keyafter_truncation {
-        output.extend_from_slice(config.trunc_str.as_bytes());
+        output.extend_from_slice(&config.trunc_bytes);
     }
 
     if !fields.head.is_empty() {
@@ -2092,7 +2113,7 @@ fn ptx_format_dumb_line_bytes(
             .saturating_sub(if fields.head_truncation { trunc_len } else { 0 });
         output.extend(std::iter::repeat_n(b' ', pad));
         if fields.head_truncation {
-            output.extend_from_slice(config.trunc_str.as_bytes());
+            output.extend_from_slice(&config.trunc_bytes);
         }
         output.extend_from_slice(&ptx_display_field_bytes(&fields.head));
     } else if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
@@ -2152,21 +2173,21 @@ fn ptx_format_roff_line_bytes(
     output.extend_from_slice(b" \"");
     output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.tail));
     if fields.tail_truncation {
-        output.extend_from_slice(config.trunc_str.as_bytes());
+        output.extend_from_slice(&config.trunc_bytes);
     }
     output.extend_from_slice(b"\" \"");
     if fields.before_truncation {
-        output.extend_from_slice(config.trunc_str.as_bytes());
+        output.extend_from_slice(&config.trunc_bytes);
     }
     output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.before));
     output.extend_from_slice(b"\" \"");
     output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.keyafter));
     if fields.keyafter_truncation {
-        output.extend_from_slice(config.trunc_str.as_bytes());
+        output.extend_from_slice(&config.trunc_bytes);
     }
     output.extend_from_slice(b"\" \"");
     if fields.head_truncation {
-        output.extend_from_slice(config.trunc_str.as_bytes());
+        output.extend_from_slice(&config.trunc_bytes);
     }
     output.extend_from_slice(&ptx_format_roff_field_bytes(&fields.head));
     output.push(b'"');

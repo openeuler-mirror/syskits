@@ -245,11 +245,8 @@ impl WordFilter {
         let arg_reg: Option<String> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
             match matches.get_one::<String>(ptx_options::PTX_WORD_REGEXP) {
                 Some(v) => {
-                    if v.is_empty() {
-                        None
-                    } else {
-                        Some(v.to_string())
-                    }
+                    let v = ptx_unescape_option(v);
+                    if v.is_empty() { None } else { Some(v) }
                 }
                 None => None,
             }
@@ -361,6 +358,93 @@ fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
     Ok(parsed as usize)
 }
 
+fn ptx_unescape_option(value: &str) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    let mut output = String::with_capacity(value.len());
+    let mut index = 0usize;
+    while index < chars.len() {
+        if chars[index] != '\\' {
+            output.push(chars[index]);
+            index += 1;
+            continue;
+        }
+
+        index += 1;
+        let Some(&escaped) = chars.get(index) else {
+            break;
+        };
+        match escaped {
+            'x' => {
+                index += 1;
+                let start = index;
+                let mut number = 0u32;
+                while index < chars.len() && index - start < 3 {
+                    let Some(digit) = chars[index].to_digit(16) else {
+                        break;
+                    };
+                    number = number * 16 + digit;
+                    index += 1;
+                }
+                if index == start {
+                    output.push_str("\\x");
+                } else if let Some(character) = char::from_u32(number) {
+                    output.push(character);
+                }
+            }
+            '0' => {
+                index += 1;
+                let start = index;
+                let mut number = 0u32;
+                while index < chars.len() && index - start < 3 {
+                    let Some(digit) = chars[index].to_digit(8) else {
+                        break;
+                    };
+                    number = number * 8 + digit;
+                    index += 1;
+                }
+                if let Some(character) = char::from_u32(number) {
+                    output.push(character);
+                }
+            }
+            'a' => {
+                output.push('\x07');
+                index += 1;
+            }
+            'b' => {
+                output.push('\x08');
+                index += 1;
+            }
+            'c' => break,
+            'f' => {
+                output.push('\x0c');
+                index += 1;
+            }
+            'n' => {
+                output.push('\n');
+                index += 1;
+            }
+            'r' => {
+                output.push('\r');
+                index += 1;
+            }
+            't' => {
+                output.push('\t');
+                index += 1;
+            }
+            'v' => {
+                output.push('\x0b');
+                index += 1;
+            }
+            _ => {
+                output.push('\\');
+                output.push(escaped);
+                index += 1;
+            }
+        }
+    }
+    output
+}
+
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     let mut config = PtxConfig::default();
     let err_msg = "parsing options failed";
@@ -370,10 +454,11 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         "\n".clone_into(&mut config.context_regex);
     }
     if let Some(reg) = matches.get_one::<String>(ptx_options::PTX_SENTENCE_REGEXP) {
+        let reg = ptx_unescape_option(reg);
         config.context_regex = if reg.is_empty() {
             NEVER_MATCH_REGEX.to_string()
         } else {
-            reg.to_string()
+            reg
         };
         // Note: Zero-length regex check is deferred to actual usage time
         // to match GNU ptx behavior (only errors when processing non-empty content)
@@ -392,10 +477,11 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
             .to_string();
     }
     if matches.contains_id(ptx_options::PTX_FLAG_TRUNCATION) {
-        config.trunc_str = matches
-            .get_one::<String>(ptx_options::PTX_FLAG_TRUNCATION)
-            .expect(err_msg)
-            .to_string();
+        config.trunc_str = ptx_unescape_option(
+            matches
+                .get_one::<String>(ptx_options::PTX_FLAG_TRUNCATION)
+                .expect(err_msg),
+        );
     }
     if matches.contains_id(ptx_options::PTX_WIDTH) {
         let value = matches

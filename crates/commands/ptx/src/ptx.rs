@@ -556,13 +556,6 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     Ok(config)
 }
 
-fn regex_matches_zero_len(pattern: &str) -> bool {
-    Regex::new(pattern)
-        .ok()
-        .and_then(|re| re.find(""))
-        .is_some_and(|m| m.start() == m.end())
-}
-
 fn compile_regex_case_lossy(pattern: &str, ignore_case: bool) -> Regex {
     let build = |pattern: &str| {
         RegexBuilder::new(pattern)
@@ -646,6 +639,20 @@ fn next_context_end(context_reg: &Regex, text: &str, start: usize) -> usize {
         Some(m) if m.end() > start => m.end(),
         _ => text.len(),
     }
+}
+
+fn context_regexp_matches_at_boundary(context_reg: &Regex, text: &str) -> bool {
+    let mut context_start = 0usize;
+    while context_start < text.len() {
+        let Some(matched) = context_reg.find_at(text, context_start) else {
+            break;
+        };
+        if matched.start() == context_start {
+            return true;
+        }
+        context_start = matched.end();
+    }
+    false
 }
 
 fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
@@ -2159,18 +2166,6 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
         settings.config.is_ignore_case,
     );
 
-    // Check for zero-length regex match only when there are words to process
-    // This matches GNU ptx behavior (only errors when processing non-empty content)
-    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
-        return Err(CtSimpleError::new(
-            1,
-            format!(
-                "error: regular expression has a match of length zero: '{}'",
-                settings.config.context_regex
-            ),
-        ));
-    }
-
     let mut reference_max_width = 0usize;
     if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
     {
@@ -2370,16 +2365,6 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
         &settings.config.context_regex,
         settings.config.is_ignore_case,
     );
-
-    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
-        return Err(CtSimpleError::new(
-            1,
-            format!(
-                "error: regular expression has a match of length zero: '{}'",
-                settings.config.context_regex
-            ),
-        ));
-    }
 
     let mut reference_max_width = 0usize;
     if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
@@ -2602,11 +2587,7 @@ fn ptx_zero_length_regex_error(pattern: &str) -> Box<dyn CTError> {
 }
 
 fn ptx_semantic_rows_for_settings(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
-    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
-        Vec::new()
-    } else {
-        ptx_collect_semantic_rows(settings)
-    }
+    ptx_collect_semantic_rows(settings)
 }
 
 pub fn ptx_native_semantic_rows_only(args: impl ctcore::Args) -> CTResult<PtxSemantic> {
@@ -2630,16 +2611,6 @@ pub fn ptx_native_semantic_rows_only(args: impl ctcore::Args) -> CTResult<PtxSem
             });
         }
     };
-
-    if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
-        let error = ptx_zero_length_regex_error(&settings.config.context_regex);
-        return Ok(PtxSemantic {
-            rows: Vec::new(),
-            classic_text: String::new(),
-            stderr_text: ptx_render_error_text(error.as_ref()),
-            exit_code: error.code(),
-        });
-    }
 
     Ok(PtxSemantic {
         rows: ptx_semantic_rows_for_settings(&settings),
@@ -2719,6 +2690,13 @@ impl PtxSettings {
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config).map_err_context(String::new)?;
+        let context_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
+        if file_map
+            .iter()
+            .any(|content| context_regexp_matches_at_boundary(&context_reg, &content.text))
+        {
+            return Err(ptx_zero_length_regex_error(&config.context_regex));
+        }
 
         // 创建单词集合
         let word_set = ptx_create_word_set(&config, &word_filter, &file_map);

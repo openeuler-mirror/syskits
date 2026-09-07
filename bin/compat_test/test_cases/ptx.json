@@ -1995,6 +1995,50 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -f -W [A-Z]+ input；输入为input=prefix alpha BETA middle gamma DELTA suffix\\n（44字节）；预期RC=0、stderr为空，stdout为7条换行分隔、共460字节的dumb索引；对应Cargo用例ptx_ignore_case_applies_to_word_and_sentence_regexps第1次调用",
+      "args": [
+        "-f",
+        "-W",
+        "[A-Z]+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\160\\162\\145\\146\\151\\170\\040\\141\\154\\160\\150\\141\\040\\102\\105\\124\\101\\040\\155\\151\\144\\144\\154\\145\\040\\147\\141\\155\\155\\141\\040\\104\\105\\114\\124\\101\\040\\163\\165\\146\\146\\151\\170\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "   suffix                     prefix   alpha BETA middle gamma DELTA\n                        prefix alpha   BETA middle gamma DELTA suffix\n      prefix alpha BETA middle gamma   DELTA suffix\n            prefix alpha BETA middle   gamma DELTA suffix\n                   prefix alpha BETA   middle gamma DELTA suffix\n   DELTA suffix                        prefix alpha BETA middle gamma\n       alpha BETA middle gamma DELTA   suffix                        prefix\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -f -S beta input；输入为input=prefix alpha BETA middle gamma DELTA suffix\\n（44字节）；预期RC=0、stderr为空，stdout为7条换行分隔、共373字节的dumb索引；对应Cargo用例ptx_ignore_case_applies_to_word_and_sentence_regexps第2次调用",
+      "args": [
+        "-f",
+        "-S",
+        "beta",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\160\\162\\145\\146\\151\\170\\040\\141\\154\\160\\150\\141\\040\\102\\105\\124\\101\\040\\155\\151\\144\\144\\154\\145\\040\\147\\141\\155\\155\\141\\040\\104\\105\\114\\124\\101\\040\\163\\165\\146\\146\\151\\170\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                              prefix   alpha BETA\n                        prefix alpha   BETA\n                        middle gamma   DELTA suffix\n                              middle   gamma DELTA suffix\n                                        middle gamma DELTA suffix\n                                       prefix alpha BETA\n                  middle gamma DELTA   suffix\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

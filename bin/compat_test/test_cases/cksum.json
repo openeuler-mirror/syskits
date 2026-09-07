@@ -2272,6 +2272,36 @@
       "cleanup_commands": [],
       "tstdin": "",
       "byteMode": true
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check --warn --strict first second；stdin为0字节、内容=空；输入fixture：file first，mode=644，152字节，内容=bad\\ncb8379ac2098aa165029e3938a51da0bcecfc008fd6795f401178647f96c5b34  one\\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  missing-one\\n；file one，mode=644，3字节，内容=abc；file second，mode=644，152字节，内容=bad\\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  two\\ncb8379ac2098aa165029e3938a51da0bcecfc008fd6795f401178647f96c5b34  missing-two\\n；file two，mode=644，3字节，内容=def；预期RC=1，stderr为501字节、内容=cksum: first: 1: improperly formatted SHA256 checksum line\\ncksum: missing-one: No such file or directory\\ncksum: WARNING: 1 line is improperly formatted\\ncksum: WARNING: 1 listed ...，stdout为90字节/4条换行分隔、内容=one: FAILED\\nmissing-one: FAILED open or read\\ntwo: FAILED\\nmissing-two: FAILED open or read\\n；迁移原Cargo用例cksum_check_reports_failures_per_manifest第1次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "--warn",
+        "--strict",
+        "first",
+        "second"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\162\\163\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\142\\141\\144\\012\\143\\142\\070\\063\\067\\071\\141\\143\\062\\060\\071\\070\\141\\141\\061\\066\\065\\060\\062\\071\\145\\063\\071\\063\\070\\141\\065\\061\\144\\141\\060\\142\\143\\145\\143\\146\\143\\060\\060\\070\\146\\144\\066\\067\\071\\065\\146\\064\\060\\061\\061\\067\\070\\066\\064\\067\\146\\071\\066\\143\\065\\142\\063\\064\\040\\040\\157\\156\\145\\012\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\040\\040\\155\\151\\163\\163\\151\\156\\147\\055\\157\\156\\145\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\156\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\145\\143\\157\\156\\144'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\142\\141\\144\\012\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\040\\040\\164\\167\\157\\012\\143\\142\\070\\063\\067\\071\\141\\143\\062\\060\\071\\070\\141\\141\\061\\066\\065\\060\\062\\071\\145\\063\\071\\063\\070\\141\\065\\061\\144\\141\\060\\142\\143\\145\\143\\146\\143\\060\\060\\070\\146\\144\\066\\067\\071\\065\\146\\064\\060\\061\\061\\067\\070\\066\\064\\067\\146\\071\\066\\143\\065\\142\\063\\064\\040\\040\\155\\151\\163\\163\\151\\156\\147\\055\\164\\167\\157\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\164\\167\\157'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\145\\146' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "one: FAILED\nmissing-one: FAILED open or read\ntwo: FAILED\nmissing-two: FAILED open or read\n",
+          "stderr": "cksum: first: 1: improperly formatted SHA256 checksum line\ncksum: missing-one: No such file or directory\ncksum: WARNING: 1 line is improperly formatted\ncksum: WARNING: 1 listed file could not be read\ncksum: WARNING: 1 computed checksum did NOT match\ncksum: second: 1: improperly formatted SHA256 checksum line\ncksum: missing-two: No such file or directory\ncksum: WARNING: 1 line is improperly formatted\ncksum: WARNING: 1 listed file could not be read\ncksum: WARNING: 1 computed checksum did NOT match\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

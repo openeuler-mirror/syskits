@@ -620,6 +620,68 @@ fn parse_ordered_output_options(args: &[OsString]) -> OrderedOutputOptions {
     options
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct OrderedCheckOutputOptions {
+    quiet: bool,
+    status: bool,
+    warn: bool,
+}
+
+impl OrderedCheckOutputOptions {
+    fn select_quiet(&mut self) {
+        self.quiet = true;
+        self.status = false;
+        self.warn = false;
+    }
+
+    fn select_status(&mut self) {
+        self.quiet = false;
+        self.status = true;
+        self.warn = false;
+    }
+
+    fn select_warn(&mut self) {
+        self.quiet = false;
+        self.status = false;
+        self.warn = true;
+    }
+}
+
+fn parse_ordered_check_output_options(args: &[OsString]) -> OrderedCheckOutputOptions {
+    let mut options = OrderedCheckOutputOptions::default();
+
+    for arg in args {
+        let arg = arg.to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+
+        if arg.starts_with("--") {
+            if long_option_matches(opt_flags::QUIET, &arg) {
+                options.select_quiet();
+            } else if long_option_matches(opt_flags::STATUS, &arg) {
+                options.select_status();
+            } else if long_option_matches(opt_flags::WARN, &arg) {
+                options.select_warn();
+            }
+            continue;
+        }
+
+        let Some(short_options) = arg.strip_prefix('-') else {
+            continue;
+        };
+        for option in short_options.chars() {
+            match option {
+                'w' => options.select_warn(),
+                'a' | 'l' => break,
+                _ => {}
+            }
+        }
+    }
+
+    options
+}
+
 fn parse_cksum_length(
     algo_name: &str,
     input_length_str: Option<&String>,
@@ -681,29 +743,8 @@ fn parse_cksum_length(
 
 fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSemanticDispatch> {
     let args_vec: Vec<OsString> = args.collect();
-    let mut last_status_idx = 0;
-    let mut last_warn_idx = 0;
-
-    let mut status = false;
-    let mut warn = false;
-
-    for (i, arg) in args_vec.iter().enumerate() {
-        let arg_str = arg.to_string_lossy();
-        if long_option_matches(opt_flags::STATUS, &arg_str) {
-            last_status_idx = i;
-            status = true;
-        } else if long_option_matches(opt_flags::WARN, &arg_str)
-            || (arg_str.starts_with('-') && !arg_str.starts_with("--") && arg_str.contains('w'))
-        {
-            last_warn_idx = i;
-            warn = true;
-        }
-    }
-
     let output_options = parse_ordered_output_options(&args_vec);
-    if status && warn && last_status_idx > last_warn_idx {
-        warn = false;
-    }
+    let check_output_options = parse_ordered_check_output_options(&args_vec);
 
     let matches = ct_app().try_get_matches_from(args_vec)?;
     let algo_name = matches
@@ -736,10 +777,10 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
     let check = matches.get_flag(opt_flags::CHECK);
     reject_verify_only_options_outside_check_mode(
         check,
-        matches.get_flag(opt_flags::QUIET),
-        matches.get_flag(opt_flags::STATUS),
+        check_output_options.quiet,
+        check_output_options.status,
         matches.get_flag(opt_flags::STRICT),
-        matches.get_flag(opt_flags::WARN),
+        check_output_options.warn,
         matches.get_flag(opt_flags::IGNORE_MISSING),
     )?;
 
@@ -786,9 +827,9 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
         binary: output_options.binary,
-        quiet: matches.get_flag(opt_flags::QUIET),
-        status,
-        warn,
+        quiet: check_output_options.quiet,
+        status: check_output_options.status,
+        warn: check_output_options.warn,
         strict: matches.get_flag(opt_flags::STRICT),
         ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
         check,
@@ -1755,29 +1796,8 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     let args_vec: Vec<OsString> = args.collect();
 
-    let mut last_status_idx = 0;
-    let mut last_warn_idx = 0;
-
-    let mut status = false;
-    let mut warn = false;
-
-    for (i, arg) in args_vec.iter().enumerate() {
-        let arg_str = arg.to_string_lossy();
-        if long_option_matches(opt_flags::STATUS, &arg_str) {
-            last_status_idx = i;
-            status = true;
-        } else if long_option_matches(opt_flags::WARN, &arg_str)
-            || (arg_str.starts_with('-') && !arg_str.starts_with("--") && arg_str.contains('w'))
-        {
-            last_warn_idx = i;
-            warn = true;
-        }
-    }
-
     let output_options = parse_ordered_output_options(&args_vec);
-    if status && warn && last_status_idx > last_warn_idx {
-        warn = false;
-    }
+    let check_output_options = parse_ordered_check_output_options(&args_vec);
 
     let matches = match ct_app().try_get_matches_from(args_vec) {
         Ok(m) => m,
@@ -1878,9 +1898,9 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
         binary: output_options.binary,
-        quiet: matches.get_flag(opt_flags::QUIET),
-        status,
-        warn,
+        quiet: check_output_options.quiet,
+        status: check_output_options.status,
+        warn: check_output_options.warn,
         strict: matches.get_flag(opt_flags::STRICT),
         ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
     };
@@ -1896,9 +1916,9 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     reject_verify_only_options_outside_check_mode(
         check,
         opts.quiet,
-        matches.get_flag(opt_flags::STATUS),
+        opts.status,
         opts.strict,
-        matches.get_flag(opt_flags::WARN),
+        opts.warn,
         opts.ignore_missing,
     )?;
 

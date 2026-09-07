@@ -1802,6 +1802,94 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -F \\x21 -w 12 input；输入为input=alpha\\x08beta gamma delta\\n（23字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共64字节的dumb索引；对应Cargo用例ptx_unescapes_flag_and_regexp_options_like_gnu第1次调用",
+      "args": [
+        "-F",
+        "\\x21",
+        "-w",
+        "12",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\010\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "         alpha!\n    !\b   beta!\n      !   delta\n      !   gamma!\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -F \\041 -w 12 input；输入为input=alpha\\x08beta gamma delta\\n（23字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共64字节的dumb索引；对应Cargo用例ptx_unescapes_flag_and_regexp_options_like_gnu第2次调用",
+      "args": [
+        "-F",
+        "\\041",
+        "-w",
+        "12",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\010\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "         alpha!\n    !\b   beta!\n      !   delta\n      !   gamma!\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -S \\c input；输入为input=alpha\\x08beta gamma delta\\n（23字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共214字节的dumb索引；对应Cargo用例ptx_unescapes_flag_and_regexp_options_like_gnu第3次调用",
+      "args": [
+        "-S",
+        "\\c",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\010\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                       alpha\bbeta gamma delta\n                              alpha\b   beta gamma delta\n                    alpha\bbeta gamma   delta\n                          alpha\bbeta   gamma delta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W \\b input；输入为input=alpha\\x08beta gamma delta\\n（23字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共57字节的dumb索引；对应Cargo用例ptx_unescapes_flag_and_regexp_options_like_gnu第4次调用",
+      "args": [
+        "-W",
+        "\\b",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\010\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                               alpha   \bbeta gamma delta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -445,6 +445,8 @@ pub struct CksumSemantic {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CksumSemanticInvocation {
     algo_name: &'static str,
+    algorithm_specified: bool,
+    infer_variable_length: bool,
     output_bits: usize,
     length: Option<usize>,
     debug: bool,
@@ -837,6 +839,11 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
 
     Ok(CksumSemanticDispatch::Invocation(CksumSemanticInvocation {
         algo_name: name,
+        algorithm_specified: matches.contains_id(opt_flags::ALGORITHM),
+        infer_variable_length: matches!(
+            algo_name,
+            CKSUM_ALGORITHM_OPTIONS_SHA2 | CKSUM_ALGORITHM_OPTIONS_SHA3
+        ),
         output_bits: bits,
         length,
         debug: matches.get_flag(opt_flags::DEBUG),
@@ -1141,6 +1148,21 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
             let (current_algo_name, mut current_digest, current_bits) = if let Some(tag) = line_algo
             {
                 if let Some((digest, bits, name)) = detect_algo_from_tag(tag) {
+                    if invocation.algorithm_specified && name != invocation.algo_name {
+                        bad_format += 1;
+                        if invocation.warn {
+                            push_stderr_line(
+                                &mut semantic.stderr_text,
+                                format!(
+                                    "{}: {}: improperly formatted {} checksum line",
+                                    f_name.display(),
+                                    line_num + 1,
+                                    algo_display_name(invocation.algo_name)
+                                ),
+                            );
+                        }
+                        continue;
+                    }
                     current_default_algo = name;
                     (name, digest, bits)
                 } else {
@@ -1175,11 +1197,13 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
 
                 if inferred_len.is_none() {
                     let is_blake2b = current_default_algo.eq_ignore_ascii_case("blake2b");
-                    let is_sha2_family = matches!(
-                        current_default_algo,
-                        "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
-                    );
-                    let is_sha3_family = current_default_algo.starts_with("sha3");
+                    let is_sha2_family = invocation.infer_variable_length
+                        && matches!(
+                            current_default_algo,
+                            "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
+                        );
+                    let is_sha3_family = invocation.infer_variable_length
+                        && current_default_algo.starts_with("sha3");
 
                     if is_blake2b || is_sha2_family || is_sha3_family {
                         let mut bits = 0;
@@ -1895,6 +1919,11 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     };
 
     let (name, algo, bits) = cksum_detect_algo(algo_name, length);
+    let algorithm_specified = matches.contains_id(opt_flags::ALGORITHM);
+    let infer_variable_length = matches!(
+        algo_name,
+        CKSUM_ALGORITHM_OPTIONS_SHA2 | CKSUM_ALGORITHM_OPTIONS_SHA3
+    );
 
     let output_format = if matches.get_flag(opt_flags::RAW) {
         CksumOutputFormat::Raw
@@ -1950,7 +1979,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             return Ok(1);
         }
 
-        if matches.contains_id(opt_flags::ALGORITHM)
+        if algorithm_specified
             && matches!(
                 opts.algo_name,
                 CKSUM_ALGORITHM_OPTIONS_BSD
@@ -1970,7 +1999,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             Some(v) => v.map(OsStr::new).collect(),
             None => vec![OsStr::new("-")],
         };
-        return cksum_check(opts, files);
+        return cksum_check(opts, files, algorithm_specified, infer_variable_length);
     }
 
     if let Some(message) = crc_debug_message(matches.get_flag(opt_flags::DEBUG), opts.algo_name) {
@@ -1985,7 +2014,12 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     Ok(0)
 }
 
-fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
+fn cksum_check(
+    opts: CksumOptions,
+    files: Vec<&OsStr>,
+    algorithm_specified: bool,
+    infer_variable_length: bool,
+) -> CTResult<i32> {
     let mut global_properly_formatted = 0;
     let mut bad_format = 0;
     let mut bad_checksum = 0;
@@ -2051,6 +2085,18 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
             let (current_algo_name, mut current_digest, current_bits) = if let Some(tag) = line_algo
             {
                 if let Some((d, b, n)) = detect_algo_from_tag(tag) {
+                    if algorithm_specified && n != opts.algo_name {
+                        bad_format += 1;
+                        if opts.warn {
+                            ctcore::ct_show_error!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                f_name.display(),
+                                line_num + 1,
+                                algo_display_name(opts.algo_name)
+                            );
+                        }
+                        continue;
+                    }
                     current_default_algo = n;
                     (n, d, b)
                 } else {
@@ -2082,11 +2128,13 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
 
                 if inferred_len.is_none() {
                     let is_blake2b = current_default_algo.eq_ignore_ascii_case("blake2b");
-                    let is_sha2_family = matches!(
-                        current_default_algo,
-                        "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
-                    );
-                    let is_sha3_family = current_default_algo.starts_with("sha3");
+                    let is_sha2_family = infer_variable_length
+                        && matches!(
+                            current_default_algo,
+                            "sha2" | "sha224" | "sha256" | "sha384" | "sha512"
+                        );
+                    let is_sha3_family =
+                        infer_variable_length && current_default_algo.starts_with("sha3");
 
                     if is_blake2b || is_sha2_family || is_sha3_family {
                         let mut bits = 0;

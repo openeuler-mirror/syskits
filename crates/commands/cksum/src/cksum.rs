@@ -560,6 +560,66 @@ fn long_option_matches(option: &str, arg: &str) -> bool {
     !arg.is_empty() && option.starts_with(arg)
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct OrderedOutputOptions {
+    untagged: bool,
+    binary: bool,
+    mode_selected: bool,
+}
+
+fn parse_ordered_output_options(args: &[OsString]) -> OrderedOutputOptions {
+    let mut options = OrderedOutputOptions::default();
+
+    for arg in args {
+        let arg = arg.to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+
+        if arg.starts_with("--") {
+            if long_option_matches(opt_flags::TAG, &arg) {
+                options.untagged = false;
+                options.binary = true;
+                options.mode_selected = true;
+            } else if long_option_matches(opt_flags::UNTAGGED, &arg) {
+                options.untagged = true;
+            } else if long_option_matches(opt_flags::BINARY, &arg) {
+                options.binary = true;
+                options.mode_selected = true;
+            } else if long_option_matches(opt_flags::TEXT, &arg) {
+                options.binary = false;
+                options.mode_selected = true;
+            }
+            continue;
+        }
+
+        let Some(short_options) = arg.strip_prefix('-') else {
+            continue;
+        };
+        if short_options.is_empty() {
+            continue;
+        }
+
+        for option in short_options.chars() {
+            match option {
+                'b' => {
+                    options.binary = true;
+                    options.mode_selected = true;
+                }
+                't' => {
+                    options.binary = false;
+                    options.mode_selected = true;
+                }
+                // The rest of a or l's token is their required value.
+                'a' | 'l' => break,
+                _ => {}
+            }
+        }
+    }
+
+    options
+}
+
 fn parse_cksum_length(
     algo_name: &str,
     input_length_str: Option<&String>,
@@ -621,68 +681,26 @@ fn parse_cksum_length(
 
 fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSemanticDispatch> {
     let args_vec: Vec<OsString> = args.collect();
-
-    let mut last_tag_idx = 0;
-    let mut last_untagged_idx = 0;
-    let mut last_binary_idx = 0;
-    let mut last_text_idx = 0;
     let mut last_status_idx = 0;
     let mut last_warn_idx = 0;
 
-    let mut untagged = false;
-    let mut tag = false;
-    let mut binary = false;
-    let mut text = false;
     let mut status = false;
     let mut warn = false;
 
     for (i, arg) in args_vec.iter().enumerate() {
         let arg_str = arg.to_string_lossy();
-        if arg_str == "--tag" {
-            last_tag_idx = i;
-            tag = true;
-            last_binary_idx = i;
-            binary = true;
-        } else if arg_str == "--untagged" {
-            last_untagged_idx = i;
-            untagged = true;
-        } else if arg_str == "--binary" || arg_str == "-b" {
-            last_binary_idx = i;
-            binary = true;
-        } else if arg_str == "--text" || arg_str == "-t" {
-            last_text_idx = i;
-            text = true;
-        } else if long_option_matches(opt_flags::STATUS, &arg_str) {
+        if long_option_matches(opt_flags::STATUS, &arg_str) {
             last_status_idx = i;
             status = true;
-        } else if arg_str == "-w" || long_option_matches(opt_flags::WARN, &arg_str) {
+        } else if long_option_matches(opt_flags::WARN, &arg_str)
+            || (arg_str.starts_with('-') && !arg_str.starts_with("--") && arg_str.contains('w'))
+        {
             last_warn_idx = i;
             warn = true;
-        } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
-            if arg_str.contains('b') {
-                last_binary_idx = i;
-                binary = true;
-            }
-            if arg_str.contains('t') {
-                last_text_idx = i;
-                text = true;
-            }
-            if arg_str.contains('w') {
-                last_warn_idx = i;
-                warn = true;
-            }
         }
     }
 
-    let binary_requested = binary;
-    let text_requested = text;
-
-    if untagged && tag && last_tag_idx > last_untagged_idx {
-        untagged = false;
-    }
-    if binary && text && last_text_idx > last_binary_idx {
-        binary = false;
-    }
+    let output_options = parse_ordered_output_options(&args_vec);
     if status && warn && last_status_idx > last_warn_idx {
         warn = false;
     }
@@ -709,7 +727,7 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         )));
     }
 
-    if !untagged && text_requested && !binary {
+    if !output_options.untagged && output_options.mode_selected && !output_options.binary {
         return Ok(CksumSemanticDispatch::Semantic(semantic_error(
             "--text mode is only supported with --untagged",
         )));
@@ -732,15 +750,10 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
             )));
         }
 
-        if binary_requested || text_requested {
-            let text_selected =
-                text_requested && (!binary_requested || last_text_idx > last_binary_idx);
-            let message = if text_selected && !untagged {
-                "--text mode is only supported with --untagged"
-            } else {
-                "the --binary and --text options are meaningless when verifying checksums"
-            };
-            return Ok(CksumSemanticDispatch::Semantic(semantic_error(message)));
+        if output_options.mode_selected {
+            return Ok(CksumSemanticDispatch::Semantic(semantic_error(
+                "the --binary and --text options are meaningless when verifying checksums",
+            )));
         }
 
         if matches.contains_id(opt_flags::ALGORITHM)
@@ -769,10 +782,10 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         length,
         debug: matches.get_flag(opt_flags::DEBUG),
         files,
-        untagged,
+        untagged: output_options.untagged,
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
-        binary,
+        binary: output_options.binary,
         quiet: matches.get_flag(opt_flags::QUIET),
         status,
         warn,
@@ -1742,67 +1755,26 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     let args_vec: Vec<OsString> = args.collect();
 
-    let mut last_tag_idx = 0;
-    let mut last_untagged_idx = 0;
-    let mut last_binary_idx = 0;
-    let mut last_text_idx = 0;
     let mut last_status_idx = 0;
     let mut last_warn_idx = 0;
 
-    let mut untagged = false;
-    let mut tag = false;
-    let mut binary = false;
-    let mut text = false;
     let mut status = false;
     let mut warn = false;
 
     for (i, arg) in args_vec.iter().enumerate() {
         let arg_str = arg.to_string_lossy();
-        if arg_str == "--tag" {
-            last_tag_idx = i;
-            tag = true;
-            last_binary_idx = i;
-            binary = true;
-        } else if arg_str == "--untagged" {
-            last_untagged_idx = i;
-            untagged = true;
-        } else if arg_str == "--binary" || arg_str == "-b" {
-            last_binary_idx = i;
-            binary = true;
-        } else if arg_str == "--text" || arg_str == "-t" {
-            last_text_idx = i;
-            text = true;
-        } else if long_option_matches(opt_flags::STATUS, &arg_str) {
+        if long_option_matches(opt_flags::STATUS, &arg_str) {
             last_status_idx = i;
             status = true;
-        } else if arg_str == "-w" || long_option_matches(opt_flags::WARN, &arg_str) {
+        } else if long_option_matches(opt_flags::WARN, &arg_str)
+            || (arg_str.starts_with('-') && !arg_str.starts_with("--") && arg_str.contains('w'))
+        {
             last_warn_idx = i;
             warn = true;
-        } else if arg_str.starts_with('-') && !arg_str.starts_with("--") {
-            if arg_str.contains('b') {
-                last_binary_idx = i;
-                binary = true;
-            }
-            if arg_str.contains('t') {
-                last_text_idx = i;
-                text = true;
-            }
-            if arg_str.contains('w') {
-                last_warn_idx = i;
-                warn = true;
-            }
         }
     }
 
-    let binary_requested = binary;
-    let text_requested = text;
-
-    if untagged && tag && last_tag_idx > last_untagged_idx {
-        untagged = false;
-    }
-    if binary && text && last_text_idx > last_binary_idx {
-        binary = false;
-    }
+    let output_options = parse_ordered_output_options(&args_vec);
     if status && warn && last_status_idx > last_warn_idx {
         warn = false;
     }
@@ -1902,10 +1874,10 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         digest: algo,
         output_bits: bits,
         length,
-        untagged,
+        untagged: output_options.untagged,
         output_format,
         zero: matches.get_flag(opt_flags::ZERO),
-        binary,
+        binary: output_options.binary,
         quiet: matches.get_flag(opt_flags::QUIET),
         status,
         warn,
@@ -1913,7 +1885,7 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
     };
 
-    if !opts.untagged && text_requested && !opts.binary {
+    if !opts.untagged && output_options.mode_selected && !opts.binary {
         return Err(CTsageError::new(
             1,
             "--text mode is only supported with --untagged",
@@ -1936,17 +1908,10 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             return Ok(1);
         }
 
-        if binary_requested || text_requested {
-            let text_selected =
-                text_requested && (!binary_requested || last_text_idx > last_binary_idx);
-
-            if text_selected && !untagged {
-                ctcore::ct_show_error!("--text mode is only supported with --untagged");
-            } else {
-                ctcore::ct_show_error!(
-                    "the --binary and --text options are meaningless when verifying checksums"
-                );
-            }
+        if output_options.mode_selected {
+            ctcore::ct_show_error!(
+                "the --binary and --text options are meaningless when verifying checksums"
+            );
             return Ok(1);
         }
 

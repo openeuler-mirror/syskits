@@ -230,7 +230,7 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
 
     if let Some(len_str) = tag.strip_prefix("BLAKE2B-") {
         if let Ok(bits) = len_str.parse::<usize>() {
-            if bits % 8 == 0 && bits <= 512 {
+            if bits > 0 && bits % 8 == 0 && bits <= 512 {
                 return Some((
                     Box::new(CtBlake2b::with_output_bytes(bits / 8)) as Box<dyn CtDigest>,
                     bits,

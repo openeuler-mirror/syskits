@@ -1589,6 +1589,106 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，145字节，内容=SHA512 (file) = ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f\\n；预期RC=1，stderr为56字节、内容=cksum: sums: no properly formatted checksum lines found\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例cksum_explicit_algorithm_is_not_overridden_by_the_manifest第1次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\123\\110\\101\\065\\061\\062\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\144\\144\\141\\146\\063\\065\\141\\061\\071\\063\\066\\061\\067\\141\\142\\141\\143\\143\\064\\061\\067\\063\\064\\071\\141\\145\\062\\060\\064\\061\\063\\061\\061\\062\\145\\066\\146\\141\\064\\145\\070\\071\\141\\071\\067\\145\\141\\062\\060\\141\\071\\145\\145\\145\\145\\066\\064\\142\\065\\065\\144\\063\\071\\141\\062\\061\\071\\062\\071\\071\\062\\141\\062\\067\\064\\146\\143\\061\\141\\070\\063\\066\\142\\141\\063\\143\\062\\063\\141\\063\\146\\145\\145\\142\\142\\144\\064\\065\\064\\144\\064\\064\\062\\063\\066\\064\\063\\143\\145\\070\\060\\145\\062\\141\\071\\141\\143\\071\\064\\146\\141\\065\\064\\143\\141\\064\\071\\146\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: sums: no properly formatted checksum lines found\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，135字节，内容=ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f  file\\n；预期RC=1，stderr为56字节、内容=cksum: sums: no properly formatted checksum lines found\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例cksum_explicit_algorithm_is_not_overridden_by_the_manifest第2次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\144\\141\\146\\063\\065\\141\\061\\071\\063\\066\\061\\067\\141\\142\\141\\143\\143\\064\\061\\067\\063\\064\\071\\141\\145\\062\\060\\064\\061\\063\\061\\061\\062\\145\\066\\146\\141\\064\\145\\070\\071\\141\\071\\067\\145\\141\\062\\060\\141\\071\\145\\145\\145\\145\\066\\064\\142\\065\\065\\144\\063\\071\\141\\062\\061\\071\\062\\071\\071\\062\\141\\062\\067\\064\\146\\143\\061\\141\\070\\063\\066\\142\\141\\063\\143\\062\\063\\141\\063\\146\\145\\145\\142\\142\\144\\064\\065\\064\\144\\064\\064\\062\\063\\066\\064\\063\\143\\145\\070\\060\\145\\062\\141\\071\\141\\143\\071\\064\\146\\141\\065\\064\\143\\141\\064\\071\\146\\040\\040\\146\\151\\154\\145\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: sums: no properly formatted checksum lines found\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，81字节，内容=SHA256 (file) = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_explicit_algorithm_is_not_overridden_by_the_manifest第3次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\123\\110\\101\\062\\065\\066\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=blake2b --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，54字节，内容=BLAKE2b-128 (file) = cf4ab791c62b8d2b2109c90275287816\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_explicit_algorithm_is_not_overridden_by_the_manifest第4次调用",
+      "args": [
+        "--algorithm=blake2b",
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\102\\114\\101\\113\\105\\062\\142\\055\\061\\062\\070\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\143\\146\\064\\141\\142\\067\\071\\061\\143\\066\\062\\142\\070\\144\\062\\142\\062\\061\\060\\071\\143\\071\\060\\062\\067\\065\\062\\070\\067\\070\\061\\066\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

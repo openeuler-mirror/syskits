@@ -1897,11 +1897,11 @@ fn ptx_format_roff_line_bytes(
 /// 执行 PTX 命令的核心逻辑
 fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
-        BufWriter::new(if settings.output_filename == "-" {
-            Box::new(stdout())
-        } else {
-            let file = File::create(&settings.output_filename).map_err_context(String::new)?;
+        BufWriter::new(if let Some(output_filename) = &settings.output_filename {
+            let file = File::create(output_filename).map_err_context(String::new)?;
             Box::new(file)
+        } else {
+            Box::new(stdout())
         });
 
     let context_reg = compile_regex_lossy(&settings.config.context_regex);
@@ -2241,7 +2241,7 @@ pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> C
         }
     };
     let settings = PtxSettings::from_matches(matches)?;
-    if settings.output_filename != "-" {
+    if settings.output_filename.is_some() {
         ptx_exec(&settings)?;
         return Ok(());
     }
@@ -2421,7 +2421,7 @@ mod ptx_options {
 }
 
 /// PTX 命令的运行配置
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct PtxSettings {
     /// 基础配置选项
     config: PtxConfig,
@@ -2430,7 +2430,7 @@ struct PtxSettings {
     /// 单词引用集合
     words: BTreeSet<WordRef>,
     /// 输出文件名
-    output_filename: String,
+    output_filename: Option<String>,
 }
 
 impl PtxSettings {
@@ -2463,9 +2463,9 @@ impl PtxSettings {
 
         // 确定输出文件名
         let output_file = if !config.is_gnu_ext && input_files.len() == 2 {
-            input_files.pop().unwrap()
+            input_files.pop()
         } else {
-            "-".to_string()
+            None
         };
 
         // 创建设置
@@ -2477,17 +2477,6 @@ impl PtxSettings {
         };
 
         Ok(settings)
-    }
-}
-
-impl Default for PtxSettings {
-    fn default() -> Self {
-        Self {
-            config: PtxConfig::default(),
-            file_map: FileMap::new(),
-            words: BTreeSet::new(),
-            output_filename: "-".to_string(),
-        }
     }
 }
 
@@ -3035,12 +3024,14 @@ mod tests {
                     set.insert(test_word_ref("test", 0, 6, 10));
                     set
                 },
-                output_filename: NamedTempFile::new()
-                    .unwrap()
-                    .path()
-                    .to_str()
-                    .unwrap()
-                    .to_string(),
+                output_filename: Some(
+                    NamedTempFile::new()
+                        .unwrap()
+                        .path()
+                        .to_str()
+                        .unwrap()
+                        .to_string(),
+                ),
             };
 
             let result = ptx_exec(&settings);
@@ -3060,7 +3051,7 @@ mod tests {
                     set.insert(test_word_ref("test", 0, 0, 4));
                     set
                 },
-                output_filename: "-".to_string(),
+                output_filename: None,
             };
 
             let result = ptx_exec(&settings);

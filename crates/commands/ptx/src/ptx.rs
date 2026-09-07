@@ -30,7 +30,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use onig::{Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
+use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
@@ -115,6 +115,65 @@ impl Iterator for RegexFindIter<'_, '_> {
 }
 
 #[derive(Debug)]
+struct ByteRegex {
+    search: OnigRegex,
+    longest: OnigRegex,
+}
+
+impl ByteRegex {
+    fn find_at(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
+        let mut region = Region::new();
+        let start = self.search.search_with_encoding(
+            EncodedBytes::ascii(bytes),
+            from,
+            bytes.len(),
+            SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut region),
+        )?;
+        let (_, end) = self
+            .longest
+            .find_with_encoding(EncodedBytes::ascii(&bytes[start..]))?;
+        Some((start, start + end))
+    }
+
+    fn find_iter<'r, 't>(&'r self, bytes: &'t [u8]) -> ByteRegexFindIter<'r, 't> {
+        ByteRegexFindIter {
+            regex: self,
+            bytes,
+            next_start: 0,
+            previous_end: None,
+        }
+    }
+}
+
+struct ByteRegexFindIter<'r, 't> {
+    regex: &'r ByteRegex,
+    bytes: &'t [u8],
+    next_start: usize,
+    previous_end: Option<usize>,
+}
+
+impl Iterator for ByteRegexFindIter<'_, '_> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.next_start > self.bytes.len() {
+                return None;
+            }
+            let (start, end) = self.regex.find_at(self.bytes, self.next_start)?;
+            if start == end && self.previous_end == Some(end) {
+                self.next_start = end + 1;
+                continue;
+            }
+            self.previous_end = Some(end);
+            self.next_start = end;
+            return Some((start, end));
+        }
+    }
+}
+
+#[derive(Debug)]
 enum OutFormat {
     Dumb,
     Roff,
@@ -179,10 +238,17 @@ struct PtxConfig {
     macro_bytes: Vec<u8>,
     /// 上下文正则表达式
     context_regex: String,
+    /// 非UTF-8上下文正则的原始字节模式及编译结果。
+    context_byte_pattern: Option<Vec<u8>>,
+    context_byte_regex: Option<ByteRegex>,
     /// break-file定义的分词边界，输出布局阶段必须复用同一规则。
     word_break_bytes: Option<HashSet<u8>>,
     /// 用户指定的word regexp，字段规划阶段按GNU re_match语义复用。
     word_regex: Option<Regex>,
+    /// 非UTF-8单词正则按原始字节执行。
+    word_byte_regex: Option<ByteRegex>,
+    /// 保证内部文本偏移与原始字节一一对应。
+    force_byte_mode: bool,
 }
 
 impl Default for PtxConfig {
@@ -199,8 +265,12 @@ impl Default for PtxConfig {
             trunc_str: "/".to_owned(),
             trunc_bytes: b"/".to_vec(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
+            context_byte_pattern: None,
+            context_byte_regex: None,
             word_break_bytes: None,
             word_regex: None,
+            word_byte_regex: None,
+            force_byte_mode: false,
             line_width: 72,
             gap_size: 3,
         }
@@ -238,18 +308,22 @@ fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> std::io::R
 }
 
 fn gnu_emacs_regex_to_rust(pattern: &str) -> String {
-    let chars: Vec<char> = pattern.chars().collect();
-    let mut translated = String::with_capacity(pattern.len());
+    String::from_utf8(gnu_emacs_regex_to_onig_bytes(pattern.as_bytes()))
+        .expect("UTF-8 pattern translation must remain UTF-8")
+}
+
+fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8]) -> Vec<u8> {
+    let mut translated = Vec::with_capacity(pattern.len());
     let mut escaped = false;
     let mut in_bracket = false;
 
-    for (index, &ch) in chars.iter().enumerate() {
+    for (index, &byte) in pattern.iter().enumerate() {
         if escaped {
-            if !in_bracket && matches!(ch, '(' | ')' | '|') {
+            if !in_bracket && matches!(byte, b'(' | b')' | b'|') {
                 translated.pop();
-                translated.push(ch);
+                translated.push(byte);
             } else {
-                translated.push(ch);
+                translated.push(byte);
             }
             escaped = false;
             continue;
@@ -257,24 +331,24 @@ fn gnu_emacs_regex_to_rust(pattern: &str) -> String {
 
         // Emacs syntax treats the nested '[' literally; Rust otherwise parses a POSIX class.
         if !in_bracket
-            && ch == '['
-            && chars.get(index + 1) == Some(&'[')
-            && chars.get(index + 2) == Some(&':')
+            && byte == b'['
+            && pattern.get(index + 1) == Some(&b'[')
+            && pattern.get(index + 2) == Some(&b':')
         {
-            translated.push('[');
-            translated.push('\\');
+            translated.push(b'[');
+            translated.push(b'\\');
         } else {
-            if !in_bracket && matches!(ch, '(' | ')' | '|') {
-                translated.push('\\');
+            if !in_bracket && matches!(byte, b'(' | b')' | b'|') {
+                translated.push(b'\\');
             }
-            translated.push(ch);
+            translated.push(byte);
         }
 
-        if ch == '\\' {
+        if byte == b'\\' {
             escaped = true;
-        } else if ch == '[' && !in_bracket {
+        } else if byte == b'[' && !in_bracket {
             in_bracket = true;
-        } else if ch == ']' && in_bracket {
+        } else if byte == b']' && in_bracket {
             in_bracket = false;
         }
     }
@@ -294,6 +368,8 @@ struct WordFilter {
     ignore_set: HashSet<Vec<u8>>,
     /// 用于匹配单词的正则表达式
     word_regex: String,
+    /// 非UTF-8自定义单词正则的原始字节模式。
+    word_byte_pattern: Option<Vec<u8>>,
     /// break-file中的边界字符。
     break_set: Option<HashSet<u8>>,
     /// 是否使用用户指定的word regexp。
@@ -355,18 +431,26 @@ impl WordFilter {
             None
         };
         // Ignore empty string regex from cmd-line-args
-        let arg_reg: Option<String> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
+        let arg_reg_bytes: Option<Vec<u8>> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
             match matches.get_one::<OsString>(ptx_options::PTX_WORD_REGEXP) {
                 Some(v) => {
-                    let v = ptx_unescape_os_option(v);
-                    if v.is_empty() { None } else { Some(v) }
+                    let value = ptx_unescape_bytes(v.as_os_str().as_bytes());
+                    if value.is_empty() { None } else { Some(value) }
                 }
                 None => None,
             }
         } else {
             None
         };
-        let uses_custom_regex = arg_reg.is_some();
+        let uses_custom_regex = arg_reg_bytes.is_some();
+        let word_byte_pattern = arg_reg_bytes
+            .as_ref()
+            .filter(|pattern| std::str::from_utf8(pattern).is_err())
+            .map(|pattern| gnu_emacs_regex_to_onig_bytes(pattern));
+        let arg_reg = arg_reg_bytes.as_ref().map(|bytes| {
+            let byte_mode = std::str::from_utf8(bytes).is_err();
+            ptx_internal_text(bytes, byte_mode)
+        });
         let reg = match arg_reg {
             Some(arg_reg) => gnu_emacs_regex_to_rust(&arg_reg),
             None => {
@@ -397,6 +481,7 @@ impl WordFilter {
             only_set: oset,
             ignore_set: iset,
             word_regex: reg,
+            word_byte_pattern,
             break_set,
             uses_custom_regex,
         })
@@ -411,6 +496,7 @@ impl Default for WordFilter {
             only_set: HashSet::new(),
             ignore_set: HashSet::new(),
             word_regex: "[A-Za-z]+".to_string(),
+            word_byte_pattern: None,
             break_set: None,
             uses_custom_regex: false,
         }
@@ -564,12 +650,6 @@ fn ptx_unescape_bytes(bytes: &[u8]) -> Vec<u8> {
     output
 }
 
-fn ptx_unescape_os_option(value: &OsString) -> String {
-    let bytes = ptx_unescape_bytes(value.as_os_str().as_bytes());
-    let byte_mode = std::str::from_utf8(&bytes).is_err();
-    ptx_internal_text(&bytes, byte_mode)
-}
-
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     let mut config = PtxConfig::default();
     let err_msg = "parsing options failed";
@@ -579,11 +659,17 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         "\n".clone_into(&mut config.context_regex);
     }
     if let Some(reg) = matches.get_one::<OsString>(ptx_options::PTX_SENTENCE_REGEXP) {
-        let reg = ptx_unescape_os_option(reg);
-        config.context_regex = if reg.is_empty() {
+        let bytes = ptx_unescape_bytes(reg.as_os_str().as_bytes());
+        let byte_mode = std::str::from_utf8(&bytes).is_err();
+        if byte_mode {
+            config.context_byte_pattern = Some(gnu_emacs_regex_to_onig_bytes(&bytes));
+            config.force_byte_mode = true;
+        }
+        let internal = ptx_internal_text(&bytes, byte_mode);
+        config.context_regex = if internal.is_empty() {
             NEVER_MATCH_REGEX.to_string()
         } else {
-            gnu_emacs_regex_to_rust(&reg)
+            gnu_emacs_regex_to_rust(&internal)
         };
         // Note: Zero-length regex check is deferred to actual usage time
         // to match GNU ptx behavior (only errors when processing non-empty content)
@@ -696,6 +782,39 @@ fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, onig::Error>
     Ok(Regex { search, longest })
 }
 
+fn compile_user_byte_regex(pattern: &[u8], ignore_case: bool) -> CTResult<ByteRegex> {
+    compile_byte_regex(pattern, ignore_case).map_err(|_| {
+        CtSimpleError::new(
+            1,
+            format!(
+                "Invalid regular expression (for regexp '{}')",
+                String::from_utf8_lossy(pattern)
+            ),
+        )
+    })
+}
+
+fn compile_byte_regex(pattern: &[u8], ignore_case: bool) -> Result<ByteRegex, onig::Error> {
+    let mut options = RegexOptions::REGEX_OPTION_NONE;
+    if ignore_case {
+        options |= RegexOptions::REGEX_OPTION_IGNORECASE;
+    }
+    let search = OnigRegex::with_options_and_encoding(
+        EncodedBytes::ascii(pattern),
+        options,
+        Syntax::default(),
+    )?;
+    let mut longest_pattern = b"\\A(?:".to_vec();
+    longest_pattern.extend_from_slice(pattern);
+    longest_pattern.push(b')');
+    let longest = OnigRegex::with_options_and_encoding(
+        EncodedBytes::ascii(&longest_pattern),
+        options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
+        Syntax::default(),
+    )?;
+    Ok(ByteRegex { search, longest })
+}
+
 /// 文件内容
 ///
 /// 存储文件的行内容和字符级表示
@@ -785,6 +904,27 @@ fn context_regexp_matches_at_boundary(context_reg: &Regex, text: &str) -> bool {
     false
 }
 
+fn next_context_end_bytes(context_reg: &ByteRegex, bytes: &[u8], start: usize) -> usize {
+    match context_reg.find_at(bytes, start) {
+        Some((_, end)) if end > start => end,
+        _ => bytes.len(),
+    }
+}
+
+fn context_regexp_matches_at_boundary_bytes(context_reg: &ByteRegex, bytes: &[u8]) -> bool {
+    let mut context_start = 0usize;
+    while context_start < bytes.len() {
+        let Some((start, end)) = context_reg.find_at(bytes, context_start) else {
+            break;
+        };
+        if start == context_start {
+            return true;
+        }
+        context_start = end;
+    }
+    false
+}
+
 fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
     let mut trimmed = end;
     while trimmed > start {
@@ -793,6 +933,14 @@ fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
             Some(ch) if ch.is_whitespace() => trimmed -= ch.len_utf8(),
             _ => break,
         }
+    }
+    trimmed
+}
+
+fn trim_context_end_bytes(bytes: &[u8], start: usize, end: usize) -> usize {
+    let mut trimmed = end;
+    while trimmed > start && bytes[trimmed - 1].is_ascii_whitespace() {
+        trimmed -= 1;
     }
     trimmed
 }
@@ -885,7 +1033,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Resu
             }
             raw_text.extend_from_slice(line);
         }
-        let byte_mode = std::str::from_utf8(&raw_text).is_err();
+        let byte_mode = config.force_byte_mode || std::str::from_utf8(&raw_text).is_err();
         let lines: Vec<String> = raw_lines
             .iter()
             .map(|line| ptx_internal_text(line, byte_mode))
@@ -954,12 +1102,25 @@ fn ptx_create_word_set(
 
     for (file_idx, content) in file_map.iter().enumerate() {
         let mut context_start = 0usize;
-        while context_start < content.text.len() {
-            let context_end_raw = next_context_end(&ref_reg, &content.text, context_start);
-            let context_end = trim_context_end(&content.text, context_start, context_end_raw);
+        while context_start < content.raw_text.len() {
+            let (context_end_raw, context_end) = if let Some(byte_regex) =
+                &config.context_byte_regex
+            {
+                let raw_end = next_context_end_bytes(byte_regex, &content.raw_text, context_start);
+                let end = trim_context_end_bytes(&content.raw_text, context_start, raw_end);
+                (raw_end, end)
+            } else {
+                let raw_end = next_context_end(&ref_reg, &content.text, context_start);
+                let end = trim_context_end(&content.text, context_start, raw_end);
+                (raw_end, end)
+            };
             let context_text = &content.text[context_start..context_end];
 
-            let matches: Vec<(usize, usize)> = if let Some(break_set) = &filter.break_set {
+            let matches: Vec<(usize, usize)> = if let Some(byte_regex) = &config.word_byte_regex {
+                byte_regex
+                    .find_iter(&content.raw_text[context_start..context_end])
+                    .collect()
+            } else if let Some(break_set) = &filter.break_set {
                 let mut ranges = Vec::new();
                 let mut cursor = context_start;
                 while cursor < context_end {
@@ -1284,6 +1445,13 @@ fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize
 }
 
 fn ptx_maximum_word_length_in_bytes(bytes: &[u8], config: &PtxConfig) -> usize {
+    if let Some(regex) = &config.word_byte_regex {
+        return regex
+            .find_iter(bytes)
+            .map(|(start, end)| end - start)
+            .max()
+            .unwrap_or(0);
+    }
     if let (Some(regex), Ok(text)) = (&config.word_regex, std::str::from_utf8(bytes)) {
         return regex
             .find_iter(text)
@@ -1491,6 +1659,12 @@ fn ptx_skip_something_bytes(
 ) -> usize {
     if cursor >= limit {
         return cursor;
+    }
+    if let Some(regex) = &config.word_byte_regex {
+        return regex
+            .find_at(&bytes[cursor..limit], 0)
+            .filter(|&(start, end)| start == 0 && end > 0)
+            .map_or(cursor + 1, |(_, end)| cursor + end);
     }
     if let (Some(regex), Ok(segment)) = (
         &config.word_regex,
@@ -2853,7 +3027,12 @@ impl PtxSettings {
         if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
             && config.context_regex != NEVER_MATCH_REGEX
         {
-            compile_user_regex(&config.context_regex, config.is_ignore_case)?;
+            if let Some(pattern) = &config.context_byte_pattern {
+                config.context_byte_regex =
+                    Some(compile_user_byte_regex(pattern, config.is_ignore_case)?);
+            } else {
+                compile_user_regex(&config.context_regex, config.is_ignore_case)?;
+            }
         }
         if !config.is_gnu_ext && input_files.len() > 2 {
             return Err(CtSimpleError::new(
@@ -2870,15 +3049,23 @@ impl PtxSettings {
                 &word_filter.word_regex,
                 config.is_ignore_case,
             )?);
+            if let Some(pattern) = &word_filter.word_byte_pattern {
+                config.word_byte_regex =
+                    Some(compile_user_byte_regex(pattern, config.is_ignore_case)?);
+                config.force_byte_mode = true;
+            }
         }
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config).map_err_context(String::new)?;
         let context_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
-        if file_map
-            .iter()
-            .any(|content| context_regexp_matches_at_boundary(&context_reg, &content.text))
-        {
+        let has_boundary_match = file_map.iter().any(|content| {
+            config.context_byte_regex.as_ref().map_or_else(
+                || context_regexp_matches_at_boundary(&context_reg, &content.text),
+                |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
+            )
+        });
+        if has_boundary_match {
             return Err(ptx_zero_length_regex_error(&config.context_regex));
         }
 
@@ -3682,6 +3869,7 @@ mod tests {
                 only_set: HashSet::new(),
                 ignore_set: HashSet::new(),
                 word_regex: r"\w+".to_string(),
+                word_byte_pattern: None,
                 break_set: None,
                 uses_custom_regex: false,
             };

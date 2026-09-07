@@ -641,6 +641,8 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         if arg_str == "--tag" {
             last_tag_idx = i;
             tag = true;
+            last_binary_idx = i;
+            binary = true;
         } else if arg_str == "--untagged" {
             last_untagged_idx = i;
             untagged = true;
@@ -679,9 +681,6 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         untagged = false;
     }
     if binary && text && last_text_idx > last_binary_idx {
-        binary = false;
-    }
-    if binary && last_tag_idx > last_binary_idx {
         binary = false;
     }
     if status && warn && last_status_idx > last_warn_idx {
@@ -1756,6 +1755,8 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         if arg_str == "--tag" {
             last_tag_idx = i;
             tag = true;
+            last_binary_idx = i;
+            binary = true;
         } else if arg_str == "--untagged" {
             last_untagged_idx = i;
             untagged = true;
@@ -1794,9 +1795,6 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         untagged = false;
     }
     if binary && text && last_text_idx > last_binary_idx {
-        binary = false;
-    }
-    if binary && last_tag_idx > last_binary_idx {
         binary = false;
     }
     if status && warn && last_status_idx > last_warn_idx {
@@ -6013,6 +6011,44 @@ mod tests {
             assert_eq!(semantic.rows[0].bytes, Some(3));
             assert_eq!(semantic.rows[0].reported_size, Some(3));
             assert!(semantic.classic_text.contains("1219131554 3 "));
+        }
+
+        #[test]
+        fn test_cksum_native_semantic_tag_and_untagged_order() {
+            let temp_dir = Builder::new()
+                .prefix("test_cksum_native_semantic_tag_and_untagged_order")
+                .tempdir()
+                .unwrap();
+            let test_file_path = temp_dir.path().join("sample.txt");
+            fs::write(&test_file_path, "alpha\nbeta\ngamma\n").unwrap();
+            let digest = "4fdbc441ea7b546100e086ac1e4fc5ae6749b7314311c99db05be450eca12996";
+
+            for (format_args, expected) in [
+                (
+                    &["--tag", "--untagged"][..],
+                    format!("{digest} *{}\n", test_file_path.display()),
+                ),
+                (
+                    &["--untagged", "--tag"][..],
+                    format!("SHA256 ({}) = {digest}\n", test_file_path.display()),
+                ),
+            ] {
+                let semantic = cksum_native_semantic(
+                    ["cksum", "--algorithm=sha256"]
+                        .into_iter()
+                        .chain(format_args.iter().copied())
+                        .map(OsString::from)
+                        .chain(std::iter::once(test_file_path.as_os_str().to_owned())),
+                )
+                .expect("semantic");
+
+                assert_eq!(semantic.exit_code, 0, "format args: {format_args:?}");
+                assert_eq!(semantic.stderr_text, "", "format args: {format_args:?}");
+                assert_eq!(
+                    semantic.classic_text, expected,
+                    "format args: {format_args:?}"
+                );
+            }
         }
 
         #[test]

@@ -887,6 +887,56 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --tag --untagged text.txt；stdin为0字节、内容=空；输入fixture：file text.txt，mode=644，17字节，内容=alpha\\nbeta\\ngamma\\n；预期RC=0，stderr为0字节、内容=空，stdout为91字节/1条换行分隔、内容=4fdbc441ea7b546100e086ac1e4fc5ae6749b7314311c99db05be450eca12996 *text.txt\\n；迁移原Cargo用例cksum_tag_and_untagged_follow_argument_order第1次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--tag",
+        "--untagged",
+        "text.txt"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\164\\145\\170\\164\\056\\164\\170\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\142\\145\\164\\141\\012\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "4fdbc441ea7b546100e086ac1e4fc5ae6749b7314311c99db05be450eca12996 *text.txt\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --untagged --tag text.txt；stdin为0字节、内容=空；输入fixture：file text.txt，mode=644，17字节，内容=alpha\\nbeta\\ngamma\\n；预期RC=0，stderr为0字节、内容=空，stdout为101字节/1条换行分隔、内容=SHA256 (text.txt) = 4fdbc441ea7b546100e086ac1e4fc5ae6749b7314311c99db05be450eca12996\\n；迁移原Cargo用例cksum_tag_and_untagged_follow_argument_order第2次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--untagged",
+        "--tag",
+        "text.txt"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\164\\145\\170\\164\\056\\164\\170\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\142\\145\\164\\141\\012\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "SHA256 (text.txt) = 4fdbc441ea7b546100e086ac1e4fc5ae6749b7314311c99db05be450eca12996\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

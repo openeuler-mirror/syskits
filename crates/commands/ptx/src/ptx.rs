@@ -27,7 +27,6 @@ use clap::{Arg, ArgAction, Command, crate_version, error::ErrorKind};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use regex::Regex;
 use std::collections::{BTreeSet, HashSet};
@@ -594,7 +593,8 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
 
     let mut offset: usize = 0;
     for filename in files {
-        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+        let using_stdin = filename.is_empty() || filename == "-";
+        let reader: BufReader<Box<dyn Read>> = BufReader::new(if using_stdin {
             ctcore::ct_io::stdin_reader_box()
         } else {
             Box::new(File::open(filename)?)
@@ -617,7 +617,11 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
         let size = lines.len();
         // 直接 Push 到数组尾部
         file_map.push(FileContent {
-            filename: filename.to_owned(),
+            filename: if using_stdin {
+                String::new()
+            } else {
+                filename.to_owned()
+            },
             text,
             chars_text,
             byte_to_char,
@@ -739,7 +743,7 @@ fn ptx_get_reference(
     _context_reg: &Regex,
 ) -> String {
     if config.is_auto_ref {
-        format!("{}:{}", file_name.maybe_quote(), word_ref.local_line_nr + 1)
+        format!("{}:{}", file_name, word_ref.local_line_nr + 1)
     } else if config.is_input_ref {
         ptx_input_reference_text(line).to_string()
     } else {

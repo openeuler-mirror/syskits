@@ -180,7 +180,7 @@ struct PtxConfig {
     /// 上下文正则表达式
     context_regex: String,
     /// break-file定义的分词边界，输出布局阶段必须复用同一规则。
-    word_break_chars: Option<HashSet<char>>,
+    word_break_bytes: Option<HashSet<u8>>,
     /// 用户指定的word regexp，字段规划阶段按GNU re_match语义复用。
     word_regex: Option<Regex>,
 }
@@ -199,7 +199,7 @@ impl Default for PtxConfig {
             trunc_str: "/".to_owned(),
             trunc_bytes: b"/".to_vec(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
-            word_break_chars: None,
+            word_break_bytes: None,
             word_regex: None,
             line_width: 72,
             gap_size: 3,
@@ -227,18 +227,14 @@ fn read_word_filter_file(
 }
 
 /// reads contents of file as unique set of characters to be used with the break-file option
-fn read_char_filter_file(
-    matches: &clap::ArgMatches,
-    option: &str,
-) -> std::io::Result<HashSet<char>> {
+fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> std::io::Result<HashSet<u8>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut reader = File::open(filename)?;
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes)?;
-    let buffer = ptx_internal_text(&bytes, std::str::from_utf8(&bytes).is_err());
-    Ok(buffer.chars().collect())
+    Ok(bytes.into_iter().collect())
 }
 
 fn gnu_emacs_regex_to_rust(pattern: &str) -> String {
@@ -299,7 +295,7 @@ struct WordFilter {
     /// 用于匹配单词的正则表达式
     word_regex: String,
     /// break-file中的边界字符。
-    break_set: Option<HashSet<char>>,
+    break_set: Option<HashSet<u8>>,
     /// 是否使用用户指定的word regexp。
     uses_custom_regex: bool,
 }
@@ -341,18 +337,18 @@ impl WordFilter {
             } else {
                 (false, HashSet::new())
             };
-        let break_set: Option<HashSet<char>> = if matches.contains_id(ptx_options::PTX_BREAK_FILE)
+        let break_set: Option<HashSet<u8>> = if matches.contains_id(ptx_options::PTX_BREAK_FILE)
             && !matches.contains_id(ptx_options::PTX_WORD_REGEXP)
         {
-            let chars = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)
+            let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)
                 .map_err_context(String::new)?;
-            let mut hs: HashSet<char> = if config.is_gnu_ext {
+            let mut hs: HashSet<u8> = if config.is_gnu_ext {
                 HashSet::new() // really only chars found in file
             } else {
                 // GNU off means at least these are considered
-                [' ', '\t', '\n'].iter().cloned().collect()
+                [b' ', b'\t', b'\n'].iter().cloned().collect()
             };
-            hs.extend(chars);
+            hs.extend(bytes);
             Some(hs)
         } else {
             // if -W takes precedence or default
@@ -380,6 +376,7 @@ impl WordFilter {
                         break_set
                             .iter()
                             .copied()
+                            .map(char::from)
                             .map(|c| if REGEX_CHARCLASS.contains(c) {
                                 format!("\\{c}")
                             } else {
@@ -962,7 +959,27 @@ fn ptx_create_word_set(
             let context_end = trim_context_end(&content.text, context_start, context_end_raw);
             let context_text = &content.text[context_start..context_end];
 
-            for (start, end) in reg.find_iter(context_text) {
+            let matches: Vec<(usize, usize)> = if let Some(break_set) = &filter.break_set {
+                let mut ranges = Vec::new();
+                let mut cursor = context_start;
+                while cursor < context_end {
+                    while cursor < context_end && break_set.contains(&content.raw_text[cursor]) {
+                        cursor += 1;
+                    }
+                    let start = cursor;
+                    while cursor < context_end && !break_set.contains(&content.raw_text[cursor]) {
+                        cursor += 1;
+                    }
+                    if start < cursor {
+                        ranges.push((start - context_start, cursor - context_start));
+                    }
+                }
+                ranges
+            } else {
+                reg.find_iter(context_text).collect()
+            };
+
+            for (start, end) in matches {
                 let (global_beg, global_end) = (context_start + start, context_start + end);
                 let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
                 let line_start = content.line_starts[local_line_nr];
@@ -1161,8 +1178,8 @@ fn ptx_skip_white_backwards(chars: &[char], mut cursor: usize, start: usize) -> 
 }
 
 fn ptx_is_default_word_char(config: &PtxConfig, c: char) -> bool {
-    if let Some(break_chars) = &config.word_break_chars {
-        return !break_chars.contains(&c);
+    if let Some(break_bytes) = &config.word_break_bytes {
+        return u8::try_from(c).is_ok_and(|byte| !break_bytes.contains(&byte));
     }
     if config.is_gnu_ext {
         c.is_ascii_alphabetic()
@@ -1442,8 +1459,8 @@ struct PtxOutputFieldsBytes {
 }
 
 fn ptx_is_default_word_byte(config: &PtxConfig, byte: u8) -> bool {
-    if let Some(break_chars) = &config.word_break_chars {
-        return !break_chars.contains(&char::from(byte));
+    if let Some(break_bytes) = &config.word_break_bytes {
+        return !break_bytes.contains(&byte);
     }
     if config.is_gnu_ext {
         byte.is_ascii_alphabetic()
@@ -2847,7 +2864,7 @@ impl PtxSettings {
 
         // 创建单词过滤器
         let word_filter = WordFilter::new(&matches, &config)?;
-        config.word_break_chars = word_filter.break_set.clone();
+        config.word_break_bytes = word_filter.break_set.clone();
         if word_filter.uses_custom_regex {
             config.word_regex = Some(compile_user_regex(
                 &word_filter.word_regex,
@@ -3268,9 +3285,9 @@ mod tests {
 
             let chars = read_char_filter_file(&matches, ptx_options::PTX_BREAK_FILE).unwrap();
             assert_eq!(chars.len(), 3);
-            assert!(chars.contains(&'a'));
-            assert!(chars.contains(&'b'));
-            assert!(chars.contains(&'c'));
+            assert!(chars.contains(&b'a'));
+            assert!(chars.contains(&b'b'));
+            assert!(chars.contains(&b'c'));
         }
 
         #[test]

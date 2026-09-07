@@ -167,7 +167,7 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
         };
     }
 
-    let padding = calculate_padding(&first, &increment, &last);
+    let padding = calculate_padding(&first, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
     let format = select_output_format(&options, &first, &increment, &last, padding, largest_dec)?;
 
@@ -213,7 +213,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
     validate_option_compatibility(&options)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
-    let padding = calculate_padding(&first, &increment, &last);
+    let padding = calculate_padding(&first, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
     let format = select_output_format(&options, &first, &increment, &last, padding, largest_dec)?;
 
@@ -338,15 +338,8 @@ fn parse_number_arg(value: &str) -> CTResult<PreciseNumber> {
     Ok(number)
 }
 
-fn calculate_padding(
-    first: &PreciseNumber,
-    increment: &PreciseNumber,
-    last: &PreciseNumber,
-) -> usize {
-    first
-        .num_integral_digits
-        .max(increment.num_integral_digits)
-        .max(last.num_integral_digits)
+fn calculate_padding(first: &PreciseNumber, last: &PreciseNumber) -> usize {
+    first.num_integral_digits.max(last.num_integral_digits)
 }
 
 fn calculate_largest_decimal(first: &PreciseNumber, increment: &PreciseNumber) -> usize {
@@ -948,6 +941,16 @@ mod tests {
         // 测试零增量
         let result = done_printing(&1, &0, &1);
         assert!(!result, "Expected false for zero increment");
+    }
+
+    #[test]
+    fn test_equal_width_ignores_increment_sign_width() {
+        let first = "0.00916".parse::<PreciseNumber>().unwrap();
+        let increment = "-0.00004".parse::<PreciseNumber>().unwrap();
+        let last = "0.00912".parse::<PreciseNumber>().unwrap();
+
+        assert_eq!(calculate_padding(&first, &last), 1);
+        assert_eq!(increment.num_integral_digits, 2);
     }
 
     #[test]

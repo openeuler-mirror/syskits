@@ -321,7 +321,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     if matches.get_flag(ptx_options::PTX_TRADITIONAL) {
         config.is_gnu_ext = false;
         config.format = OutFormat::Roff;
-        "[^ \t\n]+".clone_into(&mut config.context_regex);
+        "\n".clone_into(&mut config.context_regex);
     }
     if let Some(reg) = matches.get_one::<String>(ptx_options::PTX_SENTENCE_REGEXP) {
         config.context_regex = reg.to_string();
@@ -2749,7 +2749,7 @@ mod tests {
             let config = get_config(&matches).unwrap();
             assert!(!config.is_gnu_ext);
             assert!(matches!(config.format, OutFormat::Roff));
-            assert_eq!(config.context_regex, "[^ \t\n]+");
+            assert_eq!(config.context_regex, "\n");
         }
 
         #[test]

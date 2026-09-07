@@ -3018,6 +3018,31 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -G -b breaks input；输入为breaks=\\xfe（1字节 fe）；input=aa\\xffbb\\xfecc\\n（9字节 6161ff6262fe63630a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共48字节的roff索引，首条stdout可读为“.xx \"\" \"\" \"aa\\xffbb\\xfecc\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d47",
+        "2d62",
+        "627265616b73",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\142\\162\\145\\141\\153\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\376' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\141\\377\\142\\142\\376\\143\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e787820222220222220226161ff6262fe6363222022220a2e787820222220226161ff6262fe2220226363222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

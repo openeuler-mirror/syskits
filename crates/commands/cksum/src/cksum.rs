@@ -1160,7 +1160,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 }
             };
 
-            if line.trim().is_empty() || line.trim().starts_with('#') {
+            if line.is_empty() || line.starts_with('#') {
                 continue;
             }
 
@@ -2109,7 +2109,7 @@ fn cksum_check(
                 }
             };
 
-            if line.trim().is_empty() || line.trim().starts_with('#') {
+            if line.is_empty() || line.starts_with('#') {
                 continue;
             }
 

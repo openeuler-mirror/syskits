@@ -1928,6 +1928,33 @@
       },
       "cleanup_commands": [],
       "tstdin": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  -\n"
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 --check --warn --strict sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，99字节，内容=# comment\\n\\n \\n # not-comment\\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  file\\n；预期RC=1，stderr为165字节、内容=cksum: sums: 3: improperly formatted SHA256 checksum line\\ncksum: sums: 4: improperly formatted SHA256 checksum line\\ncksum: WARNING: 2 lines are improperly formatted\\n，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_check_only_ignores_empty_and_first_column_comment_lines第1次调用",
+      "args": [
+        "--algorithm=sha256",
+        "--check",
+        "--warn",
+        "--strict",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\043\\040\\143\\157\\155\\155\\145\\156\\164\\012\\012\\040\\012\\040\\043\\040\\156\\157\\164\\055\\143\\157\\155\\155\\145\\156\\164\\012\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\040\\040\\146\\151\\154\\145\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "file: OK\n",
+          "stderr": "cksum: sums: 3: improperly formatted SHA256 checksum line\ncksum: sums: 4: improperly formatted SHA256 checksum line\ncksum: WARNING: 2 lines are improperly formatted\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

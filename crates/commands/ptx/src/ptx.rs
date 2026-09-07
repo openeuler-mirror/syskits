@@ -30,7 +30,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use regex::{Regex, RegexBuilder};
+use onig::{Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
@@ -43,6 +43,76 @@ use sys_locale::get_locale;
 const REGEX_CHARCLASS: &str = "^-]\\";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
+
+#[derive(Debug)]
+struct Regex {
+    search: OnigRegex,
+    longest: OnigRegex,
+}
+
+impl Regex {
+    #[cfg(test)]
+    fn new(pattern: &str) -> Result<Self, onig::Error> {
+        compile_regex(pattern, false)
+    }
+
+    fn find(&self, text: &str) -> Option<(usize, usize)> {
+        self.find_at(text, 0)
+    }
+
+    fn find_at(&self, text: &str, from: usize) -> Option<(usize, usize)> {
+        let mut region = Region::new();
+        let start = self.search.search_with_options(
+            text,
+            from,
+            text.len(),
+            SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut region),
+        )?;
+        let (_, end) = self.longest.find(&text[start..])?;
+        Some((start, start + end))
+    }
+
+    fn find_iter<'r, 't>(&'r self, text: &'t str) -> RegexFindIter<'r, 't> {
+        RegexFindIter {
+            regex: self,
+            text,
+            next_start: 0,
+            previous_end: None,
+        }
+    }
+}
+
+struct RegexFindIter<'r, 't> {
+    regex: &'r Regex,
+    text: &'t str,
+    next_start: usize,
+    previous_end: Option<usize>,
+}
+
+impl Iterator for RegexFindIter<'_, '_> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.next_start > self.text.len() {
+                return None;
+            }
+            let (start, end) = self.regex.find_at(self.text, self.next_start)?;
+            if start == end && self.previous_end == Some(end) {
+                let next = self.text[end..]
+                    .chars()
+                    .next()
+                    .map_or(self.text.len() + 1, |ch| end + ch.len_utf8());
+                self.next_start = next;
+                continue;
+            }
+            self.previous_end = Some(end);
+            self.next_start = end;
+            return Some((start, end));
+        }
+    }
+}
 
 #[derive(Debug)]
 enum OutFormat {
@@ -573,11 +643,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
 }
 
 fn compile_regex_case_lossy(pattern: &str, ignore_case: bool) -> Regex {
-    let build = |pattern: &str| {
-        RegexBuilder::new(pattern)
-            .case_insensitive(ignore_case)
-            .build()
-    };
+    let build = |pattern: &str| compile_regex(pattern, ignore_case);
     if let Ok(re) = build(pattern) {
         return re;
     }
@@ -594,15 +660,27 @@ fn compile_regex_case_lossy(pattern: &str, ignore_case: bool) -> Regex {
 }
 
 fn compile_user_regex(pattern: &str, ignore_case: bool) -> CTResult<Regex> {
-    RegexBuilder::new(pattern)
-        .case_insensitive(ignore_case)
-        .build()
-        .map_err(|_| {
-            CtSimpleError::new(
-                1,
-                format!("Invalid regular expression (for regexp '{pattern}')"),
-            )
-        })
+    compile_regex(pattern, ignore_case).map_err(|_| {
+        CtSimpleError::new(
+            1,
+            format!("Invalid regular expression (for regexp '{pattern}')"),
+        )
+    })
+}
+
+fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, onig::Error> {
+    let mut options = RegexOptions::REGEX_OPTION_NONE;
+    if ignore_case {
+        options |= RegexOptions::REGEX_OPTION_IGNORECASE;
+    }
+    let search = OnigRegex::with_options(pattern, options, Syntax::default())?;
+    let longest_pattern = format!(r"\A(?:{pattern})");
+    let longest = OnigRegex::with_options(
+        &longest_pattern,
+        options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
+        Syntax::default(),
+    )?;
+    Ok(Regex { search, longest })
 }
 
 /// 文件内容
@@ -675,7 +753,7 @@ fn ptx_internal_text(bytes: &[u8], byte_mode: bool) -> String {
 
 fn next_context_end(context_reg: &Regex, text: &str, start: usize) -> usize {
     match context_reg.find_at(text, start) {
-        Some(m) if m.end() > start => m.end(),
+        Some((_, end)) if end > start => end,
         _ => text.len(),
     }
 }
@@ -683,13 +761,13 @@ fn next_context_end(context_reg: &Regex, text: &str, start: usize) -> usize {
 fn context_regexp_matches_at_boundary(context_reg: &Regex, text: &str) -> bool {
     let mut context_start = 0usize;
     while context_start < text.len() {
-        let Some(matched) = context_reg.find_at(text, context_start) else {
+        let Some((start, end)) = context_reg.find_at(text, context_start) else {
             break;
         };
-        if matched.start() == context_start {
+        if start == context_start {
             return true;
         }
-        context_start = matched.end();
+        context_start = end;
     }
     false
 }
@@ -868,9 +946,8 @@ fn ptx_create_word_set(
             let context_end = trim_context_end(&content.text, context_start, context_end_raw);
             let context_text = &content.text[context_start..context_end];
 
-            for mat in reg.find_iter(context_text) {
-                let (global_beg, global_end) =
-                    (context_start + mat.start(), context_start + mat.end());
+            for (start, end) in reg.find_iter(context_text) {
+                let (global_beg, global_end) = (context_start + start, context_start + end);
                 let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
                 let line_start = content.line_starts[local_line_nr];
                 let line = &content.lines[local_line_nr];
@@ -1081,9 +1158,9 @@ fn ptx_skip_something(chars: &[char], cursor: usize, limit: usize, config: &PtxC
         let segment: String = chars[cursor..limit].iter().collect();
         return regex
             .find(&segment)
-            .filter(|matched| matched.start() == 0 && matched.end() > 0)
-            .map_or(cursor + 1, |matched| {
-                cursor + matched.as_str().chars().count()
+            .filter(|&(start, end)| start == 0 && end > 0)
+            .map_or(cursor + 1, |(_, end)| {
+                cursor + segment[..end].chars().count()
             });
     }
 
@@ -1148,7 +1225,7 @@ fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize
         let text: String = chars.iter().collect();
         return regex
             .find_iter(&text)
-            .map(|matched| matched.as_str().chars().count())
+            .map(|(start, end)| text[start..end].chars().count())
             .max()
             .unwrap_or(0);
     }
@@ -1172,7 +1249,7 @@ fn ptx_maximum_word_length_in_bytes(bytes: &[u8], config: &PtxConfig) -> usize {
     if let (Some(regex), Ok(text)) = (&config.word_regex, std::str::from_utf8(bytes)) {
         return regex
             .find_iter(text)
-            .map(|matched| matched.end() - matched.start())
+            .map(|(start, end)| end - start)
             .max()
             .unwrap_or(0);
     }
@@ -1383,8 +1460,8 @@ fn ptx_skip_something_bytes(
     ) {
         return regex
             .find(segment)
-            .filter(|matched| matched.start() == 0 && matched.end() > 0)
-            .map_or(cursor + 1, |matched| cursor + matched.end());
+            .filter(|&(start, end)| start == 0 && end > 0)
+            .map_or(cursor + 1, |(_, end)| cursor + end);
     }
 
     let mut next = cursor;
@@ -1824,9 +1901,9 @@ fn context_bounds(
     }
 
     let mut left = base_start;
-    for m in context_reg.find_iter(line) {
-        if m.end() <= keyword_beg {
-            left = m.end();
+    for (_, end) in context_reg.find_iter(line) {
+        if end <= keyword_beg {
+            left = end;
         } else {
             break;
         }
@@ -1834,9 +1911,9 @@ fn context_bounds(
     left = left.max(base_start);
 
     let mut right = line.len();
-    for m in context_reg.find_iter(line) {
-        if m.start() >= keyword_end {
-            right = m.end();
+    for (start, end) in context_reg.find_iter(line) {
+        if start >= keyword_end {
+            right = end;
             break;
         }
     }

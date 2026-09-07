@@ -2762,6 +2762,69 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W \\(.\\)\\1 input；输入为input=x aa ab bb\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共90字节的dumb索引；对应Cargo用例ptx_custom_regexps_support_backreferences_and_longest_matches第1次调用",
+      "args": [
+        "-W",
+        "\\(.\\)\\1",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\170\\040\\141\\141\\040\\141\\142\\040\\142\\142\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                   x   aa ab bb\n                             x aa ab   bb\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W a\\|aa input；输入为input=x aa ab bb\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共93字节的dumb索引；对应Cargo用例ptx_custom_regexps_support_backreferences_and_longest_matches第2次调用",
+      "args": [
+        "-W",
+        "a\\|aa",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\170\\040\\141\\141\\040\\141\\142\\040\\142\\142\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                x aa   ab bb\n                                   x   aa ab bb\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -S \\(.\\)\\1 input；输入为input=x aa ab bb\\n（11字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共174字节的dumb索引；对应Cargo用例ptx_custom_regexps_support_backreferences_and_longest_matches第3次调用",
+      "args": [
+        "-S",
+        "\\(.\\)\\1",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\170\\040\\141\\141\\040\\141\\142\\040\\142\\142\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                   x   aa\n                                        ab bb\n                                  ab   bb\n                                       x aa\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

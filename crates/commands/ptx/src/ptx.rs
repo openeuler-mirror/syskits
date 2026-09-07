@@ -33,7 +33,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
+use std::io::{BufReader, BufWriter, Read, Write, stdout};
 use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
 
@@ -136,18 +136,15 @@ fn read_word_filter_file(
         .get_one::<String>(option)
         .expect("parsing options failed!")
         .to_string();
-    let file = File::open(filename)?;
-    let mut reader = BufReader::new(file);
+    let mut file = File::open(filename)?;
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)?;
+    let byte_mode = std::str::from_utf8(&contents).is_err();
     let mut words: HashSet<String> = HashSet::new();
-    let mut word = String::new();
-    while reader.read_line(&mut word)? != 0 {
-        if word.ends_with('\n') {
-            word.pop();
-        }
+    for line in contents.split(|&byte| byte == b'\n') {
+        let word = ptx_internal_text(line, byte_mode);
         if !word.is_empty() {
-            words.insert(std::mem::take(&mut word));
-        } else {
-            word.clear();
+            words.insert(word);
         }
     }
     Ok(words)
@@ -162,8 +159,9 @@ fn read_char_filter_file(
         .get_one::<String>(option)
         .expect("parsing options failed!");
     let mut reader = File::open(filename)?;
-    let mut buffer = String::new();
-    reader.read_to_string(&mut buffer)?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
+    let buffer = ptx_internal_text(&bytes, std::str::from_utf8(&bytes).is_err());
     Ok(buffer.chars().collect())
 }
 

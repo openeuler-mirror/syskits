@@ -1332,13 +1332,6 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
         invocation.files.iter().map(String::as_str).collect()
     };
 
-    let mut global_properly_formatted = 0usize;
-    let mut bad_format = 0usize;
-    let mut bad_checksum = 0usize;
-    let mut missing_files = 0usize;
-    let mut failed_open = 0usize;
-    let mut no_file_verified = false;
-    let mut no_file_verified_manifests = Vec::new();
     let show_warnings = !invocation.status || invocation.warn;
     let mut reversed_format = None;
 
@@ -1353,6 +1346,9 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
         };
         let mut n_properly_formatted_this_file = 0usize;
         let mut n_verified_this_file = 0usize;
+        let mut bad_format = 0usize;
+        let mut bad_checksum = 0usize;
+        let mut missing_files = 0usize;
         let mut current_default_algo = invocation.algo_name;
 
         let file_input: Box<dyn BufRead> = if manifest_is_stdin {
@@ -1365,7 +1361,7 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                         &mut semantic.stderr_text,
                         format!("{}: {}", f_name.display(), clean_io_error(&err)),
                     );
-                    failed_open += 1;
+                    semantic.exit_code = 1;
                     continue;
                 }
             }
@@ -1654,7 +1650,6 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
             }
 
             n_properly_formatted_this_file += 1;
-            global_properly_formatted += 1;
 
             let row_output_format = if is_b64 { "base64" } else { "hexadecimal" };
             let target_file: Box<dyn Read> = if filename_str == "-" {
@@ -1803,16 +1798,10 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 &mut semantic.stderr_text,
                 format!("{manifest_display}: no properly formatted checksum lines found"),
             );
-            no_file_verified = true;
-        } else if invocation.ignore_missing && n_verified_this_file == 0 {
-            if show_warnings {
-                no_file_verified_manifests.push(manifest_display.clone());
-            }
-            no_file_verified = true;
+            semantic.exit_code = 1;
+            continue;
         }
-    }
 
-    if global_properly_formatted > 0 {
         if bad_format > 0 && show_warnings {
             if bad_format == 1 {
                 push_stderr_line(
@@ -1839,41 +1828,37 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 );
             }
         }
-        if bad_checksum > 0 {
+        if bad_checksum > 0 && show_warnings {
+            if bad_checksum == 1 {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    "WARNING: 1 computed checksum did NOT match",
+                );
+            } else {
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    format!("WARNING: {bad_checksum} computed checksums did NOT match"),
+                );
+            }
+        }
+
+        if invocation.ignore_missing && n_verified_this_file == 0 {
             if show_warnings {
-                if bad_checksum == 1 {
-                    push_stderr_line(
-                        &mut semantic.stderr_text,
-                        "WARNING: 1 computed checksum did NOT match",
-                    );
-                } else {
-                    push_stderr_line(
-                        &mut semantic.stderr_text,
-                        format!("WARNING: {bad_checksum} computed checksums did NOT match"),
-                    );
-                }
+                push_stderr_line(
+                    &mut semantic.stderr_text,
+                    format!(
+                        "{}: {}",
+                        manifest_display,
+                        t!("cksum.check.no_file_verified")
+                    ),
+                );
             }
             semantic.exit_code = 1;
         }
-        for manifest in &no_file_verified_manifests {
-            push_stderr_line(
-                &mut semantic.stderr_text,
-                format!("{}: {}", manifest, t!("cksum.check.no_file_verified")),
-            );
-        }
 
-        if bad_format > 0 && invocation.strict {
+        if bad_checksum > 0 || missing_files > 0 || (bad_format > 0 && invocation.strict) {
             semantic.exit_code = 1;
         }
-        if missing_files > 0 {
-            semantic.exit_code = 1;
-        }
-    } else if bad_format > 0 || missing_files > 0 || failed_open > 0 || no_file_verified {
-        semantic.exit_code = 1;
-    }
-
-    if missing_files > 0 || failed_open > 0 || no_file_verified {
-        semantic.exit_code = 1;
     }
 
     Ok(semantic)
@@ -2301,16 +2286,9 @@ fn cksum_check(
     algorithm_specified: bool,
     infer_variable_length: bool,
 ) -> CTResult<i32> {
-    let mut global_properly_formatted = 0;
-    let mut bad_format = 0;
-    let mut bad_checksum = 0;
-    let mut missing_files = 0;
-    let mut failed_open = 0;
-    let mut no_file_verified = false;
-    let mut no_file_verified_manifests = Vec::new();
-
     let show_warnings = !opts.status || opts.warn;
     let mut reversed_format = None;
+    let mut exit_code = 0;
 
     for cksum_file in files {
         let f_name = Path::new(cksum_file);
@@ -2322,6 +2300,9 @@ fn cksum_check(
         };
         let mut n_properly_formatted_this_file = 0;
         let mut n_verified_this_file = 0;
+        let mut bad_format = 0;
+        let mut bad_checksum = 0;
+        let mut missing_files = 0;
         let mut current_default_algo = opts.algo_name;
 
         let mut file_input: Box<dyn BufRead> = if manifest_is_stdin {
@@ -2333,7 +2314,7 @@ fn cksum_check(
                     let err_msg = e.to_string();
                     let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
                     ctcore::ct_show_error!("{}: {}", f_name.display(), clean_err);
-                    failed_open += 1;
+                    exit_code = 1;
                     continue;
                 }
             }
@@ -2623,7 +2604,6 @@ fn cksum_check(
             }
 
             n_properly_formatted_this_file += 1;
-            global_properly_formatted += 1;
 
             let mut target_file: Box<dyn Read> = if filename.as_ref() == b"-" {
                 Box::new(stdin())
@@ -2703,18 +2683,10 @@ fn cksum_check(
                 "{}: no properly formatted checksum lines found",
                 manifest_display
             );
-            no_file_verified = true;
-        } else if opts.ignore_missing && n_verified_this_file == 0 {
-            if show_warnings {
-                no_file_verified_manifests.push(manifest_display.clone());
-            }
-            no_file_verified = true;
+            exit_code = 1;
+            continue;
         }
-    }
 
-    let mut exit_code = 0;
-
-    if global_properly_formatted > 0 {
         if bad_format > 0 && show_warnings {
             if bad_format == 1 {
                 ctcore::ct_show_error!("WARNING: 1 line is improperly formatted");
@@ -2729,35 +2701,31 @@ fn cksum_check(
                 ctcore::ct_show_error!("WARNING: {} listed files could not be read", missing_files);
             }
         }
-        if bad_checksum > 0 {
+        if bad_checksum > 0 && show_warnings {
+            if bad_checksum == 1 {
+                ctcore::ct_show_error!("WARNING: 1 computed checksum did NOT match");
+            } else {
+                ctcore::ct_show_error!(
+                    "WARNING: {} computed checksums did NOT match",
+                    bad_checksum
+                );
+            }
+        }
+
+        if opts.ignore_missing && n_verified_this_file == 0 {
             if show_warnings {
-                if bad_checksum == 1 {
-                    ctcore::ct_show_error!("WARNING: 1 computed checksum did NOT match");
-                } else {
-                    ctcore::ct_show_error!(
-                        "WARNING: {} computed checksums did NOT match",
-                        bad_checksum
-                    );
-                }
+                ctcore::ct_show_error!(
+                    "{}: {}",
+                    manifest_display,
+                    t!("cksum.check.no_file_verified")
+                );
             }
             exit_code = 1;
         }
-        for manifest in &no_file_verified_manifests {
-            ctcore::ct_show_error!("{}: {}", manifest, t!("cksum.check.no_file_verified"));
-        }
 
-        if bad_format > 0 && opts.strict {
+        if bad_checksum > 0 || missing_files > 0 || (bad_format > 0 && opts.strict) {
             exit_code = 1;
         }
-        if missing_files > 0 {
-            exit_code = 1;
-        }
-    } else if bad_format > 0 || missing_files > 0 || failed_open > 0 || no_file_verified {
-        exit_code = 1;
-    }
-
-    if missing_files > 0 || failed_open > 0 || no_file_verified {
-        exit_code = 1;
     }
 
     Ok(exit_code)

@@ -350,9 +350,9 @@ impl WordFilter {
         };
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
-            match matches.get_one::<String>(ptx_options::PTX_WORD_REGEXP) {
+            match matches.get_one::<OsString>(ptx_options::PTX_WORD_REGEXP) {
                 Some(v) => {
-                    let v = ptx_unescape_option(v);
+                    let v = ptx_unescape_os_option(v);
                     if v.is_empty() { None } else { Some(v) }
                 }
                 None => None,
@@ -555,8 +555,8 @@ fn ptx_unescape_bytes(bytes: &[u8]) -> Vec<u8> {
     output
 }
 
-fn ptx_unescape_option(value: &str) -> String {
-    let bytes = ptx_unescape_bytes(value.as_bytes());
+fn ptx_unescape_os_option(value: &OsString) -> String {
+    let bytes = ptx_unescape_bytes(value.as_os_str().as_bytes());
     let byte_mode = std::str::from_utf8(&bytes).is_err();
     ptx_internal_text(&bytes, byte_mode)
 }
@@ -569,8 +569,8 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         config.format = OutFormat::Roff;
         "\n".clone_into(&mut config.context_regex);
     }
-    if let Some(reg) = matches.get_one::<String>(ptx_options::PTX_SENTENCE_REGEXP) {
-        let reg = ptx_unescape_option(reg);
+    if let Some(reg) = matches.get_one::<OsString>(ptx_options::PTX_SENTENCE_REGEXP) {
+        let reg = ptx_unescape_os_option(reg);
         config.context_regex = if reg.is_empty() {
             NEVER_MATCH_REGEX.to_string()
         } else {
@@ -2916,7 +2916,8 @@ pub fn ct_app() -> Command {
             .short('S')
             .long(ptx_options::PTX_SENTENCE_REGEXP)
             .help(t!("ptx.clap.ptx_sentence_regexp"))
-            .value_name("REGEXP"),
+            .value_name("REGEXP")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(ptx_options::PTX_FORMAT_TEX)
             .short('T')
             .help(t!("ptx.clap.ptx_format_tex"))
@@ -2925,7 +2926,8 @@ pub fn ct_app() -> Command {
             .short('W')
             .long(ptx_options::PTX_WORD_REGEXP)
             .help(t!("ptx.clap.ptx_word_regexp"))
-            .value_name("REGEXP"),
+            .value_name("REGEXP")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(ptx_options::PTX_BREAK_FILE)
             .short('b')
             .long(ptx_options::PTX_BREAK_FILE)

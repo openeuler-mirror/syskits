@@ -28,7 +28,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
@@ -563,20 +563,25 @@ fn regex_matches_zero_len(pattern: &str) -> bool {
         .is_some_and(|m| m.start() == m.end())
 }
 
-fn compile_regex_lossy(pattern: &str) -> Regex {
-    if let Ok(re) = Regex::new(pattern) {
+fn compile_regex_case_lossy(pattern: &str, ignore_case: bool) -> Regex {
+    let build = |pattern: &str| {
+        RegexBuilder::new(pattern)
+            .case_insensitive(ignore_case)
+            .build()
+    };
+    if let Ok(re) = build(pattern) {
         return re;
     }
 
     if pattern.ends_with('\\') {
         let mut fixed = pattern.to_owned();
         fixed.push('\\');
-        if let Ok(re) = Regex::new(&fixed) {
+        if let Ok(re) = build(&fixed) {
             return re;
         }
     }
 
-    Regex::new(r"$^").expect("fallback regex must be valid")
+    build(r"$^").expect("fallback regex must be valid")
 }
 
 /// 文件内容
@@ -760,8 +765,8 @@ fn ptx_create_word_set(
     filter: &WordFilter,
     file_map: &FileMap,
 ) -> BTreeSet<WordRef> {
-    let reg = compile_regex_lossy(&filter.word_regex);
-    let ref_reg = compile_regex_lossy(&config.context_regex);
+    let reg = compile_regex_case_lossy(&filter.word_regex, config.is_ignore_case);
+    let ref_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
 
     for (file_idx, content) in file_map.iter().enumerate() {
@@ -2137,7 +2142,10 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
             Box::new(stdout())
         });
 
-    let context_reg = compile_regex_lossy(&settings.config.context_regex);
+    let context_reg = compile_regex_case_lossy(
+        &settings.config.context_regex,
+        settings.config.is_ignore_case,
+    );
 
     // Check for zero-length regex match only when there are words to process
     // This matches GNU ptx behavior (only errors when processing non-empty content)
@@ -2327,7 +2335,10 @@ fn ptx_render_row(
 }
 
 fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
-    let context_reg = compile_regex_lossy(&settings.config.context_regex);
+    let context_reg = compile_regex_case_lossy(
+        &settings.config.context_regex,
+        settings.config.is_ignore_case,
+    );
     let reference_max_width = ptx_reference_max_width(settings, &context_reg);
     let mut rows: Vec<PtxSemanticRow> = settings
         .words
@@ -2343,7 +2354,10 @@ fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
 }
 
 fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResult<()> {
-    let context_reg = compile_regex_lossy(&settings.config.context_regex);
+    let context_reg = compile_regex_case_lossy(
+        &settings.config.context_regex,
+        settings.config.is_ignore_case,
+    );
 
     if !settings.words.is_empty() && regex_matches_zero_len(&settings.config.context_regex) {
         return Err(CtSimpleError::new(
@@ -2680,7 +2694,10 @@ impl PtxSettings {
         let word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_chars = word_filter.break_set.clone();
         if word_filter.uses_custom_regex {
-            config.word_regex = Some(compile_regex_lossy(&word_filter.word_regex));
+            config.word_regex = Some(compile_regex_case_lossy(
+                &word_filter.word_regex,
+                config.is_ignore_case,
+            ));
         }
 
         // 读取输入文件
@@ -3157,7 +3174,7 @@ mod tests {
             let chars_line: Vec<char> = line.chars().collect();
             let maximum_word_length = ptx_maximum_word_length_in_chars(&chars_line, &config);
             let reference = "1";
-            let context_reg = compile_regex_lossy(&config.context_regex);
+            let context_reg = compile_regex_case_lossy(&config.context_regex, false);
 
             let result = ptx_format_roff_line(
                 &config,
@@ -3187,7 +3204,7 @@ mod tests {
             let chars_line: Vec<char> = line.chars().collect();
             let maximum_word_length = ptx_maximum_word_length_in_chars(&chars_line, &config);
             let word_ref = test_word_ref("bar", 0, 4, 7);
-            let context_reg = compile_regex_lossy(&config.context_regex);
+            let context_reg = compile_regex_case_lossy(&config.context_regex, false);
             let got = ptx_format_dumb_line(
                 &config,
                 &word_ref,
@@ -3213,7 +3230,7 @@ mod tests {
             let chars_line: Vec<char> = line.chars().collect();
             let maximum_word_length = ptx_maximum_word_length_in_chars(&chars_line, &config);
             let word_ref = test_word_ref("beta", 0, 7, 11);
-            let context_reg = compile_regex_lossy(&config.context_regex);
+            let context_reg = compile_regex_case_lossy(&config.context_regex, false);
             let got = ptx_format_dumb_line(
                 &config,
                 &word_ref,

@@ -62,6 +62,13 @@ enum CksumOutputFormat {
     Base64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CheckLineFormat {
+    Tagged,
+    Standard,
+    Reversed,
+}
+
 impl CTError for CkSumError {
     fn code(&self) -> i32 {
         match self {
@@ -1164,7 +1171,8 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                 continue;
             }
 
-            let (digest_str, filename_str, line_algo) = match parse_check_line(&line) {
+            let (digest_str, filename_str, line_algo, _line_format) = match parse_check_line(&line)
+            {
                 Some(values) => values,
                 None => {
                     bad_format += 1;
@@ -2113,8 +2121,9 @@ fn cksum_check(
                 continue;
             }
 
-            let (digest_str, filename_str, line_algo) = match parse_check_line(&line) {
-                Some((d, f, a)) => (d, f, a),
+            let (digest_str, filename_str, line_algo, _line_format) = match parse_check_line(&line)
+            {
+                Some((d, f, a, format)) => (d, f, a, format),
                 None => {
                     bad_format += 1;
                     if opts.warn {
@@ -2457,8 +2466,8 @@ fn cksum_check(
     Ok(exit_code)
 }
 
-fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>)> {
-    let mut input = line.trim_start_matches([' ', '\t']);
+fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFormat)> {
+    let mut input = line.trim_start_matches(|character: char| character.is_ascii_whitespace());
 
     if let Some(stripped) = input.strip_prefix('\\') {
         input = stripped;
@@ -2479,22 +2488,23 @@ fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>)> {
                 if let Some(digest) = after_paren.strip_prefix('=') {
                     let digest = digest.trim_start_matches([' ', '\t']);
                     let filename = &input[first_paren + 1..last_paren];
-                    return Some((digest, filename, Some(algo)));
+                    return Some((digest, filename, Some(algo), CheckLineFormat::Tagged));
                 }
             }
         }
     }
 
-    let trimmed = input.trim();
-    if let Some(first_space) = trimmed.find(' ') {
-        let digest = &trimmed[..first_space];
-        let rest = trimmed[first_space + 1..].trim_start();
-        if let Some(filename) = rest.strip_prefix('*') {
-            return Some((digest, filename, None));
-        }
-        return Some((digest, rest, None));
+    let separator_index = input
+        .char_indices()
+        .find_map(|(index, character)| character.is_ascii_whitespace().then_some(index))?;
+    let digest = &input[..separator_index];
+    let rest = &input[separator_index + 1..];
+
+    if rest.len() == 1 || !matches!(rest.as_bytes().first(), Some(b' ' | b'*')) {
+        Some((digest, rest, None, CheckLineFormat::Reversed))
+    } else {
+        Some((digest, &rest[1..], None, CheckLineFormat::Standard))
     }
-    None
 }
 
 fn algo_display_name(algo: &str) -> &'static str {

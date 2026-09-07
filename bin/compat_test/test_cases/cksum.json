@@ -1469,6 +1469,126 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，54字节，内容=BLAKE2b-128 (file) = cf4ab791c62b8d2b2109c90275287816\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_accepts_gnu_base_zero_blake2b_tag_lengths第1次调用",
+      "args": [
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\102\\114\\101\\113\\105\\062\\142\\055\\061\\062\\070\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\143\\146\\064\\141\\142\\067\\071\\061\\143\\066\\062\\142\\070\\144\\062\\142\\062\\061\\060\\071\\143\\071\\060\\062\\067\\065\\062\\070\\067\\070\\061\\066\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，55字节，内容=BLAKE2b-+128 (file) = cf4ab791c62b8d2b2109c90275287816\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_accepts_gnu_base_zero_blake2b_tag_lengths第2次调用",
+      "args": [
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\102\\114\\101\\113\\105\\062\\142\\055\\053\\061\\062\\070\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\143\\146\\064\\141\\142\\067\\071\\061\\143\\066\\062\\142\\070\\144\\062\\142\\062\\061\\060\\071\\143\\071\\060\\062\\067\\065\\062\\070\\067\\070\\061\\066\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，55字节，内容=BLAKE2b-0200 (file) = cf4ab791c62b8d2b2109c90275287816\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_accepts_gnu_base_zero_blake2b_tag_lengths第3次调用",
+      "args": [
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\102\\114\\101\\113\\105\\062\\142\\055\\060\\062\\060\\060\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\143\\146\\064\\141\\142\\067\\071\\061\\143\\066\\062\\142\\070\\144\\062\\142\\062\\061\\060\\071\\143\\071\\060\\062\\067\\065\\062\\070\\067\\070\\061\\066\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，55字节，内容=BLAKE2b-0x80 (file) = cf4ab791c62b8d2b2109c90275287816\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_accepts_gnu_base_zero_blake2b_tag_lengths第4次调用",
+      "args": [
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\102\\114\\101\\113\\105\\062\\142\\055\\060\\170\\070\\060\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\143\\146\\064\\141\\142\\067\\071\\061\\143\\066\\062\\142\\070\\144\\062\\142\\062\\061\\060\\071\\143\\071\\060\\062\\067\\065\\062\\070\\067\\070\\061\\066\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，55字节，内容=BLAKE2b-0X80 (file) = cf4ab791c62b8d2b2109c90275287816\\n；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=file: OK\\n；迁移原Cargo用例cksum_accepts_gnu_base_zero_blake2b_tag_lengths第5次调用",
+      "args": [
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\102\\114\\101\\113\\105\\062\\142\\055\\060\\130\\070\\060\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\143\\146\\064\\141\\142\\067\\071\\061\\143\\066\\062\\142\\070\\144\\062\\142\\062\\061\\060\\071\\143\\071\\060\\062\\067\\065\\062\\070\\067\\070\\061\\066\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "file: OK\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

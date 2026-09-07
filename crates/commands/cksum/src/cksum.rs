@@ -225,11 +225,29 @@ fn cksum_detect_algo(
     }
 }
 
+fn parse_base_zero_usize(value: &str) -> Option<usize> {
+    let value = value.strip_prefix('+').unwrap_or(value);
+    let (digits, radix) = if let Some(digits) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (digits, 16)
+    } else if value.len() > 1 && value.starts_with('0') {
+        (&value[1..], 8)
+    } else {
+        (value, 10)
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    usize::from_str_radix(digits, radix).ok()
+}
+
 fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize, &'static str)> {
     let tag = tag.trim().to_uppercase();
 
     if let Some(len_str) = tag.strip_prefix("BLAKE2B-") {
-        if let Ok(bits) = len_str.parse::<usize>() {
+        if let Some(bits) = parse_base_zero_usize(len_str) {
             if bits > 0 && bits % 8 == 0 && bits <= 512 {
                 return Some((
                     Box::new(CtBlake2b::with_output_bytes(bits / 8)) as Box<dyn CtDigest>,

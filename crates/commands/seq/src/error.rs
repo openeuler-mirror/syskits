@@ -9,8 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
@@ -21,6 +23,9 @@ use crate::numberparse::ParseNumberError;
 pub enum SeqError {
     /// 解析输入参数时的错误
     ParseError(String, ParseNumberError),
+
+    /// 操作数包含非UTF-8字节
+    NonUtf8Argument(OsString),
 
     /// 增量参数为零的错误
     ZeroIncrement(String),
@@ -42,7 +47,7 @@ impl CTError for SeqError {
     fn code(&self) -> i32 {
         match self {
             Self::NoArguments | Self::ExtraOperand(_) | Self::FormatWithEqualWidth => 1,
-            Self::ParseError(_, _) | Self::ZeroIncrement(_) => 1,
+            Self::ParseError(_, _) | Self::NonUtf8Argument(_) | Self::ZeroIncrement(_) => 1,
             Self::IoError(_) => 3,
         }
     }
@@ -51,6 +56,7 @@ impl CTError for SeqError {
         matches!(
             self,
             Self::ParseError(_, _)
+                | Self::NonUtf8Argument(_)
                 | Self::ZeroIncrement(_)
                 | Self::NoArguments
                 | Self::ExtraOperand(_)
@@ -71,6 +77,11 @@ impl Display for SeqError {
                 };
                 write!(f, "invalid {error_type} argument: {}", s.quote())
             }
+            Self::NonUtf8Argument(value) => write!(
+                f,
+                "invalid floating point argument: {}",
+                quote_argument_bytes(value.as_bytes())
+            ),
             Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
             Self::NoArguments => write!(f, "missing operand"),
             Self::ExtraOperand(operand) => write!(f, "extra operand {}", operand.quote()),
@@ -83,6 +94,19 @@ impl Display for SeqError {
     }
 }
 
+fn quote_argument_bytes(value: &[u8]) -> String {
+    let mut quoted = String::from("'");
+    for &byte in value {
+        if byte.is_ascii_graphic() || byte == b' ' {
+            quoted.push(char::from(byte));
+        } else {
+            quoted.push_str(&format!("\\{byte:03o}"));
+        }
+    }
+    quoted.push('\'');
+    quoted
+}
+
 impl From<io::Error> for SeqError {
     fn from(err: io::Error) -> Self {
         Self::IoError(err.to_string())
@@ -92,6 +116,7 @@ impl From<io::Error> for SeqError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn test_error_codes() {
@@ -111,6 +136,10 @@ mod tests {
         assert_eq!(
             SeqError::ParseError("abc".into(), ParseNumberError::Float).to_string(),
             "invalid floating point argument: 'abc'"
+        );
+        assert_eq!(
+            SeqError::NonUtf8Argument(OsString::from_vec(vec![0xff])).to_string(),
+            "invalid floating point argument: '\\377'"
         );
         assert_eq!(
             SeqError::ParseError("0x.p0".into(), ParseNumberError::Hex).to_string(),
@@ -141,6 +170,7 @@ mod tests {
         assert!(SeqError::ExtraOperand("4".into()).usage());
         assert!(SeqError::FormatWithEqualWidth.usage());
         assert!(SeqError::ParseError("123".into(), ParseNumberError::Float).usage());
+        assert!(SeqError::NonUtf8Argument(OsString::from_vec(vec![0xff])).usage());
         assert!(SeqError::ZeroIncrement("0".into()).usage());
         assert!(!SeqError::IoError("test".into()).usage());
     }

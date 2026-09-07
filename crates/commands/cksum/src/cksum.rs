@@ -225,6 +225,38 @@ fn cksum_detect_algo(
     }
 }
 
+fn base64_digest_bits(digest: &str) -> Option<usize> {
+    if digest.is_empty() || !digest.len().is_multiple_of(4) {
+        return None;
+    }
+
+    let padding = digest
+        .bytes()
+        .rev()
+        .take_while(|&byte| byte == b'=')
+        .count();
+    if padding > 2 {
+        return None;
+    }
+
+    let data_len = digest.len() - padding;
+    if !digest.as_bytes()[..data_len]
+        .iter()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/'))
+        || !digest.as_bytes()[data_len..]
+            .iter()
+            .all(|&byte| byte == b'=')
+    {
+        return None;
+    }
+
+    Some(((digest.len() / 4) * 3 - padding) * 8)
+}
+
+fn is_valid_base64_digest(digest: &str, expected_bits: usize) -> bool {
+    base64_digest_bits(digest) == Some(expected_bits)
+}
+
 fn parse_base_zero_usize(value: &str) -> Option<usize> {
     let value = value.strip_prefix('+').unwrap_or(value);
     let (digits, radix) = if let Some(digits) = value
@@ -1208,10 +1240,8 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                     if is_blake2b || is_sha2_family || is_sha3_family {
                         let mut bits = 0;
                         let is_hex_chars = digest_str.chars().all(|c| c.is_ascii_hexdigit());
-                        let is_b64_chars = digest_str.len() % 4 == 0
-                            && digest_str.chars().all(|c| {
-                                c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
-                            });
+                        let b64_bits = base64_digest_bits(digest_str);
+                        let is_b64_chars = b64_bits.is_some();
                         let has_b64_only_chars = digest_str.chars().any(|c| {
                             c == '+'
                                 || c == '/'
@@ -1221,17 +1251,11 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
                         });
 
                         if is_b64_chars && has_b64_only_chars {
-                            let padding =
-                                digest_str.chars().rev().take_while(|&c| c == '=').count();
-                            let bytes = (digest_str.len() / 4) * 3 - padding;
-                            bits = bytes * 8;
+                            bits = b64_bits.unwrap_or(0);
                         } else if is_hex_chars {
                             bits = digest_str.len() * 4;
                         } else if is_b64_chars {
-                            let padding =
-                                digest_str.chars().rev().take_while(|&c| c == '=').count();
-                            let bytes = (digest_str.len() / 4) * 3 - padding;
-                            bits = bytes * 8;
+                            bits = b64_bits.unwrap_or(0);
                         }
 
                         if bits > 0 {
@@ -1290,14 +1314,9 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
             }
 
             let expected_hex_len = current_bits / 4;
-            let expected_b64_len = current_bits.div_ceil(8).div_ceil(3) * 4;
-
             let is_hex = digest_str.len() == expected_hex_len
                 && digest_str.chars().all(|c| c.is_ascii_hexdigit());
-            let is_b64 = digest_str.len() == expected_b64_len
-                && digest_str
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=');
+            let is_b64 = is_valid_base64_digest(digest_str, current_bits);
 
             if !is_hex && !is_b64 {
                 bad_format += 1;
@@ -2139,10 +2158,8 @@ fn cksum_check(
                     if is_blake2b || is_sha2_family || is_sha3_family {
                         let mut bits = 0;
                         let is_hex_chars = digest_str.chars().all(|c| c.is_ascii_hexdigit());
-                        let is_b64_chars = digest_str.len() % 4 == 0
-                            && digest_str.chars().all(|c| {
-                                c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='
-                            });
+                        let b64_bits = base64_digest_bits(digest_str);
+                        let is_b64_chars = b64_bits.is_some();
 
                         // 如果包含 [g-z], [G-Z], +, /, = 等非十六进制字符，它必定是 Base64
                         let has_b64_only_chars = digest_str.chars().any(|c| {
@@ -2154,18 +2171,11 @@ fn cksum_check(
                         });
 
                         if is_b64_chars && has_b64_only_chars {
-                            // 通过 base64 的长度和末尾填充的 = 数量，精准逆推哈希字节数
-                            let padding =
-                                digest_str.chars().rev().take_while(|&c| c == '=').count();
-                            let bytes = (digest_str.len() / 4) * 3 - padding;
-                            bits = bytes * 8;
+                            bits = b64_bits.unwrap_or(0);
                         } else if is_hex_chars {
                             bits = digest_str.len() * 4;
                         } else if is_b64_chars {
-                            let padding =
-                                digest_str.chars().rev().take_while(|&c| c == '=').count();
-                            let bytes = (digest_str.len() / 4) * 3 - padding;
-                            bits = bytes * 8;
+                            bits = b64_bits.unwrap_or(0);
                         }
 
                         if bits > 0 {
@@ -2223,14 +2233,9 @@ fn cksum_check(
             }
 
             let expected_hex_len = current_bits / 4;
-            let expected_b64_len = current_bits.div_ceil(8).div_ceil(3) * 4;
-
             let is_hex = digest_str.len() == expected_hex_len
                 && digest_str.chars().all(|c| c.is_ascii_hexdigit());
-            let is_b64 = digest_str.len() == expected_b64_len
-                && digest_str
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=');
+            let is_b64 = is_valid_base64_digest(digest_str, current_bits);
 
             let is_valid_format = is_hex || is_b64;
 

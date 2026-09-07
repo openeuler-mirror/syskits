@@ -2168,6 +2168,71 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx input；输入为input=alpha \\xff beta \\xfe gamma\\n（21字节 616c70686120ff206265746120fe2067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为3条换行分隔、共157字节的dumb索引，首条stdout可读为“                                       alpha \\xff beta \\xfe gamma\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\377\\040\\142\\145\\164\\141\\040\\376\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202020202020202020202020202020202020202020202020202020202020202020202020616c70686120ff206265746120fe2067616d6d610a2020202020202020202020202020202020202020202020202020202020616c70686120ff2020206265746120fe2067616d6d610a20202020202020202020202020202020202020202020616c70686120ff206265746120fe20202067616d6d610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -O input；输入为input=alpha \\xff beta \\xfe gamma\\n（21字节 616c70686120ff206265746120fe2067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为3条换行分隔、共106字节的roff索引，首条stdout可读为“.xx \"\" \"\" \"alpha \\xff beta \\xfe gamma\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\377\\040\\142\\145\\164\\141\\040\\376\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022222022616c70686120ff206265746120fe2067616d6d61222022220a2e78782022222022616c70686120ff2220226265746120fe2067616d6d61222022220a2e78782022222022616c70686120ff206265746120fe22202267616d6d61222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -T input；输入为input=alpha \\xff beta \\xfe gamma\\n（21字节 616c70686120ff206265746120fe2067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为3条换行分隔、共103字节的TeX索引，首条stdout可读为“\\xx {}{}{alpha}{ \\xff beta \\xfe gamma}{}\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d54",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\377\\040\\142\\145\\164\\141\\040\\376\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b7d7b616c7068617d7b20ff206265746120fe2067616d6d617d7b7d0a5c7878207b7d7b616c70686120ff7d7b626574617d7b20fe2067616d6d617d7b7d0a5c7878207b7d7b616c70686120ff206265746120fe7d7b67616d6d617d7b7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

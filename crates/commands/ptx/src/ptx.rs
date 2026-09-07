@@ -603,12 +603,16 @@ struct FileContent {
     filename: String,
     /// 文件完整文本，物理行之间保留 '\n'，用于 GNU 默认跨行上下文处理。
     text: String,
+    /// 命令输出使用的原始字节。
+    raw_text: Vec<u8>,
     chars_text: Vec<char>,
     byte_to_char: Vec<usize>,
     /// 每个物理行在完整文本中的起始字节偏移。
     line_starts: Vec<usize>,
     /// 文件的所有行
     lines: Vec<String>,
+    /// 不包含换行符的原始行字节。
+    raw_lines: Vec<Vec<u8>>,
     /// 每行的字符数组表示，用于快速索引
     chars_lines: Vec<Vec<char>>,
     /// 在所有文件中的行偏移量
@@ -636,6 +640,23 @@ fn line_index_for_offset(line_starts: &[usize], offset: usize) -> usize {
         Ok(index) => index,
         Err(0) => 0,
         Err(index) => index - 1,
+    }
+}
+
+fn ptx_internal_text(bytes: &[u8], byte_mode: bool) -> String {
+    if byte_mode {
+        bytes
+            .iter()
+            .map(|&byte| {
+                if byte.is_ascii() {
+                    char::from(byte)
+                } else {
+                    '\x01'
+                }
+            })
+            .collect()
+    } else {
+        String::from_utf8(bytes.to_vec()).expect("validated UTF-8")
     }
 }
 
@@ -734,13 +755,36 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
     let mut offset: usize = 0;
     for filename in files {
         let using_stdin = filename.is_empty() || filename == "-";
-        let reader: BufReader<Box<dyn Read>> = BufReader::new(if using_stdin {
+        let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if using_stdin {
             ctcore::ct_io::stdin_reader_box()
         } else {
             Box::new(File::open(filename)?)
         });
-
-        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
+        let mut input_bytes = Vec::new();
+        reader.read_to_end(&mut input_bytes)?;
+        let mut raw_lines: Vec<Vec<u8>> = if input_bytes.is_empty() {
+            Vec::new()
+        } else {
+            input_bytes
+                .split(|&byte| byte == b'\n')
+                .map(<[u8]>::to_vec)
+                .collect()
+        };
+        if input_bytes.ends_with(b"\n") {
+            raw_lines.pop();
+        }
+        let mut raw_text = Vec::new();
+        for (index, line) in raw_lines.iter().enumerate() {
+            if index > 0 {
+                raw_text.push(b'\n');
+            }
+            raw_text.extend_from_slice(line);
+        }
+        let byte_mode = std::str::from_utf8(&raw_text).is_err();
+        let lines: Vec<String> = raw_lines
+            .iter()
+            .map(|line| ptx_internal_text(line, byte_mode))
+            .collect();
         let mut text = String::new();
         let mut line_starts = Vec::with_capacity(lines.len());
         for (index, line) in lines.iter().enumerate() {
@@ -763,10 +807,12 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
                 filename.to_owned()
             },
             text,
+            raw_text,
             chars_text,
             byte_to_char,
             line_starts,
             lines,
+            raw_lines,
             chars_lines,
             offset,
         });
@@ -1041,7 +1087,7 @@ fn ptx_content_maximum_word_length(content: &FileContent, config: &PtxConfig) ->
 }
 
 fn ptx_content_maximum_word_length_bytes(content: &FileContent, config: &PtxConfig) -> usize {
-    ptx_maximum_word_length_in_bytes(content.text.as_bytes(), config)
+    ptx_maximum_word_length_in_bytes(&content.raw_text, config)
 }
 
 fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize {
@@ -1903,7 +1949,7 @@ fn ptx_format_dumb_line_bytes(
     reference_max_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
-    let bytes_text = content.text.as_bytes();
+    let bytes_text = &content.raw_text;
     let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
         (
             &bytes_text[word_ref.global_position..word_ref.global_position_end],
@@ -1911,7 +1957,7 @@ fn ptx_format_dumb_line_bytes(
             &bytes_text[word_ref.global_position_end..word_ref.context_end],
         )
     } else {
-        let line = content.lines[word_ref.local_line_nr].as_bytes();
+        let line = &content.raw_lines[word_ref.local_line_nr];
         (
             &line[word_ref.position..word_ref.position_end],
             &line[..word_ref.position],
@@ -2045,7 +2091,7 @@ fn ptx_format_roff_line_bytes(
     line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
-    let bytes_text = content.text.as_bytes();
+    let bytes_text = &content.raw_text;
     let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
         (
             &bytes_text[word_ref.global_position..word_ref.global_position_end],
@@ -2053,7 +2099,7 @@ fn ptx_format_roff_line_bytes(
             &bytes_text[word_ref.global_position_end..word_ref.context_end],
         )
     } else {
-        let line = content.lines[word_ref.local_line_nr].as_bytes();
+        let line = &content.raw_lines[word_ref.local_line_nr];
         (
             &line[word_ref.position..word_ref.position_end],
             &line[..word_ref.position],
@@ -2109,7 +2155,7 @@ fn ptx_format_tex_line_bytes(
     line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
-    let bytes_text = content.text.as_bytes();
+    let bytes_text = &content.raw_text;
     let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
         (
             &bytes_text[word_ref.global_position..word_ref.global_position_end],
@@ -2117,7 +2163,7 @@ fn ptx_format_tex_line_bytes(
             &bytes_text[word_ref.global_position_end..word_ref.context_end],
         )
     } else {
-        let line = content.lines[word_ref.local_line_nr].as_bytes();
+        let line = &content.raw_lines[word_ref.local_line_nr];
         (
             &line[word_ref.position..word_ref.position_end],
             &line[..word_ref.position],
@@ -2905,14 +2951,18 @@ mod tests {
             line_starts.push(text.len());
             text.push_str(line);
         }
+        let raw_text = text.as_bytes().to_vec();
+        let raw_lines = lines.iter().map(|line| line.as_bytes().to_vec()).collect();
         FileContent {
             filename: filename.to_string(),
             chars_text: text.chars().collect(),
             byte_to_char: build_byte_to_char_map(&text),
             text,
+            raw_text,
             line_starts,
             chars_lines: lines.iter().map(|line| line.chars().collect()).collect(),
             lines,
+            raw_lines,
             offset,
         }
     }

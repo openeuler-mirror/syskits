@@ -1436,6 +1436,92 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "alpha beta\n",
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -A；输入为input=alpha beta\\n（11字节）；input file=alpha beta\\n（11字节）；stdin为alpha beta\\n；预期RC=0、stderr为空，stdout为2条换行分隔、共92字节的dumb索引；对应Cargo用例ptx_stdin_operands_use_an_empty_auto_reference_name第1次调用",
+      "args": [
+        "-A"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164\\040\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ":1:                                   alpha beta\n:1:                           alpha   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "alpha beta\n",
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -A -；输入为input=alpha beta\\n（11字节）；input file=alpha beta\\n（11字节）；stdin为alpha beta\\n；预期RC=0、stderr为空，stdout为2条换行分隔、共92字节的dumb索引；对应Cargo用例ptx_stdin_operands_use_an_empty_auto_reference_name第2次调用",
+      "args": [
+        "-A",
+        "-"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164\\040\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ":1:                                   alpha beta\n:1:                           alpha   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "alpha beta\n",
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -A ；输入为input=alpha beta\\n（11字节）；input file=alpha beta\\n（11字节）；stdin为alpha beta\\n；预期RC=0、stderr为空，stdout为2条换行分隔、共92字节的dumb索引；对应Cargo用例ptx_stdin_operands_use_an_empty_auto_reference_name第3次调用",
+      "args": [
+        "-A",
+        ""
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164\\040\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ":1:                                   alpha beta\n:1:                           alpha   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -A input file；输入为input=alpha beta\\n（11字节）；input file=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共102字节的dumb索引；对应Cargo用例ptx_stdin_operands_use_an_empty_auto_reference_name第4次调用",
+      "args": [
+        "-A",
+        "input file"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164\\040\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "input file:1:                              alpha beta\ninput file:1:                      alpha   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

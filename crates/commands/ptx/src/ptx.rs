@@ -104,6 +104,8 @@ struct PtxConfig {
     context_regex: String,
     /// break-file定义的分词边界，输出布局阶段必须复用同一规则。
     word_break_chars: Option<HashSet<char>>,
+    /// 用户指定的word regexp，字段规划阶段按GNU re_match语义复用。
+    word_regex: Option<Regex>,
 }
 
 impl Default for PtxConfig {
@@ -119,6 +121,7 @@ impl Default for PtxConfig {
             trunc_str: "/".to_owned(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
             word_break_chars: None,
+            word_regex: None,
             line_width: 72,
             gap_size: 3,
         }
@@ -159,14 +162,26 @@ fn read_char_filter_file(
     Ok(buffer.chars().collect())
 }
 
-fn gnu_emacs_word_regex_to_rust(pattern: &str) -> String {
+fn gnu_emacs_regex_to_rust(pattern: &str) -> String {
     let chars: Vec<char> = pattern.chars().collect();
     let mut translated = String::with_capacity(pattern.len());
     let mut escaped = false;
+    let mut in_bracket = false;
 
     for (index, &ch) in chars.iter().enumerate() {
+        if escaped {
+            if !in_bracket && matches!(ch, '(' | ')' | '|') {
+                translated.pop();
+                translated.push(ch);
+            } else {
+                translated.push(ch);
+            }
+            escaped = false;
+            continue;
+        }
+
         // Emacs syntax treats the nested '[' literally; Rust otherwise parses a POSIX class.
-        if !escaped
+        if !in_bracket
             && ch == '['
             && chars.get(index + 1) == Some(&'[')
             && chars.get(index + 2) == Some(&':')
@@ -174,10 +189,19 @@ fn gnu_emacs_word_regex_to_rust(pattern: &str) -> String {
             translated.push('[');
             translated.push('\\');
         } else {
+            if !in_bracket && matches!(ch, '(' | ')' | '|') {
+                translated.push('\\');
+            }
             translated.push(ch);
         }
 
-        escaped = if ch == '\\' { !escaped } else { false };
+        if ch == '\\' {
+            escaped = true;
+        } else if ch == '[' && !in_bracket {
+            in_bracket = true;
+        } else if ch == ']' && in_bracket {
+            in_bracket = false;
+        }
     }
 
     translated
@@ -197,6 +221,8 @@ struct WordFilter {
     word_regex: String,
     /// break-file中的边界字符。
     break_set: Option<HashSet<char>>,
+    /// 是否使用用户指定的word regexp。
+    uses_custom_regex: bool,
 }
 
 impl WordFilter {
@@ -253,8 +279,9 @@ impl WordFilter {
         } else {
             None
         };
+        let uses_custom_regex = arg_reg.is_some();
         let reg = match arg_reg {
-            Some(arg_reg) => gnu_emacs_word_regex_to_rust(&arg_reg),
+            Some(arg_reg) => gnu_emacs_regex_to_rust(&arg_reg),
             None => {
                 if let Some(break_set) = &break_set {
                     format!(
@@ -283,6 +310,7 @@ impl WordFilter {
             ignore_set: iset,
             word_regex: reg,
             break_set,
+            uses_custom_regex,
         })
     }
 }
@@ -296,6 +324,7 @@ impl Default for WordFilter {
             ignore_set: HashSet::new(),
             word_regex: "[A-Za-z]+".to_string(),
             break_set: None,
+            uses_custom_regex: false,
         }
     }
 }
@@ -458,7 +487,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         config.context_regex = if reg.is_empty() {
             NEVER_MATCH_REGEX.to_string()
         } else {
-            reg
+            gnu_emacs_regex_to_rust(&reg)
         };
         // Note: Zero-length regex check is deferred to actual usage time
         // to match GNU ptx behavior (only errors when processing non-empty content)
@@ -930,6 +959,15 @@ fn ptx_skip_something(chars: &[char], cursor: usize, limit: usize, config: &PtxC
     if cursor >= limit {
         return cursor;
     }
+    if let Some(regex) = &config.word_regex {
+        let segment: String = chars[cursor..limit].iter().collect();
+        return regex
+            .find(&segment)
+            .filter(|matched| matched.start() == 0 && matched.end() > 0)
+            .map_or(cursor + 1, |matched| {
+                cursor + matched.as_str().chars().count()
+            });
+    }
 
     let mut next = cursor;
     if ptx_is_default_word_char(config, chars[next]) {
@@ -978,6 +1016,14 @@ fn ptx_content_maximum_word_length_bytes(content: &FileContent, config: &PtxConf
 }
 
 fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize {
+    if let Some(regex) = &config.word_regex {
+        let text: String = chars.iter().collect();
+        return regex
+            .find_iter(&text)
+            .map(|matched| matched.as_str().chars().count())
+            .max()
+            .unwrap_or(0);
+    }
     let mut max_len = 0usize;
     let mut cursor = 0usize;
     while cursor < chars.len() {
@@ -995,6 +1041,13 @@ fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize
 }
 
 fn ptx_maximum_word_length_in_bytes(bytes: &[u8], config: &PtxConfig) -> usize {
+    if let (Some(regex), Ok(text)) = (&config.word_regex, std::str::from_utf8(bytes)) {
+        return regex
+            .find_iter(text)
+            .map(|matched| matched.end() - matched.start())
+            .max()
+            .unwrap_or(0);
+    }
     let mut max_len = 0usize;
     let mut cursor = 0usize;
     while cursor < bytes.len() {
@@ -1195,6 +1248,15 @@ fn ptx_skip_something_bytes(
 ) -> usize {
     if cursor >= limit {
         return cursor;
+    }
+    if let (Some(regex), Ok(segment)) = (
+        &config.word_regex,
+        std::str::from_utf8(&bytes[cursor..limit]),
+    ) {
+        return regex
+            .find(segment)
+            .filter(|matched| matched.start() == 0 && matched.end() > 0)
+            .map_or(cursor + 1, |matched| cursor + matched.end());
     }
 
     let mut next = cursor;
@@ -2617,6 +2679,9 @@ impl PtxSettings {
         // 创建单词过滤器
         let word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_chars = word_filter.break_set.clone();
+        if word_filter.uses_custom_regex {
+            config.word_regex = Some(compile_regex_lossy(&word_filter.word_regex));
+        }
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config).map_err_context(String::new)?;
@@ -3409,6 +3474,7 @@ mod tests {
                 ignore_set: HashSet::new(),
                 word_regex: r"\w+".to_string(),
                 break_set: None,
+                uses_custom_regex: false,
             };
 
             let file_map = vec![test_file_content(

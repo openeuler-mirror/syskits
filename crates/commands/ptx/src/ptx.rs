@@ -601,6 +601,8 @@ fn compile_user_regex(pattern: &str, ignore_case: bool) -> CTResult<Regex> {
 struct FileContent {
     /// 文件名 (从 Map 键移入内部)
     filename: String,
+    /// Linux文件名原始字节。
+    raw_filename: Vec<u8>,
     /// 文件完整文本，物理行之间保留 '\n'，用于 GNU 默认跨行上下文处理。
     text: String,
     /// 命令输出使用的原始字节。
@@ -810,6 +812,11 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Resu
                     .to_string_lossy()
                     .into_owned()
             },
+            raw_filename: if using_stdin {
+                Vec::new()
+            } else {
+                filename_bytes.to_vec()
+            },
             text,
             raw_text,
             chars_text,
@@ -938,6 +945,27 @@ fn ptx_get_reference(
         ptx_input_reference_text(line).to_string()
     } else {
         String::new()
+    }
+}
+
+fn ptx_get_reference_bytes(
+    config: &PtxConfig,
+    word_ref: &WordRef,
+    content: &FileContent,
+) -> Vec<u8> {
+    if config.is_auto_ref {
+        let mut reference = content.raw_filename.clone();
+        reference.push(b':');
+        reference.extend_from_slice((word_ref.local_line_nr + 1).to_string().as_bytes());
+        reference
+    } else if config.is_input_ref {
+        content.raw_lines[word_ref.local_line_nr]
+            .iter()
+            .copied()
+            .take_while(|byte| !byte.is_ascii_whitespace())
+            .collect()
+    } else {
+        Vec::new()
     }
 }
 
@@ -1949,7 +1977,7 @@ fn ptx_format_dumb_line_bytes(
     config: &PtxConfig,
     word_ref: &WordRef,
     content: &FileContent,
-    reference: &str,
+    reference: &[u8],
     reference_max_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
@@ -1984,19 +2012,18 @@ fn ptx_format_dumb_line_bytes(
 
     let mut output = Vec::new();
     if !config.is_right_ref {
-        let reference_bytes = reference.as_bytes();
         if config.is_auto_ref {
-            output.extend_from_slice(reference_bytes);
+            output.extend_from_slice(reference);
             output.push(b':');
             let pad = reference_max_width
                 .saturating_add(gap_size)
-                .saturating_sub(reference.chars().count().saturating_add(1));
+                .saturating_sub(reference.len().saturating_add(1));
             output.extend(std::iter::repeat_n(b' ', pad));
         } else {
-            output.extend_from_slice(reference_bytes);
+            output.extend_from_slice(reference);
             let pad = reference_max_width
                 .saturating_add(gap_size)
-                .saturating_sub(reference.chars().count());
+                .saturating_sub(reference.len());
             output.extend(std::iter::repeat_n(b' ', pad));
         }
     }
@@ -2081,7 +2108,7 @@ fn ptx_format_dumb_line_bytes(
 
     if (config.is_auto_ref || config.is_input_ref) && config.is_right_ref {
         output.extend(std::iter::repeat_n(b' ', gap_size));
-        output.extend_from_slice(reference.as_bytes());
+        output.extend_from_slice(reference);
     }
 
     output
@@ -2091,7 +2118,7 @@ fn ptx_format_roff_line_bytes(
     config: &PtxConfig,
     word_ref: &WordRef,
     content: &FileContent,
-    reference: &str,
+    reference: &[u8],
     line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
@@ -2145,7 +2172,7 @@ fn ptx_format_roff_line_bytes(
     output.push(b'"');
     if config.is_auto_ref || config.is_input_ref {
         output.extend_from_slice(b" \"");
-        output.extend_from_slice(&ptx_format_roff_field_bytes(reference.as_bytes()));
+        output.extend_from_slice(&ptx_format_roff_field_bytes(reference));
         output.push(b'"');
     }
     output
@@ -2155,7 +2182,7 @@ fn ptx_format_tex_line_bytes(
     config: &PtxConfig,
     word_ref: &WordRef,
     content: &FileContent,
-    reference: &str,
+    reference: &[u8],
     line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
@@ -2200,7 +2227,7 @@ fn ptx_format_tex_line_bytes(
     output.push(b'}');
     if config.is_auto_ref || config.is_input_ref {
         output.push(b'{');
-        output.extend_from_slice(&ptx_format_tex_field_bytes(reference.as_bytes()));
+        output.extend_from_slice(&ptx_format_tex_field_bytes(reference));
         output.push(b'}');
     }
     output
@@ -2216,25 +2243,14 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
             Box::new(stdout())
         });
 
-    let context_reg = compile_regex_case_lossy(
-        &settings.config.context_regex,
-        settings.config.is_ignore_case,
-    );
-
     let mut reference_max_width = 0usize;
     if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
     {
         for word_ref in &settings.words {
             // 通过索引直接获取文件内容
             let content = &settings.file_map[word_ref.file_index];
-            let reference = ptx_get_reference(
-                &settings.config,
-                word_ref,
-                &content.filename, // 传入提取到的文件名
-                &content.lines[word_ref.local_line_nr],
-                &context_reg,
-            );
-            reference_max_width = reference_max_width.max(str_cols(&reference));
+            let reference = ptx_get_reference_bytes(&settings.config, word_ref, content);
+            reference_max_width = reference_max_width.max(reference.len());
         }
     }
     let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
@@ -2244,13 +2260,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
         let content = &settings.file_map[word_ref.file_index];
         let maximum_word_length = ptx_content_maximum_word_length_bytes(content, &settings.config);
 
-        let reference = ptx_get_reference(
-            &settings.config,
-            word_ref,
-            &content.filename, // 传入提取到的文件名
-            &content.lines[word_ref.local_line_nr],
-            &context_reg,
-        );
+        let reference = ptx_get_reference_bytes(&settings.config, word_ref, content);
 
         let output_line = match settings.config.format {
             OutFormat::Tex => ptx_format_tex_line_bytes(
@@ -2416,24 +2426,13 @@ fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
 }
 
 fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResult<()> {
-    let context_reg = compile_regex_case_lossy(
-        &settings.config.context_regex,
-        settings.config.is_ignore_case,
-    );
-
     let mut reference_max_width = 0usize;
     if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
     {
         for word_ref in &settings.words {
             let file_map_value = &settings.file_map[word_ref.file_index];
-            let reference = ptx_get_reference(
-                &settings.config,
-                word_ref,
-                &file_map_value.filename,
-                &file_map_value.lines[word_ref.local_line_nr],
-                &context_reg,
-            );
-            reference_max_width = reference_max_width.max(str_cols(&reference));
+            let reference = ptx_get_reference_bytes(&settings.config, word_ref, file_map_value);
+            reference_max_width = reference_max_width.max(reference.len());
         }
     }
     let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
@@ -2443,13 +2442,7 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
         let maximum_word_length =
             ptx_content_maximum_word_length_bytes(file_map_value, &settings.config);
 
-        let reference = ptx_get_reference(
-            &settings.config,
-            word_ref,
-            &file_map_value.filename,
-            &file_map_value.lines[word_ref.local_line_nr],
-            &context_reg,
-        );
+        let reference = ptx_get_reference_bytes(&settings.config, word_ref, file_map_value);
 
         let output_line = match settings.config.format {
             OutFormat::Tex => ptx_format_tex_line_bytes(
@@ -2963,6 +2956,7 @@ mod tests {
         let raw_lines = lines.iter().map(|line| line.as_bytes().to_vec()).collect();
         FileContent {
             filename: filename.to_string(),
+            raw_filename: filename.as_bytes().to_vec(),
             chars_text: text.chars().collect(),
             byte_to_char: build_byte_to_char_map(&text),
             text,

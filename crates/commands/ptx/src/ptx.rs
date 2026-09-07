@@ -36,6 +36,7 @@ use std::ffi::OsString;
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
+use std::os::unix::ffi::OsStrExt;
 use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
 
@@ -738,26 +739,27 @@ fn ptx_input_reference_content_start(line: &str) -> usize {
 ///
 /// # 返回值
 /// 返回一个 HashMap，键为文件名，值为文件内容和偏移量
-fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result<FileMap> {
+fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Result<FileMap> {
     // 初始化文件数组
     let mut file_map: FileMap = Vec::new();
     let mut files = Vec::new();
 
     if input_files.is_empty() {
-        files.push("-");
+        files.push(None);
     } else if config.is_gnu_ext {
-        files.extend(input_files.iter().map(|s| s.as_str()));
+        files.extend(input_files.iter().map(Some));
     } else {
-        files.push(&input_files[0]);
+        files.push(Some(&input_files[0]));
     }
 
     let mut offset: usize = 0;
     for filename in files {
-        let using_stdin = filename.is_empty() || filename == "-";
+        let filename_bytes = filename.map_or(b"-".as_slice(), |name| name.as_os_str().as_bytes());
+        let using_stdin = filename_bytes.is_empty() || filename_bytes == b"-";
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if using_stdin {
             ctcore::ct_io::stdin_reader_box()
         } else {
-            Box::new(File::open(filename)?)
+            Box::new(File::open(filename.expect("non-stdin filename"))?)
         });
         let mut input_bytes = Vec::new();
         reader.read_to_end(&mut input_bytes)?;
@@ -803,7 +805,10 @@ fn ptx_read_input(input_files: &[String], config: &PtxConfig) -> std::io::Result
             filename: if using_stdin {
                 String::new()
             } else {
-                filename.to_owned()
+                filename
+                    .expect("non-stdin filename")
+                    .to_string_lossy()
+                    .into_owned()
             },
             text,
             raw_text,
@@ -2702,17 +2707,17 @@ struct PtxSettings {
     /// 单词引用集合
     words: BTreeSet<WordRef>,
     /// 输出文件名
-    output_filename: Option<String>,
+    output_filename: Option<OsString>,
 }
 
 impl PtxSettings {
     fn from_matches(matches: clap::ArgMatches) -> CTResult<Self> {
         // 获取输入文件列表
-        let mut input_files: Vec<String> = match &matches.get_many::<String>(ptx_options::PTX_FILE)
-        {
-            Some(v) => v.clone().cloned().collect(),
-            None => vec!["-".to_string()],
-        };
+        let mut input_files: Vec<OsString> =
+            match &matches.get_many::<OsString>(ptx_options::PTX_FILE) {
+                Some(v) => v.clone().cloned().collect(),
+                None => vec![OsString::from("-")],
+            };
 
         // 获取配置
         let mut config = get_config(&matches)?;
@@ -2724,7 +2729,7 @@ impl PtxSettings {
         if !config.is_gnu_ext && input_files.len() > 2 {
             return Err(CtSimpleError::new(
                 1,
-                format!("extra operand '{}'", input_files[2]),
+                format!("extra operand '{}'", input_files[2].to_string_lossy()),
             ));
         }
 
@@ -2775,6 +2780,7 @@ pub fn ct_app() -> Command {
         Arg::new(ptx_options::PTX_FILE)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_AUTO_REFERENCE)
             .short('A')
@@ -3328,9 +3334,8 @@ mod tests {
                     NamedTempFile::new()
                         .unwrap()
                         .path()
-                        .to_str()
-                        .unwrap()
-                        .to_string(),
+                        .as_os_str()
+                        .to_os_string(),
                 ),
             };
 
@@ -3494,7 +3499,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let input_files = vec![file.path().to_str().unwrap().to_string()];
+            let input_files = vec![file.path().as_os_str().to_os_string()];
             let result = ptx_read_input(&input_files, &config).unwrap();
 
             assert_eq!(result.len(), 1);
@@ -3516,8 +3521,8 @@ mod tests {
             };
 
             let input_files = vec![
-                file1.path().to_str().unwrap().to_string(),
-                file2.path().to_str().unwrap().to_string(),
+                file1.path().as_os_str().to_os_string(),
+                file2.path().as_os_str().to_os_string(),
             ];
             let result = ptx_read_input(&input_files, &config).unwrap();
 

@@ -709,6 +709,12 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
         )));
     }
 
+    if !untagged && text_requested && !binary {
+        return Ok(CksumSemanticDispatch::Semantic(semantic_error(
+            "--text mode is only supported with --untagged",
+        )));
+    }
+
     let check = matches.get_flag(opt_flags::CHECK);
     reject_verify_only_options_outside_check_mode(
         check,
@@ -1906,6 +1912,13 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         strict: matches.get_flag(opt_flags::STRICT),
         ignore_missing: matches.get_flag(opt_flags::IGNORE_MISSING),
     };
+
+    if !opts.untagged && text_requested && !opts.binary {
+        return Err(CTsageError::new(
+            1,
+            "--text mode is only supported with --untagged",
+        ));
+    }
 
     let check = matches.get_flag(opt_flags::CHECK);
     reject_verify_only_options_outside_check_mode(

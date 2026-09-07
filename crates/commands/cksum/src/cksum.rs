@@ -2409,26 +2409,34 @@ fn cksum_check(
 }
 
 fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>)> {
-    let mut trimmed = line.trim();
+    let mut input = line.trim_start_matches([' ', '\t']);
 
-    if let Some(stripped) = trimmed.strip_prefix('\\') {
-        trimmed = stripped;
+    if let Some(stripped) = input.strip_prefix('\\') {
+        input = stripped;
     }
 
-    if let Some(last_paren) = trimmed.rfind(')') {
-        let after_paren = &trimmed[last_paren + 1..];
-        if let Some(eq_idx) = after_paren.find('=') {
-            let digest = after_paren[eq_idx + 1..].trim_start();
-            if let Some(first_paren) = trimmed.find('(') {
-                if first_paren < last_paren {
-                    let algo = trimmed[..first_paren].trim_end();
-                    let filename = &trimmed[first_paren + 1..last_paren];
+    if let (Some(first_paren), Some(last_paren)) = (input.find('('), input.rfind(')')) {
+        if first_paren < last_paren {
+            let tag_prefix = &input[..first_paren];
+            let algo = tag_prefix
+                .strip_suffix("  ")
+                .or_else(|| tag_prefix.strip_suffix(' '))
+                .unwrap_or(tag_prefix);
+            let valid_tag_spacing = !algo.is_empty()
+                && !algo.contains([' ', '\t'])
+                && tag_prefix.len() <= algo.len() + 2;
+            let after_paren = input[last_paren + 1..].trim_start_matches([' ', '\t']);
+            if valid_tag_spacing {
+                if let Some(digest) = after_paren.strip_prefix('=') {
+                    let digest = digest.trim_start_matches([' ', '\t']);
+                    let filename = &input[first_paren + 1..last_paren];
                     return Some((digest, filename, Some(algo)));
                 }
             }
         }
     }
 
+    let trimmed = input.trim();
     if let Some(first_space) = trimmed.find(' ') {
         let digest = &trimmed[..first_space];
         let rest = trimmed[first_space + 1..].trim_start();

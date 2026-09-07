@@ -137,12 +137,17 @@ fn read_word_filter_file(
         .expect("parsing options failed!")
         .to_string();
     let file = File::open(filename)?;
-    let reader = BufReader::new(file);
+    let mut reader = BufReader::new(file);
     let mut words: HashSet<String> = HashSet::new();
-    for word in reader.lines() {
-        let word = word?;
+    let mut word = String::new();
+    while reader.read_line(&mut word)? != 0 {
+        if word.ends_with('\n') {
+            word.pop();
+        }
         if !word.is_empty() {
-            words.insert(word);
+            words.insert(std::mem::take(&mut word));
+        } else {
+            word.clear();
         }
     }
     Ok(words)

@@ -276,9 +276,17 @@ fn parent_ignores_sigpipe() -> bool {
 }
 
 fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
-    let numbers = matches
+    let raw_numbers = matches
         .get_many::<OsString>(SEQ_NUMBERS)
         .ok_or(SeqError::NoArguments)?
+        .cloned()
+        .collect::<Vec<_>>();
+    if raw_numbers.len() > 3 {
+        return Err(SeqError::ExtraOperand(raw_numbers[3].clone()).into());
+    }
+
+    let numbers = raw_numbers
+        .iter()
         .map(|value| {
             let Some(value) = value.to_str() else {
                 return Err(SeqError::NonUtf8Argument(value.clone()));
@@ -290,9 +298,6 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if numbers.len() > 3 {
-        return Err(SeqError::ExtraOperand(numbers[3].clone()).into());
-    }
     Ok(numbers)
 }
 

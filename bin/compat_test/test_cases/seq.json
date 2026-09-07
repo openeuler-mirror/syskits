@@ -1663,6 +1663,31 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "seq",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq 1 2 3 \\xff；参数完整十六进制=31 32 33 ff；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=1，stderr为65字节、完整十六进制=7365713a206578747261206f706572616e6420275c333737270a5472792027736571202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a，stdout为0字节/0条换行分隔、完整十六进制=空；迁移原Cargo用例seq_reports_non_utf8_fourth_operand_as_extra第1次调用",
+            "args": [
+                "31",
+                "32",
+                "33",
+                "ff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7365713a206578747261206f706572616e6420275c333737270a5472792027736571202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

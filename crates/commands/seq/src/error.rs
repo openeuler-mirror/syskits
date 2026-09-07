@@ -34,7 +34,7 @@ pub enum SeqError {
     NoArguments,
 
     /// 操作数超过三个
-    ExtraOperand(String),
+    ExtraOperand(OsString),
 
     /// 等宽输出不能与自定义格式同时使用
     FormatWithEqualWidth,
@@ -84,7 +84,13 @@ impl Display for SeqError {
             ),
             Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
             Self::NoArguments => write!(f, "missing operand"),
-            Self::ExtraOperand(operand) => write!(f, "extra operand {}", operand.quote()),
+            Self::ExtraOperand(operand) => {
+                write!(
+                    f,
+                    "extra operand {}",
+                    quote_argument_bytes(operand.as_bytes())
+                )
+            }
             Self::FormatWithEqualWidth => write!(
                 f,
                 "format string may not be specified when printing equal width strings"

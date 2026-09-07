@@ -104,6 +104,8 @@ struct PtxConfig {
     macro_name: String,
     /// 上下文正则表达式
     context_regex: String,
+    /// break-file定义的分词边界，输出布局阶段必须复用同一规则。
+    word_break_chars: Option<HashSet<char>>,
 }
 
 impl Default for PtxConfig {
@@ -118,6 +120,7 @@ impl Default for PtxConfig {
             macro_name: "xx".to_owned(),
             trunc_str: "/".to_owned(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
+            word_break_chars: None,
             line_width: 72,
             gap_size: 3,
         }
@@ -167,6 +170,8 @@ struct WordFilter {
     ignore_set: HashSet<String>,
     /// 用于匹配单词的正则表达式
     word_regex: String,
+    /// break-file中的边界字符。
+    break_set: Option<HashSet<char>>,
 }
 
 impl WordFilter {
@@ -223,12 +228,12 @@ impl WordFilter {
         let reg = match arg_reg {
             Some(arg_reg) => arg_reg,
             None => {
-                if break_set.is_some() {
+                if let Some(break_set) = &break_set {
                     format!(
                         "[^{}]+",
                         break_set
-                            .unwrap()
-                            .into_iter()
+                            .iter()
+                            .copied()
                             .map(|c| if REGEX_CHARCLASS.contains(c) {
                                 format!("\\{c}")
                             } else {
@@ -249,6 +254,7 @@ impl WordFilter {
             only_set: oset,
             ignore_set: iset,
             word_regex: reg,
+            break_set,
         })
     }
 }
@@ -261,6 +267,7 @@ impl Default for WordFilter {
             only_set: HashSet::new(),
             ignore_set: HashSet::new(),
             word_regex: "[A-Za-z]+".to_string(),
+            break_set: None,
         }
     }
 }
@@ -763,6 +770,9 @@ fn ptx_skip_white_backwards(chars: &[char], mut cursor: usize, start: usize) -> 
 }
 
 fn ptx_is_default_word_char(config: &PtxConfig, c: char) -> bool {
+    if let Some(break_chars) = &config.word_break_chars {
+        return !break_chars.contains(&c);
+    }
     if config.is_gnu_ext {
         c.is_ascii_alphabetic()
     } else {
@@ -1003,6 +1013,9 @@ struct PtxOutputFieldsBytes {
 }
 
 fn ptx_is_default_word_byte(config: &PtxConfig, byte: u8) -> bool {
+    if let Some(break_chars) = &config.word_break_chars {
+        return !break_chars.contains(&char::from(byte));
+    }
     if config.is_gnu_ext {
         byte.is_ascii_alphabetic()
     } else {
@@ -2395,10 +2408,11 @@ impl PtxSettings {
         };
 
         // 获取配置
-        let config = get_config(&matches)?;
+        let mut config = get_config(&matches)?;
 
         // 创建单词过滤器
         let word_filter = WordFilter::new(&matches, &config)?;
+        config.word_break_chars = word_filter.break_set.clone();
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config).map_err_context(String::new)?;
@@ -3183,6 +3197,7 @@ mod tests {
                 only_set: HashSet::new(),
                 ignore_set: HashSet::new(),
                 word_regex: r"\w+".to_string(),
+                break_set: None,
             };
 
             let file_map = vec![test_file_content(

@@ -1031,6 +1031,29 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -b breaks input；输入为breaks=,.;:\\n（5字节）；input=beta delta alpha\\nref1 epsilon alpha\\n（36字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共114字节的dumb索引；对应Cargo用例ptx_break_file_boundaries_apply_to_output_layout第1次调用",
+      "args": [
+        "-b",
+        "breaks",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "p=$(printf '%b' '\\142\\162\\145\\141\\153\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\054\\056\\073\\072\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "   ref1 epsilon alpha                  beta delta alpha\n                    beta delta alpha   ref1 epsilon alpha\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

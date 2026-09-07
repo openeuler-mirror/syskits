@@ -1857,6 +1857,30 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "command": "cksum",
+      "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；stdin为0字节、内容=空；输入fixture：file file，mode=644，3字节，内容=abc；file sums，mode=644，61字节，内容=SHA256 (file) = =ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0\\n；预期RC=1，stderr为56字节、内容=cksum: sums: no properly formatted checksum lines found\\n，stdout为0字节/0条换行分隔、内容=空；迁移原Cargo用例cksum_rejects_base64_padding_outside_the_digest_end第1次调用",
+      "args": [
+        "--check",
+        "sums"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\146\\151\\154\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\123\\110\\101\\062\\065\\066\\040\\050\\146\\151\\154\\145\\051\\040\\075\\040\\075\\165\\156\\147\\127\\166\\064\\070\\102\\172\\053\\160\\102\\121\\125\\104\\145\\130\\141\\064\\151\\111\\067\\101\\104\\131\\141\\117\\127\\106\\063\\161\\143\\164\\102\\104\\057\\131\\146\\111\\101\\106\\141\\060\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "cksum: sums: no properly formatted checksum lines found\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": ""
     }
   ]
 }

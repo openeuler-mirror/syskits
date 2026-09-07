@@ -206,16 +206,22 @@ impl WordFilter {
     fn new(matches: &clap::ArgMatches, config: &PtxConfig) -> CTResult<Self> {
         let (o, oset): (bool, HashSet<String>) = if matches.contains_id(ptx_options::PTX_ONLY_FILE)
         {
-            let words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)
+            let mut words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)
                 .map_err_context(String::new)?;
+            if config.is_ignore_case {
+                words = words.into_iter().map(|word| word.to_lowercase()).collect();
+            }
             (!words.is_empty(), words)
         } else {
             (false, HashSet::new())
         };
         let (i, iset): (bool, HashSet<String>) =
             if matches.contains_id(ptx_options::PTX_IGNORE_FILE) {
-                let words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)
+                let mut words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)
                     .map_err_context(String::new)?;
+                if config.is_ignore_case {
+                    words = words.into_iter().map(|word| word.to_lowercase()).collect();
+                }
                 (!words.is_empty(), words)
             } else {
                 (false, HashSet::new())
@@ -659,14 +665,19 @@ fn ptx_create_word_set(
                 }
 
                 let mut word = content.text[global_beg..global_end].to_owned();
-                if filter.is_only_specified && !filter.only_set.contains(&word) {
+                let filter_word = if config.is_ignore_case {
+                    word.to_lowercase()
+                } else {
+                    word.clone()
+                };
+                if filter.is_only_specified && !filter.only_set.contains(&filter_word) {
                     continue;
                 }
-                if filter.is_ignore_specified && filter.ignore_set.contains(&word) {
+                if filter.is_ignore_specified && filter.ignore_set.contains(&filter_word) {
                     continue;
                 }
                 if config.is_ignore_case {
-                    word = word.to_lowercase();
+                    word = filter_word;
                 }
 
                 let context_start = if config.is_input_ref {

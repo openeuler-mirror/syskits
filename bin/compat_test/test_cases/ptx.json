@@ -1076,6 +1076,76 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -F ! -w 20 input；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；预期RC=0、stderr为空，stdout为9条换行分隔、共179字节的dumb索引；对应Cargo用例ptx_truncation_flags_and_tex_fields_match_gnu第1次调用",
+      "args": [
+        "-F",
+        "!",
+        "-w",
+        "20",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "             alpha!\n    !delta   alpha!\n          !   alpha\n     alpha   beta!\n    !gamma   beta!\n     !beta   delta!\n     !ref1   epsilon!\n     !beta   gamma!\n    !alpha   ref1!\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -F ! -w 20 input；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；预期RC=0、stderr为空，stdout为9条换行分隔、共211字节的TeX索引；对应Cargo用例ptx_truncation_flags_and_tex_fields_match_gnu第2次调用",
+      "args": [
+        "-T",
+        "-F",
+        "!",
+        "-w",
+        "20",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{alpha}{}{}\n\\xx {}{delta}{alpha}{}{}\n\\xx {}{}{alpha}{}{}\n\\xx {}{alpha}{beta}{}{}\n\\xx {}{gamma}{beta}{}{}\n\\xx {}{beta}{delta}{}{}\n\\xx {}{ref1}{epsilon}{}{}\n\\xx {}{beta}{gamma}{}{}\n\\xx {}{alpha}{ref}{1}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T input；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；预期RC=0、stderr为空，stdout为9条换行分隔、共582字节的TeX索引；对应Cargo用例ptx_truncation_flags_and_tex_fields_match_gnu第3次调用",
+      "args": [
+        "-T",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {ref1 epsilon alpha}{}{alpha}{ beta gamma beta delta alpha}{}\n\\xx {}{alpha beta gamma beta delta}{alpha}{ ref1 epsilon alpha}{}\n\\xx {}{beta delta alpha ref1 epsilon}{alpha}{}{beta gamma}\n\\xx {epsilon alpha}{alpha}{beta}{ gamma beta delta alpha ref1}{}\n\\xx {alpha}{alpha beta gamma}{beta}{ delta alpha ref1 epsilon}{}\n\\xx {}{alpha beta gamma beta}{delta}{ alpha ref1 epsilon alpha}{}\n\\xx {}{gamma beta delta alpha ref1}{epsilon}{ alpha}{alpha beta}\n\\xx {epsilon alpha}{alpha beta}{gamma}{ beta delta alpha ref1}{}\n\\xx {}{beta gamma beta delta alpha}{ref}{1 epsilon alpha}{alpha}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

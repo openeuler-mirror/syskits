@@ -23,7 +23,9 @@
 //! - 提供引用和上下文显示
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version, error::ErrorKind};
+use clap::{
+    Arg, ArgAction, Command, builder::OsStringValueParser, crate_version, error::ErrorKind,
+};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -133,9 +135,8 @@ fn read_word_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<String>> {
     let filename = matches
-        .get_one::<String>(option)
-        .expect("parsing options failed!")
-        .to_string();
+        .get_one::<OsString>(option)
+        .expect("parsing options failed!");
     let mut file = File::open(filename)?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
@@ -156,7 +157,7 @@ fn read_char_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<char>> {
     let filename = matches
-        .get_one::<String>(option)
+        .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut reader = File::open(filename)?;
     let mut bytes = Vec::new();
@@ -2827,6 +2828,7 @@ pub fn ct_app() -> Command {
             .long(ptx_options::PTX_BREAK_FILE)
             .help(t!("ptx.clap.ptx_break_file"))
             .value_name("FILE")
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_IGNORE_CASE)
             .short('f')
@@ -2844,12 +2846,14 @@ pub fn ct_app() -> Command {
             .long(ptx_options::PTX_IGNORE_FILE)
             .help(t!("ptx.clap.ptx_ignore_file"))
             .value_name("FILE")
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_ONLY_FILE)
             .short('o')
             .long(ptx_options::PTX_ONLY_FILE)
             .help(t!("ptx.clap.ptx_only_file"))
             .value_name("FILE")
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(ptx_options::PTX_REFERENCES)
             .short('r')

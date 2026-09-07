@@ -2233,6 +2233,82 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -G -b breaks input；输入为breaks=\\xff（1字节 ff）；filter=alpha\\n\\xff\\n（8字节 616c7068610aff0a）；input=alpha\\xffbeta gamma\\n（17字节 616c706861ff626574612067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为3条换行分隔、共95字节的roff索引，首条stdout可读为“.xx \"\" \"\" \"alpha\\xffbeta gamma\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d47",
+        "2d62",
+        "627265616b73",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\142\\162\\145\\141\\153\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\377\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\377\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022222022616c706861ff626574612067616d6d61222022220a2e78782022222022616c706861ff222022626574612067616d6d61222022220a2e78782022222022616c706861ff6265746122202267616d6d61222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -o filter input；输入为breaks=\\xff（1字节 ff）；filter=alpha\\n\\xff\\n（8字节 616c7068610aff0a）；input=alpha\\xffbeta gamma\\n（17字节 616c706861ff626574612067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为1条换行分隔、共56字节的dumb索引，首条stdout可读为“                                       alpha\\xffbeta gamma\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d6f",
+        "66696c746572",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\142\\162\\145\\141\\153\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\377\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\377\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202020202020202020202020202020202020202020202020202020202020202020202020616c706861ff626574612067616d6d610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -i filter input；输入为breaks=\\xff（1字节 ff）；filter=alpha\\n\\xff\\n（8字节 616c7068610aff0a）；input=alpha\\xffbeta gamma\\n（17字节 616c706861ff626574612067616d6d610a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共95字节的dumb索引，首条stdout可读为“                              alpha\\xff   beta gamma\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d69",
+        "66696c746572",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\142\\162\\145\\141\\153\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\012\\377\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\377\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202020202020202020202020202020202020202020202020202020616c706861ff202020626574612067616d6d610a2020202020202020202020202020202020202020202020202020616c706861ff6265746120202067616d6d610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

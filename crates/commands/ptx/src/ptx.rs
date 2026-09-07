@@ -400,18 +400,34 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         }
         config.gap_size = gap;
     }
-    if let Some(fmt) = matches.get_one::<String>(ptx_options::PTX_FORMAT) {
-        config.format = match fmt.as_str() {
-            "roff" => OutFormat::Roff,
-            "tex" => OutFormat::Tex,
-            _ => config.format,
-        };
-    }
-    if matches.get_flag(ptx_options::PTX_FORMAT_ROFF) {
-        config.format = OutFormat::Roff;
-    }
-    if matches.get_flag(ptx_options::PTX_FORMAT_TEX) {
-        config.format = OutFormat::Tex;
+    let format_option = matches
+        .get_one::<String>(ptx_options::PTX_FORMAT)
+        .and_then(|format| {
+            matches.index_of(ptx_options::PTX_FORMAT).map(|index| {
+                let format = if format == "roff" {
+                    OutFormat::Roff
+                } else {
+                    OutFormat::Tex
+                };
+                (index, format)
+            })
+        });
+    let roff_option = matches
+        .get_flag(ptx_options::PTX_FORMAT_ROFF)
+        .then(|| matches.index_of(ptx_options::PTX_FORMAT_ROFF))
+        .flatten()
+        .map(|index| (index, OutFormat::Roff));
+    let tex_option = matches
+        .get_flag(ptx_options::PTX_FORMAT_TEX)
+        .then(|| matches.index_of(ptx_options::PTX_FORMAT_TEX))
+        .flatten()
+        .map(|index| (index, OutFormat::Tex));
+    if let Some((_, format)) = [format_option, roff_option, tex_option]
+        .into_iter()
+        .flatten()
+        .max_by_key(|(index, _)| *index)
+    {
+        config.format = format;
     }
     Ok(config)
 }

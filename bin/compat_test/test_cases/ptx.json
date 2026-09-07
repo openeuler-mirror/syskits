@@ -2898,6 +2898,52 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -S \\xff input；输入为input=alpha \\xff beta\\n（13字节 616c70686120ff20626574610a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共92字节的dumb索引，首条stdout可读为“                                       alpha \\xff\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d53",
+        "ff",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\377\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202020202020202020202020202020202020202020202020202020202020202020202020616c70686120ff0a20202020202020202020202020202020202020202020202020202020202020202020202020202020626574610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -W \\xff input；输入为input=alpha \\xff beta\\n（13字节 616c70686120ff20626574610a）；预期RC=0、stderr为空，stdout十六进制解码为1条换行分隔、共46字节的dumb索引，首条stdout可读为“                               alpha   \\xff beta\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d57",
+        "ff",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\377\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "20202020202020202020202020202020202020202020202020202020202020616c706861202020ff20626574610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

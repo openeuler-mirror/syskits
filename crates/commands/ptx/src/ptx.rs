@@ -415,6 +415,8 @@ impl Default for WordFilter {
 /// 记录单词在文本中的位置和上下文信息
 #[derive(Debug, PartialOrd, PartialEq, Eq, Ord, Default)]
 struct WordRef {
+    /// GNU ptx按原始无符号字节排序，不能使用非UTF-8内部映射代替。
+    raw_word: Vec<u8>,
     /// 单词本身
     word: String,
     /// 在所有文件中的行号
@@ -977,6 +979,10 @@ fn ptx_create_word_set(
                 if config.is_ignore_case {
                     word = filter_word;
                 }
+                let mut raw_word = content.raw_text[global_beg..global_end].to_vec();
+                if config.is_ignore_case {
+                    raw_word.make_ascii_uppercase();
+                }
 
                 let context_start = if config.is_input_ref {
                     context_start.max(line_start + ptx_input_reference_content_start(line))
@@ -988,6 +994,7 @@ fn ptx_create_word_set(
                 let context_char_start = content.byte_to_char[context_start];
                 let context_char_end = content.byte_to_char[context_end];
                 word_set.insert(WordRef {
+                    raw_word,
                     word,
                     file_index: file_idx,
                     global_line_nr: content.offset + local_line_nr,
@@ -3031,6 +3038,7 @@ mod tests {
         position_end: usize,
     ) -> WordRef {
         WordRef {
+            raw_word: word.as_bytes().to_vec(),
             word: word.to_string(),
             global_line_nr: local_line_nr,
             local_line_nr,

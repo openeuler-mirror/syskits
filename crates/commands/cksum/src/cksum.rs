@@ -1435,15 +1435,13 @@ fn cksum_native_check(invocation: &CksumSemanticInvocation) -> CTResult<CksumSem
         }
 
         if n_properly_formatted_this_file == 0 {
-            if show_warnings {
-                push_stderr_line(
-                    &mut semantic.stderr_text,
-                    format!(
-                        "{}: no properly formatted checksum lines found",
-                        f_name.display()
-                    ),
-                );
-            }
+            push_stderr_line(
+                &mut semantic.stderr_text,
+                format!(
+                    "{}: no properly formatted checksum lines found",
+                    f_name.display()
+                ),
+            );
             no_file_verified = true;
         } else if invocation.ignore_missing && n_verified_this_file == 0 {
             if show_warnings {
@@ -2281,12 +2279,10 @@ fn cksum_check(opts: CksumOptions, files: Vec<&OsStr>) -> CTResult<i32> {
         }
 
         if n_properly_formatted_this_file == 0 {
-            if show_warnings {
-                ctcore::ct_show_error!(
-                    "{}: no properly formatted checksum lines found",
-                    f_name.display()
-                );
-            }
+            ctcore::ct_show_error!(
+                "{}: no properly formatted checksum lines found",
+                f_name.display()
+            );
             no_file_verified = true;
         } else if opts.ignore_missing && n_verified_this_file == 0 {
             if show_warnings {

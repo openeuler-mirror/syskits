@@ -158,6 +158,30 @@ fn read_char_filter_file(
     Ok(buffer.chars().collect())
 }
 
+fn gnu_emacs_word_regex_to_rust(pattern: &str) -> String {
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut translated = String::with_capacity(pattern.len());
+    let mut escaped = false;
+
+    for (index, &ch) in chars.iter().enumerate() {
+        // Emacs syntax treats the nested '[' literally; Rust otherwise parses a POSIX class.
+        if !escaped
+            && ch == '['
+            && chars.get(index + 1) == Some(&'[')
+            && chars.get(index + 2) == Some(&':')
+        {
+            translated.push('[');
+            translated.push('\\');
+        } else {
+            translated.push(ch);
+        }
+
+        escaped = if ch == '\\' { !escaped } else { false };
+    }
+
+    translated
+}
+
 #[derive(Debug)]
 struct WordFilter {
     /// 是否只包含指定的单词
@@ -226,7 +250,7 @@ impl WordFilter {
             None
         };
         let reg = match arg_reg {
-            Some(arg_reg) => arg_reg,
+            Some(arg_reg) => gnu_emacs_word_regex_to_rust(&arg_reg),
             None => {
                 if let Some(break_set) = &break_set {
                     format!(
@@ -2849,6 +2873,18 @@ mod tests {
             let config = PtxConfig::default();
             let filter = WordFilter::new(&matches, &config).unwrap();
             assert_eq!(filter.word_regex, "[A-Z]+");
+        }
+
+        #[test]
+        fn test_word_filter_uses_gnu_emacs_bracket_semantics() {
+            let matches = ct_app()
+                .try_get_matches_from(vec!["ptx", "-W", "[[:alpha:]]+"])
+                .unwrap();
+            let config = PtxConfig::default();
+
+            let filter = WordFilter::new(&matches, &config).unwrap();
+
+            assert_eq!(filter.word_regex, r"[\[:alpha:]]+");
         }
     }
 

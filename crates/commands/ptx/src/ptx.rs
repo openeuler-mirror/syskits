@@ -30,12 +30,10 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use regex::Regex;
 use std::collections::{BTreeSet, HashSet};
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt::{Display, Formatter, Write as FmtWrite};
+use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
-use std::num::ParseIntError;
 use std::process::{Command as ProcessCommand, Stdio};
 use sys_locale::get_locale;
 
@@ -339,20 +337,28 @@ struct WordRef {
     file_index: usize,
 }
 
-#[derive(Debug)]
-enum PtxError {
-    ParseError(ParseIntError),
-}
-
-impl Error for PtxError {}
-impl CTError for PtxError {}
-
-impl Display for PtxError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::ParseError(e) => e.fmt(f),
-        }
+fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
+    let invalid = || CtSimpleError::new(1, format!("invalid {description}: '{value}'"));
+    let unsigned = value.strip_prefix('+').unwrap_or(value);
+    if unsigned.is_empty() || unsigned.starts_with('-') {
+        return Err(invalid());
     }
+
+    let (digits, radix) = if let Some(digits) = unsigned
+        .strip_prefix("0x")
+        .or_else(|| unsigned.strip_prefix("0X"))
+    {
+        (digits, 16)
+    } else if unsigned.len() > 1 && unsigned.starts_with('0') {
+        (&unsigned[1..], 8)
+    } else {
+        (unsigned, 10)
+    };
+    let parsed = u128::from_str_radix(digits, radix).map_err(|_| invalid())?;
+    if parsed == 0 || parsed > isize::MAX as u128 {
+        return Err(invalid());
+    }
+    Ok(parsed as usize)
 }
 
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
@@ -392,26 +398,16 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
             .to_string();
     }
     if matches.contains_id(ptx_options::PTX_WIDTH) {
-        let width: usize = matches
+        let value = matches
             .get_one::<String>(ptx_options::PTX_WIDTH)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
-        if width == 0 {
-            return Err(CtSimpleError::new(1, "invalid line width: '0'"));
-        }
-        config.line_width = width;
+            .expect(err_msg);
+        config.line_width = parse_positive_base0(value, "line width")?;
     }
     if matches.contains_id(ptx_options::PTX_GAP_SIZE) {
-        let gap: usize = matches
+        let value = matches
             .get_one::<String>(ptx_options::PTX_GAP_SIZE)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
-        if gap == 0 {
-            return Err(CtSimpleError::new(1, "invalid gap width: '0'"));
-        }
-        config.gap_size = gap;
+            .expect(err_msg);
+        config.gap_size = parse_positive_base0(value, "gap width")?;
     }
     let format_option = matches
         .get_one::<String>(ptx_options::PTX_FORMAT)
@@ -2548,6 +2544,7 @@ pub fn ct_app() -> Command {
             .short('g')
             .long(ptx_options::PTX_GAP_SIZE)
             .help(t!("ptx.clap.ptx_gap_size"))
+            .allow_hyphen_values(true)
             .value_name("NUMBER"),
         Arg::new(ptx_options::PTX_IGNORE_FILE)
             .short('i')
@@ -2575,6 +2572,7 @@ pub fn ct_app() -> Command {
             .short('w')
             .long(ptx_options::PTX_WIDTH)
             .help(t!("ptx.clap.ptx_width"))
+            .allow_hyphen_values(true)
             .value_name("NUMBER"),
     ];
 

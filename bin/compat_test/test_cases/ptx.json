@@ -1369,6 +1369,52 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -f -i filter input；输入为filter=APPLE\\n（6字节）；input=Apple apple APPLE banana\\n（25字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共46字节的dumb索引；对应Cargo用例ptx_ignore_case_applies_to_word_filter_tables第1次调用",
+      "args": [
+        "-f",
+        "-i",
+        "filter",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\120\\120\\114\\105\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\160\\160\\154\\145\\040\\141\\160\\160\\154\\145\\040\\101\\120\\120\\114\\105\\040\\142\\141\\156\\141\\156\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                   Apple apple APPLE   banana\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -f -o filter input；输入为filter=APPLE\\n（6字节）；input=Apple apple APPLE banana\\n（25字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共174字节的dumb索引；对应Cargo用例ptx_ignore_case_applies_to_word_filter_tables第2次调用",
+      "args": [
+        "-f",
+        "-o",
+        "filter",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\146\\151\\154\\164\\145\\162'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\120\\120\\114\\105\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\160\\160\\154\\145\\040\\141\\160\\160\\154\\145\\040\\101\\120\\120\\114\\105\\040\\142\\141\\156\\141\\156\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                       Apple apple APPLE banana\n                               Apple   apple APPLE banana\n                         Apple apple   APPLE banana\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

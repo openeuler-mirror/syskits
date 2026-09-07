@@ -42,6 +42,7 @@ use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
+const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
 
 #[derive(Debug)]
 enum OutFormat {
@@ -364,7 +365,11 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         "\n".clone_into(&mut config.context_regex);
     }
     if let Some(reg) = matches.get_one::<String>(ptx_options::PTX_SENTENCE_REGEXP) {
-        config.context_regex = reg.to_string();
+        config.context_regex = if reg.is_empty() {
+            NEVER_MATCH_REGEX.to_string()
+        } else {
+            reg.to_string()
+        };
         // Note: Zero-length regex check is deferred to actual usage time
         // to match GNU ptx behavior (only errors when processing non-empty content)
     }

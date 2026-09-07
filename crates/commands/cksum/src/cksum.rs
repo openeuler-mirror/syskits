@@ -244,9 +244,9 @@ fn parse_base_zero_usize(value: &str) -> Option<usize> {
 }
 
 fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize, &'static str)> {
-    let tag = tag.trim().to_uppercase();
+    let tag = tag.trim();
 
-    if let Some(len_str) = tag.strip_prefix("BLAKE2B-") {
+    if let Some(len_str) = tag.strip_prefix("BLAKE2b-") {
         if let Some(bits) = parse_base_zero_usize(len_str) {
             if bits > 0 && bits % 8 == 0 && bits <= 512 {
                 return Some((
@@ -333,7 +333,7 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
         return None;
     }
 
-    match tag.as_str() {
+    match tag {
         "MD5" => Some((
             Box::new(Md5::new()) as Box<dyn CtDigest>,
             128,
@@ -364,7 +364,7 @@ fn detect_algo_from_tag(tag: &str) -> Option<(Box<dyn CtDigest + 'static>, usize
             512,
             CKSUM_ALGORITHM_OPTIONS_SHA512,
         )),
-        "BLAKE2B" => Some((
+        "BLAKE2b" => Some((
             Box::new(CtBlake2b::new()) as Box<dyn CtDigest>,
             512,
             CKSUM_ALGORITHM_OPTIONS_BLAKE2B,

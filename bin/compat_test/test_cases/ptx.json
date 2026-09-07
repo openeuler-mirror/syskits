@@ -1522,6 +1522,29 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -G input output extra；输入为input=alpha beta\\n（11字节）；output=（0字节）；预期RC=1、stderr为\"/usr/bin/ptx: extra operand 'extra'\\nTry '/usr/bin/ptx --help' for more information.\\n\"，stdout为0条换行分隔、共0字节的roff索引；对应Cargo用例ptx_traditional_mode_rejects_extra_operands第1次调用",
+      "args": [
+        "-G",
+        "input",
+        "output",
+        "extra"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "/usr/bin/ptx: extra operand 'extra'\nTry '/usr/bin/ptx --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

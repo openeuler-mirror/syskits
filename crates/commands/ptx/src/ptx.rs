@@ -2444,6 +2444,12 @@ impl PtxSettings {
 
         // 获取配置
         let mut config = get_config(&matches)?;
+        if !config.is_gnu_ext && input_files.len() > 2 {
+            return Err(CtSimpleError::new(
+                1,
+                format!("extra operand '{}'", input_files[2]),
+            ));
+        }
 
         // 创建单词过滤器
         let word_filter = WordFilter::new(&matches, &config)?;

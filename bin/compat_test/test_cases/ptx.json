@@ -1658,6 +1658,102 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -O -A -w 40 input；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；refinput=LONGREFERENCE123 alpha beta gamma\\nX beta delta alpha\\n（53字节）；预期RC=0、stderr为空，stdout为9条换行分隔、共415字节的roff索引；对应Cargo用例ptx_left_references_reduce_roff_and_tex_field_widths第1次调用",
+      "args": [
+        "-O",
+        "-A",
+        "-w",
+        "40",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\162\\145\\146\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\114\\117\\116\\107\\122\\105\\106\\105\\122\\105\\116\\103\\105\\061\\062\\063\\040\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\130\\040\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"gamma/\" \"\" \"alpha beta\" \"\" \"input:1\"\n.xx \"\" \"/beta delta\" \"alpha ref1/\" \"\" \"input:2\"\n.xx \"\" \"1 epsilon\" \"alpha\" \"/ref\" \"input:3\"\n.xx \"\" \"alpha\" \"beta gamma/\" \"\" \"input:1\"\n.xx \"\" \"/beta gamma\" \"beta delta/\" \"\" \"input:2\"\n.xx \"\" \"/gamma beta\" \"delta alpha/\" \"\" \"input:2\"\n.xx \"\" \"/alpha ref1\" \"epsilon alpha\" \"\" \"input:3\"\n.xx \"\" \"alpha beta\" \"gamma beta/\" \"\" \"input:1\"\n.xx \"\" \"/alpha\" \"ref1 epsilon/\" \"\" \"input:3\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -A -w 40 input；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；refinput=LONGREFERENCE123 alpha beta gamma\\nX beta delta alpha\\n（53字节）；预期RC=0、stderr为空，stdout为9条换行分隔、共384字节的TeX索引；对应Cargo用例ptx_left_references_reduce_roff_and_tex_field_widths第2次调用",
+      "args": [
+        "-T",
+        "-A",
+        "-w",
+        "40",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\162\\145\\146\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\114\\117\\116\\107\\122\\105\\106\\105\\122\\105\\116\\103\\105\\061\\062\\063\\040\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\130\\040\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {gamma}{}{alpha}{ beta}{}{input:1}\n\\xx {}{beta delta}{alpha}{ ref1}{}{input:2}\n\\xx {}{1 epsilon}{alpha}{}{ref}{input:3}\n\\xx {}{alpha}{beta}{ gamma}{}{input:1}\n\\xx {}{beta gamma}{beta}{ delta}{}{input:2}\n\\xx {}{gamma beta}{delta}{ alpha}{}{input:2}\n\\xx {}{alpha ref1}{epsilon}{ alpha}{}{input:3}\n\\xx {}{alpha beta}{gamma}{ beta}{}{input:1}\n\\xx {}{alpha}{ref}{1 epsilon}{}{input:3}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -O -r -w 20 refinput；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；refinput=LONGREFERENCE123 alpha beta gamma\\nX beta delta alpha\\n（53字节）；预期RC=0、stderr为空，stdout为6条换行分隔、共201字节的roff索引；对应Cargo用例ptx_left_references_reduce_roff_and_tex_field_widths第3次调用",
+      "args": [
+        "-O",
+        "-r",
+        "-w",
+        "20",
+        "refinput"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\162\\145\\146\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\114\\117\\116\\107\\122\\105\\106\\105\\122\\105\\116\\103\\105\\061\\062\\063\\040\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\130\\040\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \"alpha/\" \"\" \"LONGREFERENCE123\"\n.xx \"\" \"/\" \"alpha\" \"\" \"X\"\n.xx \"\" \"/\" \"beta/\" \"\" \"LONGREFERENCE123\"\n.xx \"\" \"\" \"beta/\" \"\" \"X\"\n.xx \"\" \"/\" \"delta/\" \"\" \"X\"\n.xx \"\" \"/\" \"gamma\" \"\" \"LONGREFERENCE123\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -r -w 20 refinput；输入为input=alpha beta gamma\\nbeta delta alpha\\nref1 epsilon alpha\\n（53字节）；refinput=LONGREFERENCE123 alpha beta gamma\\nX beta delta alpha\\n（53字节）；预期RC=0、stderr为空，stdout为6条换行分隔、共181字节的TeX索引；对应Cargo用例ptx_left_references_reduce_roff_and_tex_field_widths第4次调用",
+      "args": [
+        "-T",
+        "-r",
+        "-w",
+        "20",
+        "refinput"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012\\162\\145\\146\\061\\040\\145\\160\\163\\151\\154\\157\\156\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\162\\145\\146\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\114\\117\\116\\107\\122\\105\\106\\105\\122\\105\\116\\103\\105\\061\\062\\063\\040\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\040\\147\\141\\155\\155\\141\\012\\130\\040\\142\\145\\164\\141\\040\\144\\145\\154\\164\\141\\040\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{alpha}{}{}{LONGREFERENCE123}\n\\xx {}{}{alpha}{}{}{X}\n\\xx {}{}{beta}{}{}{LONGREFERENCE123}\n\\xx {}{}{beta}{}{}{X}\n\\xx {}{}{delta}{}{}{X}\n\\xx {}{}{gamma}{}{}{LONGREFERENCE123}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

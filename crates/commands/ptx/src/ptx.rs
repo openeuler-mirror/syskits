@@ -1349,6 +1349,7 @@ fn ptx_format_tex_line(
     chars_text: &[char],
     context_reg: &Regex,
     reference: &str,
+    line_width: usize,
     maximum_word_length: usize,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
@@ -1368,7 +1369,7 @@ fn ptx_format_tex_line(
         keyword,
         all_after,
         config,
-        config.line_width,
+        line_width,
         maximum_word_length,
     );
     let after: String = fields.keyafter.chars().skip(fields.keyword_len).collect();
@@ -1455,6 +1456,7 @@ fn ptx_format_roff_line(
     chars_text: &[char],
     context_reg: &Regex,
     reference: &str,
+    line_width: usize,
     maximum_word_length: usize,
 ) -> String {
     let mut output = String::with_capacity(line.len() * 2);
@@ -1476,7 +1478,7 @@ fn ptx_format_roff_line(
         keyword,
         all_after,
         config,
-        config.line_width,
+        line_width,
         maximum_word_length,
     );
 
@@ -1502,6 +1504,16 @@ fn ptx_format_roff_line(
 
 fn str_cols(s: &str) -> usize {
     s.chars().count()
+}
+
+fn ptx_effective_line_width(config: &PtxConfig, reference_max_width: usize) -> usize {
+    if (config.is_auto_ref || config.is_input_ref) && !config.is_right_ref {
+        config
+            .line_width
+            .saturating_sub(reference_max_width + config.gap_size)
+    } else {
+        config.line_width
+    }
 }
 
 fn ptx_display_field(s: &str) -> String {
@@ -1832,6 +1844,7 @@ fn ptx_format_roff_line_bytes(
     word_ref: &WordRef,
     content: &FileContent,
     reference: &str,
+    line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
     let bytes_text = content.text.as_bytes();
@@ -1854,7 +1867,7 @@ fn ptx_format_roff_line_bytes(
         keyword,
         all_after,
         config,
-        config.line_width,
+        line_width,
         maximum_word_length,
     );
 
@@ -1930,6 +1943,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
             reference_max_width = reference_max_width.max(str_cols(&reference));
         }
     }
+    let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
 
     for word_ref in &settings.words {
         // 通过索引直接获取文件内容
@@ -1954,6 +1968,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
                 &content.chars_text,
                 &context_reg,
                 &reference,
+                effective_line_width,
                 maximum_word_length,
             )
             .into_bytes(),
@@ -1962,6 +1977,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
                 word_ref,
                 content,
                 &reference,
+                effective_line_width,
                 maximum_word_length,
             ),
             OutFormat::Dumb => ptx_format_dumb_line_bytes(
@@ -2027,13 +2043,7 @@ fn ptx_render_row(
         chars_line,
         context_reg,
     );
-    let mut effective_line_width = settings.config.line_width;
-    if (settings.config.is_auto_ref || settings.config.is_input_ref)
-        && !settings.config.is_right_ref
-    {
-        effective_line_width =
-            effective_line_width.saturating_sub(reference_max_width + settings.config.gap_size);
-    }
+    let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
     let (tail, before, after, head, _) = ptx_get_output_chunks_for_width_with_max(
         all_before,
         keyword,
@@ -2052,6 +2062,7 @@ fn ptx_render_row(
             &content.chars_text,
             context_reg,
             &reference,
+            effective_line_width,
             maximum_word_length,
         ),
         OutFormat::Roff => ptx_format_roff_line(
@@ -2063,6 +2074,7 @@ fn ptx_render_row(
             &content.chars_text,
             context_reg,
             &reference,
+            effective_line_width,
             maximum_word_length,
         ),
         OutFormat::Dumb => ptx_format_dumb_line(
@@ -2139,6 +2151,7 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
             reference_max_width = reference_max_width.max(str_cols(&reference));
         }
     }
+    let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
 
     for word_ref in &settings.words {
         let file_map_value = &settings.file_map[word_ref.file_index];
@@ -2163,6 +2176,7 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
                 &file_map_value.chars_text,
                 &context_reg,
                 &reference,
+                effective_line_width,
                 maximum_word_length,
             )
             .into_bytes(),
@@ -2171,6 +2185,7 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
                 word_ref,
                 file_map_value,
                 &reference,
+                effective_line_width,
                 maximum_word_length,
             ),
             OutFormat::Dumb => ptx_format_dumb_line_bytes(
@@ -2936,6 +2951,7 @@ mod tests {
                 &chars_line,
                 &context_reg,
                 reference,
+                config.line_width,
                 maximum_word_length,
             );
             assert!(result.starts_with(".xx"));

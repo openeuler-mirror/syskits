@@ -32,6 +32,8 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write, stdin, stdout};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -301,6 +303,29 @@ fn unescape_checksum_filename(filename: &str) -> Option<String> {
     Some(unescaped)
 }
 
+fn unescape_checksum_filename_bytes(filename: &[u8]) -> Option<Vec<u8>> {
+    let mut unescaped = Vec::with_capacity(filename.len());
+    let mut index = 0;
+    while index < filename.len() {
+        if filename[index] != b'\\' {
+            unescaped.push(filename[index]);
+            index += 1;
+            continue;
+        }
+
+        index += 1;
+        let escaped = *filename.get(index)?;
+        match escaped {
+            b'\\' => unescaped.push(b'\\'),
+            b'n' => unescaped.push(b'\n'),
+            b'r' => unescaped.push(b'\r'),
+            _ => return None,
+        }
+        index += 1;
+    }
+    Some(unescaped)
+}
+
 fn checksum_output_filename(filename: &str, escape: bool) -> (bool, Cow<'_, str>) {
     if escape && filename_needs_escape(filename) {
         (true, Cow::Owned(escape_checksum_filename(filename)))
@@ -316,6 +341,62 @@ fn checksum_status_filename(filename: &str) -> Cow<'_, str> {
     } else {
         filename
     }
+}
+
+#[cfg(unix)]
+fn os_str_bytes(value: &OsStr) -> Cow<'_, [u8]> {
+    Cow::Borrowed(value.as_bytes())
+}
+
+#[cfg(unix)]
+fn os_str_from_bytes(value: &[u8]) -> Option<Cow<'_, OsStr>> {
+    Some(Cow::Borrowed(OsStr::from_bytes(value)))
+}
+
+#[cfg(not(unix))]
+fn os_str_from_bytes(value: &[u8]) -> Option<Cow<'_, OsStr>> {
+    String::from_utf8(value.to_vec())
+        .ok()
+        .map(|value| Cow::Owned(OsString::from(value)))
+}
+
+#[cfg(not(unix))]
+fn os_str_bytes(value: &OsStr) -> Cow<'_, [u8]> {
+    Cow::Owned(value.to_string_lossy().as_bytes().to_vec())
+}
+
+fn checksum_output_filename_bytes(filename: &[u8], escape: bool) -> (bool, Cow<'_, [u8]>) {
+    if !escape
+        || !filename
+            .iter()
+            .any(|byte| matches!(byte, b'\\' | b'\n' | b'\r'))
+    {
+        return (false, Cow::Borrowed(filename));
+    }
+
+    let mut escaped = Vec::with_capacity(filename.len());
+    for &byte in filename {
+        match byte {
+            b'\\' => escaped.extend_from_slice(b"\\\\"),
+            b'\n' => escaped.extend_from_slice(b"\\n"),
+            b'\r' => escaped.extend_from_slice(b"\\r"),
+            _ => escaped.push(byte),
+        }
+    }
+    (true, Cow::Owned(escaped))
+}
+
+fn write_checksum_status(filename: &OsStr, status: &str) -> io::Result<()> {
+    let filename = os_str_bytes(filename);
+    let (escaped, filename) = checksum_output_filename_bytes(&filename, true);
+    let mut output = stdout().lock();
+    if escaped {
+        output.write_all(b"\\")?;
+    }
+    output.write_all(&filename)?;
+    output.write_all(b": ")?;
+    output.write_all(status.as_bytes())?;
+    output.write_all(b"\n")
 }
 
 fn parse_base_zero_usize(value: &str) -> Option<usize> {
@@ -926,8 +1007,12 @@ fn cksum_parse_semantic_invocation(args: impl ctcore::Args) -> CTResult<CksumSem
     }
 
     let files = matches
-        .get_many::<String>(opt_flags::FILE)
-        .map(|values| values.cloned().collect())
+        .get_many::<OsString>(opt_flags::FILE)
+        .map(|values| {
+            values
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect()
+        })
         .unwrap_or_default();
 
     Ok(CksumSemanticDispatch::Invocation(CksumSemanticInvocation {
@@ -1072,6 +1157,70 @@ fn render_cksum_compute_classic(
             }
         }
     }
+}
+
+fn render_cksum_file_classic(
+    options: &CksumOptions,
+    sum: &str,
+    size: usize,
+    filename: &OsStr,
+) -> Vec<u8> {
+    let filename = os_str_bytes(filename);
+    let mut output = Vec::new();
+
+    match options.algo_name {
+        CKSUM_ALGORITHM_OPTIONS_SYSV => output.extend_from_slice(
+            format!(
+                "{} {} ",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(size, options.output_bits)
+            )
+            .as_bytes(),
+        ),
+        CKSUM_ALGORITHM_OPTIONS_BSD => output.extend_from_slice(
+            format!(
+                "{:05} {:5} ",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(size, options.output_bits)
+            )
+            .as_bytes(),
+        ),
+        CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
+            output.extend_from_slice(format!("{sum} {size} ").as_bytes());
+        }
+        _ => {
+            let (escaped, rendered_filename) =
+                checksum_output_filename_bytes(&filename, !options.zero);
+            if escaped {
+                output.push(b'\\');
+            }
+            if options.untagged {
+                output.extend_from_slice(sum.as_bytes());
+                output.push(b' ');
+                output.push(if options.binary { b'*' } else { b' ' });
+            } else {
+                let tag = if options.algo_name == CKSUM_ALGORITHM_OPTIONS_BLAKE2B {
+                    blake2b_tag(options.length)
+                } else {
+                    options.algo_name.to_ascii_uppercase()
+                };
+                output.extend_from_slice(tag.as_bytes());
+                output.extend_from_slice(b" (");
+                output.extend_from_slice(&rendered_filename);
+                output.extend_from_slice(b") = ");
+                output.extend_from_slice(sum.as_bytes());
+                output.push(if options.zero { b'\0' } else { b'\n' });
+                return output;
+            }
+            output.extend_from_slice(&rendered_filename);
+            output.push(if options.zero { b'\0' } else { b'\n' });
+            return output;
+        }
+    }
+
+    output.extend_from_slice(&filename);
+    output.push(if options.zero { b'\0' } else { b'\n' });
+    output
 }
 
 fn cksum_open_for_semantic(file_name: &str) -> Result<Box<dyn Read>, String> {
@@ -1837,8 +1986,6 @@ where
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
 
-    let line_end = if cksum_opts.zero { "\0" } else { "\n" };
-
     for file_name in f {
         let filename = Path::new(file_name);
         let stdin_buffer;
@@ -1898,47 +2045,7 @@ where
             },
         };
 
-        let bsd_width = 5;
-        match cksum_opts.algo_name {
-            CKSUM_ALGORITHM_OPTIONS_SYSV => print!(
-                "{} {} {}{}",
-                sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits),
-                filename.display(),
-                line_end
-            ),
-            CKSUM_ALGORITHM_OPTIONS_BSD => print!(
-                "{:0bsd_width$} {:bsd_width$} {}{}",
-                sum.parse::<u16>().unwrap(),
-                div_ceil(sz, cksum_opts.output_bits),
-                filename.display(),
-                line_end
-            ),
-            CKSUM_ALGORITHM_OPTIONS_CRC | CKSUM_ALGORITHM_OPTIONS_CRC32B => {
-                print!("{sum} {sz} {}{}", filename.display(), line_end)
-            }
-            CKSUM_ALGORITHM_OPTIONS_BLAKE2B if !cksum_opts.untagged => {
-                let tag = blake2b_tag(cksum_opts.length);
-                let filename = filename.to_string_lossy();
-                let (escaped, filename) = checksum_output_filename(&filename, !cksum_opts.zero);
-                let prefix = if escaped { "\\" } else { "" };
-                print!("{prefix}{tag} ({filename}) = {sum}{line_end}");
-            }
-            _ => {
-                let filename = filename.to_string_lossy();
-                let (escaped, filename) = checksum_output_filename(&filename, !cksum_opts.zero);
-                let prefix = if escaped { "\\" } else { "" };
-                if cksum_opts.untagged {
-                    let marker = if cksum_opts.binary { "*" } else { " " };
-                    print!("{prefix}{sum} {marker}{filename}{line_end}");
-                } else {
-                    print!(
-                        "{prefix}{} ({filename}) = {sum}{line_end}",
-                        cksum_opts.algo_name.to_ascii_uppercase(),
-                    );
-                }
-            }
-        }
+        stdout().write_all(&render_cksum_file_classic(&cksum_opts, &sum, sz, file_name))?;
     }
 
     Ok(())
@@ -2169,8 +2276,8 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
             return Ok(1);
         }
 
-        let files = match matches.get_many::<String>(opt_flags::FILE) {
-            Some(v) => v.map(OsStr::new).collect(),
+        let files = match matches.get_many::<OsString>(opt_flags::FILE) {
+            Some(v) => v.map(OsString::as_os_str).collect(),
             None => vec![OsStr::new("-")],
         };
         return cksum_check(opts, files, algorithm_specified, infer_variable_length);
@@ -2180,8 +2287,8 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
         ctcore::ct_show_error!("{message}");
     }
 
-    match matches.get_many::<String>(opt_flags::FILE) {
-        Some(files) => cksum(opts, files.map(OsStr::new))?,
+    match matches.get_many::<OsString>(opt_flags::FILE) {
+        Some(files) => cksum(opts, files.map(OsString::as_os_str))?,
         None => cksum(opts, std::iter::empty())?,
     };
 
@@ -2217,7 +2324,7 @@ fn cksum_check(
         let mut n_verified_this_file = 0;
         let mut current_default_algo = opts.algo_name;
 
-        let file_input: Box<dyn BufRead> = if manifest_is_stdin {
+        let mut file_input: Box<dyn BufRead> = if manifest_is_stdin {
             Box::new(BufReader::new(stdin()))
         } else {
             match File::open(f_name) {
@@ -2232,23 +2339,36 @@ fn cksum_check(
             }
         };
 
-        for (line_num, line_result) in file_input.lines().enumerate() {
-            let line = match line_result {
-                Ok(l) => l,
+        let mut next_line_num = 0usize;
+        let mut line = Vec::new();
+        loop {
+            line.clear();
+            match file_input.read_until(b'\n', &mut line) {
+                Ok(0) => break,
+                Ok(_) => {}
                 Err(e) => {
                     let err_msg = e.to_string();
                     let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
                     ctcore::ct_show_error!("{}: {}", f_name.display(), clean_err);
-                    continue;
+                    break;
                 }
-            };
+            }
+            let line_num = next_line_num;
+            next_line_num += 1;
 
-            if line.is_empty() || line.starts_with('#') {
+            if line.last() == Some(&b'\n') {
+                line.pop();
+            }
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+
+            if line.is_empty() || line.first() == Some(&b'#') {
                 continue;
             }
 
             let (digest_str, parsed_filename, line_algo, line_format, escaped_filename) =
-                match parse_check_line(&line) {
+                match parse_check_line_bytes(&line) {
                     Some((d, f, a, format, escaped)) => (d, f, a, format, escaped),
                     None => {
                         bad_format += 1;
@@ -2436,7 +2556,7 @@ fn cksum_check(
                 continue;
             }
 
-            let filename: Cow<'_, str> = match line_format {
+            let filename: Cow<'_, [u8]> = match line_format {
                 CheckLineFormat::Tagged => Cow::Borrowed(parsed_filename),
                 CheckLineFormat::Reversed => {
                     if reversed_format == Some(false) {
@@ -2455,7 +2575,10 @@ fn cksum_check(
                     Cow::Borrowed(parsed_filename)
                 }
                 CheckLineFormat::Standard(marker) if reversed_format == Some(true) => {
-                    Cow::Owned(format!("{}{parsed_filename}", char::from(marker)))
+                    let mut filename = Vec::with_capacity(parsed_filename.len() + 1);
+                    filename.push(marker);
+                    filename.extend_from_slice(parsed_filename);
+                    Cow::Owned(filename)
                 }
                 CheckLineFormat::Standard(_) => {
                     reversed_format = Some(false);
@@ -2463,7 +2586,7 @@ fn cksum_check(
                 }
             };
             let filename = if escaped_filename {
-                match unescape_checksum_filename(&filename) {
+                match unescape_checksum_filename_bytes(&filename) {
                     Some(filename) => Cow::Owned(filename),
                     None => {
                         bad_format += 1;
@@ -2481,10 +2604,12 @@ fn cksum_check(
             } else {
                 filename
             };
-            let filename_str = filename.as_ref();
-            let status_filename = checksum_status_filename(filename_str);
+            let Some(filename_os) = os_str_from_bytes(&filename) else {
+                bad_format += 1;
+                continue;
+            };
 
-            if manifest_is_stdin && filename_str == "-" {
+            if manifest_is_stdin && filename.as_ref() == b"-" {
                 bad_format += 1;
                 if opts.warn {
                     ctcore::ct_show_error!(
@@ -2500,10 +2625,10 @@ fn cksum_check(
             n_properly_formatted_this_file += 1;
             global_properly_formatted += 1;
 
-            let mut target_file: Box<dyn Read> = if filename_str == "-" {
+            let mut target_file: Box<dyn Read> = if filename.as_ref() == b"-" {
                 Box::new(stdin())
             } else {
-                match File::open(Path::new(filename_str)) {
+                match File::open(Path::new(&*filename_os)) {
                     Ok(f) => Box::new(BufReader::new(f)),
                     Err(e) => {
                         if opts.ignore_missing && e.kind() == io::ErrorKind::NotFound {
@@ -2511,13 +2636,12 @@ fn cksum_check(
                         }
                         let err_msg = e.to_string();
                         let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-                        ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
+                        ctcore::ct_show_error!("{}: {}", filename_os.to_string_lossy(), clean_err);
                         if !opts.status {
-                            println!(
-                                "{}: {}",
-                                status_filename,
-                                t!("cksum.check.failed_open_or_read")
-                            );
+                            write_checksum_status(
+                                filename_os.as_ref(),
+                                &t!("cksum.check.failed_open_or_read"),
+                            )?;
                         }
                         missing_files += 1;
                         continue;
@@ -2537,13 +2661,12 @@ fn cksum_check(
                 Err(e) => {
                     let err_msg = e.to_string();
                     let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-                    ctcore::ct_show_error!("{}: {}", filename_str, clean_err);
+                    ctcore::ct_show_error!("{}: {}", filename_os.to_string_lossy(), clean_err);
                     if !opts.status {
-                        println!(
-                            "{}: {}",
-                            status_filename,
-                            t!("cksum.check.failed_open_or_read")
-                        );
+                        write_checksum_status(
+                            filename_os.as_ref(),
+                            &t!("cksum.check.failed_open_or_read"),
+                        )?;
                     }
                     missing_files += 1;
                     continue;
@@ -2565,11 +2688,11 @@ fn cksum_check(
 
             if checksum_match {
                 if !opts.quiet && !opts.status {
-                    println!("{}: {}", status_filename, t!("cksum.check.ok"));
+                    write_checksum_status(filename_os.as_ref(), &t!("cksum.check.ok"))?;
                 }
             } else {
                 if !opts.status {
-                    println!("{}: {}", status_filename, t!("cksum.check.failed"));
+                    write_checksum_status(filename_os.as_ref(), &t!("cksum.check.failed"))?;
                 }
                 bad_checksum += 1;
             }
@@ -2641,48 +2764,69 @@ fn cksum_check(
 }
 
 fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFormat, bool)> {
-    let mut input = line.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let (digest, filename, algorithm, format, escaped) = parse_check_line_bytes(line.as_bytes())?;
+    Some((
+        digest,
+        std::str::from_utf8(filename).ok()?,
+        algorithm,
+        format,
+        escaped,
+    ))
+}
+
+type ParsedCheckLineBytes<'a> = (&'a str, &'a [u8], Option<&'a str>, CheckLineFormat, bool);
+
+fn parse_check_line_bytes(line: &[u8]) -> Option<ParsedCheckLineBytes<'_>> {
+    let mut input = line;
+    while matches!(input.first(), Some(b' ' | b'\t')) {
+        input = &input[1..];
+    }
     let mut escaped_filename = false;
 
-    if let Some(stripped) = input.strip_prefix('\\') {
-        input = stripped;
+    if input.first() == Some(&b'\\') {
+        input = &input[1..];
         escaped_filename = true;
     }
 
-    if let (Some(first_paren), Some(last_paren)) = (input.find('('), input.rfind(')')) {
+    if let (Some(first_paren), Some(last_paren)) = (
+        input.iter().position(|&byte| byte == b'('),
+        input.iter().rposition(|&byte| byte == b')'),
+    ) {
         if first_paren < last_paren {
             let tag_prefix = &input[..first_paren];
             let algo = tag_prefix
-                .strip_suffix("  ")
-                .or_else(|| tag_prefix.strip_suffix(' '))
+                .strip_suffix(b"  ")
+                .or_else(|| tag_prefix.strip_suffix(b" "))
                 .unwrap_or(tag_prefix);
             let valid_tag_spacing = !algo.is_empty()
-                && !algo.contains([' ', '\t'])
+                && !algo.iter().any(|byte| matches!(byte, b' ' | b'\t'))
                 && tag_prefix.len() <= algo.len() + 2;
-            let after_paren = input[last_paren + 1..].trim_start_matches([' ', '\t']);
-            if valid_tag_spacing {
-                if let Some(digest) = after_paren.strip_prefix('=') {
-                    let digest = digest.trim_start_matches([' ', '\t']);
-                    let filename = &input[first_paren + 1..last_paren];
-                    return Some((
-                        digest,
-                        filename,
-                        Some(algo),
-                        CheckLineFormat::Tagged,
-                        escaped_filename,
-                    ));
+            let mut after_paren = &input[last_paren + 1..];
+            while matches!(after_paren.first(), Some(b' ' | b'\t')) {
+                after_paren = &after_paren[1..];
+            }
+            if valid_tag_spacing && after_paren.first() == Some(&b'=') {
+                let mut digest = &after_paren[1..];
+                while matches!(digest.first(), Some(b' ' | b'\t')) {
+                    digest = &digest[1..];
                 }
+                let filename = &input[first_paren + 1..last_paren];
+                return Some((
+                    std::str::from_utf8(digest).ok()?,
+                    filename,
+                    Some(std::str::from_utf8(algo).ok()?),
+                    CheckLineFormat::Tagged,
+                    escaped_filename,
+                ));
             }
         }
     }
 
-    let separator_index = input
-        .char_indices()
-        .find_map(|(index, character)| character.is_ascii_whitespace().then_some(index))?;
-    let digest = &input[..separator_index];
+    let separator_index = input.iter().position(|byte| matches!(byte, b' ' | b'\t'))?;
+    let digest = std::str::from_utf8(&input[..separator_index]).ok()?;
     let rest = &input[separator_index + 1..];
 
-    if rest.len() == 1 || !matches!(rest.as_bytes().first(), Some(b' ' | b'*')) {
+    if rest.len() == 1 || !matches!(rest.first(), Some(b' ' | b'*')) {
         Some((
             digest,
             rest,
@@ -2695,7 +2839,7 @@ fn parse_check_line(line: &str) -> Option<(&str, &str, Option<&str>, CheckLineFo
             digest,
             &rest[1..],
             None,
-            CheckLineFormat::Standard(rest.as_bytes()[0]),
+            CheckLineFormat::Standard(rest[0]),
             escaped_filename,
         ))
     }
@@ -2750,6 +2894,7 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::FILE)
             .hide(true)
             .action(clap::ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::ALGORITHM)
             .long(opt_flags::ALGORITHM)
@@ -2880,6 +3025,7 @@ mod tests {
         use crate::ct_app;
         use crate::opt_flags;
         use clap::error::ErrorKind;
+        use std::ffi::OsString;
 
         #[test]
         fn test_ct_app_version() {
@@ -2931,7 +3077,7 @@ mod tests {
             // FILE argument is valid, so this should succeed
             assert!(result.is_ok());
             let matches = result.unwrap();
-            assert!(matches.get_many::<String>(opt_flags::FILE).is_some());
+            assert!(matches.get_many::<OsString>(opt_flags::FILE).is_some());
         }
 
         #[test]
@@ -3014,8 +3160,8 @@ mod tests {
             // FILE argument accepts multiple values, so this should succeed
             assert!(result.is_ok());
             let matches = result.unwrap();
-            let files: Vec<&String> = matches
-                .get_many::<String>(opt_flags::FILE)
+            let files: Vec<&OsString> = matches
+                .get_many::<OsString>(opt_flags::FILE)
                 .unwrap()
                 .collect();
             assert_eq!(files.len(), 3);
@@ -3100,8 +3246,8 @@ mod tests {
             // Empty string is a valid file path for clap
             assert!(result.is_ok());
             let matches = result.unwrap();
-            let files: Vec<&String> = matches
-                .get_many::<String>(opt_flags::FILE)
+            let files: Vec<&OsString> = matches
+                .get_many::<OsString>(opt_flags::FILE)
                 .unwrap()
                 .collect();
             assert_eq!(files.len(), 1);
@@ -3118,8 +3264,8 @@ mod tests {
             // clap does not validate file existence at parse time; this should succeed
             assert!(result.is_ok());
             let matches = result.unwrap();
-            let files: Vec<&String> = matches
-                .get_many::<String>(opt_flags::FILE)
+            let files: Vec<&OsString> = matches
+                .get_many::<OsString>(opt_flags::FILE)
                 .unwrap()
                 .collect();
             assert_eq!(files.len(), 1);
@@ -4527,7 +4673,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4582,7 +4728,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4637,7 +4783,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4691,7 +4837,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4746,7 +4892,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4801,7 +4947,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4856,7 +5002,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4911,7 +5057,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -4966,7 +5112,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5021,7 +5167,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5076,7 +5222,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5131,7 +5277,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5186,7 +5332,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5241,7 +5387,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5297,7 +5443,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5352,7 +5498,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5407,7 +5553,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5462,7 +5608,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5517,7 +5663,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5572,7 +5718,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5627,7 +5773,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5682,7 +5828,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5737,7 +5883,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5793,7 +5939,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5848,7 +5994,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5903,7 +6049,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -5959,7 +6105,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -6014,7 +6160,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -6069,7 +6215,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -6125,7 +6271,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -6180,7 +6326,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -6235,7 +6381,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));
@@ -6291,7 +6437,7 @@ mod tests {
 
             match results
                 .expect("get opt_flags error")
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<OsString>(opt_flags::FILE)
             {
                 Some(files) => {
                     let s = cksum(opts, files.map(OsStr::new));

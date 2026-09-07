@@ -1,4 +1,6 @@
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::process::{Command, Stdio};
 
 use tempfile::TempDir;

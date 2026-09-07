@@ -2223,6 +2223,55 @@
       "cleanup_commands": [],
       "tstdin": "",
       "byteMode": true
+    },
+    {
+      "command": "cksum",
+      "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --algorithm=sha256 nonutf-\\xff；参数完整十六进制=2d2d616c676f726974686d3d736861323536 6e6f6e7574662dff；stdin为0字节、完整十六进制=空；输入fixture：file nonutf-\\xff，mode=644，3字节，完整十六进制=616263；预期RC=0，stderr为0字节、完整十六进制=空，stdout为85字节/1条换行分隔、完整十六进制=53484132353620286e6f6e7574662dff29203d20626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561640a；迁移原Cargo用例cksum_preserves_non_utf8_filename_bytes第1次调用",
+      "args": [
+        "2d2d616c676f726974686d3d736861323536",
+        "6e6f6e7574662dff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\156\\157\\156\\165\\164\\146\\055\\377'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "53484132353620286e6f6e7574662dff29203d20626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561640a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "command": "cksum",
+      "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行cksum --check sums；参数完整十六进制=2d2d636865636b 73756d73；stdin为0字节、完整十六进制=空；输入fixture：file nonutf-\\xff，mode=644，3字节，完整十六进制=616263；file sums，mode=644，85字节，完整十六进制=53484132353620286e6f6e7574662dff29203d20626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561640a；预期RC=0，stderr为0字节、完整十六进制=空，stdout为13字节/1条换行分隔、完整十六进制=6e6f6e7574662dff3a204f4b0a；迁移原Cargo用例cksum_preserves_non_utf8_filename_bytes第2次调用",
+      "args": [
+        "2d2d636865636b",
+        "73756d73"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\156\\157\\156\\165\\164\\146\\055\\377'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\165\\155\\163'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\123\\110\\101\\062\\065\\066\\040\\050\\156\\157\\156\\165\\164\\146\\055\\377\\051\\040\\075\\040\\142\\141\\067\\070\\061\\066\\142\\146\\070\\146\\060\\061\\143\\146\\145\\141\\064\\061\\064\\061\\064\\060\\144\\145\\065\\144\\141\\145\\062\\062\\062\\063\\142\\060\\060\\063\\066\\061\\141\\063\\071\\066\\061\\067\\067\\141\\071\\143\\142\\064\\061\\060\\146\\146\\066\\061\\146\\062\\060\\060\\061\\065\\141\\144\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "6e6f6e7574662dff3a204f4b0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": "",
+      "byteMode": true
     }
   ]
 }

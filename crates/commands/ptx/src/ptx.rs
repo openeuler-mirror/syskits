@@ -139,7 +139,10 @@ fn read_word_filter_file(
     let reader = BufReader::new(file);
     let mut words: HashSet<String> = HashSet::new();
     for word in reader.lines() {
-        words.insert(word?);
+        let word = word?;
+        if !word.is_empty() {
+            words.insert(word);
+        }
     }
     Ok(words)
 }
@@ -205,7 +208,7 @@ impl WordFilter {
         {
             let words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)
                 .map_err_context(String::new)?;
-            (true, words)
+            (!words.is_empty(), words)
         } else {
             (false, HashSet::new())
         };
@@ -213,7 +216,7 @@ impl WordFilter {
             if matches.contains_id(ptx_options::PTX_IGNORE_FILE) {
                 let words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)
                     .map_err_context(String::new)?;
-                (true, words)
+                (!words.is_empty(), words)
             } else {
                 (false, HashSet::new())
             };

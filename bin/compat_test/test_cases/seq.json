@@ -1593,6 +1593,30 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "seq",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f \\xff%f\\xfe 1；参数完整十六进制=2d66 ff2566fe 31；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为11字节/1条换行分隔、完整十六进制=ff312e303030303030fe0a；迁移原Cargo用例seq_preserves_non_utf8_format_literals第1次调用",
+            "args": [
+                "2d66",
+                "ff2566fe",
+                "31"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff312e303030303030fe0a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

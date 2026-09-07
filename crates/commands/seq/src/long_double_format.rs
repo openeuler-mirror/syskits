@@ -58,8 +58,8 @@ struct Flags {
 
 #[derive(Debug)]
 pub struct GnuFloatFormat {
-    prefix: String,
-    suffix: String,
+    prefix: Vec<u8>,
+    suffix: Vec<u8>,
     flags: Flags,
     width: usize,
     precision: Option<usize>,
@@ -68,10 +68,10 @@ pub struct GnuFloatFormat {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum GnuFormatError {
-    NoDirective(String),
-    EndsInPercent(String),
-    UnknownDirective(String, u8),
-    TooManyDirectives(String),
+    NoDirective(Vec<u8>),
+    EndsInPercent(Vec<u8>),
+    UnknownDirective(Vec<u8>, u8),
+    TooManyDirectives(Vec<u8>),
 }
 
 impl Error for GnuFormatError {}
@@ -82,24 +82,37 @@ impl Display for GnuFormatError {
     fn fmt(&self, output: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NoDirective(format) => {
-                write!(output, "format '{format}' has no % directive")
+                write!(
+                    output,
+                    "format '{}' has no % directive",
+                    String::from_utf8_lossy(format)
+                )
             }
-            Self::EndsInPercent(format) => write!(output, "format '{format}' ends in %"),
+            Self::EndsInPercent(format) => write!(
+                output,
+                "format '{}' ends in %",
+                String::from_utf8_lossy(format)
+            ),
             Self::UnknownDirective(format, directive) => write!(
                 output,
-                "format '{format}' has unknown %{} directive",
+                "format '{}' has unknown %{} directive",
+                String::from_utf8_lossy(format),
                 char::from(*directive)
             ),
             Self::TooManyDirectives(format) => {
-                write!(output, "format '{format}' has too many % directives")
+                write!(
+                    output,
+                    "format '{}' has too many % directives",
+                    String::from_utf8_lossy(format)
+                )
             }
         }
     }
 }
 
 impl GnuFloatFormat {
-    pub fn try_parse(format: &str) -> Result<Self, GnuFormatError> {
-        let bytes = format.as_bytes();
+    pub fn try_parse(format: &[u8]) -> Result<Self, GnuFormatError> {
+        let bytes = format;
         let mut percent = 0;
         while percent < bytes.len() {
             if bytes[percent] != b'%' {
@@ -111,7 +124,7 @@ impl GnuFloatFormat {
             }
         }
         if percent == bytes.len() {
-            return Err(GnuFormatError::NoDirective(format.to_string()));
+            return Err(GnuFormatError::NoDirective(format.to_vec()));
         }
 
         let mut index = percent + 1;
@@ -150,11 +163,11 @@ impl GnuFloatFormat {
             index += 1;
         }
         let Some(&conversion) = bytes.get(index) else {
-            return Err(GnuFormatError::EndsInPercent(format.to_string()));
+            return Err(GnuFormatError::EndsInPercent(format.to_vec()));
         };
         if !b"aAeEfFgG".contains(&conversion) {
             return Err(GnuFormatError::UnknownDirective(
-                format.to_string(),
+                format.to_vec(),
                 conversion,
             ));
         }
@@ -166,7 +179,7 @@ impl GnuFloatFormat {
             } else if bytes.get(suffix_index + 1) == Some(&b'%') {
                 suffix_index += 2;
             } else {
-                return Err(GnuFormatError::TooManyDirectives(format.to_string()));
+                return Err(GnuFormatError::TooManyDirectives(format.to_vec()));
             }
         }
 
@@ -180,13 +193,11 @@ impl GnuFloatFormat {
         })
     }
 
-    pub fn format(&self, value: &ExtendedBigDecimal) -> String {
-        format!(
-            "{}{}{}",
-            self.prefix,
-            self.format_numeric(value, true),
-            self.suffix
-        )
+    pub fn format(&self, value: &ExtendedBigDecimal) -> Vec<u8> {
+        let mut output = self.prefix.clone();
+        output.extend_from_slice(self.format_numeric(value, true).as_bytes());
+        output.extend_from_slice(&self.suffix);
+        output
     }
 
     pub fn format_unlocalized_numeric(&self, value: &ExtendedBigDecimal) -> String {
@@ -337,16 +348,30 @@ fn group_integer(integer: &str, locale: &LocaleInfo) -> String {
     groups.join(&locale.thousands_separator)
 }
 
-fn parse_usize(value: &str) -> usize {
+fn parse_usize(value: &[u8]) -> usize {
     if value.is_empty() {
         0
     } else {
-        value.parse().unwrap_or(usize::MAX)
+        value.iter().fold(0_usize, |result, digit| {
+            result
+                .saturating_mul(10)
+                .saturating_add(usize::from(digit - b'0'))
+        })
     }
 }
 
-fn unescape_percent(value: &str) -> String {
-    value.replace("%%", "%")
+fn unescape_percent(value: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(value.len());
+    let mut index = 0;
+    while index < value.len() {
+        output.push(value[index]);
+        index += if value[index] == b'%' && value.get(index + 1) == Some(&b'%') {
+            2
+        } else {
+            1
+        };
+    }
+    output
 }
 
 fn pad_number(sign: &str, body: &str, width: usize, left: bool, zero: bool) -> String {
@@ -795,7 +820,12 @@ mod tests {
 
     fn render(format: &str, value: &str) -> String {
         let value = value.parse::<PreciseNumber>().unwrap().number;
-        GnuFloatFormat::try_parse(format).unwrap().format(&value)
+        String::from_utf8(
+            GnuFloatFormat::try_parse(format.as_bytes())
+                .unwrap()
+                .format(&value),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -843,22 +873,22 @@ mod tests {
     #[test]
     fn rejects_non_gnu_directives_without_panicking() {
         for (format, expected) in [
-            ("%%g", GnuFormatError::NoDirective("%%g".to_string())),
-            ("%", GnuFormatError::EndsInPercent("%".to_string())),
+            ("%%g", GnuFormatError::NoDirective(b"%%g".to_vec())),
+            ("%", GnuFormatError::EndsInPercent(b"%".to_vec())),
             (
                 "%lf",
-                GnuFormatError::UnknownDirective("%lf".to_string(), b'l'),
+                GnuFormatError::UnknownDirective(b"%lf".to_vec(), b'l'),
             ),
             (
                 "%1$f",
-                GnuFormatError::UnknownDirective("%1$f".to_string(), b'$'),
+                GnuFormatError::UnknownDirective(b"%1$f".to_vec(), b'$'),
             ),
-            (
-                "%g%g",
-                GnuFormatError::TooManyDirectives("%g%g".to_string()),
-            ),
+            ("%g%g", GnuFormatError::TooManyDirectives(b"%g%g".to_vec())),
         ] {
-            assert_eq!(GnuFloatFormat::try_parse(format).unwrap_err(), expected);
+            assert_eq!(
+                GnuFloatFormat::try_parse(format.as_bytes()).unwrap_err(),
+                expected
+            );
         }
     }
 }

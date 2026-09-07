@@ -465,8 +465,7 @@ fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
     Ok(parsed as usize)
 }
 
-fn ptx_unescape_option_bytes(value: &str) -> Vec<u8> {
-    let bytes = value.as_bytes();
+fn ptx_unescape_bytes(bytes: &[u8]) -> Vec<u8> {
     let mut output = Vec::with_capacity(bytes.len());
     let mut index = 0usize;
     while index < bytes.len() {
@@ -554,7 +553,7 @@ fn ptx_unescape_option_bytes(value: &str) -> Vec<u8> {
 }
 
 fn ptx_unescape_option(value: &str) -> String {
-    let bytes = ptx_unescape_option_bytes(value);
+    let bytes = ptx_unescape_bytes(value.as_bytes());
     let byte_mode = std::str::from_utf8(&bytes).is_err();
     ptx_internal_text(&bytes, byte_mode)
 }
@@ -592,9 +591,9 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     }
     if matches.contains_id(ptx_options::PTX_FLAG_TRUNCATION) {
         let value = matches
-            .get_one::<String>(ptx_options::PTX_FLAG_TRUNCATION)
+            .get_one::<OsString>(ptx_options::PTX_FLAG_TRUNCATION)
             .expect(err_msg);
-        config.trunc_bytes = ptx_unescape_option_bytes(value);
+        config.trunc_bytes = ptx_unescape_bytes(value.as_os_str().as_bytes());
         let byte_mode = std::str::from_utf8(&config.trunc_bytes).is_err();
         config.trunc_str = ptx_internal_text(&config.trunc_bytes, byte_mode);
     }
@@ -2887,7 +2886,8 @@ pub fn ct_app() -> Command {
             .short('F')
             .long(ptx_options::PTX_FLAG_TRUNCATION)
             .help(t!("ptx.clap.ptx_flag_truncation"))
-            .value_name("STRING"),
+            .value_name("STRING")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(ptx_options::PTX_MACRO_NAME)
             .short('M')
             .long(ptx_options::PTX_MACRO_NAME)

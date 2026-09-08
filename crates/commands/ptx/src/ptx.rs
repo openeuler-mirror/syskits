@@ -72,6 +72,51 @@ fn ptx_is_single_byte_locale() -> bool {
     locale == "C" || locale == "POSIX" || locale.contains("ISO8859") || locale.contains("ISO-8859")
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum LocaleRegexEncoding {
+    #[default]
+    Ascii,
+    EucCn,
+    EucTw,
+    Big5,
+    Gb18030,
+}
+
+impl LocaleRegexEncoding {
+    fn from_environment() -> Self {
+        let locale = ptx_locale_name()
+            .to_string_lossy()
+            .trim()
+            .to_ascii_uppercase();
+        if locale.contains("GB18030") || locale.contains("GBK") {
+            Self::Gb18030
+        } else if locale.contains("GB2312") {
+            Self::EucCn
+        } else if locale.contains("EUCTW") {
+            Self::EucTw
+        } else if locale.contains("BIG5") {
+            Self::Big5
+        } else {
+            Self::Ascii
+        }
+    }
+
+    fn encoded(self, bytes: &[u8]) -> EncodedBytes<'_> {
+        let encoding = match self {
+            Self::Ascii => return EncodedBytes::ascii(bytes),
+            Self::EucCn => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_CN),
+            Self::EucTw => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_TW),
+            Self::Big5 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingBIG5),
+            Self::Gb18030 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingGB18030),
+        };
+        EncodedBytes::from_parts(bytes, encoding)
+    }
+
+    fn is_non_utf8_multibyte(self) -> bool {
+        self != Self::Ascii
+    }
+}
+
 #[derive(Debug)]
 struct LocaleByteCtype {
     alpha: [bool; 256],
@@ -216,6 +261,7 @@ struct ByteRegex {
     search: OnigRegex,
     longest: OnigRegex,
     fold_upper: Option<[u8; 256]>,
+    encoding: LocaleRegexEncoding,
 }
 
 impl ByteRegex {
@@ -241,7 +287,7 @@ impl ByteRegex {
         let bytes = folded.as_ref();
         let mut region = Region::new();
         let start = self.search.search_with_encoding(
-            EncodedBytes::ascii(bytes),
+            self.encoding.encoded(bytes),
             from,
             bytes.len(),
             SearchOptions::SEARCH_OPTION_NONE,
@@ -249,7 +295,7 @@ impl ByteRegex {
         )?;
         let (_, end) = self
             .longest
-            .find_with_encoding(EncodedBytes::ascii(&bytes[start..]))?;
+            .find_with_encoding(self.encoding.encoded(&bytes[start..]))?;
         Some((start, start + end))
     }
 
@@ -374,6 +420,8 @@ struct PtxConfig {
     single_byte_locale: bool,
     /// GNU ptx按当前LC_CTYPE对每个原始字节执行isalpha和toupper。
     byte_ctype: LocaleByteCtype,
+    /// 非UTF-8多字节locale使用的Oniguruma编码。
+    locale_regex_encoding: LocaleRegexEncoding,
 }
 
 impl Default for PtxConfig {
@@ -399,6 +447,7 @@ impl Default for PtxConfig {
             force_byte_mode: false,
             single_byte_locale: false,
             byte_ctype: LocaleByteCtype::from_environment(),
+            locale_regex_encoding: LocaleRegexEncoding::default(),
             line_width: 72,
             gap_size: 3,
         }
@@ -583,7 +632,11 @@ impl WordFilter {
         let uses_custom_regex = arg_reg_bytes.is_some();
         let word_byte_pattern = arg_reg_bytes
             .as_ref()
-            .filter(|pattern| config.single_byte_locale || std::str::from_utf8(pattern).is_err())
+            .filter(|pattern| {
+                config.single_byte_locale
+                    || config.locale_regex_encoding.is_non_utf8_multibyte()
+                    || std::str::from_utf8(pattern).is_err()
+            })
             .map(|pattern| gnu_emacs_regex_to_onig_bytes(pattern));
         let arg_reg = arg_reg_bytes.as_ref().map(|bytes| {
             let byte_mode = std::str::from_utf8(bytes).is_err();
@@ -799,6 +852,7 @@ fn ptx_unescape_bytes(bytes: &[u8]) -> Vec<u8> {
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     let mut config = PtxConfig {
         single_byte_locale: ptx_is_single_byte_locale(),
+        locale_regex_encoding: LocaleRegexEncoding::from_environment(),
         ..Default::default()
     };
     let err_msg = "parsing options failed";
@@ -811,7 +865,10 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         let bytes = ptx_unescape_bytes(reg.as_os_str().as_bytes());
         config.context_pattern_bytes = Some(bytes.clone());
         let byte_mode = std::str::from_utf8(&bytes).is_err();
-        if byte_mode || config.single_byte_locale {
+        if byte_mode
+            || config.single_byte_locale
+            || config.locale_regex_encoding.is_non_utf8_multibyte()
+        {
             config.context_byte_pattern = Some(gnu_emacs_regex_to_onig_bytes(&bytes));
             config.force_byte_mode = true;
         }
@@ -936,8 +993,9 @@ fn compile_user_byte_regex(
     pattern: &[u8],
     ignore_case: bool,
     byte_ctype: &LocaleByteCtype,
+    encoding: LocaleRegexEncoding,
 ) -> CTResult<ByteRegex> {
-    compile_byte_regex(pattern, ignore_case, byte_ctype).map_err(|_| {
+    compile_byte_regex(pattern, ignore_case, byte_ctype, encoding).map_err(|_| {
         CtSimpleError::new(
             1,
             format!(
@@ -952,13 +1010,14 @@ fn compile_byte_regex(
     pattern: &[u8],
     ignore_case: bool,
     byte_ctype: &LocaleByteCtype,
+    encoding: LocaleRegexEncoding,
 ) -> Result<ByteRegex, onig::Error> {
     let mut options = RegexOptions::REGEX_OPTION_NONE;
     if ignore_case {
         options |= RegexOptions::REGEX_OPTION_IGNORECASE;
     }
     let mut folded_pattern = pattern.to_vec();
-    if ignore_case {
+    if ignore_case && encoding == LocaleRegexEncoding::Ascii {
         for byte in &mut folded_pattern {
             if !byte.is_ascii() {
                 *byte = byte_ctype.upper[usize::from(*byte)];
@@ -966,7 +1025,7 @@ fn compile_byte_regex(
         }
     }
     let search = OnigRegex::with_options_and_encoding(
-        EncodedBytes::ascii(&folded_pattern),
+        encoding.encoded(&folded_pattern),
         options,
         Syntax::default(),
     )?;
@@ -974,14 +1033,16 @@ fn compile_byte_regex(
     longest_pattern.extend_from_slice(&folded_pattern);
     longest_pattern.push(b')');
     let longest = OnigRegex::with_options_and_encoding(
-        EncodedBytes::ascii(&longest_pattern),
+        encoding.encoded(&longest_pattern),
         options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
         Syntax::default(),
     )?;
     Ok(ByteRegex {
         search,
         longest,
-        fold_upper: ignore_case.then_some(byte_ctype.upper),
+        fold_upper: (ignore_case && encoding == LocaleRegexEncoding::Ascii)
+            .then_some(byte_ctype.upper),
+        encoding,
     })
 }
 
@@ -3810,6 +3871,7 @@ impl PtxSettings {
                     pattern,
                     config.is_ignore_case,
                     &config.byte_ctype,
+                    config.locale_regex_encoding,
                 )?);
             } else {
                 compile_user_regex(&config.context_regex, config.is_ignore_case)?;
@@ -3830,6 +3892,7 @@ impl PtxSettings {
                     pattern,
                     config.is_ignore_case,
                     &config.byte_ctype,
+                    config.locale_regex_encoding,
                 )?);
                 config.force_byte_mode = true;
             }
@@ -3879,9 +3942,17 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
     if bytes.is_empty() {
         return Ok(());
     }
-    if config.single_byte_locale || std::str::from_utf8(&bytes).is_err() {
+    if config.single_byte_locale
+        || config.locale_regex_encoding.is_non_utf8_multibyte()
+        || std::str::from_utf8(&bytes).is_err()
+    {
         let pattern = gnu_emacs_regex_to_onig_bytes(&bytes);
-        compile_user_byte_regex(&pattern, config.is_ignore_case, &config.byte_ctype)?;
+        compile_user_byte_regex(
+            &pattern,
+            config.is_ignore_case,
+            &config.byte_ctype,
+            config.locale_regex_encoding,
+        )?;
     } else {
         let pattern = gnu_emacs_regex_to_rust(
             std::str::from_utf8(&bytes).expect("validated UTF-8 word regexp"),

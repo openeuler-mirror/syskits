@@ -52,6 +52,10 @@ fn ptx_is_space_char(ch: char) -> bool {
     u8::try_from(ch).is_ok_and(ptx_is_space_byte)
 }
 
+fn ptx_write_error_context() -> String {
+    "write error".to_string()
+}
+
 fn ptx_locale_name() -> OsString {
     ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
@@ -2782,10 +2786,12 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
 
         writer
             .write_all(&output_line)
-            .map_err_context(String::new)?;
-        writer.write_all(b"\n").map_err_context(String::new)?;
+            .map_err_context(ptx_write_error_context)?;
+        writer
+            .write_all(b"\n")
+            .map_err_context(ptx_write_error_context)?;
     }
-    Ok(())
+    writer.flush().map_err_context(ptx_write_error_context)
 }
 
 fn ptx_reference_max_width(settings: &PtxSettings, context_reg: &Regex) -> usize {
@@ -2964,10 +2970,12 @@ fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResu
 
         writer
             .write_all(&output_line)
-            .map_err_context(String::new)?;
-        writer.write_all(b"\n").map_err_context(String::new)?;
+            .map_err_context(ptx_write_error_context)?;
+        writer
+            .write_all(b"\n")
+            .map_err_context(ptx_write_error_context)?;
     }
-    Ok(())
+    writer.flush().map_err_context(ptx_write_error_context)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -3004,11 +3012,15 @@ pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> C
         Err(err) => {
             return match err.kind() {
                 ErrorKind::DisplayHelp => {
-                    out.write_all(ptx_render_help_text().as_bytes())?;
+                    out.write_all(ptx_render_help_text().as_bytes())
+                        .map_err_context(ptx_write_error_context)?;
+                    out.flush().map_err_context(ptx_write_error_context)?;
                     Ok(())
                 }
                 ErrorKind::DisplayVersion => {
-                    out.write_all(ptx_render_version_text().as_bytes())?;
+                    out.write_all(ptx_render_version_text().as_bytes())
+                        .map_err_context(ptx_write_error_context)?;
+                    out.flush().map_err_context(ptx_write_error_context)?;
                     Ok(())
                 }
                 _ => Err(err.into()),

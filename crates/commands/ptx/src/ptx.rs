@@ -641,7 +641,11 @@ struct WordRef {
 
 fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
     let invalid = || CtSimpleError::new(1, format!("invalid {description}: '{value}'"));
-    let unsigned = value.strip_prefix('+').unwrap_or(value);
+    let value_without_leading_space =
+        value.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
+    let unsigned = value_without_leading_space
+        .strip_prefix('+')
+        .unwrap_or(value_without_leading_space);
     if unsigned.is_empty() || unsigned.starts_with('-') {
         return Err(invalid());
     }

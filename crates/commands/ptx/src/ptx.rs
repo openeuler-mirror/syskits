@@ -119,6 +119,7 @@ enum LocaleRegexEncoding {
     EucCn,
     EucTw,
     Big5,
+    Big5Hkscs,
     Gb18030,
 }
 
@@ -142,10 +143,10 @@ impl LocaleMultibyteValidator {
         })
     }
 
-    fn valid_character_len(&self, bytes: &[u8]) -> Option<usize> {
+    fn decode_character(&self, bytes: &[u8]) -> Option<(usize, char)> {
         let &first = bytes.first()?;
         if first.is_ascii() {
-            return Some(1);
+            return Some((1, char::from(first)));
         }
         unsafe {
             let locale = self.locale as ctcore::libc::locale_t;
@@ -157,9 +158,13 @@ impl LocaleMultibyteValidator {
             if length == usize::MAX || length == usize::MAX - 1 || length <= 1 {
                 None
             } else {
-                Some(length)
+                char::from_u32(wide).map(|character| (length, character))
             }
         }
+    }
+
+    fn valid_character_len(&self, bytes: &[u8]) -> Option<usize> {
+        self.decode_character(bytes).map(|(length, _)| length)
     }
 }
 
@@ -178,6 +183,8 @@ impl LocaleRegexEncoding {
             Self::EucCn
         } else if codeset.contains("EUC-TW") || codeset.contains("EUCTW") {
             Self::EucTw
+        } else if codeset.contains("BIG5-HKSCS") || codeset.contains("BIG5HKSCS") {
+            Self::Big5Hkscs
         } else if codeset.contains("BIG5") {
             Self::Big5
         } else {
@@ -198,6 +205,10 @@ impl LocaleRegexEncoding {
             Self::EucCn => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_CN),
             Self::EucTw => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_TW),
             Self::Big5 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingBIG5),
+            // HKSCS retains Big5's two-byte structure but extends its lead-byte range.
+            // GB18030 accepts that superset; LocaleMultibyteValidator still enforces
+            // the actual glibc Big5-HKSCS character repertoire before a match is used.
+            Self::Big5Hkscs => std::ptr::addr_of_mut!(onig_sys::OnigEncodingGB18030),
             Self::Gb18030 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingGB18030),
         };
         Some(encoding)
@@ -419,6 +430,68 @@ struct ByteRegex {
     fold_upper: Option<[u8; 256]>,
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
+    transcode_hkscs: bool,
+}
+
+struct LocaleUtf8Text {
+    text: String,
+    boundaries: Vec<(usize, usize)>,
+    invalid_raw_offsets: Vec<usize>,
+}
+
+impl LocaleUtf8Text {
+    fn from_bytes(bytes: &[u8], validator: &LocaleMultibyteValidator) -> Self {
+        let mut text = String::with_capacity(bytes.len());
+        let mut boundaries = Vec::with_capacity(bytes.len() + 1);
+        let mut invalid_raw_offsets = Vec::new();
+        let mut raw_offset = 0usize;
+        boundaries.push((0, 0));
+        while raw_offset < bytes.len() {
+            let (length, character) = validator
+                .decode_character(&bytes[raw_offset..])
+                .unwrap_or_else(|| {
+                    invalid_raw_offsets.push(raw_offset);
+                    (
+                        1,
+                        char::from_u32(0xe000 + u32::from(bytes[raw_offset])).unwrap(),
+                    )
+                });
+            text.push(character);
+            raw_offset += length;
+            boundaries.push((raw_offset, text.len()));
+        }
+        Self {
+            text,
+            boundaries,
+            invalid_raw_offsets,
+        }
+    }
+
+    fn utf8_offset_at_or_after(&self, raw_offset: usize) -> Option<usize> {
+        let index = self
+            .boundaries
+            .partition_point(|&(raw, _)| raw < raw_offset);
+        self.boundaries.get(index).map(|&(_, utf8)| utf8)
+    }
+
+    fn raw_offset(&self, utf8_offset: usize) -> Option<usize> {
+        self.boundaries
+            .binary_search_by_key(&utf8_offset, |&(_, utf8)| utf8)
+            .ok()
+            .map(|index| self.boundaries[index].0)
+    }
+
+    fn first_invalid_at_or_after(&self, raw_offset: usize) -> Option<usize> {
+        let index = self
+            .invalid_raw_offsets
+            .partition_point(|&invalid| invalid < raw_offset);
+        self.invalid_raw_offsets.get(index).copied()
+    }
+
+    fn contains_invalid(&self, start: usize, end: usize) -> bool {
+        self.first_invalid_at_or_after(start)
+            .is_some_and(|invalid| invalid < end)
+    }
 }
 
 impl ByteRegex {
@@ -501,6 +574,9 @@ impl ByteRegex {
     fn find_at(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
         let folded = self.folded_bytes(bytes);
         let bytes = folded.as_ref();
+        if self.transcode_hkscs {
+            return self.find_at_transcoded(bytes, from);
+        }
         let mut search_from = from;
         while search_from <= bytes.len() {
             let mut region = Region::new();
@@ -534,12 +610,67 @@ impl ByteRegex {
         None
     }
 
+    fn find_at_transcoded(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
+        let validator = self.locale_validator.as_ref()?;
+        let transcoded = LocaleUtf8Text::from_bytes(bytes, validator);
+        self.find_at_transcoded_text(bytes, 0, from, &transcoded)
+    }
+
+    fn find_at_transcoded_text(
+        &self,
+        bytes: &[u8],
+        raw_base: usize,
+        from: usize,
+        transcoded: &LocaleUtf8Text,
+    ) -> Option<(usize, usize)> {
+        let utf8_base = transcoded.utf8_offset_at_or_after(raw_base)?;
+        let text = &transcoded.text[utf8_base..];
+        let mut search_from = from;
+        while search_from <= bytes.len() {
+            let utf8_from = transcoded
+                .utf8_offset_at_or_after(search_from)?
+                .saturating_sub(utf8_base);
+            let mut region = Region::new();
+            let utf8_start = self.search.search_with_options(
+                text,
+                utf8_from,
+                text.len(),
+                SearchOptions::SEARCH_OPTION_NONE,
+                Some(&mut region),
+            )?;
+            let utf8_start = utf8_base + utf8_start;
+            let start = transcoded.raw_offset(utf8_start)?;
+            if let Some(invalid) = transcoded.first_invalid_at_or_after(search_from)
+                && invalid < start
+            {
+                search_from = invalid + 1;
+                continue;
+            }
+            let (_, utf8_length) = self.longest.find(&transcoded.text[utf8_start..])?;
+            let end = transcoded.raw_offset(utf8_start + utf8_length)?;
+            if !transcoded.contains_invalid(start, end) {
+                return Some((start, end));
+            }
+            search_from = start + 1;
+        }
+        None
+    }
+
     fn find_iter<'r, 't>(&'r self, bytes: &'t [u8]) -> ByteRegexFindIter<'r, 't> {
+        let transcoded = self
+            .transcode_hkscs
+            .then(|| {
+                self.locale_validator
+                    .as_ref()
+                    .map(|validator| LocaleUtf8Text::from_bytes(bytes, validator))
+            })
+            .flatten();
         ByteRegexFindIter {
             regex: self,
             bytes,
             next_start: 0,
             previous_end: None,
+            transcoded,
         }
     }
 }
@@ -549,6 +680,7 @@ struct ByteRegexFindIter<'r, 't> {
     bytes: &'t [u8],
     next_start: usize,
     previous_end: Option<usize>,
+    transcoded: Option<LocaleUtf8Text>,
 }
 
 impl Iterator for ByteRegexFindIter<'_, '_> {
@@ -560,8 +692,13 @@ impl Iterator for ByteRegexFindIter<'_, '_> {
                 return None;
             }
             let base = self.next_start;
-            let (start, end) = self.regex.find(&self.bytes[base..])?;
-            let (start, end) = (base + start, base + end);
+            let (start, end) = if let Some(transcoded) = &self.transcoded {
+                self.regex
+                    .find_at_transcoded_text(self.bytes, base, base, transcoded)?
+            } else {
+                let (start, end) = self.regex.find(&self.bytes[base..])?;
+                (base + start, base + end)
+            };
             if start == end && self.previous_end == Some(end) {
                 self.next_start = end + 1;
                 continue;
@@ -1246,9 +1383,16 @@ fn compile_byte_regex(
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
 ) -> Result<ByteRegex, onig::Error> {
+    let transcode_hkscs = encoding == LocaleRegexEncoding::Big5Hkscs && locale_validator.is_some();
     let mut options = RegexOptions::REGEX_OPTION_NONE;
     if ignore_case {
         options |= RegexOptions::REGEX_OPTION_IGNORECASE;
+        if transcode_hkscs {
+            // onig exposes this option in onig_sys but omits it from RegexOptions.
+            options |= unsafe {
+                RegexOptions::from_bits_unchecked(onig_sys::ONIG_OPTION_IGNORECASE_IS_ASCII)
+            };
+        }
     }
     let mut folded_pattern = pattern.to_vec();
     if ignore_case && encoding == LocaleRegexEncoding::Ascii {
@@ -1258,19 +1402,35 @@ fn compile_byte_regex(
             }
         }
     }
-    let search = OnigRegex::with_options_and_encoding(
-        encoding.encoded(&folded_pattern),
-        options,
-        Syntax::default(),
-    )?;
-    let mut longest_pattern = b"\\A(?:".to_vec();
-    longest_pattern.extend_from_slice(&folded_pattern);
-    longest_pattern.push(b')');
-    let longest = OnigRegex::with_options_and_encoding(
-        encoding.encoded(&longest_pattern),
-        options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
-        Syntax::default(),
-    )?;
+    let (search, longest) = if transcode_hkscs {
+        let validator = locale_validator
+            .as_ref()
+            .expect("HKSCS transcoding requires a locale validator");
+        let pattern = LocaleUtf8Text::from_bytes(&folded_pattern, validator).text;
+        let search = OnigRegex::with_options(&pattern, options, Syntax::default())?;
+        let longest_pattern = format!(r"\A(?:{pattern})");
+        let longest = OnigRegex::with_options(
+            &longest_pattern,
+            options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
+            Syntax::default(),
+        )?;
+        (search, longest)
+    } else {
+        let search = OnigRegex::with_options_and_encoding(
+            encoding.encoded(&folded_pattern),
+            options,
+            Syntax::default(),
+        )?;
+        let mut longest_pattern = b"\\A(?:".to_vec();
+        longest_pattern.extend_from_slice(&folded_pattern);
+        longest_pattern.push(b')');
+        let longest = OnigRegex::with_options_and_encoding(
+            encoding.encoded(&longest_pattern),
+            options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
+            Syntax::default(),
+        )?;
+        (search, longest)
+    };
     Ok(ByteRegex {
         search,
         longest,
@@ -1278,6 +1438,7 @@ fn compile_byte_regex(
             .then_some(byte_ctype.upper),
         encoding,
         locale_validator,
+        transcode_hkscs,
     })
 }
 

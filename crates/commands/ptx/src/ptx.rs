@@ -39,11 +39,21 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::process::{Command as ProcessCommand, Stdio};
+use std::sync::Arc;
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
+
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+}
 
 fn ptx_is_space_byte(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c)
@@ -109,6 +119,53 @@ enum LocaleRegexEncoding {
     EucTw,
     Big5,
     Gb18030,
+}
+
+#[derive(Debug)]
+struct LocaleMultibyteValidator {
+    locale: usize,
+}
+
+impl LocaleMultibyteValidator {
+    fn from_environment() -> Option<Self> {
+        let locale_name = CString::new(ptx_locale_name().as_encoded_bytes()).ok()?;
+        let locale = unsafe {
+            ctcore::libc::newlocale(
+                ctcore::libc::LC_CTYPE_MASK,
+                locale_name.as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        (!locale.is_null()).then_some(Self {
+            locale: locale as usize,
+        })
+    }
+
+    fn valid_character_len(&self, bytes: &[u8]) -> Option<usize> {
+        let &first = bytes.first()?;
+        if first.is_ascii() {
+            return Some(1);
+        }
+        unsafe {
+            let locale = self.locale as ctcore::libc::locale_t;
+            let previous = ctcore::libc::uselocale(locale);
+            let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+            let mut wide: ctcore::libc::wchar_t = 0;
+            let length = mbrtowc(&mut wide, bytes.as_ptr().cast(), bytes.len(), &mut state);
+            ctcore::libc::uselocale(previous);
+            if length == usize::MAX || length == usize::MAX - 1 || length <= 1 {
+                None
+            } else {
+                Some(length)
+            }
+        }
+    }
+}
+
+impl Drop for LocaleMultibyteValidator {
+    fn drop(&mut self) {
+        unsafe { ctcore::libc::freelocale(self.locale as ctcore::libc::locale_t) };
+    }
 }
 
 impl LocaleRegexEncoding {
@@ -360,9 +417,69 @@ struct ByteRegex {
     longest: OnigRegex,
     fold_upper: Option<[u8; 256]>,
     encoding: LocaleRegexEncoding,
+    locale_validator: Option<Arc<LocaleMultibyteValidator>>,
 }
 
 impl ByteRegex {
+    fn valid_character_len(&self, bytes: &[u8]) -> Option<usize> {
+        if self.encoding == LocaleRegexEncoding::Ascii {
+            return self.encoding.valid_character_len(bytes);
+        }
+        match &self.locale_validator {
+            Some(validator) => validator.valid_character_len(bytes),
+            None => self.encoding.valid_character_len(bytes),
+        }
+    }
+
+    fn is_valid_match_range(&self, bytes: &[u8], start: usize, end: usize) -> bool {
+        if self.encoding == LocaleRegexEncoding::Ascii {
+            return true;
+        }
+        let mut cursor = 0usize;
+        let mut start_is_boundary = start == 0;
+        let mut end_is_boundary = end == 0;
+        let mut contains_invalid_byte = false;
+        while cursor < bytes.len() {
+            if cursor == start {
+                start_is_boundary = true;
+            }
+            if cursor == end {
+                end_is_boundary = true;
+            }
+            match self.valid_character_len(&bytes[cursor..]) {
+                Some(length) => cursor += length,
+                None => {
+                    if (start..end).contains(&cursor) {
+                        contains_invalid_byte = true;
+                    }
+                    cursor += 1;
+                }
+            }
+        }
+        if cursor == start {
+            start_is_boundary = true;
+        }
+        if cursor == end {
+            end_is_boundary = true;
+        }
+        start_is_boundary && end_is_boundary && !contains_invalid_byte
+    }
+
+    fn first_invalid_byte_at_or_after(&self, bytes: &[u8], from: usize) -> Option<usize> {
+        if self.encoding == LocaleRegexEncoding::Ascii {
+            return None;
+        }
+        let mut cursor = 0usize;
+        while cursor < bytes.len() {
+            match self.valid_character_len(&bytes[cursor..]) {
+                Some(length) => cursor += length,
+                None if cursor >= from => return Some(cursor),
+                None => cursor += 1,
+            }
+        }
+        None
+    }
+
     fn folded_bytes<'a>(&self, bytes: &'a [u8]) -> Cow<'a, [u8]> {
         let Some(upper) = &self.fold_upper else {
             return Cow::Borrowed(bytes);
@@ -383,18 +500,37 @@ impl ByteRegex {
     fn find_at(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
         let folded = self.folded_bytes(bytes);
         let bytes = folded.as_ref();
-        let mut region = Region::new();
-        let start = self.search.search_with_encoding(
-            self.encoding.encoded(bytes),
-            from,
-            bytes.len(),
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut region),
-        )?;
-        let (_, end) = self
-            .longest
-            .find_with_encoding(self.encoding.encoded(&bytes[start..]))?;
-        Some((start, start + end))
+        let mut search_from = from;
+        while search_from <= bytes.len() {
+            let mut region = Region::new();
+            let start = self.search.search_with_encoding(
+                self.encoding.encoded(bytes),
+                search_from,
+                bytes.len(),
+                SearchOptions::SEARCH_OPTION_NONE,
+                Some(&mut region),
+            );
+            let Some(start) = start else {
+                let invalid = self.first_invalid_byte_at_or_after(bytes, search_from)?;
+                search_from = invalid + 1;
+                continue;
+            };
+            if let Some(invalid) = self.first_invalid_byte_at_or_after(bytes, search_from)
+                && invalid < start
+            {
+                search_from = invalid + 1;
+                continue;
+            }
+            let (_, end) = self
+                .longest
+                .find_with_encoding(self.encoding.encoded(&bytes[start..]))?;
+            let end = start + end;
+            if self.is_valid_match_range(bytes, start, end) {
+                return Some((start, end));
+            }
+            search_from = start + 1;
+        }
+        None
     }
 
     fn find_iter<'r, 't>(&'r self, bytes: &'t [u8]) -> ByteRegexFindIter<'r, 't> {
@@ -520,6 +656,8 @@ struct PtxConfig {
     byte_ctype: LocaleByteCtype,
     /// 非UTF-8多字节locale使用的Oniguruma编码。
     locale_regex_encoding: LocaleRegexEncoding,
+    /// Linux locale转换器用于验证Oniguruma候选的实际字符边界。
+    locale_validator: Option<Arc<LocaleMultibyteValidator>>,
 }
 
 impl Default for PtxConfig {
@@ -546,6 +684,7 @@ impl Default for PtxConfig {
             single_byte_locale: false,
             byte_ctype: LocaleByteCtype::from_environment(),
             locale_regex_encoding: LocaleRegexEncoding::default(),
+            locale_validator: None,
             line_width: 72,
             gap_size: 3,
         }
@@ -951,6 +1090,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     let mut config = PtxConfig {
         single_byte_locale: ptx_is_single_byte_locale(),
         locale_regex_encoding: LocaleRegexEncoding::from_environment(),
+        locale_validator: LocaleMultibyteValidator::from_environment().map(Arc::new),
         ..Default::default()
     };
     let err_msg = "parsing options failed";
@@ -1092,8 +1232,9 @@ fn compile_user_byte_regex(
     ignore_case: bool,
     byte_ctype: &LocaleByteCtype,
     encoding: LocaleRegexEncoding,
+    locale_validator: Option<Arc<LocaleMultibyteValidator>>,
 ) -> CTResult<ByteRegex> {
-    compile_byte_regex(pattern, ignore_case, byte_ctype, encoding)
+    compile_byte_regex(pattern, ignore_case, byte_ctype, encoding, locale_validator)
         .map_err(|_| ptx_invalid_regex_error(pattern))
 }
 
@@ -1102,6 +1243,7 @@ fn compile_byte_regex(
     ignore_case: bool,
     byte_ctype: &LocaleByteCtype,
     encoding: LocaleRegexEncoding,
+    locale_validator: Option<Arc<LocaleMultibyteValidator>>,
 ) -> Result<ByteRegex, onig::Error> {
     let mut options = RegexOptions::REGEX_OPTION_NONE;
     if ignore_case {
@@ -1134,6 +1276,7 @@ fn compile_byte_regex(
         fold_upper: (ignore_case && encoding == LocaleRegexEncoding::Ascii)
             .then_some(byte_ctype.upper),
         encoding,
+        locale_validator,
     })
 }
 
@@ -2122,11 +2265,7 @@ fn ptx_skip_something_bytes(
         return cursor;
     }
     if let Some(regex) = &config.word_byte_regex {
-        if regex
-            .encoding
-            .valid_character_len(&bytes[cursor..limit])
-            .is_none()
-        {
+        if regex.valid_character_len(&bytes[cursor..limit]).is_none() {
             return cursor + 1;
         }
         return regex
@@ -3963,6 +4102,7 @@ impl PtxSettings {
                     config.is_ignore_case,
                     &config.byte_ctype,
                     config.locale_regex_encoding,
+                    config.locale_validator.clone(),
                 )?);
             } else {
                 compile_user_regex(&config.context_regex, config.is_ignore_case)?;
@@ -3984,6 +4124,7 @@ impl PtxSettings {
                     config.is_ignore_case,
                     &config.byte_ctype,
                     config.locale_regex_encoding,
+                    config.locale_validator.clone(),
                 )?);
                 config.force_byte_mode = true;
             }
@@ -4043,6 +4184,7 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
             config.is_ignore_case,
             &config.byte_ctype,
             config.locale_regex_encoding,
+            config.locale_validator.clone(),
         )?;
     } else {
         let pattern = gnu_emacs_regex_to_rust(

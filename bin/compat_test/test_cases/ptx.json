@@ -4189,6 +4189,135 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -G newline；输入为control=\\x01alpha\\n（7字节 01616c7068610a）；high=\\xffalpha\\n（7字节 ff616c7068610a）；newline=\\n（1字节 0a）；quote='alpha\\n（7字节 27616c7068610a）；预期RC=1、stderr可读为“/usr/bin/ptx: error: regular expression has a match of length zero: '\\n'\\n”，共73字节2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c6e270a，stdout十六进制解码为0条换行分隔、共0字节的roff索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d47",
+        "6e65776c696e65"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\143\\157\\156\\164\\162\\157\\154'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\001\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\150\\151\\147\\150'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\156\\145\\167\\154\\151\\156\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\161\\165\\157\\164\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\047\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c6e270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -S \\n newline；输入为control=\\x01alpha\\n（7字节 01616c7068610a）；high=\\xffalpha\\n（7字节 ff616c7068610a）；newline=\\n（1字节 0a）；quote='alpha\\n（7字节 27616c7068610a）；预期RC=1、stderr可读为“/usr/bin/ptx: error: regular expression has a match of length zero: '\\n'\\n”，共73字节2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c6e270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d53",
+        "5c6e",
+        "6e65776c696e65"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\143\\157\\156\\164\\162\\157\\154'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\001\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\150\\151\\147\\150'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\156\\145\\167\\154\\151\\156\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\161\\165\\157\\164\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\047\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c6e270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -S ' quote；输入为control=\\x01alpha\\n（7字节 01616c7068610a）；high=\\xffalpha\\n（7字节 ff616c7068610a）；newline=\\n（1字节 0a）；quote='alpha\\n（7字节 27616c7068610a）；预期RC=1、stderr可读为“/usr/bin/ptx: error: regular expression has a match of length zero: '\\''\\n”，共73字节2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c27270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d53",
+        "27",
+        "71756f7465"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\143\\157\\156\\164\\162\\157\\154'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\001\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\150\\151\\147\\150'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\156\\145\\167\\154\\151\\156\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\161\\165\\157\\164\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\047\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c27270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -S \\01 control；输入为control=\\x01alpha\\n（7字节 01616c7068610a）；high=\\xffalpha\\n（7字节 ff616c7068610a）；newline=\\n（1字节 0a）；quote='alpha\\n（7字节 27616c7068610a）；预期RC=1、stderr可读为“/usr/bin/ptx: error: regular expression has a match of length zero: '\\001'\\n”，共75字节2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c303031270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d53",
+        "5c3031",
+        "636f6e74726f6c"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\143\\157\\156\\164\\162\\157\\154'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\001\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\150\\151\\147\\150'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\156\\145\\167\\154\\151\\156\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\161\\165\\157\\164\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\047\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c303031270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -S \\xff high；输入为control=\\x01alpha\\n（7字节 01616c7068610a）；high=\\xffalpha\\n（7字节 ff616c7068610a）；newline=\\n（1字节 0a）；quote='alpha\\n（7字节 27616c7068610a）；预期RC=1、stderr可读为“/usr/bin/ptx: error: regular expression has a match of length zero: '\\377'\\n”，共75字节2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d53",
+        "ff",
+        "68696768"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\143\\157\\156\\164\\162\\157\\154'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\001\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\150\\151\\147\\150'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\377\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\156\\145\\167\\154\\151\\156\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\161\\165\\157\\164\\145'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\047\\141\\154\\160\\150\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -3303,6 +3303,27 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -G input /dev/full；输入为input=alpha beta\\n（11字节）；预期RC=1、stderr为\"/usr/bin/ptx: write error: No space left on device\\n\"，stdout为0条换行分隔、共0字节的roff索引；对应Cargo用例ptx_reports_output_write_and_flush_errors第2次调用",
+      "args": [
+        "-G",
+        "input",
+        "/dev/full"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "/usr/bin/ptx: write error: No space left on device\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

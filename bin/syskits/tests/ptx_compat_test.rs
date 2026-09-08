@@ -1,5 +1,5 @@
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use tempfile::TempDir;
 
@@ -140,5 +140,31 @@ testfile:1:                       first   line.\n\
 testfile:2:                      second   line.\n\
 testfile:3:                           3   line.\n\
 testfile:2:                               second line.\n"
+    );
+}
+
+#[test]
+fn ptx_reports_stdout_write_errors() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("input"), b"alpha beta\n").expect("write input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["ptx", "input"])
+        .stdout(Stdio::from(
+            fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .expect("open /dev/full"),
+        ))
+        .output()
+        .expect("run syskits ptx");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"ptx: write error: No space left on device\n"
     );
 }

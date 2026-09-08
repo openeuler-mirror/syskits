@@ -3042,9 +3042,16 @@ fn ptx_format_tex_line(
         maximum_word_length,
     );
     let keyafter_chars: Vec<char> = fields.keyafter.chars().collect();
-    let key_end = ptx_skip_something(&keyafter_chars, 0, keyafter_chars.len(), config);
-    let key: String = keyafter_chars[..key_end].iter().collect();
-    let after: String = keyafter_chars[key_end..].iter().collect();
+    let (key, after): (String, String) = if keyafter_chars.is_empty() && config.word_regex.is_some()
+    {
+        (keyword.chars().next().into_iter().collect(), String::new())
+    } else {
+        let key_end = ptx_skip_something(&keyafter_chars, 0, keyafter_chars.len(), config);
+        (
+            keyafter_chars[..key_end].iter().collect(),
+            keyafter_chars[key_end..].iter().collect(),
+        )
+    };
 
     write!(
         output,
@@ -3650,9 +3657,12 @@ fn ptx_format_tex_line_bytes(
         line_width,
         maximum_word_length,
     );
-    let key_end = ptx_skip_something_bytes(&fields.keyafter, 0, fields.keyafter.len(), config);
-    let key = &fields.keyafter[..key_end];
-    let after = &fields.keyafter[key_end..];
+    let (key, after) = if fields.keyafter.is_empty() && config.word_regex.is_some() {
+        (&keyword[..keyword.len().min(1)], &[][..])
+    } else {
+        let key_end = ptx_skip_something_bytes(&fields.keyafter, 0, fields.keyafter.len(), config);
+        (&fields.keyafter[..key_end], &fields.keyafter[key_end..])
+    };
 
     let mut output = Vec::new();
     output.push(b'\\');

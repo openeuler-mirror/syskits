@@ -8315,6 +8315,31 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -A -w 10 -W '..' input；input由两个制表符和a加换行组成；预期RC=0、stderr为空，stdout为1行25字节的TeX记录\\xx {}{}{ }{}{}{input:1}，验证字段裁空后仍保留一个空白关键词和自动引用",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '\\t\\ta\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-A",
+        "-w",
+        "10",
+        "-W",
+        "..",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{ }{}{}{input:1}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

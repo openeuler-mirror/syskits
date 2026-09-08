@@ -9240,6 +9240,57 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.utf8，执行ptx -w 12 -W 'a.*a' input；input可读为“é alpha beta gamma \\xFF tail\\n”，共27字节c3 a9 20 61 6c 70 68 61 20 62 65 74 61 20 67 61 6d 6d 61 20 ff 20 74 61 69 6c 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、27字节的普通索引“    /\\xA9   alpha beta gamma/\\n”，其中十六进制stdout逐字节表示截断标志、保留的非法字节a9、关键词上下文和换行，验证最长匹配不会跨越非法UTF-8字节ff",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf '\\303\\251 alpha beta gamma \\377 tail\\n' > input"
+      ],
+      "args": [
+        "2d77",
+        "3132",
+        "2d57",
+        "612e2a61",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202fa9202020616c70686120626574612067616d6d612f0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.utf8，执行ptx -T -S 'a.*a' -W '[0-9]+' input；input可读为“x alpha gamma \\xFF 1 alpha omega\\n”，共30字节78 20 61 6c 70 68 61 20 67 61 6d 6d 61 20 ff 20 31 20 61 6c 70 68 61 20 6f 6d 65 67 61 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、29字节的TeX索引“\\xx {}{\\xFF}{1}{ alpha omega}{}\\n”，其中十六进制stdout逐字节表示TeX宏、非法字节ff、关键词1、右侧上下文和换行，验证句分隔正则不会跨越非法UTF-8字节ff",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'x alpha gamma \\377 1 alpha omega\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d53",
+        "612e2a61",
+        "2d57",
+        "5b302d395d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7bff7d7b317d7b20616c706861206f6d6567617d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

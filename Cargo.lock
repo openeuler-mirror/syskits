@@ -2326,6 +2326,7 @@ dependencies = [
  "clap",
  "ctcore",
  "onig",
+ "onig_sys",
  "rust-i18n",
  "sys-locale 0.2.4",
  "tempfile",

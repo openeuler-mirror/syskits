@@ -376,8 +376,15 @@ impl Regex {
             SearchOptions::SEARCH_OPTION_NONE,
             Some(&mut region),
         )?;
-        let (_, end) = self.longest.find(&text[start..])?;
-        Some((start, start + end))
+        let mut longest_region = Region::new();
+        self.longest.search_with_options(
+            text,
+            start,
+            text.len(),
+            SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut longest_region),
+        )?;
+        longest_region.pos(0)
     }
 
     fn find_iter<'r, 't>(&'r self, text: &'t str) -> RegexFindIter<'r, 't> {
@@ -598,10 +605,15 @@ impl ByteRegex {
                 search_from = invalid + 1;
                 continue;
             }
-            let (_, end) = self
-                .longest
-                .find_with_encoding(self.encoding.encoded(&bytes[start..]))?;
-            let end = start + end;
+            let mut longest_region = Region::new();
+            self.longest.search_with_encoding(
+                self.encoding.encoded(bytes),
+                start,
+                bytes.len(),
+                SearchOptions::SEARCH_OPTION_NONE,
+                Some(&mut longest_region),
+            )?;
+            let (_, end) = longest_region.pos(0)?;
             if self.is_valid_match_range(bytes, start, end) {
                 return Some((start, end));
             }
@@ -646,8 +658,17 @@ impl ByteRegex {
                 search_from = invalid + 1;
                 continue;
             }
-            let (_, utf8_length) = self.longest.find(&transcoded.text[utf8_start..])?;
-            let end = transcoded.raw_offset(utf8_start + utf8_length)?;
+            let mut longest_region = Region::new();
+            let relative_start = utf8_start - utf8_base;
+            self.longest.search_with_options(
+                text,
+                relative_start,
+                text.len(),
+                SearchOptions::SEARCH_OPTION_NONE,
+                Some(&mut longest_region),
+            )?;
+            let (_, relative_end) = longest_region.pos(0)?;
+            let end = transcoded.raw_offset(utf8_base + relative_end)?;
             if !transcoded.contains_invalid(start, end) {
                 return Some((start, end));
             }
@@ -1356,7 +1377,7 @@ fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, onig::Error>
         options |= RegexOptions::REGEX_OPTION_IGNORECASE;
     }
     let search = OnigRegex::with_options(pattern, options, Syntax::default())?;
-    let longest_pattern = format!(r"\A(?:{pattern})");
+    let longest_pattern = format!(r"\G(?:{pattern})");
     let longest = OnigRegex::with_options(
         &longest_pattern,
         options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
@@ -1408,7 +1429,7 @@ fn compile_byte_regex(
             .expect("HKSCS transcoding requires a locale validator");
         let pattern = LocaleUtf8Text::from_bytes(&folded_pattern, validator).text;
         let search = OnigRegex::with_options(&pattern, options, Syntax::default())?;
-        let longest_pattern = format!(r"\A(?:{pattern})");
+        let longest_pattern = format!(r"\G(?:{pattern})");
         let longest = OnigRegex::with_options(
             &longest_pattern,
             options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
@@ -1421,7 +1442,7 @@ fn compile_byte_regex(
             options,
             Syntax::default(),
         )?;
-        let mut longest_pattern = b"\\A(?:".to_vec();
+        let mut longest_pattern = b"\\G(?:".to_vec();
         longest_pattern.extend_from_slice(&folded_pattern);
         longest_pattern.push(b')');
         let longest = OnigRegex::with_options_and_encoding(
@@ -2731,7 +2752,10 @@ fn ptx_format_tex_line(
         line_width,
         maximum_word_length,
     );
-    let after: String = fields.keyafter.chars().skip(fields.keyword_len).collect();
+    let keyafter_chars: Vec<char> = fields.keyafter.chars().collect();
+    let key_end = ptx_skip_something(&keyafter_chars, 0, keyafter_chars.len(), config);
+    let key: String = keyafter_chars[..key_end].iter().collect();
+    let after: String = keyafter_chars[key_end..].iter().collect();
 
     write!(
         output,
@@ -2739,7 +2763,7 @@ fn ptx_format_tex_line(
         config.macro_name,
         format_tex_field(&fields.tail),
         format_tex_field(&fields.before),
-        format_tex_field(keyword),
+        format_tex_field(&key),
         format_tex_field(&after),
         format_tex_field(&fields.head),
     )
@@ -3337,7 +3361,9 @@ fn ptx_format_tex_line_bytes(
         line_width,
         maximum_word_length,
     );
-    let after = &fields.keyafter[keyword.len().min(fields.keyafter.len())..];
+    let key_end = ptx_skip_something_bytes(&fields.keyafter, 0, fields.keyafter.len(), config);
+    let key = &fields.keyafter[..key_end];
+    let after = &fields.keyafter[key_end..];
 
     let mut output = Vec::new();
     output.push(b'\\');
@@ -3347,7 +3373,7 @@ fn ptx_format_tex_line_bytes(
     output.extend_from_slice(b"}{");
     output.extend_from_slice(&ptx_format_tex_field_bytes(&fields.before));
     output.extend_from_slice(b"}{");
-    output.extend_from_slice(&ptx_format_tex_field_bytes(keyword));
+    output.extend_from_slice(&ptx_format_tex_field_bytes(key));
     output.extend_from_slice(b"}{");
     output.extend_from_slice(&ptx_format_tex_field_bytes(after));
     output.extend_from_slice(b"}{");

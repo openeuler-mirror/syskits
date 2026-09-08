@@ -117,7 +117,9 @@ impl Iterator for RegexFindIter<'_, '_> {
             if self.next_start > self.text.len() {
                 return None;
             }
-            let (start, end) = self.regex.find_at(self.text, self.next_start)?;
+            let base = self.next_start;
+            let (start, end) = self.regex.find(&self.text[base..])?;
+            let (start, end) = (base + start, base + end);
             if start == end && self.previous_end == Some(end) {
                 let next = self.text[end..]
                     .chars()
@@ -140,6 +142,10 @@ struct ByteRegex {
 }
 
 impl ByteRegex {
+    fn find(&self, bytes: &[u8]) -> Option<(usize, usize)> {
+        self.find_at(bytes, 0)
+    }
+
     fn find_at(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
         let mut region = Region::new();
         let start = self.search.search_with_encoding(
@@ -180,7 +186,9 @@ impl Iterator for ByteRegexFindIter<'_, '_> {
             if self.next_start > self.bytes.len() {
                 return None;
             }
-            let (start, end) = self.regex.find_at(self.bytes, self.next_start)?;
+            let base = self.next_start;
+            let (start, end) = self.regex.find(&self.bytes[base..])?;
+            let (start, end) = (base + start, base + end);
             if start == end && self.previous_end == Some(end) {
                 self.next_start = end + 1;
                 continue;

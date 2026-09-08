@@ -2016,6 +2016,22 @@ fn ptx_content_maximum_word_length_bytes(content: &FileContent, config: &PtxConf
     ptx_maximum_word_length_in_bytes(&content.raw_text, config)
 }
 
+fn ptx_global_maximum_word_length(file_map: &FileMap, config: &PtxConfig) -> usize {
+    file_map
+        .iter()
+        .map(|content| ptx_content_maximum_word_length(content, config))
+        .max()
+        .unwrap_or(0)
+}
+
+fn ptx_global_maximum_word_length_bytes(file_map: &FileMap, config: &PtxConfig) -> usize {
+    file_map
+        .iter()
+        .map(|content| ptx_content_maximum_word_length_bytes(content, config))
+        .max()
+        .unwrap_or(0)
+}
+
 fn ptx_maximum_word_length_in_chars(chars: &[char], config: &PtxConfig) -> usize {
     if let Some(regex) = &config.word_regex {
         let text: String = chars.iter().collect();
@@ -3194,11 +3210,12 @@ fn ptx_exec(settings: &mut PtxSettings) -> CTResult<()> {
 
     let reference_max_width = ptx_reference_max_width_bytes(settings);
     let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
+    let maximum_word_length =
+        ptx_global_maximum_word_length_bytes(&settings.file_map, &settings.config);
 
     for word_ref in &settings.words {
         // 通过索引直接获取文件内容
         let content = &settings.file_map[word_ref.file_index];
-        let maximum_word_length = ptx_content_maximum_word_length_bytes(content, &settings.config);
 
         let reference = ptx_get_reference_bytes(&settings.config, word_ref, content);
 
@@ -3265,9 +3282,9 @@ fn ptx_render_row(
     word_ref: &WordRef,
     context_reg: &Regex,
     reference_max_width: usize,
+    maximum_word_length: usize,
 ) -> PtxSemanticRow {
     let content = &settings.file_map[word_ref.file_index];
-    let maximum_word_length = ptx_content_maximum_word_length(content, &settings.config);
     let line = &content.lines[word_ref.local_line_nr];
     let chars_line = &content.chars_lines[word_ref.local_line_nr];
     let reference = ptx_get_reference(
@@ -3356,10 +3373,19 @@ fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
         settings.config.is_ignore_case,
     );
     let reference_max_width = ptx_reference_max_width(settings, &context_reg);
+    let maximum_word_length = ptx_global_maximum_word_length(&settings.file_map, &settings.config);
     let mut rows: Vec<PtxSemanticRow> = settings
         .words
         .iter()
-        .map(|word_ref| ptx_render_row(settings, word_ref, &context_reg, reference_max_width))
+        .map(|word_ref| {
+            ptx_render_row(
+                settings,
+                word_ref,
+                &context_reg,
+                reference_max_width,
+                maximum_word_length,
+            )
+        })
         .collect();
 
     for (index, row) in rows.iter_mut().enumerate() {
@@ -3372,11 +3398,11 @@ fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
 fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResult<()> {
     let reference_max_width = ptx_reference_max_width_bytes(settings);
     let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
+    let maximum_word_length =
+        ptx_global_maximum_word_length_bytes(&settings.file_map, &settings.config);
 
     for word_ref in &settings.words {
         let file_map_value = &settings.file_map[word_ref.file_index];
-        let maximum_word_length =
-            ptx_content_maximum_word_length_bytes(file_map_value, &settings.config);
 
         let reference = ptx_get_reference_bytes(&settings.config, word_ref, file_map_value);
 

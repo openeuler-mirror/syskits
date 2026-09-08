@@ -44,6 +44,14 @@ const REGEX_CHARCLASS: &str = "^-]\\";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
 
+fn ptx_is_space_byte(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c)
+}
+
+fn ptx_is_space_char(ch: char) -> bool {
+    u8::try_from(ch).is_ok_and(ptx_is_space_byte)
+}
+
 #[derive(Debug)]
 struct Regex {
     search: OnigRegex,
@@ -930,7 +938,7 @@ fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
     while trimmed > start {
         let prefix = &text[start..trimmed];
         match prefix.chars().next_back() {
-            Some(ch) if ch.is_whitespace() => trimmed -= ch.len_utf8(),
+            Some(ch) if ptx_is_space_char(ch) => trimmed -= ch.len_utf8(),
             _ => break,
         }
     }
@@ -939,7 +947,7 @@ fn trim_context_end(text: &str, start: usize, end: usize) -> usize {
 
 fn trim_context_end_bytes(bytes: &[u8], start: usize, end: usize) -> usize {
     let mut trimmed = end;
-    while trimmed > start && bytes[trimmed - 1].is_ascii_whitespace() {
+    while trimmed > start && ptx_is_space_byte(bytes[trimmed - 1]) {
         trimmed -= 1;
     }
     trimmed
@@ -947,13 +955,13 @@ fn trim_context_end_bytes(bytes: &[u8], start: usize, end: usize) -> usize {
 
 fn ptx_input_reference_span(line: &str) -> Option<(usize, usize)> {
     let first = line.chars().next()?;
-    if first.is_ascii_whitespace() {
+    if ptx_is_space_char(first) {
         return None;
     }
 
     let end = line
         .char_indices()
-        .find_map(|(idx, ch)| ch.is_ascii_whitespace().then_some(idx))
+        .find_map(|(idx, ch)| ptx_is_space_char(ch).then_some(idx))
         .unwrap_or(line.len());
 
     Some((0, end))
@@ -973,7 +981,7 @@ fn ptx_input_reference_content_start(line: &str) -> usize {
 
     let mut start = end;
     for (idx, ch) in line[end..].char_indices() {
-        if !ch.is_ascii_whitespace() {
+        if !ptx_is_space_char(ch) {
             start = end + idx;
             break;
         }
@@ -1249,7 +1257,7 @@ fn ptx_get_reference_bytes(
         content.raw_lines[word_ref.local_line_nr]
             .iter()
             .copied()
-            .take_while(|byte| !byte.is_ascii_whitespace())
+            .take_while(|&byte| !ptx_is_space_byte(byte))
             .collect()
     } else {
         Vec::new()
@@ -1325,14 +1333,14 @@ fn ptx_chars_to_string(chars: &[char], start: usize, end: usize) -> String {
 }
 
 fn ptx_skip_white(chars: &[char], mut cursor: usize, limit: usize) -> usize {
-    while cursor < limit && chars[cursor].is_whitespace() {
+    while cursor < limit && ptx_is_space_char(chars[cursor]) {
         cursor += 1;
     }
     cursor
 }
 
 fn ptx_skip_white_backwards(chars: &[char], mut cursor: usize, start: usize) -> usize {
-    while cursor > start && chars[cursor - 1].is_whitespace() {
+    while cursor > start && ptx_is_space_char(chars[cursor - 1]) {
         cursor -= 1;
     }
     cursor
@@ -1345,7 +1353,7 @@ fn ptx_is_default_word_char(config: &PtxConfig, c: char) -> bool {
     if config.is_gnu_ext {
         c.is_ascii_alphabetic()
     } else {
-        !c.is_whitespace()
+        !matches!(c, ' ' | '\t' | '\n')
     }
 }
 
@@ -1633,19 +1641,19 @@ fn ptx_is_default_word_byte(config: &PtxConfig, byte: u8) -> bool {
     if config.is_gnu_ext {
         byte.is_ascii_alphabetic()
     } else {
-        !byte.is_ascii_whitespace()
+        !matches!(byte, b' ' | b'\t' | b'\n')
     }
 }
 
 fn ptx_skip_white_bytes(bytes: &[u8], mut cursor: usize, limit: usize) -> usize {
-    while cursor < limit && bytes[cursor].is_ascii_whitespace() {
+    while cursor < limit && ptx_is_space_byte(bytes[cursor]) {
         cursor += 1;
     }
     cursor
 }
 
 fn ptx_skip_white_backwards_bytes(bytes: &[u8], mut cursor: usize, start: usize) -> usize {
-    while cursor > start && bytes[cursor - 1].is_ascii_whitespace() {
+    while cursor > start && ptx_is_space_byte(bytes[cursor - 1]) {
         cursor -= 1;
     }
     cursor
@@ -1889,7 +1897,7 @@ fn ptx_get_output_chunks_for_width_with_max(
 
 fn tex_mapper(x: char) -> String {
     match x {
-        c if c.is_whitespace() => " ".to_string(),
+        c if ptx_is_space_char(c) => " ".to_string(),
         '\\' => "\\backslash{}".to_owned(),
         '$' | '%' | '#' | '&' | '_' => format!("\\{x}"),
         '}' | '{' => format!("$\\{x}$"),
@@ -1962,7 +1970,7 @@ fn ptx_format_tex_line(
 fn ptx_format_roff_field(s: &str) -> String {
     s.chars()
         .map(|c| {
-            if c.is_whitespace() {
+            if ptx_is_space_char(c) {
                 " ".to_string()
             } else if c == '"' {
                 "\"\"".to_string()
@@ -2083,7 +2091,7 @@ fn ptx_effective_line_width(config: &PtxConfig, reference_max_width: usize) -> u
 
 fn ptx_display_field(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .map(|c| if ptx_is_space_char(c) { ' ' } else { c })
         .collect()
 }
 
@@ -2203,7 +2211,7 @@ fn ptx_format_dumb_line(
         output.push_str(&" ".repeat(pad));
     } else {
         let whitespace_before_adjust =
-            if config.is_gnu_ext && !before.is_empty() && before.chars().all(char::is_whitespace) {
+            if config.is_gnu_ext && !before.is_empty() && before.chars().all(ptx_is_space_char) {
                 1
             } else {
                 0
@@ -2244,7 +2252,7 @@ fn ptx_format_dumb_line(
 fn ptx_format_roff_field_bytes(s: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.len());
     for &b in s {
-        if b.is_ascii_whitespace() {
+        if ptx_is_space_byte(b) {
             out.push(b' ');
         } else if b == b'"' {
             out.push(b'"');
@@ -2260,7 +2268,7 @@ fn ptx_format_tex_field_bytes(s: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.len());
     for &byte in s {
         match byte {
-            byte if byte.is_ascii_whitespace() => out.push(b' '),
+            byte if ptx_is_space_byte(byte) => out.push(b' '),
             b'\\' => out.extend_from_slice(b"\\backslash{}"),
             b'$' | b'%' | b'#' | b'&' | b'_' => {
                 out.push(b'\\');
@@ -2279,7 +2287,7 @@ fn ptx_format_tex_field_bytes(s: &[u8]) -> Vec<u8> {
 
 fn ptx_display_field_bytes(s: &[u8]) -> Vec<u8> {
     s.iter()
-        .map(|&b| if b.is_ascii_whitespace() { b' ' } else { b })
+        .map(|&b| if ptx_is_space_byte(b) { b' ' } else { b })
         .collect()
 }
 
@@ -2361,7 +2369,7 @@ fn ptx_format_dumb_line_bytes(
     } else {
         let whitespace_before_adjust = if config.is_gnu_ext
             && !fields.before.is_empty()
-            && fields.before.iter().all(|byte| byte.is_ascii_whitespace())
+            && fields.before.iter().all(|&byte| ptx_is_space_byte(byte))
         {
             1
         } else {

@@ -8503,6 +8503,174 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[z-a]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为0行、0字节的dumb索引，验证空降序正类不匹配",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[^z-a]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为13行、611字节的dumb索引，验证空降序否定类匹配全部字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[^z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                   a    b c x y z -\n                                 a b    c x y z -\n                               a b c    x y z -\n                             a b c x    y z -\n                           a b c x y    z -\n                         a b c x y z    -\n                         a b c x y z   -\n                                       a b c x y z -\n                                   a   b c x y z -\n                                 a b   c x y z -\n                               a b c   x y z -\n                             a b c x   y z -\n                           a b c x y   z -\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[xz-a]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为1行、47字节的dumb索引，验证移除空范围后保留字面x",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[xz-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                               a b c   x y z -\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[a--c]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为1行、49字节的dumb索引，验证连字符端点降序范围为空",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[a--c]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                 a b   c x y z -\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[z-a]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为0行、0字节的dumb索引，验证空降序正类不匹配",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[^z-a]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为13行、611字节的dumb索引，验证空降序否定类匹配全部字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[^z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                   a    b c x y z -\n                                 a b    c x y z -\n                               a b c    x y z -\n                             a b c x    y z -\n                           a b c x y    z -\n                         a b c x y z    -\n                         a b c x y z   -\n                                       a b c x y z -\n                                   a   b c x y z -\n                                 a b   c x y z -\n                               a b c   x y z -\n                             a b c x   y z -\n                           a b c x y   z -\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[xz-a]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为1行、47字节的dumb索引，验证移除空范围后保留字面x",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[xz-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                               a b c   x y z -\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[a--c]' input；input内容为“a b c x y z -\\n”；预期RC=0、stderr为空，stdout为1行、49字节的dumb索引，验证连字符端点降序范围为空",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c x y z -\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[a--c]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                 a b   c x y z -\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

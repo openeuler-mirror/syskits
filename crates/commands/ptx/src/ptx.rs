@@ -1416,6 +1416,9 @@ fn ptx_create_word_set(
             };
 
             for (start, end) in matches {
+                if start == end {
+                    continue;
+                }
                 let (global_beg, global_end) = (context_start + start, context_start + end);
                 let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
                 let line_start = content.line_starts[local_line_nr];

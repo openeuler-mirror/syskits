@@ -4854,6 +4854,80 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -r -S  -w 40 input；输入为input=R1 alpha.\\nR2 beta\\n（18字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共64字节的dumb索引；对应Cargo用例ptx_input_references_preserve_context_across_physical_lines第1次调用",
+      "args": [
+        "-r",
+        "-S",
+        "",
+        "-w",
+        "40",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\040\\141\\154\\160\\150\\141\\056\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "R1                    alpha. R2 beta\nR2        alpha. R2   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -R -r -S  -w 40 input；输入为input=R1 alpha.\\nR2 beta\\n（18字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共92字节的dumb索引；对应Cargo用例ptx_input_references_preserve_context_across_physical_lines第2次调用",
+      "args": [
+        "-R",
+        "-r",
+        "-S",
+        "",
+        "-w",
+        "40",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\040\\141\\154\\160\\150\\141\\056\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                    alpha. R2 beta         R1\n        alpha. R2   beta                   R2\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -A -r -S  -w 40 input；输入为input=R1 alpha.\\nR2 beta\\n（18字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共65字节的dumb索引；对应Cargo用例ptx_input_references_preserve_context_across_physical_lines第3次调用",
+      "args": [
+        "-A",
+        "-r",
+        "-S",
+        "",
+        "-w",
+        "40",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\040\\141\\154\\160\\150\\141\\056\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "input:1:  beta           alpha. R2\ninput:2:     alpha. R2   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

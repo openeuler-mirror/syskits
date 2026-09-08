@@ -1344,6 +1344,18 @@ fn ptx_create_word_set(
                 (raw_end, end)
             };
             let context_text = &content.text[context_start..context_end];
+            let output_context_start = if config.is_input_ref {
+                let context_line_nr = line_index_for_offset(&content.line_starts, context_start);
+                let context_line_start = content.line_starts[context_line_nr];
+                if context_line_start == context_start {
+                    context_start
+                        + ptx_input_reference_content_start(&content.lines[context_line_nr])
+                } else {
+                    context_start
+                }
+            } else {
+                context_start
+            };
 
             let matches: Vec<(usize, usize)> = if let Some(byte_regex) = &config.word_byte_regex {
                 byte_regex
@@ -1435,14 +1447,9 @@ fn ptx_create_word_set(
                     word = filter_word;
                 }
 
-                let context_start = if config.is_input_ref {
-                    context_start.max(line_start + ptx_input_reference_content_start(line))
-                } else {
-                    context_start
-                };
                 let global_char_position = content.byte_to_char[global_beg];
                 let global_char_position_end = content.byte_to_char[global_end];
-                let context_char_start = content.byte_to_char[context_start];
+                let context_char_start = content.byte_to_char[output_context_start];
                 let context_char_end = content.byte_to_char[context_end];
                 word_set.insert(WordRef {
                     raw_word,
@@ -1454,7 +1461,7 @@ fn ptx_create_word_set(
                     position_end: global_end - line_start,
                     global_position: global_beg,
                     global_position_end: global_end,
-                    context_start,
+                    context_start: output_context_start,
                     context_end,
                     global_char_position,
                     global_char_position_end,

@@ -5405,6 +5405,66 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx \\xd6\\xd0；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: \\xd6\\xd0: No such file or directory\\n”，共44字节2f7573722f62696e2f7074783a20d6d03a204e6f20737563682066696c65206f72206469726563746f72790a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "d6d0"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20d6d03a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.big5，执行ptx \\xa4\\xa4；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: \\xa4\\xa4: No such file or directory\\n”，共44字节2f7573722f62696e2f7074783a20a4a43a204e6f20737563682066696c65206f72206469726563746f72790a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "a4a4"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.big5'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20a4a43a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN，执行ptx \\xd6\\xd0；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: \\xd6\\xd0: No such file or directory\\n”，共44字节2f7573722f62696e2f7074783a20d6d03a204e6f20737563682066696c65206f72206469726563746f72790a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "d6d0"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20d6d03a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

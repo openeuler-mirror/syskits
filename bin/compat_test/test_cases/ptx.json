@@ -4318,6 +4318,130 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -w \\xff；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: invalid line width: '\\377'\\n”，共41字节2f7573722f62696e2f7074783a20696e76616c6964206c696e652077696474683a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d77",
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20696e76616c6964206c696e652077696474683a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -g \\xff；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: invalid gap width: '\\377'\\n”，共40字节2f7573722f62696e2f7074783a20696e76616c6964206761702077696474683a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d67",
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20696e76616c6964206761702077696474683a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx --width \\xff；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: invalid line width: '\\377'\\n”，共41字节2f7573722f62696e2f7074783a20696e76616c6964206c696e652077696474683a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d2d7769647468",
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20696e76616c6964206c696e652077696474683a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx --gap-size \\xff；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: invalid gap width: '\\377'\\n”，共40字节2f7573722f62696e2f7074783a20696e76616c6964206761702077696474683a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d2d6761702d73697a65",
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20696e76616c6964206761702077696474683a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx --width=\\xff；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: invalid line width: '\\377'\\n”，共41字节2f7573722f62696e2f7074783a20696e76616c6964206c696e652077696474683a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d2d77696474683dff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20696e76616c6964206c696e652077696474683a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -g\\xff；输入为无输入文件；预期RC=1、stderr可读为“/usr/bin/ptx: invalid gap width: '\\377'\\n”，共40字节2f7573722f62696e2f7074783a20696e76616c6964206761702077696474683a20275c333737270a，stdout十六进制解码为0条换行分隔、共0字节的dumb索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d67ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a20696e76616c6964206761702077696474683a20275c333737270a"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

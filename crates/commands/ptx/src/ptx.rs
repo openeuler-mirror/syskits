@@ -3229,15 +3229,16 @@ fn validate_ptx_width_occurrences(args: &[OsString]) -> CTResult<()> {
                     }
                     None => break,
                 };
-                if let Ok(value) = std::str::from_utf8(value) {
-                    parse_positive_base0(
-                        value,
-                        if option == b"width" {
-                            "line width"
-                        } else {
-                            "gap width"
-                        },
-                    )?;
+                let description = if option == b"width" {
+                    "line width"
+                } else {
+                    "gap width"
+                };
+                match std::str::from_utf8(value) {
+                    Ok(value) => {
+                        parse_positive_base0(value, description)?;
+                    }
+                    Err(_) => return Err(ptx_invalid_numeric_arg_error(value, description)),
                 }
             } else if attached.is_none()
                 && matches!(
@@ -3272,15 +3273,16 @@ fn validate_ptx_width_occurrences(args: &[OsString]) -> CTResult<()> {
                 } else {
                     break;
                 };
-                if let Ok(value) = std::str::from_utf8(value) {
-                    parse_positive_base0(
-                        value,
-                        if option == b'w' {
-                            "line width"
-                        } else {
-                            "gap width"
-                        },
-                    )?;
+                let description = if option == b'w' {
+                    "line width"
+                } else {
+                    "gap width"
+                };
+                match std::str::from_utf8(value) {
+                    Ok(value) => {
+                        parse_positive_base0(value, description)?;
+                    }
+                    Err(_) => return Err(ptx_invalid_numeric_arg_error(value, description)),
                 }
                 break;
             }
@@ -3501,6 +3503,19 @@ fn ptx_quote_pattern(
     }
     quoted.push(b'\'');
     quoted
+}
+
+fn ptx_invalid_numeric_arg_error(value: &[u8], description: &str) -> Box<dyn CTError> {
+    let byte_ctype = LocaleByteCtype::from_environment();
+    let quoted = ptx_quote_pattern(value, &byte_ctype, ptx_is_single_byte_locale());
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+    let _ = stderr.write_all(b": invalid ");
+    let _ = stderr.write_all(description.as_bytes());
+    let _ = stderr.write_all(b": ");
+    let _ = stderr.write_all(&quoted);
+    let _ = stderr.write_all(b"\n");
+    CtSimpleError::new(1, "")
 }
 
 fn ptx_zero_length_regex_error(

@@ -29,7 +29,7 @@ use clap::{
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
@@ -3639,6 +3639,17 @@ fn ptx_file_io_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
     CtSimpleError::new(1, "")
 }
 
+fn ptx_extra_operand_error(operand: &OsStr) -> Box<dyn CTError> {
+    let byte_ctype = LocaleByteCtype::from_environment();
+    let quoted = ptx_quote_pattern(operand.as_bytes(), &byte_ctype, ptx_is_single_byte_locale());
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+    let _ = stderr.write_all(b": extra operand ");
+    let _ = stderr.write_all(&quoted);
+    let _ = stderr.write_all(b"\n");
+    CTsageError::new(1, "")
+}
+
 fn ptx_zero_length_regex_error(
     pattern: &[u8],
     byte_ctype: &LocaleByteCtype,
@@ -3743,10 +3754,7 @@ impl PtxSettings {
             None
         };
         if !config.is_gnu_ext && input_files.len() > 2 {
-            return Err(CtSimpleError::new(
-                1,
-                format!("extra operand '{}'", input_files[2].to_string_lossy()),
-            ));
+            return Err(ptx_extra_operand_error(&input_files[2]));
         }
         if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
             && config.context_regex != NEVER_MATCH_REGEX

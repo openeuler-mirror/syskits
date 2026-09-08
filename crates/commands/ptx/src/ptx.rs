@@ -48,6 +48,11 @@ const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"
 const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
 
 unsafe extern "C" {
+    fn fnmatch(
+        pattern: *const ctcore::libc::c_char,
+        string: *const ctcore::libc::c_char,
+        flags: ctcore::libc::c_int,
+    ) -> ctcore::libc::c_int;
     fn mbrtowc(
         wide: *mut ctcore::libc::wchar_t,
         bytes: *const ctcore::libc::c_char,
@@ -69,7 +74,11 @@ fn ptx_write_error_context() -> String {
 }
 
 fn ptx_locale_name() -> OsString {
-    ["LC_ALL", "LC_CTYPE", "LANG"]
+    ptx_locale_category_name("LC_CTYPE")
+}
+
+fn ptx_locale_category_name(category: &str) -> OsString {
+    ["LC_ALL", category, "LANG"]
         .into_iter()
         .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
         .unwrap_or_else(|| OsString::from("C"))
@@ -202,6 +211,60 @@ impl LocaleMultibyteValidator {
 }
 
 impl Drop for LocaleMultibyteValidator {
+    fn drop(&mut self) {
+        unsafe { ctcore::libc::freelocale(self.locale as ctcore::libc::locale_t) };
+    }
+}
+
+#[derive(Debug)]
+struct LocaleCollation {
+    locale: usize,
+}
+
+impl LocaleCollation {
+    fn from_environment() -> Option<Self> {
+        let mut locale = unsafe {
+            ctcore::libc::newlocale(
+                ctcore::libc::LC_ALL_MASK,
+                c"C".as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        if locale.is_null() {
+            return None;
+        }
+        for (category, mask) in [
+            ("LC_CTYPE", ctcore::libc::LC_CTYPE_MASK),
+            ("LC_COLLATE", ctcore::libc::LC_COLLATE_MASK),
+        ] {
+            let name = CString::new(ptx_locale_category_name(category).as_encoded_bytes()).ok()?;
+            let combined = unsafe { ctcore::libc::newlocale(mask, name.as_ptr(), locale) };
+            if combined.is_null() {
+                unsafe { ctcore::libc::freelocale(locale) };
+                return None;
+            }
+            locale = combined;
+        }
+        Some(Self {
+            locale: locale as usize,
+        })
+    }
+
+    fn range_members(&self, start: u8, end: u8) -> Option<[bool; 256]> {
+        let pattern = [b'[', start, b'-', end, b']', 0];
+        let mut members = [false; 256];
+        let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
+        for value in 1u16..=255 {
+            let candidate = [value as u8, 0];
+            members[usize::from(value)] =
+                unsafe { fnmatch(pattern.as_ptr().cast(), candidate.as_ptr().cast(), 0) == 0 };
+        }
+        unsafe { ctcore::libc::uselocale(previous) };
+        members.iter().any(|&member| member).then_some(members)
+    }
+}
+
+impl Drop for LocaleCollation {
     fn drop(&mut self) {
         unsafe { ctcore::libc::freelocale(self.locale as ctcore::libc::locale_t) };
     }
@@ -966,6 +1029,8 @@ struct PtxConfig {
     locale_regex_encoding: LocaleRegexEncoding,
     /// Linux locale转换器用于验证Oniguruma候选的实际字符边界。
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
+    /// glibc locale排序规则，用于展开单字节正则范围。
+    locale_collation: Option<Arc<LocaleCollation>>,
     /// GNU libc当前locale下的正则word和non-word字符类。
     regex_word_class: Vec<u8>,
     regex_non_word_class: Vec<u8>,
@@ -998,6 +1063,7 @@ impl Default for PtxConfig {
             byte_ctype: LocaleByteCtype::from_environment(),
             locale_regex_encoding: LocaleRegexEncoding::default(),
             locale_validator: None,
+            locale_collation: None,
             regex_word_class: b"[[:alnum:]_]".to_vec(),
             regex_non_word_class: b"[^[:alnum:]_]".to_vec(),
             regex_space_class: b"[[:space:]]".to_vec(),
@@ -1068,12 +1134,16 @@ fn gnu_emacs_regex_to_rust(pattern: &str, config: &PtxConfig) -> String {
 }
 
 fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8], config: &PtxConfig) -> Vec<u8> {
-    gnu_emacs_regex_to_onig_bytes_with_classes(
+    gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
         pattern,
         &config.regex_word_class,
         &config.regex_non_word_class,
         &config.regex_space_class,
         &config.regex_non_space_class,
+        config
+            .single_byte_locale
+            .then_some(config.locale_collation.as_deref())
+            .flatten(),
     )
 }
 
@@ -1084,11 +1154,33 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes(
     space_class: &[u8],
     non_space_class: &[u8],
 ) -> Vec<u8> {
+    gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
+        pattern,
+        word_class,
+        non_word_class,
+        space_class,
+        non_space_class,
+        None,
+    )
+}
+
+fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
+    pattern: &[u8],
+    word_class: &[u8],
+    non_word_class: &[u8],
+    space_class: &[u8],
+    non_space_class: &[u8],
+    locale_collation: Option<&LocaleCollation>,
+) -> Vec<u8> {
     let mut translated = Vec::with_capacity(pattern.len());
     let mut escaped = false;
     let mut in_bracket = false;
+    let mut skip_before = 0usize;
 
     for (index, &byte) in pattern.iter().enumerate() {
+        if index < skip_before {
+            continue;
+        }
         if in_bracket && !escaped && byte == b'\\' {
             translated.extend_from_slice(b"\\\\");
             continue;
@@ -1151,6 +1243,24 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes(
                 translated.push(byte);
             }
             escaped = false;
+            continue;
+        }
+
+        if in_bracket
+            && !matches!(byte, b'[' | b']' | b'\\' | b'-' | b'^')
+            && pattern.get(index + 1) == Some(&b'-')
+            && pattern
+                .get(index + 2)
+                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'-' | b'^'))
+            && let Some(members) = locale_collation
+                .and_then(|collation| collation.range_members(byte, pattern[index + 2]))
+        {
+            for (value, member) in members.into_iter().enumerate() {
+                if member {
+                    write!(translated, r"\x{value:02X}").expect("writing to a Vec cannot fail");
+                }
+            }
+            skip_before = index + 3;
             continue;
         }
 
@@ -1489,6 +1599,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         single_byte_locale: ptx_is_single_byte_locale(),
         locale_regex_encoding: LocaleRegexEncoding::from_environment(),
         locale_validator: LocaleMultibyteValidator::from_environment().map(Arc::new),
+        locale_collation: LocaleCollation::from_environment().map(Arc::new),
         ..Default::default()
     };
     (config.regex_word_class, config.regex_non_word_class) = ptx_locale_word_classes(

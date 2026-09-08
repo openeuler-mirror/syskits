@@ -8388,6 +8388,121 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -W '[a-z]+' input；input按ISO-8859-1可读为“ä z\\n”，共4字节e4 20 7a 0a；预期RC=0、stderr为空，stdout十六进制解码为2行、84字节的dumb索引，两条记录分别轮转ISO-8859-1字节e4表示的ä和ASCII z，JSON中的十六进制stdout表示全部索引行的原始输出字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\344 z\\n' > input"
+      ],
+      "args": [
+        "2d57",
+        "5b612d7a5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202020202020202020202020202020202020202020202020202020202020202020e42020207a0a202020202020202020202020202020202020202020202020202020202020202020202020202020e4207a0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -W '[A-Za-z]+' input；input按ISO-8859-1可读为“Ä ä z\\n”，共6字节c4 20 e4 20 7a 0a；预期RC=0、stderr为空，stdout十六进制解码为3行、129字节的dumb索引，三条记录依次覆盖ISO-8859-1的Ä、ä和ASCII z，JSON中的十六进制stdout表示全部索引行的原始输出字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\304 \\344 z\\n' > input"
+      ],
+      "args": [
+        "2d57",
+        "5b412d5a612d7a5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202020202020202020202020202020202020202020202020202020202020c420e42020207a0a202020202020202020202020202020202020202020202020202020202020202020202020202020c420e4207a0a2020202020202020202020202020202020202020202020202020202020202020202020c4202020e4207a0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -W '[0-9]+' input；input按ISO-8859-1可读为“² 2\\n”，共4字节b2 20 32 0a；预期RC=0、stderr为空，stdout十六进制解码为2行、84字节的dumb索引，两条记录分别覆盖上标数字²的字节b2和ASCII 2，JSON中的十六进制stdout表示全部索引行的原始输出字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\262 2\\n' > input"
+      ],
+      "args": [
+        "2d57",
+        "5b302d395d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202020202020202020202020202020202020202020202020202020202020202020b2202020320a202020202020202020202020202020202020202020202020202020202020202020202020202020b220320a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -W '[a-c]+' input；input按ISO-8859-1可读为“ä d\\n”，共4字节e4 20 64 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、43字节的dumb索引，一条记录保留子范围按locale选中的高字节e4及上下文d，JSON中的十六进制stdout表示全部索引行的原始输出字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\344 d\\n' > input"
+      ],
+      "args": [
+        "2d57",
+        "5b612d635d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "202020202020202020202020202020202020202020202020202020202020202020202020202020e420640a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -W '[^a-z]+' input；input按ISO-8859-1可读为“ä !\\n”，共4字节e4 20 21 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、42字节的dumb索引，一条记录验证否定范围排除高字节e4并索引感叹号，JSON中的十六进制stdout表示全部索引行的原始输出字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\344 !\\n' > input"
+      ],
+      "args": [
+        "2d57",
+        "5b5e612d7a5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202020202020202020202020202020202020202020202020202020202020202020e420202020210a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

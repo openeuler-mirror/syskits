@@ -29,7 +29,7 @@ use clap::{
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
@@ -55,10 +55,6 @@ fn ptx_is_space_char(ch: char) -> bool {
 
 fn ptx_write_error_context() -> String {
     "write error".to_string()
-}
-
-fn ptx_file_context(path: &OsStr) -> String {
-    path.to_string_lossy().into_owned()
 }
 
 fn ptx_locale_name() -> OsString {
@@ -414,10 +410,10 @@ fn read_word_filter_file(matches: &clap::ArgMatches, option: &str) -> CTResult<H
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut file =
-        File::open(filename).map_err_context(|| ptx_file_context(filename.as_os_str()))?;
+        File::open(filename).map_err(|error| ptx_file_io_error(filename.as_os_str(), error))?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)
-        .map_err_context(|| ptx_file_context(filename.as_os_str()))?;
+        .map_err(|error| ptx_file_io_error(filename.as_os_str(), error))?;
     let mut words: HashSet<Vec<u8>> = HashSet::new();
     for line in contents.split(|&byte| byte == b'\n') {
         if !line.is_empty() {
@@ -433,11 +429,11 @@ fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> CTResult<H
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
     let mut reader =
-        File::open(filename).map_err_context(|| ptx_file_context(filename.as_os_str()))?;
+        File::open(filename).map_err(|error| ptx_file_io_error(filename.as_os_str(), error))?;
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
-        .map_err_context(|| ptx_file_context(filename.as_os_str()))?;
+        .map_err(|error| ptx_file_io_error(filename.as_os_str(), error))?;
     Ok(bytes.into_iter().collect())
 }
 
@@ -1224,13 +1220,13 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
         } else {
             Box::new(
                 File::open(filename.expect("non-stdin filename"))
-                    .map_err_context(|| ptx_file_context(display_name.as_os_str()))?,
+                    .map_err(|error| ptx_file_io_error(display_name.as_os_str(), error))?,
             )
         });
         let mut input_bytes = Vec::new();
         reader
             .read_to_end(&mut input_bytes)
-            .map_err_context(|| ptx_file_context(display_name.as_os_str()))?;
+            .map_err(|error| ptx_file_io_error(display_name.as_os_str(), error))?;
         let mut raw_lines: Vec<Vec<u8>> = if input_bytes.is_empty() {
             Vec::new()
         } else {
@@ -2843,7 +2839,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
         BufWriter::new(if let Some(output_filename) = &settings.output_filename {
             let file = File::create(output_filename)
-                .map_err_context(|| ptx_file_context(output_filename.as_os_str()))?;
+                .map_err(|error| ptx_file_io_error(output_filename.as_os_str(), error))?;
             Box::new(file)
         } else {
             Box::new(stdout())
@@ -3514,6 +3510,130 @@ fn ptx_invalid_numeric_arg_error(value: &[u8], description: &str) -> Box<dyn CTE
     let _ = stderr.write_all(description.as_bytes());
     let _ = stderr.write_all(b": ");
     let _ = stderr.write_all(&quoted);
+    let _ = stderr.write_all(b"\n");
+    CtSimpleError::new(1, "")
+}
+
+fn ptx_printable_byte_mask(
+    bytes: &[u8],
+    byte_ctype: &LocaleByteCtype,
+    single_byte_locale: bool,
+) -> Vec<bool> {
+    let mut printable = vec![false; bytes.len()];
+    let mut index = 0usize;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte.is_ascii() || single_byte_locale {
+            printable[index] = byte_ctype.is_print(byte);
+            index += 1;
+            continue;
+        }
+        let valid_len = match std::str::from_utf8(&bytes[index..]) {
+            Ok(valid) => valid.chars().next().map_or(0, char::len_utf8),
+            Err(error) if error.valid_up_to() > 0 => {
+                std::str::from_utf8(&bytes[index..index + error.valid_up_to()])
+                    .expect("validated UTF-8 prefix")
+                    .chars()
+                    .next()
+                    .map_or(0, char::len_utf8)
+            }
+            Err(_) => 0,
+        };
+        if valid_len == 0 {
+            index += 1;
+        } else {
+            printable[index..index + valid_len].fill(true);
+            index += valid_len;
+        }
+    }
+    printable
+}
+
+fn ptx_push_single_quoted(output: &mut Vec<u8>, bytes: &[u8]) {
+    output.push(b'\'');
+    for &byte in bytes {
+        if byte == b'\'' {
+            output.extend_from_slice(b"'\\''");
+        } else {
+            output.push(byte);
+        }
+    }
+    output.push(b'\'');
+}
+
+fn ptx_push_dollar_quoted(output: &mut Vec<u8>, bytes: &[u8]) {
+    output.extend_from_slice(b"$'");
+    for &byte in bytes {
+        match byte {
+            b'\x07' => output.extend_from_slice(b"\\a"),
+            b'\x08' => output.extend_from_slice(b"\\b"),
+            b'\t' => output.extend_from_slice(b"\\t"),
+            b'\n' => output.extend_from_slice(b"\\n"),
+            b'\x0b' => output.extend_from_slice(b"\\v"),
+            b'\x0c' => output.extend_from_slice(b"\\f"),
+            b'\r' => output.extend_from_slice(b"\\r"),
+            b'\\' | b'\'' => output.extend_from_slice(&[b'\\', byte]),
+            _ => ptx_push_octal_escape(output, byte),
+        }
+    }
+    output.push(b'\'');
+}
+
+fn ptx_quote_file_name(path: &OsStr) -> Vec<u8> {
+    const SHELL_SPECIAL: &[u8] = b"|&;<>()$`\\\"'*?[]=^{} ";
+    let bytes = path.as_bytes();
+    let byte_ctype = LocaleByteCtype::from_environment();
+    let printable = ptx_printable_byte_mask(bytes, &byte_ctype, ptx_is_single_byte_locale());
+    if printable.iter().all(|&value| value) {
+        let needs_quote = bytes.is_empty()
+            || bytes
+                .first()
+                .is_some_and(|byte| matches!(byte, b'~' | b'#' | b'!'))
+            || bytes.iter().any(|byte| SHELL_SPECIAL.contains(byte));
+        if !needs_quote {
+            return bytes.to_vec();
+        }
+        if bytes.contains(&b'\'')
+            && !bytes
+                .iter()
+                .any(|byte| matches!(byte, b'"' | b'`' | b'$' | b'\\'))
+        {
+            let mut quoted = Vec::with_capacity(bytes.len() + 2);
+            quoted.push(b'"');
+            quoted.extend_from_slice(bytes);
+            quoted.push(b'"');
+            return quoted;
+        }
+        let mut quoted = Vec::with_capacity(bytes.len() + 2);
+        ptx_push_single_quoted(&mut quoted, bytes);
+        return quoted;
+    }
+
+    let mut quoted = Vec::new();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        let is_printable = printable[index];
+        let start = index;
+        while index < bytes.len() && printable[index] == is_printable {
+            index += 1;
+        }
+        if is_printable {
+            ptx_push_single_quoted(&mut quoted, &bytes[start..index]);
+        } else {
+            ptx_push_dollar_quoted(&mut quoted, &bytes[start..index]);
+        }
+    }
+    quoted
+}
+
+fn ptx_file_io_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
+    let quoted = ptx_quote_file_name(path);
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+    let _ = stderr.write_all(b": ");
+    let _ = stderr.write_all(&quoted);
+    let _ = stderr.write_all(b": ");
+    let _ = stderr.write_all(strip_errno(&error).as_bytes());
     let _ = stderr.write_all(b"\n");
     CtSimpleError::new(1, "")
 }

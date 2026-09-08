@@ -1241,6 +1241,9 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
             }
             raw_text.extend_from_slice(line);
         }
+        if input_bytes.ends_with(b"\n") {
+            raw_text.push(b'\n');
+        }
         let byte_mode = config.force_byte_mode || std::str::from_utf8(&raw_text).is_err();
         let invalid_utf8_bytes = ptx_invalid_utf8_mask(&raw_text);
         let lines: Vec<String> = raw_lines
@@ -1261,6 +1264,9 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
             }
             line_starts.push(text.len());
             text.push_str(line);
+        }
+        if input_bytes.ends_with(b"\n") {
+            text.push('\n');
         }
         let chars_text: Vec<char> = text.chars().collect();
         let byte_to_char = build_byte_to_char_map(&text);

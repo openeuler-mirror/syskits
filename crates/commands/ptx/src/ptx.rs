@@ -190,6 +190,15 @@ impl LocaleMultibyteValidator {
                 ) != 0
             }
     }
+
+    fn is_space_character(&self, codepoint: u32) -> bool {
+        unsafe {
+            iswspace_l(
+                codepoint as ctcore::libc::c_uint,
+                self.locale as ctcore::libc::locale_t,
+            ) != 0
+        }
+    }
 }
 
 impl Drop for LocaleMultibyteValidator {
@@ -315,6 +324,7 @@ impl LocaleRegexEncoding {
 struct LocaleByteCtype {
     alpha: [bool; 256],
     print: [bool; 256],
+    space: [bool; 256],
     upper: [u8; 256],
 }
 
@@ -323,6 +333,7 @@ impl LocaleByteCtype {
         let mut table = Self {
             alpha: std::array::from_fn(|index| (index as u8).is_ascii_alphabetic()),
             print: std::array::from_fn(|index| (index as u8).is_ascii_graphic() || index == 32),
+            space: std::array::from_fn(|index| ptx_is_space_byte(index as u8)),
             upper: std::array::from_fn(|index| (index as u8).to_ascii_uppercase()),
         };
         let Ok(locale_name) = CString::new(ptx_locale_name().as_encoded_bytes()) else {
@@ -341,6 +352,7 @@ impl LocaleByteCtype {
             for byte in 0u16..=255 {
                 table.alpha[usize::from(byte)] = isalpha_l(i32::from(byte), locale) != 0;
                 table.print[usize::from(byte)] = isprint_l(i32::from(byte), locale) != 0;
+                table.space[usize::from(byte)] = isspace_l(i32::from(byte), locale) != 0;
                 table.upper[usize::from(byte)] = toupper_l(i32::from(byte), locale) as u8;
             }
             ctcore::libc::freelocale(locale);
@@ -354,6 +366,10 @@ impl LocaleByteCtype {
 
     fn is_print(&self, byte: u8) -> bool {
         self.print[usize::from(byte)]
+    }
+
+    fn is_space(&self, byte: u8) -> bool {
+        self.space[usize::from(byte)]
     }
 
     fn uppercase(&self, bytes: &mut [u8]) {
@@ -372,11 +388,19 @@ unsafe extern "C" {
         character: ctcore::libc::c_int,
         locale: ctcore::libc::locale_t,
     ) -> ctcore::libc::c_int;
+    fn isspace_l(
+        character: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
     fn toupper_l(
         character: ctcore::libc::c_int,
         locale: ctcore::libc::locale_t,
     ) -> ctcore::libc::c_int;
     fn iswalnum_l(
+        character: ctcore::libc::c_uint,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
+    fn iswspace_l(
         character: ctcore::libc::c_uint,
         locale: ctcore::libc::locale_t,
     ) -> ctcore::libc::c_int;
@@ -389,63 +413,90 @@ fn ptx_push_unicode_range(class: &mut String, start: u32, end: u32) {
     }
 }
 
+fn ptx_class_pair(positive: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
+    let mut negative = Vec::with_capacity(positive.len() + 1);
+    negative.extend_from_slice(b"[^");
+    negative.extend_from_slice(&positive[1..]);
+    (positive, negative)
+}
+
+fn ptx_single_byte_classes(mut is_member: impl FnMut(u8) -> bool) -> (Vec<u8>, Vec<u8>) {
+    let mut class = vec![b'['];
+    let mut range_start = None;
+    for value in 0u16..=256 {
+        let member = value < 256 && is_member(value as u8);
+        match (range_start, member) {
+            (None, true) => range_start = Some(value),
+            (Some(start), false) => {
+                class.push(start as u8);
+                if value - 1 != start {
+                    class.push(b'-');
+                    class.push((value - 1) as u8);
+                }
+                range_start = None;
+            }
+            _ => {}
+        }
+    }
+    class.push(b']');
+    ptx_class_pair(class)
+}
+
+fn ptx_unicode_classes(mut is_member: impl FnMut(u32) -> bool) -> (Vec<u8>, Vec<u8>) {
+    let mut class = String::from("[");
+    let mut range_start = None;
+    for codepoint in 0..=0x11_0000 {
+        let member =
+            char::from_u32(codepoint).is_some() && codepoint <= 0x10_ffff && is_member(codepoint);
+        match (range_start, member) {
+            (None, true) => range_start = Some(codepoint),
+            (Some(start), false) => {
+                ptx_push_unicode_range(&mut class, start, codepoint - 1);
+                range_start = None;
+            }
+            _ => {}
+        }
+    }
+    class.push(']');
+    ptx_class_pair(class.into_bytes())
+}
+
 fn ptx_locale_word_classes(
     single_byte_locale: bool,
     encoding: LocaleRegexEncoding,
     byte_ctype: &LocaleByteCtype,
     locale_validator: Option<&LocaleMultibyteValidator>,
 ) -> (Vec<u8>, Vec<u8>) {
-    let positive = if single_byte_locale {
-        let mut class = vec![b'['];
-        let mut range_start = None;
-        for value in 0u16..=256 {
-            let is_word = value < 256
-                && (byte_ctype.is_alpha(value as u8)
-                    || (value as u8).is_ascii_digit()
-                    || value == u16::from(b'_'));
-            match (range_start, is_word) {
-                (None, true) => range_start = Some(value),
-                (Some(start), false) => {
-                    class.push(start as u8);
-                    if value - 1 != start {
-                        class.push(b'-');
-                        class.push((value - 1) as u8);
-                    }
-                    range_start = None;
-                }
-                _ => {}
-            }
-        }
-        class.push(b']');
-        class
-    } else if encoding == LocaleRegexEncoding::Ascii || encoding.is_non_utf8_multibyte() {
+    if single_byte_locale {
+        return ptx_single_byte_classes(|byte| {
+            byte_ctype.is_alpha(byte) || byte.is_ascii_digit() || byte == b'_'
+        });
+    }
+    if encoding == LocaleRegexEncoding::Ascii || encoding.is_non_utf8_multibyte() {
         let Some(validator) = locale_validator else {
             return (b"[[:alnum:]_]".to_vec(), b"[^[:alnum:]_]".to_vec());
         };
-        let mut class = String::from("[");
-        let mut range_start = None;
-        for codepoint in 0..=0x11_0000 {
-            let is_word = char::from_u32(codepoint).is_some()
-                && codepoint <= 0x10_ffff
-                && validator.is_word_character(codepoint);
-            match (range_start, is_word) {
-                (None, true) => range_start = Some(codepoint),
-                (Some(start), false) => {
-                    ptx_push_unicode_range(&mut class, start, codepoint - 1);
-                    range_start = None;
-                }
-                _ => {}
-            }
-        }
-        class.push(']');
-        class.into_bytes()
-    } else {
-        b"[[:alnum:]_]".to_vec()
-    };
-    let mut negative = Vec::with_capacity(positive.len() + 1);
-    negative.extend_from_slice(b"[^");
-    negative.extend_from_slice(&positive[1..]);
-    (positive, negative)
+        return ptx_unicode_classes(|codepoint| validator.is_word_character(codepoint));
+    }
+    (b"[[:alnum:]_]".to_vec(), b"[^[:alnum:]_]".to_vec())
+}
+
+fn ptx_locale_space_classes(
+    single_byte_locale: bool,
+    encoding: LocaleRegexEncoding,
+    byte_ctype: &LocaleByteCtype,
+    locale_validator: Option<&LocaleMultibyteValidator>,
+) -> (Vec<u8>, Vec<u8>) {
+    if single_byte_locale {
+        return ptx_single_byte_classes(|byte| byte_ctype.is_space(byte));
+    }
+    if encoding == LocaleRegexEncoding::Ascii || encoding.is_non_utf8_multibyte() {
+        let Some(validator) = locale_validator else {
+            return (b"[[:space:]]".to_vec(), b"[^[:space:]]".to_vec());
+        };
+        return ptx_unicode_classes(|codepoint| validator.is_space_character(codepoint));
+    }
+    (b"[[:space:]]".to_vec(), b"[^[:space:]]".to_vec())
 }
 
 #[derive(Debug)]
@@ -926,6 +977,8 @@ struct PtxConfig {
     /// GNU libc当前locale下的正则word和non-word字符类。
     regex_word_class: Vec<u8>,
     regex_non_word_class: Vec<u8>,
+    regex_space_class: Vec<u8>,
+    regex_non_space_class: Vec<u8>,
 }
 
 impl Default for PtxConfig {
@@ -955,6 +1008,8 @@ impl Default for PtxConfig {
             locale_validator: None,
             regex_word_class: b"[[:alnum:]_]".to_vec(),
             regex_non_word_class: b"[^[:alnum:]_]".to_vec(),
+            regex_space_class: b"[[:space:]]".to_vec(),
+            regex_non_space_class: b"[^[:space:]]".to_vec(),
             line_width: 72,
             gap_size: 3,
         }
@@ -1002,10 +1057,20 @@ fn gnu_emacs_regex_to_rust(pattern: &str, config: &PtxConfig) -> String {
     } else {
         (b"[[:alnum:]_]".as_slice(), b"[^[:alnum:]_]".as_slice())
     };
+    let (space_class, non_space_class) = if std::str::from_utf8(&config.regex_space_class).is_ok() {
+        (
+            config.regex_space_class.as_slice(),
+            config.regex_non_space_class.as_slice(),
+        )
+    } else {
+        (b"[[:space:]]".as_slice(), b"[^[:space:]]".as_slice())
+    };
     String::from_utf8(gnu_emacs_regex_to_onig_bytes_with_classes(
         pattern.as_bytes(),
         word_class,
         non_word_class,
+        space_class,
+        non_space_class,
     ))
     .expect("UTF-8 pattern translation must remain UTF-8")
 }
@@ -1015,6 +1080,8 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8], config: &PtxConfig) -> Vec<u8> 
         pattern,
         &config.regex_word_class,
         &config.regex_non_word_class,
+        &config.regex_space_class,
+        &config.regex_non_space_class,
     )
 }
 
@@ -1022,6 +1089,8 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes(
     pattern: &[u8],
     word_class: &[u8],
     non_word_class: &[u8],
+    space_class: &[u8],
+    non_space_class: &[u8],
 ) -> Vec<u8> {
     let mut translated = Vec::with_capacity(pattern.len());
     let mut escaped = false;
@@ -1075,7 +1144,14 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes(
                 translated.extend_from_slice(b")(?!");
                 translated.extend_from_slice(word_class);
                 translated.extend_from_slice(b"))");
-            } else if !in_bracket && byte.is_ascii_alphabetic() && !matches!(byte, b's' | b'S') {
+            } else if !in_bracket && matches!(byte, b's' | b'S') {
+                translated.pop();
+                translated.extend_from_slice(if byte == b's' {
+                    space_class
+                } else {
+                    non_space_class
+                });
+            } else if !in_bracket && byte.is_ascii_alphabetic() {
                 // GNU's Emacs syntax treats other alphabetic escapes literally.
                 translated.pop();
                 translated.push(byte);
@@ -1422,6 +1498,12 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         ..Default::default()
     };
     (config.regex_word_class, config.regex_non_word_class) = ptx_locale_word_classes(
+        config.single_byte_locale,
+        config.locale_regex_encoding,
+        &config.byte_ctype,
+        config.locale_validator.as_deref(),
+    );
+    (config.regex_space_class, config.regex_non_space_class) = ptx_locale_space_classes(
         config.single_byte_locale,
         config.locale_regex_encoding,
         &config.byte_ctype,

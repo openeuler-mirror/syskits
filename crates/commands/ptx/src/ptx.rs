@@ -32,7 +32,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::collections::{BTreeSet, HashSet};
-use std::ffi::OsString;
+use std::ffi::{CString, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
@@ -52,15 +52,75 @@ fn ptx_is_space_char(ch: char) -> bool {
     u8::try_from(ch).is_ok_and(ptx_is_space_byte)
 }
 
+fn ptx_locale_name() -> OsString {
+    ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| OsString::from("C"))
+}
+
 fn ptx_is_single_byte_locale() -> bool {
-    let locale = std::env::var("LC_ALL")
-        .ok()
-        .or_else(|| std::env::var("LC_CTYPE").ok())
-        .or_else(|| std::env::var("LANG").ok())
-        .unwrap_or_default()
+    let locale = ptx_locale_name()
+        .to_string_lossy()
         .trim()
         .to_ascii_uppercase();
-    locale == "C" || locale == "POSIX"
+    locale == "C" || locale == "POSIX" || locale.contains("ISO8859") || locale.contains("ISO-8859")
+}
+
+#[derive(Debug)]
+struct LocaleByteCtype {
+    alpha: [bool; 256],
+    upper: [u8; 256],
+}
+
+impl LocaleByteCtype {
+    fn from_environment() -> Self {
+        let mut table = Self {
+            alpha: std::array::from_fn(|index| (index as u8).is_ascii_alphabetic()),
+            upper: std::array::from_fn(|index| (index as u8).to_ascii_uppercase()),
+        };
+        let Ok(locale_name) = CString::new(ptx_locale_name().as_encoded_bytes()) else {
+            return table;
+        };
+
+        unsafe {
+            let locale = ctcore::libc::newlocale(
+                ctcore::libc::LC_CTYPE_MASK,
+                locale_name.as_ptr(),
+                std::ptr::null_mut(),
+            );
+            if locale.is_null() {
+                return table;
+            }
+            for byte in 0u16..=255 {
+                table.alpha[usize::from(byte)] = isalpha_l(i32::from(byte), locale) != 0;
+                table.upper[usize::from(byte)] = toupper_l(i32::from(byte), locale) as u8;
+            }
+            ctcore::libc::freelocale(locale);
+        }
+        table
+    }
+
+    fn is_alpha(&self, byte: u8) -> bool {
+        self.alpha[usize::from(byte)]
+    }
+
+    fn uppercase(&self, bytes: &mut [u8]) {
+        for byte in bytes {
+            *byte = self.upper[usize::from(*byte)];
+        }
+    }
+}
+
+unsafe extern "C" {
+    fn isalpha_l(
+        character: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
+    fn toupper_l(
+        character: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
 }
 
 #[derive(Debug)]
@@ -278,6 +338,8 @@ struct PtxConfig {
     force_byte_mode: bool,
     /// C/POSIX locale中的GNU正则按单字节执行。
     single_byte_locale: bool,
+    /// GNU ptx按当前LC_CTYPE对每个原始字节执行isalpha和toupper。
+    byte_ctype: LocaleByteCtype,
 }
 
 impl Default for PtxConfig {
@@ -301,6 +363,7 @@ impl Default for PtxConfig {
             word_byte_regex: None,
             force_byte_mode: false,
             single_byte_locale: false,
+            byte_ctype: LocaleByteCtype::from_environment(),
             line_width: 72,
             gap_size: 3,
         }
@@ -417,7 +480,7 @@ impl WordFilter {
                 words = words
                     .into_iter()
                     .map(|mut word| {
-                        word.make_ascii_uppercase();
+                        config.byte_ctype.uppercase(&mut word);
                         word
                     })
                     .collect();
@@ -434,7 +497,7 @@ impl WordFilter {
                     words = words
                         .into_iter()
                         .map(|mut word| {
-                            word.make_ascii_uppercase();
+                            config.byte_ctype.uppercase(&mut word);
                             word
                         })
                         .collect();
@@ -1220,6 +1283,29 @@ fn ptx_create_word_set(
                     }
                 }
                 ranges
+            } else if !filter.uses_custom_regex {
+                let mut ranges = Vec::new();
+                let mut cursor = context_start;
+                let is_word_byte = |byte| {
+                    if config.is_gnu_ext {
+                        config.byte_ctype.is_alpha(byte)
+                    } else {
+                        !matches!(byte, b' ' | b'\t' | b'\n')
+                    }
+                };
+                while cursor < context_end {
+                    while cursor < context_end && !is_word_byte(content.raw_text[cursor]) {
+                        cursor += 1;
+                    }
+                    let start = cursor;
+                    while cursor < context_end && is_word_byte(content.raw_text[cursor]) {
+                        cursor += 1;
+                    }
+                    if start < cursor {
+                        ranges.push((start - context_start, cursor - context_start));
+                    }
+                }
+                ranges
             } else {
                 let matches = reg.find_iter(context_text);
                 if config.word_regex.is_some() {
@@ -1255,7 +1341,7 @@ fn ptx_create_word_set(
                     word.clone()
                 };
                 if config.is_ignore_case {
-                    raw_word.make_ascii_uppercase();
+                    config.byte_ctype.uppercase(&mut raw_word);
                 }
                 if filter.is_only_specified && !filter.only_set.contains(&raw_word) {
                     continue;
@@ -1438,7 +1524,7 @@ fn ptx_is_default_word_char(config: &PtxConfig, c: char) -> bool {
         return u8::try_from(c).is_ok_and(|byte| !break_bytes.contains(&byte));
     }
     if config.is_gnu_ext {
-        c.is_ascii_alphabetic()
+        u8::try_from(c).is_ok_and(|byte| config.byte_ctype.is_alpha(byte))
     } else {
         !matches!(c, ' ' | '\t' | '\n')
     }
@@ -1726,7 +1812,7 @@ fn ptx_is_default_word_byte(config: &PtxConfig, byte: u8) -> bool {
         return !break_bytes.contains(&byte);
     }
     if config.is_gnu_ext {
-        byte.is_ascii_alphabetic()
+        config.byte_ctype.is_alpha(byte)
     } else {
         !matches!(byte, b' ' | b'\t' | b'\n')
     }

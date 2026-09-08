@@ -32,7 +32,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::collections::{BTreeSet, HashSet};
-use std::ffi::{CString, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
@@ -54,6 +54,10 @@ fn ptx_is_space_char(ch: char) -> bool {
 
 fn ptx_write_error_context() -> String {
     "write error".to_string()
+}
+
+fn ptx_file_context(path: &OsStr) -> String {
+    path.to_string_lossy().into_owned()
 }
 
 fn ptx_locale_name() -> OsString {
@@ -374,16 +378,15 @@ impl Default for PtxConfig {
     }
 }
 
-fn read_word_filter_file(
-    matches: &clap::ArgMatches,
-    option: &str,
-) -> std::io::Result<HashSet<Vec<u8>>> {
+fn read_word_filter_file(matches: &clap::ArgMatches, option: &str) -> CTResult<HashSet<Vec<u8>>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
-    let mut file = File::open(filename)?;
+    let mut file =
+        File::open(filename).map_err_context(|| ptx_file_context(filename.as_os_str()))?;
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
+    file.read_to_end(&mut contents)
+        .map_err_context(|| ptx_file_context(filename.as_os_str()))?;
     let mut words: HashSet<Vec<u8>> = HashSet::new();
     for line in contents.split(|&byte| byte == b'\n') {
         if !line.is_empty() {
@@ -394,13 +397,16 @@ fn read_word_filter_file(
 }
 
 /// reads contents of file as unique set of characters to be used with the break-file option
-fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> std::io::Result<HashSet<u8>> {
+fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> CTResult<HashSet<u8>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
-    let mut reader = File::open(filename)?;
+    let mut reader =
+        File::open(filename).map_err_context(|| ptx_file_context(filename.as_os_str()))?;
     let mut bytes = Vec::new();
-    reader.read_to_end(&mut bytes)?;
+    reader
+        .read_to_end(&mut bytes)
+        .map_err_context(|| ptx_file_context(filename.as_os_str()))?;
     Ok(bytes.into_iter().collect())
 }
 
@@ -478,8 +484,7 @@ impl WordFilter {
     fn new(matches: &clap::ArgMatches, config: &PtxConfig) -> CTResult<Self> {
         let (o, oset): (bool, HashSet<Vec<u8>>) = if matches.contains_id(ptx_options::PTX_ONLY_FILE)
         {
-            let mut words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)
-                .map_err_context(String::new)?;
+            let mut words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)?;
             if config.is_ignore_case {
                 words = words
                     .into_iter()
@@ -495,8 +500,7 @@ impl WordFilter {
         };
         let (i, iset): (bool, HashSet<Vec<u8>>) =
             if matches.contains_id(ptx_options::PTX_IGNORE_FILE) {
-                let mut words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)
-                    .map_err_context(String::new)?;
+                let mut words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)?;
                 if config.is_ignore_case {
                     words = words
                         .into_iter()
@@ -513,8 +517,7 @@ impl WordFilter {
         let break_set: Option<HashSet<u8>> = if matches.contains_id(ptx_options::PTX_BREAK_FILE)
             && !matches.contains_id(ptx_options::PTX_WORD_REGEXP)
         {
-            let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)
-                .map_err_context(String::new)?;
+            let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)?;
             let mut hs: HashSet<u8> = if config.is_gnu_ext {
                 HashSet::new() // really only chars found in file
             } else {
@@ -1134,7 +1137,7 @@ fn ptx_input_reference_content_start(line: &str) -> usize {
 ///
 /// # 返回值
 /// 返回一个 HashMap，键为文件名，值为文件内容和偏移量
-fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Result<FileMap> {
+fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<FileMap> {
     // 初始化文件数组
     let mut file_map: FileMap = Vec::new();
     let mut files = Vec::new();
@@ -1151,13 +1154,22 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Resu
     for filename in files {
         let filename_bytes = filename.map_or(b"-".as_slice(), |name| name.as_os_str().as_bytes());
         let using_stdin = filename_bytes.is_empty() || filename_bytes == b"-";
+        let display_name = filename
+            .filter(|name| !name.is_empty())
+            .cloned()
+            .unwrap_or_else(|| OsString::from("-"));
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if using_stdin {
             ctcore::ct_io::stdin_reader_box()
         } else {
-            Box::new(File::open(filename.expect("non-stdin filename"))?)
+            Box::new(
+                File::open(filename.expect("non-stdin filename"))
+                    .map_err_context(|| ptx_file_context(display_name.as_os_str()))?,
+            )
         });
         let mut input_bytes = Vec::new();
-        reader.read_to_end(&mut input_bytes)?;
+        reader
+            .read_to_end(&mut input_bytes)
+            .map_err_context(|| ptx_file_context(display_name.as_os_str()))?;
         let mut raw_lines: Vec<Vec<u8>> = if input_bytes.is_empty() {
             Vec::new()
         } else {
@@ -2732,7 +2744,8 @@ fn ptx_format_tex_line_bytes(
 fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
         BufWriter::new(if let Some(output_filename) = &settings.output_filename {
-            let file = File::create(output_filename).map_err_context(String::new)?;
+            let file = File::create(output_filename)
+                .map_err_context(|| ptx_file_context(output_filename.as_os_str()))?;
             Box::new(file)
         } else {
             Box::new(stdout())
@@ -3250,7 +3263,7 @@ impl PtxSettings {
         }
 
         // 读取输入文件
-        let file_map = ptx_read_input(&input_files, &config).map_err_context(String::new)?;
+        let file_map = ptx_read_input(&input_files, &config)?;
         let context_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
         let has_boundary_match = file_map.iter().any(|content| {
             config.context_byte_regex.as_ref().map_or_else(

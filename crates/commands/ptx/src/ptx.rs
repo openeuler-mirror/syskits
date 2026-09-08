@@ -523,22 +523,6 @@ impl WordFilter {
             } else {
                 (false, HashSet::new())
             };
-        let break_set: Option<HashSet<u8>> = if matches.contains_id(ptx_options::PTX_BREAK_FILE)
-            && !matches.contains_id(ptx_options::PTX_WORD_REGEXP)
-        {
-            let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)?;
-            let mut hs: HashSet<u8> = if config.is_gnu_ext {
-                HashSet::new() // really only chars found in file
-            } else {
-                // GNU off means at least these are considered
-                [b' ', b'\t', b'\n'].iter().cloned().collect()
-            };
-            hs.extend(bytes);
-            Some(hs)
-        } else {
-            // if -W takes precedence or default
-            None
-        };
         // Ignore empty string regex from cmd-line-args
         let arg_reg_bytes: Option<Vec<u8>> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
             match matches.get_one::<OsString>(ptx_options::PTX_WORD_REGEXP) {
@@ -551,6 +535,21 @@ impl WordFilter {
         } else {
             None
         };
+        let break_set: Option<HashSet<u8>> =
+            if matches.contains_id(ptx_options::PTX_BREAK_FILE) && arg_reg_bytes.is_none() {
+                let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)?;
+                let mut hs: HashSet<u8> = if config.is_gnu_ext {
+                    HashSet::new() // really only chars found in file
+                } else {
+                    // GNU off means at least these are considered
+                    [b' ', b'\t', b'\n'].iter().cloned().collect()
+                };
+                hs.extend(bytes);
+                Some(hs)
+            } else {
+                // A non-empty -W takes precedence over the break file.
+                None
+            };
         let uses_custom_regex = arg_reg_bytes.is_some();
         let word_byte_pattern = arg_reg_bytes
             .as_ref()

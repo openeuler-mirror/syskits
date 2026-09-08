@@ -8671,6 +8671,258 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[a-c-e]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按ASCII单引号引用连续范围[a-c-e]，验证-W拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[a-c-e]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[a-c-e]')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[a-b-c-d]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按ASCII单引号引用连续范围[a-b-c-d]，验证-W拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[a-b-c-d]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[a-b-c-d]')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W '[x-z-a]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按ASCII单引号引用连续范围[x-z-a]，验证-W拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[x-z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[x-z-a]')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -S '[a-c-e]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按ASCII单引号引用连续范围[a-c-e]，验证-S拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-S",
+        "[a-c-e]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[a-c-e]')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -S '[a-b-c-d]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按ASCII单引号引用连续范围[a-b-c-d]，验证-S拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-S",
+        "[a-b-c-d]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[a-b-c-d]')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -S '[x-z-a]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按ASCII单引号引用连续范围[x-z-a]，验证-S拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-S",
+        "[x-z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[x-z-a]')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[a-c-e]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按locale Unicode引号引用连续范围[a-c-e]，验证-W拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[a-c-e]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[a-c-e]’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[a-b-c-d]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按locale Unicode引号引用连续范围[a-b-c-d]，验证-W拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[a-b-c-d]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[a-b-c-d]’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '[x-z-a]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按locale Unicode引号引用连续范围[x-z-a]，验证-W拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-W",
+        "[x-z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[x-z-a]’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -S '[a-c-e]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按locale Unicode引号引用连续范围[a-c-e]，验证-S拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-S",
+        "[a-c-e]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[a-c-e]’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -S '[a-b-c-d]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按locale Unicode引号引用连续范围[a-b-c-d]，验证-S拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-S",
+        "[a-b-c-d]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[a-b-c-d]’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -S '[x-z-a]' input；input内容为“a b c d e x y z\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并按locale Unicode引号引用连续范围[x-z-a]，验证-S拒绝第二个非末尾连字符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'a b c d e x y z\\n' > input"
+      ],
+      "args": [
+        "-S",
+        "[x-z-a]",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[x-z-a]’)\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

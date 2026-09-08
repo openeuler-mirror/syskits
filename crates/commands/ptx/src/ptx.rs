@@ -1314,6 +1314,57 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
     translated
 }
 
+fn ptx_has_chained_character_class_range(pattern: &[u8]) -> bool {
+    let mut index = 0usize;
+    let mut in_bracket = false;
+    let mut escaped = false;
+    let mut range_just_ended = false;
+    while index < pattern.len() {
+        let byte = pattern[index];
+        if escaped {
+            escaped = false;
+            range_just_ended = false;
+            index += 1;
+            continue;
+        }
+        if byte == b'\\' {
+            escaped = true;
+            range_just_ended = false;
+            index += 1;
+            continue;
+        }
+        if !in_bracket {
+            if byte == b'[' {
+                in_bracket = true;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b']' {
+            in_bracket = false;
+            range_just_ended = false;
+            index += 1;
+            continue;
+        }
+        if range_just_ended && byte == b'-' && pattern.get(index + 1) != Some(&b']') {
+            return true;
+        }
+        if !matches!(byte, b'[' | b']' | b'-' | b'^')
+            && pattern.get(index + 1) == Some(&b'-')
+            && pattern
+                .get(index + 2)
+                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'^'))
+        {
+            range_just_ended = true;
+            index += 3;
+            continue;
+        }
+        range_just_ended = false;
+        index += 1;
+    }
+    false
+}
+
 #[derive(Debug)]
 struct WordFilter {
     /// 是否只包含指定的单词
@@ -4754,6 +4805,18 @@ impl PtxSettings {
         if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
             && config.context_regex != NEVER_MATCH_REGEX
         {
+            if config
+                .context_pattern_bytes
+                .as_deref()
+                .is_some_and(ptx_has_chained_character_class_range)
+            {
+                return Err(ptx_invalid_regex_error(
+                    config
+                        .context_pattern_bytes
+                        .as_deref()
+                        .expect("checked context regexp"),
+                ));
+            }
             if let Some(pattern) = &config.context_byte_pattern {
                 config.context_byte_regex = Some(compile_user_byte_regex(
                     pattern,
@@ -4814,6 +4877,9 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
     let bytes = ptx_unescape_bytes(value.as_os_str().as_bytes());
     if bytes.is_empty() {
         return Ok(());
+    }
+    if ptx_has_chained_character_class_range(&bytes) {
+        return Err(ptx_invalid_regex_error(&bytes));
     }
     if config.is_ignore_case
         || config.single_byte_locale

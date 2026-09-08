@@ -30,6 +30,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
@@ -4257,7 +4258,7 @@ pub fn ct_app() -> Command {
         Arg::new(ptx_options::PTX_FORMAT)
             .long(ptx_options::PTX_FORMAT)
             .value_name("FORMAT")
-            .value_parser(["roff", "tex"]),
+            .value_parser(CtShortcutValueParser::new(["roff", "tex"])),
         Arg::new(ptx_options::PTX_RIGHT_SIDE_REFS)
             .short('R')
             .long(ptx_options::PTX_RIGHT_SIDE_REFS)

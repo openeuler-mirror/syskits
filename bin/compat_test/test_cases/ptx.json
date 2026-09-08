@@ -8340,6 +8340,54 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C.UTF-8，执行ptx -f -W '.' input；input可读为“\\\\xFF x\\\\n”，共4字节ff 20 78 0a；预期RC=0、stderr为空，stdout十六进制解码为2行、83字节的dumb索引，点号词正则只匹配有效字符x，非法字节ff仅作为上下文保留，生成两个轮转布局，JSON中的十六进制stdout表示全部索引行并逐字节保留ff",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\377 x\\n' > input"
+      ],
+      "args": [
+        "2d66",
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202020202020202020202020202020202020202020202020202020202020202020ff20202020780a2020202020202020202020202020202020202020202020202020202020202020202020ff202020780a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C.UTF-8，执行ptx -f -S '.x' input；input可读为“\\\\xFF x\\\\n”，共4字节ff 20 78 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、41字节的dumb索引，句边界正则不把非法字节ff作为点号匹配，输出仅保留一条x上下文记录，JSON中的十六进制stdout表示全部索引行并逐字节保留ff",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\377 x\\n' > input"
+      ],
+      "args": [
+        "2d66",
+        "2d53",
+        "2e78",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202020202020202020202020202020202020202020202020202020202020202020ff202020780a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -586,6 +586,7 @@ struct ByteRegex {
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
     transcode_locale: bool,
+    single_byte_locale: bool,
 }
 
 struct LocaleUtf8Text {
@@ -651,10 +652,7 @@ impl LocaleUtf8Text {
 
 impl ByteRegex {
     fn valid_character_len(&self, bytes: &[u8]) -> Option<usize> {
-        if matches!(
-            self.encoding,
-            LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
-        ) {
+        if self.single_byte_locale || self.encoding == LocaleRegexEncoding::SingleByte {
             return self.encoding.valid_character_len(bytes);
         }
         match &self.locale_validator {
@@ -664,10 +662,7 @@ impl ByteRegex {
     }
 
     fn is_valid_match_range(&self, bytes: &[u8], start: usize, end: usize) -> bool {
-        if matches!(
-            self.encoding,
-            LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
-        ) {
+        if self.single_byte_locale || self.encoding == LocaleRegexEncoding::SingleByte {
             return true;
         }
         let mut cursor = 0usize;
@@ -701,10 +696,7 @@ impl ByteRegex {
     }
 
     fn first_invalid_byte_at_or_after(&self, bytes: &[u8], from: usize) -> Option<usize> {
-        if matches!(
-            self.encoding,
-            LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
-        ) {
+        if self.single_byte_locale || self.encoding == LocaleRegexEncoding::SingleByte {
             return None;
         }
         let mut cursor = 0usize;
@@ -1651,9 +1643,17 @@ fn compile_user_byte_regex(
     byte_ctype: &LocaleByteCtype,
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
+    single_byte_locale: bool,
 ) -> CTResult<ByteRegex> {
-    compile_byte_regex(pattern, ignore_case, byte_ctype, encoding, locale_validator)
-        .map_err(|_| ptx_invalid_regex_error(pattern))
+    compile_byte_regex(
+        pattern,
+        ignore_case,
+        byte_ctype,
+        encoding,
+        locale_validator,
+        single_byte_locale,
+    )
+    .map_err(|_| ptx_invalid_regex_error(pattern))
 }
 
 fn compile_byte_regex(
@@ -1662,6 +1662,7 @@ fn compile_byte_regex(
     byte_ctype: &LocaleByteCtype,
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
+    single_byte_locale: bool,
 ) -> Result<ByteRegex, onig::Error> {
     let transcode_locale = encoding.is_non_utf8_multibyte() && locale_validator.is_some();
     let mut options = RegexOptions::REGEX_OPTION_NONE;
@@ -1733,6 +1734,7 @@ fn compile_byte_regex(
         encoding,
         locale_validator,
         transcode_locale,
+        single_byte_locale,
     })
 }
 
@@ -4621,6 +4623,7 @@ impl PtxSettings {
                     &config.byte_ctype,
                     config.locale_regex_encoding,
                     config.locale_validator.clone(),
+                    config.single_byte_locale,
                 )?);
             } else {
                 compile_user_regex(&config.context_regex, config.is_ignore_case)?;
@@ -4643,6 +4646,7 @@ impl PtxSettings {
                     &config.byte_ctype,
                     config.locale_regex_encoding,
                     config.locale_validator.clone(),
+                    config.single_byte_locale,
                 )?);
                 config.force_byte_mode = true;
             }
@@ -4685,6 +4689,7 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
             &config.byte_ctype,
             config.locale_regex_encoding,
             config.locale_validator.clone(),
+            config.single_byte_locale,
         )?;
     } else {
         let pattern = gnu_emacs_regex_to_rust(

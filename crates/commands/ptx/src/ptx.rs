@@ -1068,15 +1068,8 @@ fn compile_user_byte_regex(
     byte_ctype: &LocaleByteCtype,
     encoding: LocaleRegexEncoding,
 ) -> CTResult<ByteRegex> {
-    compile_byte_regex(pattern, ignore_case, byte_ctype, encoding).map_err(|_| {
-        CtSimpleError::new(
-            1,
-            format!(
-                "Invalid regular expression (for regexp '{}')",
-                String::from_utf8_lossy(pattern)
-            ),
-        )
-    })
+    compile_byte_regex(pattern, ignore_case, byte_ctype, encoding)
+        .map_err(|_| ptx_invalid_regex_error(pattern))
 }
 
 fn compile_byte_regex(
@@ -3620,6 +3613,7 @@ fn ptx_quote_pattern(
 ) -> Vec<u8> {
     let mut quoted = Vec::with_capacity(pattern.len() + 2);
     quoted.push(b'\'');
+    let printable = ptx_printable_byte_mask(pattern, byte_ctype, single_byte_locale);
     let mut index = 0usize;
     while index < pattern.len() {
         let byte = pattern[index];
@@ -3640,43 +3634,12 @@ fn ptx_quote_pattern(
             index += 1;
             continue;
         }
-        if byte.is_ascii() {
-            if byte_ctype.is_print(byte) {
-                quoted.push(byte);
-            } else {
-                ptx_push_octal_escape(&mut quoted, byte);
-            }
-            index += 1;
-            continue;
-        }
-        if single_byte_locale {
-            if byte_ctype.is_print(byte) {
-                quoted.push(byte);
-            } else {
-                ptx_push_octal_escape(&mut quoted, byte);
-            }
-            index += 1;
-            continue;
-        }
-
-        let valid_len = match std::str::from_utf8(&pattern[index..]) {
-            Ok(valid) => valid.chars().next().map_or(0, char::len_utf8),
-            Err(error) if error.valid_up_to() > 0 => {
-                std::str::from_utf8(&pattern[index..index + error.valid_up_to()])
-                    .expect("validated UTF-8 prefix")
-                    .chars()
-                    .next()
-                    .map_or(0, char::len_utf8)
-            }
-            Err(_) => 0,
-        };
-        if valid_len == 0 {
-            ptx_push_octal_escape(&mut quoted, byte);
-            index += 1;
+        if printable[index] {
+            quoted.push(byte);
         } else {
-            quoted.extend_from_slice(&pattern[index..index + valid_len]);
-            index += valid_len;
+            ptx_push_octal_escape(&mut quoted, byte);
         }
+        index += 1;
     }
     quoted.push(b'\'');
     quoted
@@ -3826,6 +3789,17 @@ fn ptx_file_io_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
     let _ = stderr.write_all(b": ");
     let _ = stderr.write_all(strip_errno(&error).as_bytes());
     let _ = stderr.write_all(b"\n");
+    CtSimpleError::new(1, "")
+}
+
+fn ptx_invalid_regex_error(pattern: &[u8]) -> Box<dyn CTError> {
+    let byte_ctype = LocaleByteCtype::from_environment();
+    let quoted = ptx_quote_pattern(pattern, &byte_ctype, ptx_is_single_byte_locale());
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+    let _ = stderr.write_all(b": Invalid regular expression (for regexp ");
+    let _ = stderr.write_all(&quoted);
+    let _ = stderr.write_all(b")\n");
     CtSimpleError::new(1, "")
 }
 

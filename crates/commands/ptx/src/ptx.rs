@@ -128,18 +128,65 @@ impl LocaleRegexEncoding {
     }
 
     fn encoded(self, bytes: &[u8]) -> EncodedBytes<'_> {
+        let Some(encoding) = self.onig_encoding() else {
+            return EncodedBytes::ascii(bytes);
+        };
+        EncodedBytes::from_parts(bytes, encoding)
+    }
+
+    fn onig_encoding(self) -> Option<onig_sys::OnigEncoding> {
         let encoding = match self {
-            Self::Ascii => return EncodedBytes::ascii(bytes),
+            Self::Ascii => return None,
             Self::EucCn => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_CN),
             Self::EucTw => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_TW),
             Self::Big5 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingBIG5),
             Self::Gb18030 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingGB18030),
         };
-        EncodedBytes::from_parts(bytes, encoding)
+        Some(encoding)
     }
 
     fn is_non_utf8_multibyte(self) -> bool {
         self != Self::Ascii
+    }
+
+    fn mark_valid_multibyte_sequences(self, bytes: &[u8], printable: &mut [bool]) {
+        let Some(encoding) = self.onig_encoding() else {
+            return;
+        };
+        let mut padded = bytes.to_vec();
+        padded.extend_from_slice(&[0; 4]);
+        let mut index = 0usize;
+        unsafe {
+            let encoding = &*encoding;
+            let encoded_length = encoding
+                .mbc_enc_len
+                .expect("Oniguruma encoding must provide character lengths");
+            let is_valid = encoding
+                .is_valid_mbc_string
+                .expect("Oniguruma encoding must validate byte strings");
+            while index < bytes.len() {
+                if bytes[index].is_ascii() {
+                    index += 1;
+                    continue;
+                }
+                let length = encoded_length(padded.as_ptr().add(index));
+                let Ok(length) = usize::try_from(length) else {
+                    index += 1;
+                    continue;
+                };
+                if length <= 1 || index + length > bytes.len() {
+                    index += 1;
+                    continue;
+                }
+                let start = padded.as_ptr().add(index);
+                if is_valid(start, start.add(length)) != 0 {
+                    printable[index..index + length].fill(true);
+                    index += length;
+                } else {
+                    index += 1;
+                }
+            }
+        }
     }
 }
 
@@ -3654,6 +3701,16 @@ fn ptx_printable_byte_mask(
     single_byte_locale: bool,
 ) -> Vec<bool> {
     let mut printable = vec![false; bytes.len()];
+    let locale_encoding = LocaleRegexEncoding::from_environment();
+    if locale_encoding.is_non_utf8_multibyte() {
+        for (index, &byte) in bytes.iter().enumerate() {
+            if byte.is_ascii() {
+                printable[index] = byte_ctype.is_print(byte);
+            }
+        }
+        locale_encoding.mark_valid_multibyte_sequences(bytes, &mut printable);
+        return printable;
+    }
     let mut index = 0usize;
     while index < bytes.len() {
         let byte = bytes[index];

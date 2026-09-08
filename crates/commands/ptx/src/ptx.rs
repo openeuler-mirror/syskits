@@ -518,22 +518,36 @@ struct WordFilter {
 impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &PtxConfig) -> CTResult<Self> {
-        let (o, oset): (bool, HashSet<Vec<u8>>) = if matches.contains_id(ptx_options::PTX_ONLY_FILE)
-        {
-            let mut words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)?;
-            if config.is_ignore_case {
-                words = words
-                    .into_iter()
-                    .map(|mut word| {
-                        config.byte_ctype.uppercase(&mut word);
-                        word
-                    })
-                    .collect();
+        // Ignore empty string regex from cmd-line-args
+        let arg_reg_bytes: Option<Vec<u8>> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
+            match matches.get_one::<OsString>(ptx_options::PTX_WORD_REGEXP) {
+                Some(v) => {
+                    let value = ptx_unescape_bytes(v.as_os_str().as_bytes());
+                    if value.is_empty() { None } else { Some(value) }
+                }
+                None => None,
             }
-            (!words.is_empty(), words)
         } else {
-            (false, HashSet::new())
+            None
         };
+        let loaded_break_set: Option<HashSet<u8>> =
+            if matches.contains_id(ptx_options::PTX_BREAK_FILE) {
+                let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)?;
+                let mut hs: HashSet<u8> = if config.is_gnu_ext {
+                    HashSet::new() // really only chars found in file
+                } else {
+                    // GNU off means at least these are considered
+                    [b' ', b'\t', b'\n'].iter().cloned().collect()
+                };
+                hs.extend(bytes);
+                Some(hs)
+            } else {
+                None
+            };
+        let break_set = arg_reg_bytes
+            .is_none()
+            .then_some(loaded_break_set)
+            .flatten();
         let (i, iset): (bool, HashSet<Vec<u8>>) =
             if matches.contains_id(ptx_options::PTX_IGNORE_FILE) {
                 let mut words = read_word_filter_file(matches, ptx_options::PTX_IGNORE_FILE)?;
@@ -550,33 +564,22 @@ impl WordFilter {
             } else {
                 (false, HashSet::new())
             };
-        // Ignore empty string regex from cmd-line-args
-        let arg_reg_bytes: Option<Vec<u8>> = if matches.contains_id(ptx_options::PTX_WORD_REGEXP) {
-            match matches.get_one::<OsString>(ptx_options::PTX_WORD_REGEXP) {
-                Some(v) => {
-                    let value = ptx_unescape_bytes(v.as_os_str().as_bytes());
-                    if value.is_empty() { None } else { Some(value) }
-                }
-                None => None,
+        let (o, oset): (bool, HashSet<Vec<u8>>) = if matches.contains_id(ptx_options::PTX_ONLY_FILE)
+        {
+            let mut words = read_word_filter_file(matches, ptx_options::PTX_ONLY_FILE)?;
+            if config.is_ignore_case {
+                words = words
+                    .into_iter()
+                    .map(|mut word| {
+                        config.byte_ctype.uppercase(&mut word);
+                        word
+                    })
+                    .collect();
             }
+            (!words.is_empty(), words)
         } else {
-            None
+            (false, HashSet::new())
         };
-        let break_set: Option<HashSet<u8>> =
-            if matches.contains_id(ptx_options::PTX_BREAK_FILE) && arg_reg_bytes.is_none() {
-                let bytes = read_char_filter_file(matches, ptx_options::PTX_BREAK_FILE)?;
-                let mut hs: HashSet<u8> = if config.is_gnu_ext {
-                    HashSet::new() // really only chars found in file
-                } else {
-                    // GNU off means at least these are considered
-                    [b' ', b'\t', b'\n'].iter().cloned().collect()
-                };
-                hs.extend(bytes);
-                Some(hs)
-            } else {
-                // A non-empty -W takes precedence over the break file.
-                None
-            };
         let uses_custom_regex = arg_reg_bytes.is_some();
         let word_byte_pattern = arg_reg_bytes
             .as_ref()
@@ -3752,6 +3755,8 @@ impl PtxSettings {
             ));
         }
 
+        validate_ptx_word_regexp(&matches, &config)?;
+
         // 创建单词过滤器
         let word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_bytes = word_filter.break_set.clone();
@@ -3811,6 +3816,26 @@ impl PtxSettings {
 
         Ok(settings)
     }
+}
+
+fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> CTResult<()> {
+    let Some(value) = matches.get_one::<OsString>(ptx_options::PTX_WORD_REGEXP) else {
+        return Ok(());
+    };
+    let bytes = ptx_unescape_bytes(value.as_os_str().as_bytes());
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    if config.single_byte_locale || std::str::from_utf8(&bytes).is_err() {
+        let pattern = gnu_emacs_regex_to_onig_bytes(&bytes);
+        compile_user_byte_regex(&pattern, config.is_ignore_case, &config.byte_ctype)?;
+    } else {
+        let pattern = gnu_emacs_regex_to_rust(
+            std::str::from_utf8(&bytes).expect("validated UTF-8 word regexp"),
+        );
+        compile_user_regex(&pattern, config.is_ignore_case)?;
+    }
+    Ok(())
 }
 
 pub fn ct_app() -> Command {

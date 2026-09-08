@@ -4928,6 +4928,27 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W a* input；输入为input=Y1 （3字节）；预期RC=0、stderr为空，stdout为0条换行分隔、共0字节的dumb索引；对应Cargo用例ptx_word_regexp_skips_zero_length_matches第1次调用",
+      "args": [
+        "-W",
+        "a*",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\131\\061\\040' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

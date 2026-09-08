@@ -40,12 +40,60 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::process::{Command as ProcessCommand, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
+
+type GlibcReCompilePattern = unsafe extern "C" fn(
+    *const ctcore::libc::c_char,
+    usize,
+    *mut ctcore::libc::regex_t,
+) -> *const ctcore::libc::c_char;
+type GlibcReMatch = unsafe extern "C" fn(
+    *mut ctcore::libc::regex_t,
+    *const ctcore::libc::c_char,
+    ctcore::libc::regoff_t,
+    ctcore::libc::regoff_t,
+    *mut ctcore::libc::c_void,
+) -> ctcore::libc::regoff_t;
+
+struct GlibcRegexApi {
+    compile_pattern: GlibcReCompilePattern,
+    is_match: GlibcReMatch,
+}
+
+fn glibc_regex_api() -> Option<&'static GlibcRegexApi> {
+    static API: OnceLock<Option<GlibcRegexApi>> = OnceLock::new();
+
+    API.get_or_init(|| unsafe {
+        // Oniguruma exports ABI-incompatible GNU regex compatibility symbols.
+        // Resolve the glibc implementation from its own handle explicitly.
+        let handle = ctcore::libc::dlopen(
+            c"libc.so.6".as_ptr(),
+            ctcore::libc::RTLD_LAZY | ctcore::libc::RTLD_LOCAL,
+        );
+        if handle.is_null() {
+            return None;
+        }
+        let compile_pattern = ctcore::libc::dlsym(handle, c"re_compile_pattern".as_ptr());
+        let is_match = ctcore::libc::dlsym(handle, c"re_match".as_ptr());
+        if compile_pattern.is_null() || is_match.is_null() {
+            ctcore::libc::dlclose(handle);
+            return None;
+        }
+        Some(GlibcRegexApi {
+            compile_pattern: std::mem::transmute::<
+                *mut ctcore::libc::c_void,
+                GlibcReCompilePattern,
+            >(compile_pattern),
+            is_match: std::mem::transmute::<*mut ctcore::libc::c_void, GlibcReMatch>(is_match),
+        })
+    })
+    .as_ref()
+}
 
 unsafe extern "C" {
     fn fnmatch(
@@ -273,23 +321,23 @@ impl LocaleCollation {
         candidates: &[Vec<u8>],
         fold_upper: Option<&[u8; 256]>,
     ) -> Option<Vec<Vec<u8>>> {
+        let regex_api = glibc_regex_api()?;
         let mut folded_pattern = pattern.to_vec();
         if let Some(upper) = fold_upper {
             for byte in &mut folded_pattern {
                 *byte = upper[usize::from(*byte)];
             }
         }
-        folded_pattern.push(0);
         let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
         let mut regex: ctcore::libc::regex_t = unsafe { std::mem::zeroed() };
-        let compile_result = unsafe {
-            ctcore::libc::regcomp(
-                &mut regex,
+        let compile_error = unsafe {
+            (regex_api.compile_pattern)(
                 folded_pattern.as_ptr().cast(),
-                ctcore::libc::REG_EXTENDED | ctcore::libc::REG_NOSUB,
+                folded_pattern.len(),
+                &mut regex,
             )
         };
-        if compile_result != 0 {
+        if !compile_error.is_null() {
             unsafe { ctcore::libc::uselocale(previous) };
             return None;
         }
@@ -304,15 +352,17 @@ impl LocaleCollation {
                     *byte = upper[usize::from(*byte)];
                 }
             }
-            folded_candidate.push(0);
+            let Ok(length) = ctcore::libc::regoff_t::try_from(folded_candidate.len()) else {
+                continue;
+            };
             if unsafe {
-                ctcore::libc::regexec(
-                    &regex,
+                (regex_api.is_match)(
+                    &mut regex,
                     folded_candidate.as_ptr().cast(),
+                    length,
                     0,
                     std::ptr::null_mut(),
-                    0,
-                ) == 0
+                ) >= 0
             } {
                 matches.push(candidate.clone());
             }
@@ -1241,14 +1291,26 @@ fn ptx_character_class_end(pattern: &[u8], start: usize) -> Option<usize> {
     if pattern.get(index) == Some(&b']') {
         index += 1;
     }
-    pattern[index..]
-        .iter()
-        .position(|&byte| byte == b']')
-        .map(|relative| index + relative)
+    while index < pattern.len() {
+        if pattern.get(index) == Some(&b'[')
+            && let Some(&delimiter @ (b'.' | b'=')) = pattern.get(index + 1)
+            && let Some(relative) = pattern[index + 2..]
+                .windows(2)
+                .position(|closing| closing == [delimiter, b']'])
+        {
+            index += relative + 4;
+            continue;
+        }
+        if pattern[index] == b']' {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
 }
 
 fn ptx_character_class_has_range(class: &[u8]) -> bool {
-    if class.len() < 4 || class[1..class.len() - 1].contains(&b'[') {
+    if class.len() < 4 {
         return false;
     }
     let content = &class[1..class.len() - 1];

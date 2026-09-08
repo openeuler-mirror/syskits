@@ -906,6 +906,13 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8]) -> Vec<u8> {
                     b'\'' => translated.extend_from_slice(b"\\z"),
                     _ => unreachable!(),
                 }
+            } else if !in_bracket
+                && byte.is_ascii_alphabetic()
+                && !matches!(byte, b'B' | b'w' | b'W' | b's' | b'S')
+            {
+                // GNU's Emacs syntax treats other alphabetic escapes literally.
+                translated.pop();
+                translated.push(byte);
             } else {
                 translated.push(byte);
             }

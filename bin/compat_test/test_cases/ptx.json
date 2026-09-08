@@ -6571,6 +6571,270 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\A input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共232字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第1次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\A",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {041 x y z k<x> g<x> p$\\{$Alpha}{}{A}{ C D G H K M N O R X Y Z d e h u0}{}\n\\xx {}{d e h u0041 x y z k<x> g<x> p$\\{$}{A}{lpha$\\}$ P$\\{$Alpha$\\}$ 123}{X Y Z}\n\\xx {}{041 x y z k<x> g<x> p$\\{$Alpha$\\}$ P$\\{$}{A}{lpha$\\}$ 123}{h u0}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\C input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共82字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第2次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\C",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {1 x y z k<x> g<x> p$\\{$Alpha$\\}$}{A}{C}{ D G H K M N O R X Y Z d e h u004}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\d+ input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共82字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第3次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\d+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {a$\\}$}{A C D G H K M N O R X Y Z}{d}{ e h u0041 x y z k<x> g<x> p$\\{$Alph}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\D+ input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共81字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第4次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\D+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {x y z k<x> g<x> p$\\{$Alpha$\\}$}{A C}{D}{ G H K M N O R X Y Z d e h u0041}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\N input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共81字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第5次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\N",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {g<x> p$\\{$Alpha$\\}$}{A C D G H K M}{N}{ O R X Y Z d e h u0041 x y z k<x>}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\R input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共82字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第6次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\R",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {> p$\\{$Alpha$\\}$}{A C D G H K M N O}{R}{ X Y Z d e h u0041 x y z k<x> g<x}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\u0041 input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共89字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第7次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\u0041",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{A C D G H K M N O R X Y Z d e h}{u0041}{ x y z k<x> g<x> p$\\{$Alpha$\\}$ P$\\{$A}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\z input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共91字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第8次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\z",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{K M N O R X Y Z d e h u0041 x y}{z}{ k<x> g<x> p$\\{$Alpha$\\}$ P$\\{$Alpha$\\}$ 123}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\k<x> input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共89字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第9次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\k<x>",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{M N O R X Y Z d e h u0041 x y z}{k<x>}{ g<x> p$\\{$Alpha$\\}$ P$\\{$Alpha$\\}$ 123}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\g<x> input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共88字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第10次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\g<x>",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{R X Y Z d e h u0041 x y z k<x>}{g<x>}{ p$\\{$Alpha$\\}$ P$\\{$Alpha$\\}$ 123}{M N O}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\p{Alpha} input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共88字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第11次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\p{Alpha}",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{Y Z d e h u0041 x y z k<x> g<x>}{p$\\{$Alpha$\\}$}{ P$\\{$Alpha$\\}$ 123}{M N O R X}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W \\P{Alpha} input；输入为input=A C D G H K M N O R X Y Z d e h u0041 x y z k<x> g<x> p{Alpha} P{Alpha} 123\\n（76字节）；预期RC=0、stderr为空，stdout为1条换行分隔、共80字节的TeX索引；对应Cargo用例ptx_does_not_enable_oniguruma_only_alphabetic_escapes第12次调用",
+      "args": [
+        "-T",
+        "-W",
+        "\\P{Alpha}",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\101\\040\\103\\040\\104\\040\\107\\040\\110\\040\\113\\040\\115\\040\\116\\040\\117\\040\\122\\040\\130\\040\\131\\040\\132\\040\\144\\040\\145\\040\\150\\040\\165\\060\\060\\064\\061\\040\\170\\040\\171\\040\\172\\040\\153\\074\\170\\076\\040\\147\\074\\170\\076\\040\\160\\173\\101\\154\\160\\150\\141\\175\\040\\120\\173\\101\\154\\160\\150\\141\\175\\040\\061\\062\\063\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{u0041 x y z k<x> g<x> p$\\{$Alpha$\\}$}{P$\\{$Alpha$\\}$}{ 123}{X Y Z d e h}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

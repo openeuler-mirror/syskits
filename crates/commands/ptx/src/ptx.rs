@@ -31,6 +31,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::{CString, OsStr, OsString};
 use std::fmt::Write as FmtWrite;
@@ -207,14 +208,30 @@ impl Iterator for RegexFindIter<'_, '_> {
 struct ByteRegex {
     search: OnigRegex,
     longest: OnigRegex,
+    fold_upper: Option<[u8; 256]>,
 }
 
 impl ByteRegex {
+    fn folded_bytes<'a>(&self, bytes: &'a [u8]) -> Cow<'a, [u8]> {
+        let Some(upper) = &self.fold_upper else {
+            return Cow::Borrowed(bytes);
+        };
+        let mut folded = bytes.to_vec();
+        for byte in &mut folded {
+            if !byte.is_ascii() {
+                *byte = upper[usize::from(*byte)];
+            }
+        }
+        Cow::Owned(folded)
+    }
+
     fn find(&self, bytes: &[u8]) -> Option<(usize, usize)> {
         self.find_at(bytes, 0)
     }
 
     fn find_at(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
+        let folded = self.folded_bytes(bytes);
+        let bytes = folded.as_ref();
         let mut region = Region::new();
         let start = self.search.search_with_encoding(
             EncodedBytes::ascii(bytes),
@@ -897,8 +914,12 @@ fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, onig::Error>
     Ok(Regex { search, longest })
 }
 
-fn compile_user_byte_regex(pattern: &[u8], ignore_case: bool) -> CTResult<ByteRegex> {
-    compile_byte_regex(pattern, ignore_case).map_err(|_| {
+fn compile_user_byte_regex(
+    pattern: &[u8],
+    ignore_case: bool,
+    byte_ctype: &LocaleByteCtype,
+) -> CTResult<ByteRegex> {
+    compile_byte_regex(pattern, ignore_case, byte_ctype).map_err(|_| {
         CtSimpleError::new(
             1,
             format!(
@@ -909,25 +930,41 @@ fn compile_user_byte_regex(pattern: &[u8], ignore_case: bool) -> CTResult<ByteRe
     })
 }
 
-fn compile_byte_regex(pattern: &[u8], ignore_case: bool) -> Result<ByteRegex, onig::Error> {
+fn compile_byte_regex(
+    pattern: &[u8],
+    ignore_case: bool,
+    byte_ctype: &LocaleByteCtype,
+) -> Result<ByteRegex, onig::Error> {
     let mut options = RegexOptions::REGEX_OPTION_NONE;
     if ignore_case {
         options |= RegexOptions::REGEX_OPTION_IGNORECASE;
     }
+    let mut folded_pattern = pattern.to_vec();
+    if ignore_case {
+        for byte in &mut folded_pattern {
+            if !byte.is_ascii() {
+                *byte = byte_ctype.upper[usize::from(*byte)];
+            }
+        }
+    }
     let search = OnigRegex::with_options_and_encoding(
-        EncodedBytes::ascii(pattern),
+        EncodedBytes::ascii(&folded_pattern),
         options,
         Syntax::default(),
     )?;
     let mut longest_pattern = b"\\A(?:".to_vec();
-    longest_pattern.extend_from_slice(pattern);
+    longest_pattern.extend_from_slice(&folded_pattern);
     longest_pattern.push(b')');
     let longest = OnigRegex::with_options_and_encoding(
         EncodedBytes::ascii(&longest_pattern),
         options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
         Syntax::default(),
     )?;
-    Ok(ByteRegex { search, longest })
+    Ok(ByteRegex {
+        search,
+        longest,
+        fold_upper: ignore_case.then_some(byte_ctype.upper),
+    })
 }
 
 /// 文件内容
@@ -3463,8 +3500,11 @@ impl PtxSettings {
             && config.context_regex != NEVER_MATCH_REGEX
         {
             if let Some(pattern) = &config.context_byte_pattern {
-                config.context_byte_regex =
-                    Some(compile_user_byte_regex(pattern, config.is_ignore_case)?);
+                config.context_byte_regex = Some(compile_user_byte_regex(
+                    pattern,
+                    config.is_ignore_case,
+                    &config.byte_ctype,
+                )?);
             } else {
                 compile_user_regex(&config.context_regex, config.is_ignore_case)?;
             }
@@ -3485,8 +3525,11 @@ impl PtxSettings {
                 config.is_ignore_case,
             )?);
             if let Some(pattern) = &word_filter.word_byte_pattern {
-                config.word_byte_regex =
-                    Some(compile_user_byte_regex(pattern, config.is_ignore_case)?);
+                config.word_byte_regex = Some(compile_user_byte_regex(
+                    pattern,
+                    config.is_ignore_case,
+                    &config.byte_ctype,
+                )?);
                 config.force_byte_mode = true;
             }
         }

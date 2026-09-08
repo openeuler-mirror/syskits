@@ -9163,6 +9163,83 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.utf8，执行ptx -w 12 -W . input；input可读为“é alpha beta gamma \\xFF tail\\n”，共27字节c3 a9 20 61 6c 70 68 61 20 62 65 74 61 20 67 61 6d 6d 61 20 ff 20 74 61 69 6c 0a；预期RC=0、stderr为空，stdout十六进制解码为24行、348字节的默认dumb索引，每行轮转一个点号正则匹配并按12列截断上下文，最后一行仍将合法UTF-8字符é作为完整c3 a9字段，JSON中的十六进制stdout表示全部24行且完整保留非法字节ff",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf '\\303\\251 alpha beta gamma \\377 tail\\n' > input"
+      ],
+      "args": [
+        "2d77",
+        "3132",
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202020202f20202020616c702f0a202020202f61202020206265742f0a202020202f612020202067616d2f0a202020202f6120202020ff20742f0a202020202fff202020207461692f0a2020202020202f202020616c70682f0a202020202f68202020612062652f0a202020202f74202020612067612f0a202020202f67202020616d6d612f0a202020202f6d2020206120ff2f0a202020202f7420202061696c0a202020202f61202020626574612f0a202020202f622020206574612f0a202020202f6120202067616d6d2f0a202020202f70202020686120622f0a202020202f61202020696c0a202020202f612020206c7068612f0a202020202f692020206c0a202020202f612020206d6d612f0a202020202f6d2020206d6120ff2f0a202020202f6c2020207068612f0a202020202f65202020746120672f0a202020202fff2020207461696c0a202020202020202020c3a920612f0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.utf8，执行ptx -R -w 12 -W . input；input可读为“é alpha beta gamma \\xFF tail\\n”，共27字节c3 a9 20 61 6c 70 68 61 20 62 65 74 61 20 67 61 6d 6d 61 20 ff 20 74 61 69 6c 0a；预期RC=0、stderr为空，stdout十六进制解码为24行、276字节的右侧引用dumb索引，每行轮转一个点号正则匹配且省去默认布局的左侧预留，最后一行仍将合法UTF-8字符é作为完整c3 a9字段，JSON中的十六进制stdout表示全部24行且完整保留非法字节ff",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf '\\303\\251 alpha beta gamma \\377 tail\\n' > input"
+      ],
+      "args": [
+        "2d52",
+        "2d77",
+        "3132",
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020202f20202020616c702f0a202f61202020206265742f0a202f612020202067616d2f0a202f6120202020ff20742f0a202fff202020207461692f0a2020202f202020616c70682f0a202f68202020612062652f0a202f74202020612067612f0a202f67202020616d6d612f0a202f6d2020206120ff2f0a202f7420202061696c0a202f61202020626574612f0a202f622020206574612f0a202f6120202067616d6d2f0a202f70202020686120622f0a202f61202020696c0a202f612020206c7068612f0a202f692020206c0a202f612020206d6d612f0a202f6d2020206d6120ff2f0a202f6c2020207068612f0a202f65202020746120672f0a202fff2020207461696c0a202020202020c3a920612f0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.utf8，执行ptx -T -w 12 -W . input；input可读为“é alpha beta gamma \\xFF tail\\n”，共27字节c3 a9 20 61 6c 70 68 61 20 62 65 74 61 20 67 61 6d 6d 61 20 ff 20 74 61 69 6c 0a；预期RC=0、stderr为空，stdout十六进制解码为24行、467字节的\\xx TeX索引，每条记录轮转一个点号正则匹配并分隔左右字段，最后一条将合法UTF-8字符é完整保存在关键词字段中，JSON中的十六进制stdout表示全部24条TeX记录且完整保留非法字节ff",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf '\\303\\251 alpha beta gamma \\377 tail\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d77",
+        "3132",
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b7d7b207d7b616c707d7b7d0a5c7878207b7d7b617d7b207d7b6265747d7b7d0a5c7878207b7d7b617d7b207d7b67616d7d7b7d0a5c7878207b7d7b617d7b207d7bff20747d7b7d0a5c7878207b7d7bff7d7b207d7b7461697d7b7d0a5c7878207b7d7b7d7b617d7b6c70687d7b7d0a5c7878207b7d7b687d7b617d7b2062657d7b7d0a5c7878207b7d7b747d7b617d7b2067617d7b7d0a5c7878207b7d7b677d7b617d7b6d6d617d7b7d0a5c7878207b7d7b6d7d7b617d7b20ff7d7b7d0a5c7878207b7d7b747d7b617d7b696c7d7b7d0a5c7878207b7d7b617d7b627d7b6574617d7b7d0a5c7878207b7d7b627d7b657d7b74617d7b7d0a5c7878207b7d7b617d7b677d7b616d6d7d7b7d0a5c7878207b7d7b707d7b687d7b6120627d7b7d0a5c7878207b7d7b617d7b697d7b6c7d7b7d0a5c7878207b7d7b617d7b6c7d7b7068617d7b7d0a5c7878207b7d7b697d7b6c7d7b7d7b7d0a5c7878207b7d7b617d7b6d7d7b6d617d7b7d0a5c7878207b7d7b6d7d7b6d7d7b6120ff7d7b7d0a5c7878207b7d7b6c7d7b707d7b68617d7b7d0a5c7878207b7d7b657d7b747d7b6120677d7b7d0a5c7878207b7d7bff7d7b747d7b61696c7d7b7d0a5c7878207b7d7b7d7bc3a97d7b20617d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

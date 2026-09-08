@@ -33,7 +33,7 @@ use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, st
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
@@ -65,11 +65,40 @@ fn ptx_locale_name() -> OsString {
 }
 
 fn ptx_is_single_byte_locale() -> bool {
-    let locale = ptx_locale_name()
+    let codeset = ptx_locale_codeset();
+    matches!(codeset.as_str(), "ANSI_X3.4-1968" | "ASCII")
+        || codeset.contains("ISO-8859")
+        || codeset.contains("ISO8859")
+}
+
+fn ptx_locale_codeset() -> String {
+    let fallback = ptx_locale_name()
         .to_string_lossy()
         .trim()
         .to_ascii_uppercase();
-    locale == "C" || locale == "POSIX" || locale.contains("ISO8859") || locale.contains("ISO-8859")
+    let Ok(locale_name) = CString::new(ptx_locale_name().as_encoded_bytes()) else {
+        return fallback;
+    };
+    unsafe {
+        let locale = ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        );
+        if locale.is_null() {
+            return fallback;
+        }
+        let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale);
+        let value = if codeset.is_null() {
+            fallback
+        } else {
+            CStr::from_ptr(codeset)
+                .to_string_lossy()
+                .to_ascii_uppercase()
+        };
+        ctcore::libc::freelocale(locale);
+        value
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -84,17 +113,14 @@ enum LocaleRegexEncoding {
 
 impl LocaleRegexEncoding {
     fn from_environment() -> Self {
-        let locale = ptx_locale_name()
-            .to_string_lossy()
-            .trim()
-            .to_ascii_uppercase();
-        if locale.contains("GB18030") || locale.contains("GBK") {
+        let codeset = ptx_locale_codeset();
+        if codeset.contains("GB18030") || codeset.contains("GBK") {
             Self::Gb18030
-        } else if locale.contains("GB2312") {
+        } else if codeset.contains("GB2312") {
             Self::EucCn
-        } else if locale.contains("EUCTW") {
+        } else if codeset.contains("EUC-TW") || codeset.contains("EUCTW") {
             Self::EucTw
-        } else if locale.contains("BIG5") {
+        } else if codeset.contains("BIG5") {
             Self::Big5
         } else {
             Self::Ascii

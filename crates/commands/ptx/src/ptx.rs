@@ -97,7 +97,9 @@ fn ptx_locale_codeset() -> String {
             std::ptr::null_mut(),
         );
         if locale.is_null() {
-            return fallback;
+            // GNU ptx leaves the process in its startup C locale when
+            // setlocale(LC_ALL, "") rejects the environment locale.
+            return "ASCII".to_string();
         }
         let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale);
         let value = if codeset.is_null() {
@@ -138,9 +140,13 @@ impl LocaleMultibyteValidator {
                 std::ptr::null_mut(),
             )
         };
-        (!locale.is_null()).then_some(Self {
-            locale: locale as usize,
-        })
+        if locale.is_null() {
+            None
+        } else {
+            Some(Self {
+                locale: locale as usize,
+            })
+        }
     }
 
     fn decode_character(&self, bytes: &[u8]) -> Option<(usize, char)> {

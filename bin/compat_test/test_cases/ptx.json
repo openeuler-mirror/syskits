@@ -9379,6 +9379,72 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[.a.]-z]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t - .\\n”；预期RC=0、stderr为空，stdout为2行、83字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t - .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.a.]-z]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{Ä}{ ä }{É}{}\n\\xx {}{Ä ä É}{ é ² 2 ß z a b c : [ ] d i g t - .}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[a-[.z.]]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t - .\\n”；预期RC=0、stderr为空，stdout为0行、0字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t - .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[a-[.z.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[.a.]-[.z.]]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t - .\\n”；预期RC=0、stderr为空，stdout为0行、0字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t - .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.a.]-[.z.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

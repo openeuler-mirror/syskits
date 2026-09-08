@@ -1283,6 +1283,19 @@ fn gnu_emacs_regex_to_onig_bytes_with_candidates(
     gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(pattern, &context)
 }
 
+fn ptx_bracket_symbol_end(pattern: &[u8], start: usize) -> Option<(u8, usize)> {
+    if pattern.get(start) != Some(&b'[') {
+        return None;
+    }
+    let &delimiter @ (b'.' | b'=') = pattern.get(start + 1)? else {
+        return None;
+    };
+    pattern[start + 2..]
+        .windows(2)
+        .position(|closing| closing == [delimiter, b']'])
+        .map(|relative| (delimiter, start + relative + 4))
+}
+
 fn ptx_character_class_end(pattern: &[u8], start: usize) -> Option<usize> {
     let mut index = start + 1;
     if pattern.get(index) == Some(&b'^') {
@@ -1292,13 +1305,8 @@ fn ptx_character_class_end(pattern: &[u8], start: usize) -> Option<usize> {
         index += 1;
     }
     while index < pattern.len() {
-        if pattern.get(index) == Some(&b'[')
-            && let Some(&delimiter @ (b'.' | b'=')) = pattern.get(index + 1)
-            && let Some(relative) = pattern[index + 2..]
-                .windows(2)
-                .position(|closing| closing == [delimiter, b']'])
-        {
-            index += relative + 4;
+        if let Some((_, end)) = ptx_bracket_symbol_end(pattern, index) {
+            index = end;
             continue;
         }
         if pattern[index] == b']' {
@@ -1318,14 +1326,21 @@ fn ptx_character_class_has_range(class: &[u8]) -> bool {
     if content.get(index) == Some(&b']') {
         index += 1;
     }
-    while index + 2 < content.len() {
-        if !matches!(content[index], b'[' | b']' | b'\\' | b'-' | b'^')
-            && content[index + 1] == b'-'
-            && !matches!(content[index + 2], b'[' | b']' | b'\\' | b'^')
-        {
+    while index < content.len() {
+        let symbol = ptx_bracket_symbol_end(content, index);
+        let start_end = symbol.map_or(index + 1, |(_, end)| end);
+        let valid_start = symbol.is_some_and(|(delimiter, _)| delimiter == b'.')
+            || !matches!(content[index], b'[' | b']' | b'\\' | b'-' | b'^');
+        let end_start = start_end + 1;
+        let valid_end = ptx_bracket_symbol_end(content, end_start)
+            .is_some_and(|(delimiter, _)| delimiter == b'.')
+            || content
+                .get(end_start)
+                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'^'));
+        if valid_start && content.get(start_end) == Some(&b'-') && valid_end {
             return true;
         }
-        index += 1;
+        index = start_end;
     }
     false
 }

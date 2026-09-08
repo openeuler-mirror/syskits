@@ -1696,6 +1696,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
         files.push(Some(&input_files[0]));
     }
 
+    let context_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
     let mut offset: usize = 0;
     for filename in files {
         let filename_bytes = filename.map_or(b"-".as_slice(), |name| name.as_os_str().as_bytes());
@@ -1766,8 +1767,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
 
         let size = lines.len();
-        // 直接 Push 到数组尾部
-        file_map.push(FileContent {
+        let content = FileContent {
             filename: if using_stdin {
                 String::new()
             } else {
@@ -1791,7 +1791,23 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
             raw_lines,
             chars_lines,
             offset,
-        });
+        };
+        let has_boundary_match = config.context_byte_regex.as_ref().map_or_else(
+            || context_regexp_matches_at_boundary(&context_reg, &content.text),
+            |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
+        );
+        if has_boundary_match {
+            let pattern = config
+                .context_pattern_bytes
+                .as_deref()
+                .unwrap_or(config.context_regex.as_bytes());
+            return Err(ptx_zero_length_regex_error(
+                pattern,
+                &config.byte_ctype,
+                config.single_byte_locale,
+            ));
+        }
+        file_map.push(content);
         offset += size;
     }
     Ok(file_map)
@@ -4357,25 +4373,6 @@ impl PtxSettings {
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config)?;
-        let context_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
-        let has_boundary_match = file_map.iter().any(|content| {
-            config.context_byte_regex.as_ref().map_or_else(
-                || context_regexp_matches_at_boundary(&context_reg, &content.text),
-                |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
-            )
-        });
-        if has_boundary_match {
-            let pattern = config
-                .context_pattern_bytes
-                .as_deref()
-                .unwrap_or(config.context_regex.as_bytes());
-            return Err(ptx_zero_length_regex_error(
-                pattern,
-                &config.byte_ctype,
-                config.single_byte_locale,
-            ));
-        }
-
         // 创建单词集合
         let word_set = ptx_create_word_set(&config, &word_filter, &file_map);
 

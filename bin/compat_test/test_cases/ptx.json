@@ -9445,6 +9445,270 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[=a=]-z]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=a=]-z]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[[=a=]-z]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[a-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[a-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[a-[=z=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[=a=]-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=a=]-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[[=a=]-[=z=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[=a=]-z]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]-z]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[[=a=]-z]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[a-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[a-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[a-[=z=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[=a=]-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp '[[=a=]-[=z=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[=a=]-z]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=a=]-z]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[[=a=]-z]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[a-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[a-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[a-[=z=]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[=a=]-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=a=]-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[[=a=]-[=z=]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[=a=]-z]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]-z]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[[=a=]-z]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[a-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[a-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[a-[=z=]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[=a=]-[=z=]]+' input；input内容为“a b z é\\n”；预期RC=1、stdout为空，stderr报告Invalid range end并引用非法等价类范围端点",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a b z é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]-[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid range end (for regexp ‘[[=a=]-[=z=]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -3019,7 +3019,7 @@ fn ptx_render_version_text() -> String {
 pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args: Vec<OsString> = args.collect();
+    let args = ptx_args(args);
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
         Err(err) => {
@@ -3064,7 +3064,7 @@ pub fn ptx_native_semantic_with_stdin(
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let argv: Vec<OsString> = args.collect();
+    let argv = ptx_args(args);
     let direct = run_ptx_direct_process(&argv, stdin_bytes.as_deref())?;
     let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
     let stderr_text = String::from_utf8_lossy(&direct.stderr).into_owned();
@@ -3081,6 +3081,64 @@ pub fn ptx_native_semantic_with_stdin(
         stderr_text,
         exit_code: direct.exit_code,
     })
+}
+
+fn ptx_args(args: impl ctcore::Args) -> Vec<OsString> {
+    let mut args: Vec<OsString> = args.collect();
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return args;
+    }
+
+    let mut index = 1usize;
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.is_empty() || bytes == b"-" || bytes[0] != b'-' {
+            args.insert(index, OsString::from("--"));
+            break;
+        }
+
+        let takes_next_value = if let Some(long) = bytes.strip_prefix(b"--") {
+            !long.contains(&b'=') && ptx_long_option_takes_value(long)
+        } else {
+            ptx_short_option_takes_next_value(&bytes[1..])
+        };
+        index += 1 + usize::from(takes_next_value && index + 1 < args.len());
+    }
+    args
+}
+
+fn ptx_long_option_takes_value(option: &[u8]) -> bool {
+    const VALUE_OPTIONS: [&[u8]; 10] = [
+        b"break-file",
+        b"flag-truncation",
+        b"gap-size",
+        b"ignore-file",
+        b"macro-name",
+        b"only-file",
+        b"format",
+        b"sentence-regexp",
+        b"width",
+        b"word-regexp",
+    ];
+    let mut matches = VALUE_OPTIONS
+        .into_iter()
+        .filter(|candidate| candidate.starts_with(option));
+    matches.next().is_some() && matches.next().is_none()
+}
+
+fn ptx_short_option_takes_next_value(options: &[u8]) -> bool {
+    for (index, option) in options.iter().copied().enumerate() {
+        if matches!(
+            option,
+            b'F' | b'M' | b'S' | b'W' | b'b' | b'g' | b'i' | b'o' | b'w'
+        ) {
+            return index + 1 == options.len();
+        }
+    }
+    false
 }
 
 fn ptx_collect_semantic_rows_from_argv(

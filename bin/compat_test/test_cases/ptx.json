@@ -3406,6 +3406,121 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx input -T；输入为-T=gamma delta\\n（12字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共49字节的TeX索引；对应Cargo用例ptx_posix_mode_stops_option_parsing_at_the_first_input第1次调用",
+      "args": [
+        "input",
+        "-T"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "unset POSIXLY_CORRECT",
+        "p=$(printf '%b' '\\055\\124'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{alpha}{ beta}{}\n\\xx {}{alpha}{beta}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx input -T；输入为-T=gamma delta\\n（12字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共190字节的TeX索引；对应Cargo用例ptx_posix_mode_stops_option_parsing_at_the_first_input第2次调用",
+      "args": [
+        "input",
+        "-T"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export POSIXLY_CORRECT='1'",
+        "p=$(printf '%b' '\\055\\124'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                       alpha beta\n                               alpha   beta\n                               gamma   delta\n                                       gamma delta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -w 20 input -T；输入为-T=gamma delta\\n（12字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共77字节的TeX索引；对应Cargo用例ptx_posix_mode_stops_option_parsing_at_the_first_input第3次调用",
+      "args": [
+        "-w",
+        "20",
+        "input",
+        "-T"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export POSIXLY_CORRECT='1'",
+        "p=$(printf '%b' '\\055\\124'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "             alpha/\n     alpha   beta\n     gamma   delta\n             gamma/\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx --width 20 input -T；输入为-T=gamma delta\\n（12字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共77字节的TeX索引；对应Cargo用例ptx_posix_mode_stops_option_parsing_at_the_first_input第4次调用",
+      "args": [
+        "--width",
+        "20",
+        "input",
+        "-T"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export POSIXLY_CORRECT='1'",
+        "p=$(printf '%b' '\\055\\124'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "             alpha/\n     alpha   beta\n     gamma   delta\n             gamma/\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx --width=20 input -T；输入为-T=gamma delta\\n（12字节）；input=alpha beta\\n（11字节）；预期RC=0、stderr为空，stdout为4条换行分隔、共77字节的TeX索引；对应Cargo用例ptx_posix_mode_stops_option_parsing_at_the_first_input第5次调用",
+      "args": [
+        "--width=20",
+        "input",
+        "-T"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export POSIXLY_CORRECT='1'",
+        "p=$(printf '%b' '\\055\\124'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\147\\141\\155\\155\\141\\040\\144\\145\\154\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "             alpha/\n     alpha   beta\n     gamma   delta\n             gamma/\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

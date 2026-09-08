@@ -2838,11 +2838,9 @@ fn ptx_format_tex_line_bytes(
 }
 
 /// 执行 PTX 命令的核心逻辑
-fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
+fn ptx_exec(settings: &mut PtxSettings) -> CTResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> =
-        BufWriter::new(if let Some(output_filename) = &settings.output_filename {
-            let file = File::create(output_filename)
-                .map_err(|error| ptx_file_io_error(output_filename.as_os_str(), error))?;
+        BufWriter::new(if let Some(file) = settings.output_file.take() {
             Box::new(file)
         } else {
             Box::new(stdout())
@@ -3122,9 +3120,9 @@ pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> C
             };
         }
     };
-    let settings = PtxSettings::from_matches(matches)?;
-    if settings.output_filename.is_some() {
-        ptx_exec(&settings)?;
+    let mut settings = PtxSettings::from_matches(matches)?;
+    if settings.output_file.is_some() {
+        ptx_exec(&mut settings)?;
         return Ok(());
     }
 
@@ -3720,21 +3718,36 @@ struct PtxSettings {
     file_map: FileMap,
     /// 单词引用集合
     words: BTreeSet<WordRef>,
-    /// 输出文件名
-    output_filename: Option<OsString>,
+    /// 传统模式解析操作数时已经创建的输出文件。
+    output_file: Option<File>,
 }
 
 impl PtxSettings {
     fn from_matches(matches: clap::ArgMatches) -> CTResult<Self> {
         // 获取输入文件列表
-        let mut input_files: Vec<OsString> =
-            match &matches.get_many::<OsString>(ptx_options::PTX_FILE) {
-                Some(v) => v.clone().cloned().collect(),
-                None => vec![OsString::from("-")],
-            };
+        let input_files: Vec<OsString> = match &matches.get_many::<OsString>(ptx_options::PTX_FILE)
+        {
+            Some(v) => v.clone().cloned().collect(),
+            None => vec![OsString::from("-")],
+        };
 
         // 获取配置
         let mut config = get_config(&matches)?;
+        let output_file = if !config.is_gnu_ext && input_files.len() >= 2 {
+            let output_filename = &input_files[1];
+            Some(
+                File::create(output_filename)
+                    .map_err(|error| ptx_file_io_error(output_filename.as_os_str(), error))?,
+            )
+        } else {
+            None
+        };
+        if !config.is_gnu_ext && input_files.len() > 2 {
+            return Err(CtSimpleError::new(
+                1,
+                format!("extra operand '{}'", input_files[2].to_string_lossy()),
+            ));
+        }
         if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
             && config.context_regex != NEVER_MATCH_REGEX
         {
@@ -3748,13 +3761,6 @@ impl PtxSettings {
                 compile_user_regex(&config.context_regex, config.is_ignore_case)?;
             }
         }
-        if !config.is_gnu_ext && input_files.len() > 2 {
-            return Err(CtSimpleError::new(
-                1,
-                format!("extra operand '{}'", input_files[2].to_string_lossy()),
-            ));
-        }
-
         validate_ptx_word_regexp(&matches, &config)?;
 
         // 创建单词过滤器
@@ -3799,19 +3805,12 @@ impl PtxSettings {
         // 创建单词集合
         let word_set = ptx_create_word_set(&config, &word_filter, &file_map);
 
-        // 确定输出文件名
-        let output_file = if !config.is_gnu_ext && input_files.len() == 2 {
-            input_files.pop()
-        } else {
-            None
-        };
-
         // 创建设置
         let settings = Self {
             config,
             file_map,
             words: word_set,
-            output_filename: output_file,
+            output_file,
         };
 
         Ok(settings)
@@ -4383,7 +4382,7 @@ mod tests {
         #[test]
         fn test_ptx_exec() {
             // 创建测试配置
-            let settings = PtxSettings {
+            let mut settings = PtxSettings {
                 config: PtxConfig {
                     format: OutFormat::Roff,
                     is_gnu_ext: false,
@@ -4401,22 +4400,16 @@ mod tests {
                     set.insert(test_word_ref("test", 0, 6, 10));
                     set
                 },
-                output_filename: Some(
-                    NamedTempFile::new()
-                        .unwrap()
-                        .path()
-                        .as_os_str()
-                        .to_os_string(),
-                ),
+                output_file: Some(NamedTempFile::new().unwrap().reopen().unwrap()),
             };
 
-            let result = ptx_exec(&settings);
+            let result = ptx_exec(&mut settings);
             assert!(result.is_ok());
         }
 
         #[test]
         fn test_ptx_exec_dumb_format() {
-            let settings = PtxSettings {
+            let mut settings = PtxSettings {
                 config: PtxConfig {
                     format: OutFormat::Dumb,
                     ..Default::default()
@@ -4427,10 +4420,10 @@ mod tests {
                     set.insert(test_word_ref("test", 0, 0, 4));
                     set
                 },
-                output_filename: None,
+                output_file: None,
             };
 
-            let result = ptx_exec(&settings);
+            let result = ptx_exec(&mut settings);
             assert!(result.is_ok());
         }
     }

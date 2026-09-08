@@ -5603,6 +5603,105 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -r -W . -w 20 input；输入为input=R x\\n\\fc\\n（7字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共44字节的dumb索引；对应Cargo用例ptx_input_reference_whitespace_keyword_context_matches_gnu第1次调用",
+      "args": [
+        "-r",
+        "-W",
+        ".",
+        "-w",
+        "20",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\040\\170\\012\\014\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "              c\n            c\nR           x\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -r -W . -w 20 -R input；输入为input=R x\\n\\fc\\n（7字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共74字节的dumb索引；对应Cargo用例ptx_input_reference_whitespace_keyword_context_matches_gnu第2次调用",
+      "args": [
+        "-r",
+        "-W",
+        ".",
+        "-w",
+        "20",
+        "-R",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\040\\170\\012\\014\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "            c           \n          c            \n          x            R\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -r -W . -w 20 -O input；输入为input=R x\\n\\fc\\n（7字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共62字节的roff索引；对应Cargo用例ptx_input_reference_whitespace_keyword_context_matches_gnu第3次调用",
+      "args": [
+        "-r",
+        "-W",
+        ".",
+        "-w",
+        "20",
+        "-O",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\040\\170\\012\\014\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \" c\" \"\" \"\"\n.xx \"\" \"\" \"c\" \"\" \"\"\n.xx \"\" \"\" \"x\" \"\" \"R\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -r -W . -w 20 -T input；输入为input=R x\\n\\fc\\n（7字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共56字节的TeX索引；对应Cargo用例ptx_input_reference_whitespace_keyword_context_matches_gnu第4次调用",
+      "args": [
+        "-r",
+        "-W",
+        ".",
+        "-w",
+        "20",
+        "-T",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\040\\170\\012\\014\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{ }{c}{}{}\n\\xx {}{}{c}{}{}{}\n\\xx {}{}{x}{}{}{R}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -2134,6 +2134,7 @@ fn ptx_define_output_fields_bytes_for_width(
     all_before: &[u8],
     keyword: &[u8],
     all_after: &[u8],
+    left_context_after_keyword: usize,
     config: &PtxConfig,
     line_width: usize,
     maximum_word_length: usize,
@@ -2151,7 +2152,15 @@ fn ptx_define_output_fields_bytes_for_width(
     let context_end = bytes.len();
     let key_start = all_before.len();
     let key_end = key_start + keyword.len();
-    let left_context_start = context_start;
+    // GNU stores the left-context boundary as a signed displacement from the
+    // keyword.  In input-reference mode, leading whitespace can itself be a
+    // custom-regexp keyword before the reference prefix is removed, leaving
+    // that boundary after the keyword start.
+    let left_context_start = if left_context_after_keyword == 0 {
+        context_start
+    } else {
+        key_start + left_context_after_keyword
+    };
     let right_context_end = context_end;
     let left_field_start = if key_start.saturating_sub(left_context_start)
         > half_line_width.saturating_add(maximum_word_length)
@@ -2750,6 +2759,35 @@ fn ptx_display_field_bytes(s: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+fn ptx_context_slices_bytes<'a>(
+    word_ref: &WordRef,
+    content: &'a FileContent,
+) -> (&'a [u8], &'a [u8], &'a [u8], usize) {
+    let bytes = &content.raw_text;
+    if word_ref.context_end > word_ref.context_start
+        && word_ref.global_position_end <= bytes.len()
+        && word_ref.context_end <= bytes.len()
+    {
+        let before_start = word_ref.context_start.min(word_ref.global_position);
+        return (
+            &bytes[word_ref.global_position..word_ref.global_position_end],
+            &bytes[before_start..word_ref.global_position],
+            &bytes[word_ref.global_position_end..word_ref.context_end],
+            word_ref
+                .context_start
+                .saturating_sub(word_ref.global_position),
+        );
+    }
+
+    let line = &content.raw_lines[word_ref.local_line_nr];
+    (
+        &line[word_ref.position..word_ref.position_end],
+        &line[..word_ref.position],
+        &line[word_ref.position_end..],
+        0,
+    )
+}
+
 fn ptx_format_dumb_line_bytes(
     config: &PtxConfig,
     word_ref: &WordRef,
@@ -2758,21 +2796,8 @@ fn ptx_format_dumb_line_bytes(
     reference_max_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
-    let bytes_text = &content.raw_text;
-    let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
-        (
-            &bytes_text[word_ref.global_position..word_ref.global_position_end],
-            &bytes_text[word_ref.context_start..word_ref.global_position],
-            &bytes_text[word_ref.global_position_end..word_ref.context_end],
-        )
-    } else {
-        let line = &content.raw_lines[word_ref.local_line_nr];
-        (
-            &line[word_ref.position..word_ref.position_end],
-            &line[..word_ref.position],
-            &line[word_ref.position_end..],
-        )
-    };
+    let (keyword, all_before, all_after, left_context_after_keyword) =
+        ptx_context_slices_bytes(word_ref, content);
     let gap_size = config.gap_size;
     let mut effective_line_width = config.line_width;
     if (config.is_auto_ref || config.is_input_ref) && !config.is_right_ref {
@@ -2782,6 +2807,7 @@ fn ptx_format_dumb_line_bytes(
         all_before,
         keyword,
         all_after,
+        left_context_after_keyword,
         config,
         effective_line_width,
         maximum_word_length,
@@ -2899,25 +2925,13 @@ fn ptx_format_roff_line_bytes(
     line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
-    let bytes_text = &content.raw_text;
-    let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
-        (
-            &bytes_text[word_ref.global_position..word_ref.global_position_end],
-            &bytes_text[word_ref.context_start..word_ref.global_position],
-            &bytes_text[word_ref.global_position_end..word_ref.context_end],
-        )
-    } else {
-        let line = &content.raw_lines[word_ref.local_line_nr];
-        (
-            &line[word_ref.position..word_ref.position_end],
-            &line[..word_ref.position],
-            &line[word_ref.position_end..],
-        )
-    };
+    let (keyword, all_before, all_after, left_context_after_keyword) =
+        ptx_context_slices_bytes(word_ref, content);
     let fields = ptx_define_output_fields_bytes_for_width(
         all_before,
         keyword,
         all_after,
+        left_context_after_keyword,
         config,
         line_width,
         maximum_word_length,
@@ -2963,25 +2977,13 @@ fn ptx_format_tex_line_bytes(
     line_width: usize,
     maximum_word_length: usize,
 ) -> Vec<u8> {
-    let bytes_text = &content.raw_text;
-    let (keyword, all_before, all_after) = if word_ref.context_end > word_ref.context_start {
-        (
-            &bytes_text[word_ref.global_position..word_ref.global_position_end],
-            &bytes_text[word_ref.context_start..word_ref.global_position],
-            &bytes_text[word_ref.global_position_end..word_ref.context_end],
-        )
-    } else {
-        let line = &content.raw_lines[word_ref.local_line_nr];
-        (
-            &line[word_ref.position..word_ref.position_end],
-            &line[..word_ref.position],
-            &line[word_ref.position_end..],
-        )
-    };
+    let (keyword, all_before, all_after, left_context_after_keyword) =
+        ptx_context_slices_bytes(word_ref, content);
     let fields = ptx_define_output_fields_bytes_for_width(
         all_before,
         keyword,
         all_after,
+        left_context_after_keyword,
         config,
         line_width,
         maximum_word_length,

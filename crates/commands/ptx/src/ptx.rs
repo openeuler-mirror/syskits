@@ -3023,7 +3023,7 @@ fn ptx_render_version_text() -> String {
 pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = ptx_args(args);
+    let args = ptx_args(args)?;
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
         Err(err) => {
@@ -3068,7 +3068,7 @@ pub fn ptx_native_semantic_with_stdin(
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let argv = ptx_args(args);
+    let argv = ptx_args(args)?;
     let direct = run_ptx_direct_process(&argv, stdin_bytes.as_deref())?;
     let classic_text = String::from_utf8_lossy(&direct.stdout).into_owned();
     let stderr_text = String::from_utf8_lossy(&direct.stderr).into_owned();
@@ -3087,10 +3087,11 @@ pub fn ptx_native_semantic_with_stdin(
     })
 }
 
-fn ptx_args(args: impl ctcore::Args) -> Vec<OsString> {
+fn ptx_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     let mut args: Vec<OsString> = args.collect();
+    validate_ptx_width_occurrences(&args)?;
     if std::env::var_os("POSIXLY_CORRECT").is_none() {
-        return args;
+        return Ok(args);
     }
 
     let mut index = 1usize;
@@ -3111,26 +3112,168 @@ fn ptx_args(args: impl ctcore::Args) -> Vec<OsString> {
         };
         index += 1 + usize::from(takes_next_value && index + 1 < args.len());
     }
-    args
+    Ok(args)
 }
 
-fn ptx_long_option_takes_value(option: &[u8]) -> bool {
-    const VALUE_OPTIONS: [&[u8]; 10] = [
+fn validate_ptx_width_occurrences(args: &[OsString]) -> CTResult<()> {
+    let posix = std::env::var_os("POSIXLY_CORRECT").is_some();
+    let mut index = 1usize;
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.is_empty() || bytes == b"-" || bytes[0] != b'-' {
+            if posix {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            let (name, attached) = long
+                .iter()
+                .position(|byte| *byte == b'=')
+                .map_or((long, None), |separator| {
+                    (&long[..separator], Some(&long[separator + 1..]))
+                });
+            let Some(option) = ptx_canonical_long_option(name) else {
+                break;
+            };
+            if matches!(option, b"width" | b"gap-size") {
+                let value = match attached {
+                    Some(value) => value,
+                    None if index + 1 < args.len() => {
+                        index += 1;
+                        args[index].as_encoded_bytes()
+                    }
+                    None => break,
+                };
+                if let Ok(value) = std::str::from_utf8(value) {
+                    parse_positive_base0(
+                        value,
+                        if option == b"width" {
+                            "line width"
+                        } else {
+                            "gap width"
+                        },
+                    )?;
+                }
+            } else if attached.is_none()
+                && matches!(
+                    option,
+                    b"break-file"
+                        | b"flag-truncation"
+                        | b"ignore-file"
+                        | b"macro-name"
+                        | b"only-file"
+                        | b"format"
+                        | b"sentence-regexp"
+                        | b"word-regexp"
+                )
+                && index + 1 < args.len()
+            {
+                index += 1;
+            }
+            index += 1;
+            continue;
+        }
+
+        let options = &bytes[1..];
+        let mut option_index = 0usize;
+        while option_index < options.len() {
+            let option = options[option_index];
+            if matches!(option, b'w' | b'g') {
+                let value = if option_index + 1 < options.len() {
+                    &options[option_index + 1..]
+                } else if index + 1 < args.len() {
+                    index += 1;
+                    args[index].as_encoded_bytes()
+                } else {
+                    break;
+                };
+                if let Ok(value) = std::str::from_utf8(value) {
+                    parse_positive_base0(
+                        value,
+                        if option == b'w' {
+                            "line width"
+                        } else {
+                            "gap width"
+                        },
+                    )?;
+                }
+                break;
+            }
+            if matches!(option, b'F' | b'M' | b'S' | b'W' | b'b' | b'i' | b'o') {
+                if option_index + 1 == options.len() && index + 1 < args.len() {
+                    index += 1;
+                }
+                break;
+            }
+            if !matches!(
+                option,
+                b'A' | b'G' | b'O' | b'R' | b'T' | b'f' | b'r' | b't'
+            ) {
+                return Ok(());
+            }
+            option_index += 1;
+        }
+        index += 1;
+    }
+    Ok(())
+}
+
+fn ptx_canonical_long_option(option: &[u8]) -> Option<&'static [u8]> {
+    const LONG_OPTIONS: [&[u8]; 18] = [
+        b"auto-reference",
         b"break-file",
         b"flag-truncation",
+        b"ignore-case",
         b"gap-size",
         b"ignore-file",
         b"macro-name",
         b"only-file",
+        b"references",
+        b"right-side-refs",
         b"format",
         b"sentence-regexp",
+        b"traditional",
+        b"typeset-mode",
         b"width",
         b"word-regexp",
+        b"help",
+        b"version",
     ];
-    let mut matches = VALUE_OPTIONS
+    if let Some(exact) = LONG_OPTIONS
+        .into_iter()
+        .find(|candidate| *candidate == option)
+    {
+        return Some(exact);
+    }
+    let mut matches = LONG_OPTIONS
         .into_iter()
         .filter(|candidate| candidate.starts_with(option));
-    matches.next().is_some() && matches.next().is_none()
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn ptx_long_option_takes_value(option: &[u8]) -> bool {
+    ptx_canonical_long_option(option).is_some_and(|option| {
+        matches!(
+            option,
+            b"break-file"
+                | b"flag-truncation"
+                | b"gap-size"
+                | b"ignore-file"
+                | b"macro-name"
+                | b"only-file"
+                | b"format"
+                | b"sentence-regexp"
+                | b"width"
+                | b"word-regexp"
+        )
+    })
 }
 
 fn ptx_short_option_takes_next_value(options: &[u8]) -> bool {

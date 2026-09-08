@@ -8129,6 +8129,146 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W '\\s' input；input依次包含U+0085、U+00A0、U+2007、U+202F、制表符和alpha；预期RC=0、stderr为空，stdout为5行共179字节的roff记录，仅ASCII分隔空格和制表符被\\s索引",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\302\\205 \\302\\240 \\342\\200\\207 \\342\\200\\257 \\talpha\\n' > input"
+      ],
+      "args": [
+        "-O",
+        "-W",
+        "\\s",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"      \" \" alpha\" \"\"\n.xx \"\" \"\" \"        alpha\" \"\"\n.xx \"\" \"  \" \"      alpha\" \"\"\n.xx \"\" \"    \" \"    alpha\" \"\"\n.xx \"\" \"      \" \"  alpha\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W '\\S' input；input依次包含U+0085、U+00A0、U+2007、U+202F、制表符和alpha；预期RC=0、stderr为空，stdout为9行共319字节的roff记录，四个Unicode字符和alpha均被\\S索引",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\302\\205 \\302\\240 \\342\\200\\207 \\342\\200\\257 \\talpha\\n' > input"
+      ],
+      "args": [
+        "-O",
+        "-W",
+        "\\S",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"      \" \"alpha\" \"\"\n.xx \"\" \"        alph\" \"a\" \"\"\n.xx \"\" \"        alp\" \"ha\" \"\"\n.xx \"\" \"        a\" \"lpha\" \"\"\n.xx \"\" \"        al\" \"pha\" \"\"\n.xx \"\" \"\" \"        alpha\" \"\"\n.xx \"\" \"\" \"       alpha\" \"\"\n.xx \"\" \"  \" \"     alpha\" \"\"\n.xx \"\" \"    \" \"   alpha\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -W '\\s' input；input按ISO-8859-1包含控制字节0x85、NBSP、é、制表符和alpha，共13字节85 20 a0 20 e9 20 09 61 6c 70 68 61 0a；预期RC=0、stderr为空，stdout十六进制解码为4行、111字节的.xx roff记录，四条记录分别索引三个ASCII空格和制表符，JSON中的十六进制stdout表示全部4条记录并逐字节保留85、a0和e9",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\205 \\240 \\351 \\talpha\\n' > input"
+      ],
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c73",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e787820222220228520a020e922202220616c706861222022220a2e787820222220228522202220a020e92020616c706861222022220a2e787820222220228520a022202220e92020616c706861222022220a2e787820222220228520a020e92220222020616c706861222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -W '\\S' input；input按ISO-8859-1包含控制字节0x85、NBSP、é、制表符和alpha，共13字节85 20 a0 20 e9 20 09 61 6c 70 68 61 0a；预期RC=0、stderr为空，stdout十六进制解码为8行、220字节的.xx roff记录，八条记录分别索引85、a0、e9及alpha的五个字母，JSON中的十六进制stdout表示全部8条记录并逐字节保留高位输入字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\205 \\240 \\351 \\talpha\\n' > input"
+      ],
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c53",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e787820222220228520a020e9222022616c706861222022220a2e787820222220228520a020e92020616c706822202261222022220a2e787820222220228520a020e92020616c702220226861222022220a2e787820222220228520a020e92020612220226c706861222022220a2e787820222220228520a020e92020616c222022706861222022220a2e787820222220222220228520a020e92020616c706861222022220a2e7878202222202285222022a020e92020616c706861222022220a2e787820222220228520a0222022e92020616c706861222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx -O -W '\\s' input；input按GBK可读为“中”、ASCII空格、制表符和alpha，共10字节d6 d0 20 09 61 6c 70 68 61 0a；预期RC=0、stderr为空，stdout十六进制解码为2行、49字节的.xx roff记录，两条记录分别索引ASCII空格和制表符，JSON中的十六进制stdout表示全部2条记录并将GBK字符中字节d6 d0作为完整上下文保留",
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gbk",
+        "printf '\\326\\320 \\talpha\\n' > input"
+      ],
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c73",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d022202220616c706861222022220a2e78782022222022d6d02220222020616c706861222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx -O -W '\\S' input；input按GBK可读为“中”、ASCII空格、制表符和alpha，共10字节d6 d0 20 09 61 6c 70 68 61 0a；预期RC=0、stderr为空，stdout十六进制解码为6行、148字节的.xx roff记录，六条记录分别索引一个GBK汉字和alpha的五个字母，JSON中的十六进制stdout表示全部6条记录并逐字节保留d6 d0上下文",
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gbk",
+        "printf '\\326\\320 \\talpha\\n' > input"
+      ],
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c53",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d0222022616c706861222022220a2e78782022222022d6d02020616c706822202261222022220a2e78782022222022d6d02020616c702220226861222022220a2e78782022222022d6d02020612220226c706861222022220a2e78782022222022d6d02020616c222022706861222022220a2e78782022222022222022d6d02020616c706861222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

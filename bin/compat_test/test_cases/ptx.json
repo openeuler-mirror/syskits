@@ -7321,6 +7321,670 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W \\w input；输入为input=့ က alpha _ 1\\n（18字节）；预期RC=0、stderr为空，stdout为8条换行分隔、共260字节的roff索引；对应Cargo用例ptx_word_operators_use_gnu_locale_classification第1次调用",
+      "args": [
+        "-O",
+        "-W",
+        "\\w",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C.UTF-8'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\341\\200\\267\\040\\341\\200\\200\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"့ က alpha _\" \"1\" \"\"\n.xx \"\" \"့ က alpha\" \"_ 1\" \"\"\n.xx \"\" \"့ က\" \"alpha _ 1\" \"\"\n.xx \"\" \"့ က alph\" \"a _ 1\" \"\"\n.xx \"\" \"့ က alp\" \"ha _ 1\" \"\"\n.xx \"\" \"့ က a\" \"lpha _ 1\" \"\"\n.xx \"\" \"့ က al\" \"pha _ 1\" \"\"\n.xx \"\" \"့\" \"က alpha _ 1\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W \\W input；输入为input=့ က alpha _ 1\\n（18字节）；预期RC=0、stderr为空，stdout为5条换行分隔、共165字节的roff索引；对应Cargo用例ptx_word_operators_use_gnu_locale_classification第2次调用",
+      "args": [
+        "-O",
+        "-W",
+        "\\W",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C.UTF-8'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\341\\200\\267\\040\\341\\200\\200\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"့\" \" က alpha _ 1\" \"\"\n.xx \"\" \"့ က\" \" alpha _ 1\" \"\"\n.xx \"\" \"့ က alpha\" \" _ 1\" \"\"\n.xx \"\" \"့ က alpha _\" \" 1\" \"\"\n.xx \"\" \"\" \"့ က alpha _ 1\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W \\<.\\> input；输入为input=့ က alpha _ 1\\n（18字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共96字节的roff索引；对应Cargo用例ptx_word_operators_use_gnu_locale_classification第3次调用",
+      "args": [
+        "-O",
+        "-W",
+        "\\<.\\>",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C.UTF-8'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\341\\200\\267\\040\\341\\200\\200\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"့ က alpha _\" \"1\" \"\"\n.xx \"\" \"့ က alpha\" \"_ 1\" \"\"\n.xx \"\" \"့\" \"က alpha _ 1\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W \\B.\\B input；输入为input=့ က alpha _ 1\\n（18字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共99字节的roff索引；对应Cargo用例ptx_word_operators_use_gnu_locale_classification第4次调用",
+      "args": [
+        "-O",
+        "-W",
+        "\\B.\\B",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C.UTF-8'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\341\\200\\267\\040\\341\\200\\200\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"့ က alp\" \"ha _ 1\" \"\"\n.xx \"\" \"့ က a\" \"lpha _ 1\" \"\"\n.xx \"\" \"\" \"့ က alpha _ 1\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -W \\w input；输入为input=\\xe9 x_ 1\\n（7字节 e920785f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共86字节的roff索引，首条stdout可读为“.xx \"\" \"\\xe9 x_\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c77",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='en_US.iso88591'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\351\\040\\170\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022e920785f22202231222022220a2e78782022222022e920782220225f2031222022220a2e78782022222022e9222022785f2031222022220a2e78782022222022222022e920785f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -W \\W input；输入为input=\\xe9 x_ 1\\n（7字节 e920785f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共44字节的roff索引，首条stdout可读为“.xx \"\" \"\\xe9\" \" x_ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c57",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='en_US.iso88591'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\351\\040\\170\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022e922202220785f2031222022220a2e78782022222022e920785f2220222031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -W \\<.\\> input；输入为input=\\xe9 x_ 1\\n（7字节 e920785f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共43字节的roff索引，首条stdout可读为“.xx \"\" \"\\xe9 x_\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c3c2e5c3e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='en_US.iso88591'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\351\\040\\170\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022e920785f22202231222022220a2e78782022222022222022e920785f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -W \\B.\\B input；输入为input=\\xe9 x_ 1\\n（7字节 e920785f20310a）；预期RC=0、stderr为空，stdout十六进制解码为0条换行分隔、共0字节的roff索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c422e5c42",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='en_US.iso88591'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\351\\040\\170\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb2312，执行ptx -O -W \\w input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为9条换行分隔、共275字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c77",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb2312'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c706861205f22202231222022220a2e78782022222022d6d020cec420616c7068612220225f2031222022220a2e78782022222022d6d020cec4222022616c706861205f2031222022220a2e78782022222022d6d020cec420616c706822202261205f2031222022220a2e78782022222022d6d020cec420616c702220226861205f2031222022220a2e78782022222022d6d020cec420612220226c706861205f2031222022220a2e78782022222022d6d020cec420616c222022706861205f2031222022220a2e78782022222022d6d0222022cec420616c706861205f2031222022220a2e78782022222022222022d6d020cec420616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb2312，执行ptx -O -W \\W input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共124字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0\" \" \\xce\\xc4 alpha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c57",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb2312'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d022202220cec420616c706861205f2031222022220a2e78782022222022d6d020cec422202220616c706861205f2031222022220a2e78782022222022d6d020cec420616c706861222022205f2031222022220a2e78782022222022d6d020cec420616c706861205f2220222031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb2312，执行ptx -O -W \\<.\\> input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共121字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c3c2e5c3e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb2312'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c706861205f22202231222022220a2e78782022222022d6d020cec420616c7068612220225f2031222022220a2e78782022222022d6d0222022cec420616c706861205f2031222022220a2e78782022222022222022d6d020cec420616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb2312，执行ptx -O -W \\B.\\B input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共62字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alp\" \"ha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c422e5c42",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb2312'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c702220226861205f2031222022220a2e78782022222022d6d020cec420612220226c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx -O -W \\w input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为9条换行分隔、共275字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c77",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c706861205f22202231222022220a2e78782022222022d6d020cec420616c7068612220225f2031222022220a2e78782022222022d6d020cec4222022616c706861205f2031222022220a2e78782022222022d6d020cec420616c706822202261205f2031222022220a2e78782022222022d6d020cec420616c702220226861205f2031222022220a2e78782022222022d6d020cec420612220226c706861205f2031222022220a2e78782022222022d6d020cec420616c222022706861205f2031222022220a2e78782022222022d6d0222022cec420616c706861205f2031222022220a2e78782022222022222022d6d020cec420616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx -O -W \\W input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共124字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0\" \" \\xce\\xc4 alpha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c57",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d022202220cec420616c706861205f2031222022220a2e78782022222022d6d020cec422202220616c706861205f2031222022220a2e78782022222022d6d020cec420616c706861222022205f2031222022220a2e78782022222022d6d020cec420616c706861205f2220222031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx -O -W \\<.\\> input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共121字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c3c2e5c3e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c706861205f22202231222022220a2e78782022222022d6d020cec420616c7068612220225f2031222022220a2e78782022222022d6d0222022cec420616c706861205f2031222022220a2e78782022222022222022d6d020cec420616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk，执行ptx -O -W \\B.\\B input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共62字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alp\" \"ha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c422e5c42",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c702220226861205f2031222022220a2e78782022222022d6d020cec420612220226c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb18030，执行ptx -O -W \\w input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为9条换行分隔、共275字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c77",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb18030'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c706861205f22202231222022220a2e78782022222022d6d020cec420616c7068612220225f2031222022220a2e78782022222022d6d020cec4222022616c706861205f2031222022220a2e78782022222022d6d020cec420616c706822202261205f2031222022220a2e78782022222022d6d020cec420616c702220226861205f2031222022220a2e78782022222022d6d020cec420612220226c706861205f2031222022220a2e78782022222022d6d020cec420616c222022706861205f2031222022220a2e78782022222022d6d0222022cec420616c706861205f2031222022220a2e78782022222022222022d6d020cec420616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb18030，执行ptx -O -W \\W input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共124字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0\" \" \\xce\\xc4 alpha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c57",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb18030'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d022202220cec420616c706861205f2031222022220a2e78782022222022d6d020cec422202220616c706861205f2031222022220a2e78782022222022d6d020cec420616c706861222022205f2031222022220a2e78782022222022d6d020cec420616c706861205f2220222031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb18030，执行ptx -O -W \\<.\\> input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共121字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c3c2e5c3e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb18030'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c706861205f22202231222022220a2e78782022222022d6d020cec420616c7068612220225f2031222022220a2e78782022222022d6d0222022cec420616c706861205f2031222022220a2e78782022222022222022d6d020cec420616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb18030，执行ptx -O -W \\B.\\B input；输入为input=\\xd6\\xd0 \\xce\\xc4 alpha _ 1\\n（16字节 d6d020cec420616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共62字节的roff索引，首条stdout可读为“.xx \"\" \"\\xd6\\xd0 \\xce\\xc4 alp\" \"ha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c422e5c42",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gb18030'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\326\\320\\040\\316\\304\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022d6d020cec420616c702220226861205f2031222022220a2e78782022222022d6d020cec420612220226c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.big5，执行ptx -O -W \\w input；输入为input=\\xa4\\xa4 \\xa4\\xe5 alpha _ 1\\n（16字节 a4a420a4e520616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为9条换行分隔、共275字节的roff索引，首条stdout可读为“.xx \"\" \"\\xa4\\xa4 \\xa4\\xe5 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c77",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.big5'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\244\\244\\040\\244\\345\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022a4a420a4e520616c706861205f22202231222022220a2e78782022222022a4a420a4e520616c7068612220225f2031222022220a2e78782022222022a4a420a4e5222022616c706861205f2031222022220a2e78782022222022a4a420a4e520616c706822202261205f2031222022220a2e78782022222022a4a420a4e520616c702220226861205f2031222022220a2e78782022222022a4a420a4e520612220226c706861205f2031222022220a2e78782022222022a4a420a4e520616c222022706861205f2031222022220a2e78782022222022222022a4a420a4e520616c706861205f2031222022220a2e78782022222022a4a4222022a4e520616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.big5，执行ptx -O -W \\W input；输入为input=\\xa4\\xa4 \\xa4\\xe5 alpha _ 1\\n（16字节 a4a420a4e520616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共124字节的roff索引，首条stdout可读为“.xx \"\" \"\\xa4\\xa4\" \" \\xa4\\xe5 alpha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c57",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.big5'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\244\\244\\040\\244\\345\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022a4a422202220a4e520616c706861205f2031222022220a2e78782022222022a4a420a4e522202220616c706861205f2031222022220a2e78782022222022a4a420a4e520616c706861222022205f2031222022220a2e78782022222022a4a420a4e520616c706861205f2220222031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.big5，执行ptx -O -W \\<.\\> input；输入为input=\\xa4\\xa4 \\xa4\\xe5 alpha _ 1\\n（16字节 a4a420a4e520616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共121字节的roff索引，首条stdout可读为“.xx \"\" \"\\xa4\\xa4 \\xa4\\xe5 alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c3c2e5c3e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.big5'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\244\\244\\040\\244\\345\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022a4a420a4e520616c706861205f22202231222022220a2e78782022222022a4a420a4e520616c7068612220225f2031222022220a2e78782022222022222022a4a420a4e520616c706861205f2031222022220a2e78782022222022a4a4222022a4e520616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.big5，执行ptx -O -W \\B.\\B input；输入为input=\\xa4\\xa4 \\xa4\\xe5 alpha _ 1\\n（16字节 a4a420a4e520616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共62字节的roff索引，首条stdout可读为“.xx \"\" \"\\xa4\\xa4 \\xa4\\xe5 alp\" \"ha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c422e5c42",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.big5'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\244\\244\\040\\244\\345\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022a4a420a4e520616c702220226861205f2031222022220a2e78782022222022a4a420a4e520612220226c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.euctw，执行ptx -O -W \\w input；输入为input=\\xc4\\xe3 \\xc5\\xdf alpha _ 1\\n（16字节 c4e320c5df20616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为9条换行分隔、共275字节的roff索引，首条stdout可读为“.xx \"\" \"\\xc4\\xe3 \\xc5\\xdf alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c77",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.euctw'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\304\\343\\040\\305\\337\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022c4e320c5df20616c706861205f22202231222022220a2e78782022222022c4e320c5df20616c7068612220225f2031222022220a2e78782022222022c4e320c5df222022616c706861205f2031222022220a2e78782022222022c4e320c5df20616c706822202261205f2031222022220a2e78782022222022c4e320c5df20616c702220226861205f2031222022220a2e78782022222022c4e320c5df20612220226c706861205f2031222022220a2e78782022222022c4e320c5df20616c222022706861205f2031222022220a2e78782022222022222022c4e320c5df20616c706861205f2031222022220a2e78782022222022c4e3222022c5df20616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.euctw，执行ptx -O -W \\W input；输入为input=\\xc4\\xe3 \\xc5\\xdf alpha _ 1\\n（16字节 c4e320c5df20616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共124字节的roff索引，首条stdout可读为“.xx \"\" \"\\xc4\\xe3\" \" \\xc5\\xdf alpha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c57",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.euctw'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\304\\343\\040\\305\\337\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022c4e322202220c5df20616c706861205f2031222022220a2e78782022222022c4e320c5df22202220616c706861205f2031222022220a2e78782022222022c4e320c5df20616c706861222022205f2031222022220a2e78782022222022c4e320c5df20616c706861205f2220222031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.euctw，执行ptx -O -W \\<.\\> input；输入为input=\\xc4\\xe3 \\xc5\\xdf alpha _ 1\\n（16字节 c4e320c5df20616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共121字节的roff索引，首条stdout可读为“.xx \"\" \"\\xc4\\xe3 \\xc5\\xdf alpha _\" \"1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c3c2e5c3e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.euctw'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\304\\343\\040\\305\\337\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022c4e320c5df20616c706861205f22202231222022220a2e78782022222022c4e320c5df20616c7068612220225f2031222022220a2e78782022222022222022c4e320c5df20616c706861205f2031222022220a2e78782022222022c4e3222022c5df20616c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_TW.euctw，执行ptx -O -W \\B.\\B input；输入为input=\\xc4\\xe3 \\xc5\\xdf alpha _ 1\\n（16字节 c4e320c5df20616c706861205f20310a）；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共62字节的roff索引，首条stdout可读为“.xx \"\" \"\\xc4\\xe3 \\xc5\\xdf alp\" \"ha _ 1\" \"\"\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d4f",
+        "2d57",
+        "5c422e5c42",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='zh_TW.euctw'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\304\\343\\040\\305\\337\\040\\141\\154\\160\\150\\141\\040\\137\\040\\061\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022c4e320c5df20616c702220226861205f2031222022220a2e78782022222022c4e320c5df20612220226c706861205f2031222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

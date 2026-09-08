@@ -8269,6 +8269,52 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -f -W 'éx' input；input为1行UTF-8文本“Éx éx”加换行；预期RC=0、stderr为空，stdout为1行22字节roff记录.xx \"\" \"Éx\" \"éx\" \"\"，验证-f仅折叠ASCII而不将É与é视为同一正则字节序列",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'Éx éx\\n' > input"
+      ],
+      "args": [
+        "-O",
+        "-f",
+        "-W",
+        "éx",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"Éx\" \"éx\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -f -S 'éx' input；input为1行UTF-8文本“Éx éx”加换行；预期RC=0、stderr为空，stdout为2行共46字节roff记录，依次将É与é前后的上下文分开，验证-f的句边界正则按UTF-8原始字节进行ASCII大小写折叠",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'Éx éx\\n' > input"
+      ],
+      "args": [
+        "-O",
+        "-f",
+        "-S",
+        "éx",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"É\" \"x éx\" \"\"\n.xx \"\" \"Éx é\" \"x\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -1166,17 +1166,14 @@ fn ptx_input_reference_text(line: &str) -> &str {
 }
 
 fn ptx_input_reference_content_start(line: &str) -> usize {
-    let Some((_, end)) = ptx_input_reference_span(line) else {
-        return 0;
-    };
-
-    let mut start = end;
-    for (idx, ch) in line[end..].char_indices() {
+    let content_base = ptx_input_reference_span(line).map_or(0, |(_, end)| end);
+    let mut start = content_base;
+    for (idx, ch) in line[content_base..].char_indices() {
         if !ptx_is_space_char(ch) {
-            start = end + idx;
+            start = content_base + idx;
             break;
         }
-        start = end + idx + ch.len_utf8();
+        start = content_base + idx + ch.len_utf8();
     }
 
     start

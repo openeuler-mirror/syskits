@@ -7121,6 +7121,90 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W [^[:space:]]+ input；输入为input=a b c\\n（6字节）；预期RC=0、stderr为空，stdout为0条换行分隔、共0字节的dumb索引；对应Cargo用例ptx_word_regexp_treats_nested_posix_classes_as_literals第1次调用",
+      "args": [
+        "-W",
+        "[^[:space:]]+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\040\\142\\040\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W [x[:alpha:]]+ input；输入为input=a b c\\n（6字节）；预期RC=0、stderr为空，stdout为0条换行分隔、共0字节的dumb索引；对应Cargo用例ptx_word_regexp_treats_nested_posix_classes_as_literals第2次调用",
+      "args": [
+        "-W",
+        "[x[:alpha:]]+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\040\\142\\040\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W [^[:alpha:]]+ input；输入为input=a b c\\n（6字节）；预期RC=0、stderr为空，stdout为0条换行分隔、共0字节的dumb索引；对应Cargo用例ptx_word_regexp_treats_nested_posix_classes_as_literals第3次调用",
+      "args": [
+        "-W",
+        "[^[:alpha:]]+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\040\\142\\040\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -W [a[:digit:]]+ input；输入为input=a b c\\n（6字节）；预期RC=0、stderr为空，stdout为0条换行分隔、共0字节的dumb索引；对应Cargo用例ptx_word_regexp_treats_nested_posix_classes_as_literals第4次调用",
+      "args": [
+        "-W",
+        "[a[:digit:]]+",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\040\\142\\040\\143\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -924,14 +924,10 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8]) -> Vec<u8> {
             continue;
         }
 
-        // Emacs syntax treats the nested '[' literally; Rust otherwise parses a POSIX class.
-        if !in_bracket
-            && byte == b'['
-            && pattern.get(index + 1) == Some(&b'[')
-            && pattern.get(index + 2) == Some(&b':')
-        {
-            translated.push(b'[');
-            translated.push(b'\\');
+        // Emacs syntax treats a nested '[' literally; Oniguruma otherwise
+        // recognizes constructs such as [:alpha:] anywhere in the class.
+        if in_bracket && byte == b'[' && pattern.get(index + 1) == Some(&b':') {
+            translated.extend_from_slice(b"\\[");
         } else {
             if !in_bracket && matches!(byte, b'(' | b')' | b'|' | b'{' | b'}') {
                 translated.push(b'\\');

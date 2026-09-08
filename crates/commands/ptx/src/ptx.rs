@@ -947,13 +947,13 @@ fn trim_context_end_bytes(bytes: &[u8], start: usize, end: usize) -> usize {
 
 fn ptx_input_reference_span(line: &str) -> Option<(usize, usize)> {
     let first = line.chars().next()?;
-    if first.is_whitespace() {
+    if first.is_ascii_whitespace() {
         return None;
     }
 
     let end = line
         .char_indices()
-        .find_map(|(idx, ch)| ch.is_whitespace().then_some(idx))
+        .find_map(|(idx, ch)| ch.is_ascii_whitespace().then_some(idx))
         .unwrap_or(line.len());
 
     Some((0, end))
@@ -973,7 +973,7 @@ fn ptx_input_reference_content_start(line: &str) -> usize {
 
     let mut start = end;
     for (idx, ch) in line[end..].char_indices() {
-        if !ch.is_whitespace() {
+        if !ch.is_ascii_whitespace() {
             start = end + idx;
             break;
         }

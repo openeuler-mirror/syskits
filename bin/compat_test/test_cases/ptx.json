@@ -4020,6 +4020,31 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -T -f -S \\xe9 input；输入为input=\\xc9lan \\xe9lan\\n（10字节 c96c616e20e96c616e0a）；预期RC=1、stderr可读为“/usr/bin/ptx: error: regular expression has a match of length zero: '\\xe9'\\n”，共72字节2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a2027e9270a，stdout十六进制解码为0条换行分隔、共0字节的TeX索引，stdout为空；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d54",
+        "2d66",
+        "2d53",
+        "e9",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='en_US.iso88591'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\311\\154\\141\\156\\040\\351\\154\\141\\156\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "2f7573722f62696e2f7074783a206572726f723a20726567756c61722065787072657373696f6e206861732061206d61746368206f66206c656e677468207a65726f3a2027e9270a"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

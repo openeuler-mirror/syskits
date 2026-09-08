@@ -266,6 +266,61 @@ impl LocaleCollation {
         unsafe { ctcore::libc::uselocale(previous) };
         members.iter().any(|&member| member).then_some(members)
     }
+
+    fn matching_candidates(
+        &self,
+        pattern: &[u8],
+        candidates: &[Vec<u8>],
+        fold_upper: Option<&[u8; 256]>,
+    ) -> Option<Vec<Vec<u8>>> {
+        let mut folded_pattern = pattern.to_vec();
+        if let Some(upper) = fold_upper {
+            for byte in &mut folded_pattern {
+                *byte = upper[usize::from(*byte)];
+            }
+        }
+        folded_pattern.push(0);
+        let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
+        let mut regex: ctcore::libc::regex_t = unsafe { std::mem::zeroed() };
+        let compile_result = unsafe {
+            ctcore::libc::regcomp(
+                &mut regex,
+                folded_pattern.as_ptr().cast(),
+                ctcore::libc::REG_EXTENDED | ctcore::libc::REG_NOSUB,
+            )
+        };
+        if compile_result != 0 {
+            unsafe { ctcore::libc::uselocale(previous) };
+            return None;
+        }
+        let mut matches = Vec::new();
+        for candidate in candidates
+            .iter()
+            .filter(|candidate| !candidate.contains(&0))
+        {
+            let mut folded_candidate = candidate.clone();
+            if let Some(upper) = fold_upper {
+                for byte in &mut folded_candidate {
+                    *byte = upper[usize::from(*byte)];
+                }
+            }
+            folded_candidate.push(0);
+            if unsafe {
+                ctcore::libc::regexec(
+                    &regex,
+                    folded_candidate.as_ptr().cast(),
+                    0,
+                    std::ptr::null_mut(),
+                    0,
+                ) == 0
+            } {
+                matches.push(candidate.clone());
+            }
+        }
+        unsafe { ctcore::libc::regfree(&mut regex) };
+        unsafe { ctcore::libc::uselocale(previous) };
+        Some(matches)
+    }
 }
 
 impl Drop for LocaleCollation {
@@ -1111,6 +1166,14 @@ fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> CTResult<H
 }
 
 fn gnu_emacs_regex_to_rust(pattern: &str, config: &PtxConfig) -> String {
+    gnu_emacs_regex_to_rust_with_candidates(pattern, config, None)
+}
+
+fn gnu_emacs_regex_to_rust_with_candidates(
+    pattern: &str,
+    config: &PtxConfig,
+    locale_candidates: Option<&[Vec<u8>]>,
+) -> String {
     let (word_class, non_word_class) = if std::str::from_utf8(&config.regex_word_class).is_ok() {
         (
             config.regex_word_class.as_slice(),
@@ -1127,38 +1190,147 @@ fn gnu_emacs_regex_to_rust(pattern: &str, config: &PtxConfig) -> String {
     } else {
         (b"[[:space:]]".as_slice(), b"[^[:space:]]".as_slice())
     };
-    let translated = gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
-        pattern.as_bytes(),
+    let context = RegexTranslationContext {
         word_class,
         non_word_class,
         space_class,
         non_space_class,
-        config.locale_collation.as_deref(),
-        false,
-    );
+        locale_collation: config.locale_collation.as_deref(),
+        expand_locale_ranges: false,
+        defer_locale_ranges: locale_candidates.is_none()
+            && !config.single_byte_locale
+            && config.locale_regex_encoding == LocaleRegexEncoding::Ascii,
+        locale_candidates,
+        range_fold_upper: config.is_ignore_case.then_some(&config.byte_ctype.upper),
+    };
+    let translated =
+        gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(pattern.as_bytes(), &context);
     String::from_utf8(translated).expect("UTF-8 pattern translation must remain UTF-8")
 }
 
 fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8], config: &PtxConfig) -> Vec<u8> {
-    gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
-        pattern,
-        &config.regex_word_class,
-        &config.regex_non_word_class,
-        &config.regex_space_class,
-        &config.regex_non_space_class,
-        config.locale_collation.as_deref(),
-        config.single_byte_locale,
-    )
+    gnu_emacs_regex_to_onig_bytes_with_candidates(pattern, config, None)
+}
+
+fn gnu_emacs_regex_to_onig_bytes_with_candidates(
+    pattern: &[u8],
+    config: &PtxConfig,
+    locale_candidates: Option<&[Vec<u8>]>,
+) -> Vec<u8> {
+    let context = RegexTranslationContext {
+        word_class: &config.regex_word_class,
+        non_word_class: &config.regex_non_word_class,
+        space_class: &config.regex_space_class,
+        non_space_class: &config.regex_non_space_class,
+        locale_collation: config.locale_collation.as_deref(),
+        expand_locale_ranges: config.single_byte_locale,
+        defer_locale_ranges: locale_candidates.is_none()
+            && !config.single_byte_locale
+            && config.locale_regex_encoding == LocaleRegexEncoding::Ascii,
+        locale_candidates,
+        range_fold_upper: config.is_ignore_case.then_some(&config.byte_ctype.upper),
+    };
+    gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(pattern, &context)
+}
+
+fn ptx_character_class_end(pattern: &[u8], start: usize) -> Option<usize> {
+    let mut index = start + 1;
+    if pattern.get(index) == Some(&b'^') {
+        index += 1;
+    }
+    if pattern.get(index) == Some(&b']') {
+        index += 1;
+    }
+    pattern[index..]
+        .iter()
+        .position(|&byte| byte == b']')
+        .map(|relative| index + relative)
+}
+
+fn ptx_character_class_has_range(class: &[u8]) -> bool {
+    if class.len() < 4 || class[1..class.len() - 1].contains(&b'[') {
+        return false;
+    }
+    let content = &class[1..class.len() - 1];
+    let mut index = usize::from(content.first() == Some(&b'^'));
+    if content.get(index) == Some(&b']') {
+        index += 1;
+    }
+    while index + 2 < content.len() {
+        if !matches!(content[index], b'[' | b']' | b'\\' | b'-' | b'^')
+            && content[index + 1] == b'-'
+            && !matches!(content[index + 2], b'[' | b']' | b'\\' | b'^')
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn ptx_pattern_has_character_class_range(pattern: &[u8]) -> bool {
+    let mut index = 0usize;
+    let mut escaped = false;
+    while index < pattern.len() {
+        let byte = pattern[index];
+        if escaped {
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        if byte == b'\\' {
+            escaped = true;
+            index += 1;
+            continue;
+        }
+        if byte == b'['
+            && let Some(end) = ptx_character_class_end(pattern, index)
+        {
+            if ptx_character_class_has_range(&pattern[index..=end]) {
+                return true;
+            }
+            index = end + 1;
+            continue;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn ptx_push_onig_candidate_alternation(output: &mut Vec<u8>, candidates: &[Vec<u8>]) {
+    if candidates.is_empty() {
+        output.extend_from_slice(b"(?:(?!)\\x00)");
+        return;
+    }
+    output.extend_from_slice(b"(?:");
+    for (index, candidate) in candidates.iter().enumerate() {
+        if index > 0 {
+            output.push(b'|');
+        }
+        if candidate.len() == 1 {
+            write!(output, r"\x{:02X}", candidate[0]).expect("writing to a Vec cannot fail");
+        } else {
+            output.extend_from_slice(candidate);
+        }
+    }
+    output.push(b')');
+}
+
+struct RegexTranslationContext<'a> {
+    word_class: &'a [u8],
+    non_word_class: &'a [u8],
+    space_class: &'a [u8],
+    non_space_class: &'a [u8],
+    locale_collation: Option<&'a LocaleCollation>,
+    expand_locale_ranges: bool,
+    defer_locale_ranges: bool,
+    locale_candidates: Option<&'a [Vec<u8>]>,
+    range_fold_upper: Option<&'a [u8; 256]>,
 }
 
 fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
     pattern: &[u8],
-    word_class: &[u8],
-    non_word_class: &[u8],
-    space_class: &[u8],
-    non_space_class: &[u8],
-    locale_collation: Option<&LocaleCollation>,
-    expand_locale_ranges: bool,
+    context: &RegexTranslationContext<'_>,
 ) -> Vec<u8> {
     let mut translated = Vec::with_capacity(pattern.len());
     let mut escaped = false;
@@ -1173,6 +1345,30 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
     for (index, &byte) in pattern.iter().enumerate() {
         if index < skip_before {
             continue;
+        }
+        if !in_bracket
+            && byte == b'['
+            && let Some(end) = ptx_character_class_end(pattern, index)
+            && ptx_character_class_has_range(&pattern[index..=end])
+            && let Some(locale_collation) = context.locale_collation
+        {
+            let class = &pattern[index..=end];
+            if let Some(candidates) = context.locale_candidates {
+                if let Some(matching) = locale_collation.matching_candidates(
+                    class,
+                    candidates,
+                    context.range_fold_upper,
+                ) {
+                    ptx_push_onig_candidate_alternation(&mut translated, &matching);
+                    skip_before = end + 1;
+                    continue;
+                }
+            }
+            if context.defer_locale_ranges {
+                translated.extend_from_slice(b"(?:(?!)\\x00)");
+                skip_before = end + 1;
+                continue;
+            }
         }
         if in_bracket && !escaped && byte == b'\\' {
             translated.extend_from_slice(b"\\\\");
@@ -1189,16 +1385,16 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
                 match byte {
                     b'<' => {
                         translated.extend_from_slice(b"(?<!");
-                        translated.extend_from_slice(word_class);
+                        translated.extend_from_slice(context.word_class);
                         translated.extend_from_slice(b")(?=");
-                        translated.extend_from_slice(word_class);
+                        translated.extend_from_slice(context.word_class);
                         translated.push(b')');
                     }
                     b'>' => {
                         translated.extend_from_slice(b"(?<=");
-                        translated.extend_from_slice(word_class);
+                        translated.extend_from_slice(context.word_class);
                         translated.extend_from_slice(b")(?!");
-                        translated.extend_from_slice(word_class);
+                        translated.extend_from_slice(context.word_class);
                         translated.push(b')');
                     }
                     b'`' => translated.extend_from_slice(b"\\A"),
@@ -1208,27 +1404,27 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
             } else if !in_bracket && matches!(byte, b'w' | b'W') {
                 translated.pop();
                 translated.extend_from_slice(if byte == b'w' {
-                    word_class
+                    context.word_class
                 } else {
-                    non_word_class
+                    context.non_word_class
                 });
             } else if !in_bracket && byte == b'B' {
                 translated.pop();
                 translated.extend_from_slice(b"(?:(?<=");
-                translated.extend_from_slice(word_class);
+                translated.extend_from_slice(context.word_class);
                 translated.extend_from_slice(b")(?=");
-                translated.extend_from_slice(word_class);
+                translated.extend_from_slice(context.word_class);
                 translated.extend_from_slice(b")|(?<!");
-                translated.extend_from_slice(word_class);
+                translated.extend_from_slice(context.word_class);
                 translated.extend_from_slice(b")(?!");
-                translated.extend_from_slice(word_class);
+                translated.extend_from_slice(context.word_class);
                 translated.extend_from_slice(b"))");
             } else if !in_bracket && matches!(byte, b's' | b'S') {
                 translated.pop();
                 translated.extend_from_slice(if byte == b's' {
-                    space_class
+                    context.space_class
                 } else {
-                    non_space_class
+                    context.non_space_class
                 });
             } else if !in_bracket && byte.is_ascii_alphabetic() {
                 // GNU's Emacs syntax treats other alphabetic escapes literally.
@@ -1254,10 +1450,10 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
             && pattern
                 .get(index + 2)
                 .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'^'))
-            && let Some(locale_collation) = locale_collation
+            && let Some(locale_collation) = context.locale_collation
         {
             if let Some(members) = locale_collation.range_members(byte, pattern[index + 2]) {
-                if expand_locale_ranges {
+                if context.expand_locale_ranges {
                     for (value, member) in members.into_iter().enumerate() {
                         if member {
                             write!(translated, r"\x{value:02X}")
@@ -1379,6 +1575,8 @@ struct WordFilter {
     word_regex: String,
     /// 非UTF-8自定义单词正则的原始字节模式。
     word_byte_pattern: Option<Vec<u8>>,
+    /// 用户指定并完成GNU反转义的原始单词正则。
+    word_pattern_bytes: Option<Vec<u8>>,
     /// break-file中的边界字符。
     break_set: Option<HashSet<u8>>,
     /// 是否使用用户指定的word regexp。
@@ -1495,6 +1693,7 @@ impl WordFilter {
             ignore_set: iset,
             word_regex: reg,
             word_byte_pattern,
+            word_pattern_bytes: arg_reg_bytes,
             break_set,
             uses_custom_regex,
         })
@@ -1510,6 +1709,7 @@ impl Default for WordFilter {
             ignore_set: HashSet::new(),
             word_regex: "[A-Za-z]+".to_string(),
             word_byte_pattern: None,
+            word_pattern_bytes: None,
             break_set: None,
             uses_custom_regex: false,
         }
@@ -1958,6 +2158,166 @@ struct FileContent {
 
 type FileMap = Vec<FileContent>;
 
+fn ptx_collect_locale_regex_candidates(file_map: &FileMap, config: &PtxConfig) -> Vec<Vec<u8>> {
+    let Some(validator) = config.locale_validator.as_deref() else {
+        return Vec::new();
+    };
+    let mut candidates = BTreeSet::new();
+    for file in file_map {
+        ptx_add_locale_regex_candidates(&file.raw_text, validator, &mut candidates);
+    }
+    candidates.into_iter().collect()
+}
+
+fn ptx_add_locale_regex_candidates(
+    bytes: &[u8],
+    validator: &LocaleMultibyteValidator,
+    candidates: &mut BTreeSet<Vec<u8>>,
+) {
+    let mut index = 0usize;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte == 0 {
+            index += 1;
+            continue;
+        }
+        let length = if byte.is_ascii() {
+            Some(1)
+        } else {
+            validator.valid_character_len(&bytes[index..])
+        };
+        if let Some(length) = length {
+            candidates.insert(bytes[index..index + length].to_vec());
+            index += length;
+        } else {
+            index += 1;
+        }
+    }
+}
+
+fn ptx_locale_context_matches_at_boundary(
+    config: &PtxConfig,
+    content: &FileContent,
+) -> CTResult<bool> {
+    if config.single_byte_locale || config.locale_regex_encoding.is_non_utf8_multibyte() {
+        return Ok(false);
+    }
+    let Some(pattern) = config.context_pattern_bytes.as_deref() else {
+        return Ok(false);
+    };
+    if !ptx_pattern_has_character_class_range(pattern) {
+        return Ok(false);
+    }
+    let Some(validator) = config.locale_validator.as_deref() else {
+        return Ok(false);
+    };
+    let mut candidates = BTreeSet::new();
+    ptx_add_locale_regex_candidates(&content.raw_text, validator, &mut candidates);
+    let candidates: Vec<Vec<u8>> = candidates.into_iter().collect();
+    if candidates.is_empty() {
+        return Ok(false);
+    }
+    let byte_mode = std::str::from_utf8(pattern).is_err();
+    if config.is_ignore_case
+        || byte_mode
+        || content.invalid_utf8_bytes.iter().any(|&invalid| invalid)
+    {
+        let translated =
+            gnu_emacs_regex_to_onig_bytes_with_candidates(pattern, config, Some(&candidates));
+        let regex = compile_user_byte_regex(
+            &translated,
+            config.is_ignore_case,
+            &config.byte_ctype,
+            config.locale_regex_encoding,
+            config.locale_validator.clone(),
+            config.single_byte_locale,
+        )?;
+        Ok(context_regexp_matches_at_boundary_bytes(
+            &regex,
+            &content.raw_text,
+        ))
+    } else {
+        let pattern = std::str::from_utf8(pattern).expect("validated UTF-8 context regexp");
+        let translated =
+            gnu_emacs_regex_to_rust_with_candidates(pattern, config, Some(&candidates));
+        let regex = compile_user_regex(&translated, config.is_ignore_case)?;
+        Ok(context_regexp_matches_at_boundary(&regex, &content.text))
+    }
+}
+
+fn ptx_recompile_locale_range_regexps(
+    config: &mut PtxConfig,
+    word_filter: &mut WordFilter,
+    file_map: &FileMap,
+) -> CTResult<()> {
+    if config.single_byte_locale || config.locale_regex_encoding.is_non_utf8_multibyte() {
+        return Ok(());
+    }
+    let candidates = ptx_collect_locale_regex_candidates(file_map, config);
+    if candidates.is_empty() {
+        return Ok(());
+    }
+    let has_invalid_input = file_map
+        .iter()
+        .any(|file| file.invalid_utf8_bytes.iter().any(|&invalid| invalid));
+
+    if let Some(pattern) = config.context_pattern_bytes.clone()
+        && !pattern.is_empty()
+        && ptx_pattern_has_character_class_range(&pattern)
+    {
+        let byte_mode = std::str::from_utf8(&pattern).is_err();
+        if config.is_ignore_case || byte_mode || has_invalid_input {
+            let translated =
+                gnu_emacs_regex_to_onig_bytes_with_candidates(&pattern, config, Some(&candidates));
+            config.context_byte_regex = Some(compile_user_byte_regex(
+                &translated,
+                config.is_ignore_case,
+                &config.byte_ctype,
+                config.locale_regex_encoding,
+                config.locale_validator.clone(),
+                config.single_byte_locale,
+            )?);
+            config.context_byte_pattern = Some(translated);
+            config.force_byte_mode = true;
+        } else {
+            let pattern = std::str::from_utf8(&pattern).expect("validated UTF-8 context regexp");
+            let translated =
+                gnu_emacs_regex_to_rust_with_candidates(pattern, config, Some(&candidates));
+            config.context_regex = translated.clone();
+            config.context_byte_pattern = None;
+            config.context_byte_regex = None;
+            compile_user_regex(&translated, config.is_ignore_case)?;
+        }
+    }
+
+    if let Some(pattern) = word_filter.word_pattern_bytes.as_deref()
+        && ptx_pattern_has_character_class_range(pattern)
+    {
+        let byte_mode = std::str::from_utf8(pattern).is_err();
+        if config.is_ignore_case || byte_mode || has_invalid_input {
+            let translated =
+                gnu_emacs_regex_to_onig_bytes_with_candidates(pattern, config, Some(&candidates));
+            config.word_byte_regex = Some(compile_user_byte_regex(
+                &translated,
+                config.is_ignore_case,
+                &config.byte_ctype,
+                config.locale_regex_encoding,
+                config.locale_validator.clone(),
+                config.single_byte_locale,
+            )?);
+            config.force_byte_mode = true;
+        } else {
+            let pattern = std::str::from_utf8(pattern).expect("validated UTF-8 word regexp");
+            let translated =
+                gnu_emacs_regex_to_rust_with_candidates(pattern, config, Some(&candidates));
+            word_filter.word_regex.clone_from(&translated);
+            config.word_regex = Some(compile_user_regex(&translated, config.is_ignore_case)?);
+            config.word_byte_regex = None;
+        }
+    }
+    Ok(())
+}
+
 fn build_byte_to_char_map(text: &str) -> Vec<usize> {
     let mut map = vec![0; text.len() + 1];
     let mut char_index = 0usize;
@@ -2248,7 +2608,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
         let has_boundary_match = config.context_byte_regex.as_ref().map_or_else(
             || context_regexp_matches_at_boundary(&context_reg, &content.text),
             |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
-        );
+        ) || ptx_locale_context_matches_at_boundary(config, &content)?;
         if has_boundary_match {
             let pattern = config
                 .context_pattern_bytes
@@ -4833,7 +5193,7 @@ impl PtxSettings {
         validate_ptx_word_regexp(&matches, &config)?;
 
         // 创建单词过滤器
-        let word_filter = WordFilter::new(&matches, &config)?;
+        let mut word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_bytes = word_filter.break_set.clone();
         if word_filter.uses_custom_regex {
             config.word_regex = Some(compile_user_regex(
@@ -4855,6 +5215,7 @@ impl PtxSettings {
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config)?;
+        ptx_recompile_locale_range_regexps(&mut config, &mut word_filter, &file_map)?;
         // 创建单词集合
         let word_set = ptx_create_word_set(&config, &word_filter, &file_map);
 
@@ -5219,7 +5580,11 @@ mod tests {
                 .try_get_matches_from(vec!["ptx", "-G", "-S", "[A-Z].*"])
                 .unwrap();
             let config = get_config(&matches).unwrap();
-            assert_eq!(config.context_regex, "[A-Z].*");
+            assert_eq!(
+                config.context_pattern_bytes.as_deref(),
+                Some(b"[A-Z].*".as_slice())
+            );
+            assert_eq!(config.context_regex, "(?:(?!)\\x00).*");
         }
 
         #[test]
@@ -5682,6 +6047,7 @@ mod tests {
                 ignore_set: HashSet::new(),
                 word_regex: r"\w+".to_string(),
                 word_byte_pattern: None,
+                word_pattern_bytes: None,
                 break_set: None,
                 uses_custom_regex: false,
             };

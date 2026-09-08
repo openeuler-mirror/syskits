@@ -222,17 +222,19 @@ struct LocaleCollation {
 }
 
 impl LocaleCollation {
-    fn from_environment() -> Option<Self> {
-        let mut locale = unsafe {
+    fn c_locale() -> Option<ctcore::libc::locale_t> {
+        let locale = unsafe {
             ctcore::libc::newlocale(
                 ctcore::libc::LC_ALL_MASK,
                 c"C".as_ptr(),
                 std::ptr::null_mut(),
             )
         };
-        if locale.is_null() {
-            return None;
-        }
+        (!locale.is_null()).then_some(locale)
+    }
+
+    fn from_environment() -> Option<Self> {
+        let mut locale = Self::c_locale()?;
         for (category, mask) in [
             ("LC_CTYPE", ctcore::libc::LC_CTYPE_MASK),
             ("LC_COLLATE", ctcore::libc::LC_COLLATE_MASK),
@@ -241,7 +243,9 @@ impl LocaleCollation {
             let combined = unsafe { ctcore::libc::newlocale(mask, name.as_ptr(), locale) };
             if combined.is_null() {
                 unsafe { ctcore::libc::freelocale(locale) };
-                return None;
+                return Self::c_locale().map(|locale| Self {
+                    locale: locale as usize,
+                });
             }
             locale = combined;
         }
@@ -1123,14 +1127,16 @@ fn gnu_emacs_regex_to_rust(pattern: &str, config: &PtxConfig) -> String {
     } else {
         (b"[[:space:]]".as_slice(), b"[^[:space:]]".as_slice())
     };
-    String::from_utf8(gnu_emacs_regex_to_onig_bytes_with_classes(
+    let translated = gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
         pattern.as_bytes(),
         word_class,
         non_word_class,
         space_class,
         non_space_class,
-    ))
-    .expect("UTF-8 pattern translation must remain UTF-8")
+        config.locale_collation.as_deref(),
+        false,
+    );
+    String::from_utf8(translated).expect("UTF-8 pattern translation must remain UTF-8")
 }
 
 fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8], config: &PtxConfig) -> Vec<u8> {
@@ -1140,27 +1146,8 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8], config: &PtxConfig) -> Vec<u8> 
         &config.regex_non_word_class,
         &config.regex_space_class,
         &config.regex_non_space_class,
-        config
-            .single_byte_locale
-            .then_some(config.locale_collation.as_deref())
-            .flatten(),
-    )
-}
-
-fn gnu_emacs_regex_to_onig_bytes_with_classes(
-    pattern: &[u8],
-    word_class: &[u8],
-    non_word_class: &[u8],
-    space_class: &[u8],
-    non_space_class: &[u8],
-) -> Vec<u8> {
-    gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
-        pattern,
-        word_class,
-        non_word_class,
-        space_class,
-        non_space_class,
-        None,
+        config.locale_collation.as_deref(),
+        config.single_byte_locale,
     )
 }
 
@@ -1171,11 +1158,17 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
     space_class: &[u8],
     non_space_class: &[u8],
     locale_collation: Option<&LocaleCollation>,
+    expand_locale_ranges: bool,
 ) -> Vec<u8> {
     let mut translated = Vec::with_capacity(pattern.len());
     let mut escaped = false;
     let mut in_bracket = false;
     let mut skip_before = 0usize;
+    let mut bracket_output_start = 0usize;
+    let mut bracket_at_start = false;
+    let mut bracket_negated = false;
+    let mut bracket_has_member = false;
+    let mut bracket_removed_empty_range = false;
 
     for (index, &byte) in pattern.iter().enumerate() {
         if index < skip_before {
@@ -1183,6 +1176,8 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
         }
         if in_bracket && !escaped && byte == b'\\' {
             translated.extend_from_slice(b"\\\\");
+            bracket_at_start = false;
+            bracket_has_member = true;
             continue;
         }
         if escaped {
@@ -1246,20 +1241,37 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
             continue;
         }
 
+        if in_bracket && bracket_at_start && byte == b'^' {
+            translated.push(byte);
+            bracket_at_start = false;
+            bracket_negated = true;
+            continue;
+        }
+
         if in_bracket
             && !matches!(byte, b'[' | b']' | b'\\' | b'-' | b'^')
             && pattern.get(index + 1) == Some(&b'-')
             && pattern
                 .get(index + 2)
-                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'-' | b'^'))
-            && let Some(members) = locale_collation
-                .and_then(|collation| collation.range_members(byte, pattern[index + 2]))
+                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'^'))
+            && let Some(locale_collation) = locale_collation
         {
-            for (value, member) in members.into_iter().enumerate() {
-                if member {
-                    write!(translated, r"\x{value:02X}").expect("writing to a Vec cannot fail");
+            if let Some(members) = locale_collation.range_members(byte, pattern[index + 2]) {
+                if expand_locale_ranges {
+                    for (value, member) in members.into_iter().enumerate() {
+                        if member {
+                            write!(translated, r"\x{value:02X}")
+                                .expect("writing to a Vec cannot fail");
+                        }
+                    }
+                } else {
+                    translated.extend_from_slice(&pattern[index..index + 3]);
                 }
+                bracket_has_member = true;
+            } else {
+                bracket_removed_empty_range = true;
             }
+            bracket_at_start = false;
             skip_before = index + 3;
             continue;
         }
@@ -1268,19 +1280,34 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
         // recognizes constructs such as [:alpha:] anywhere in the class.
         if in_bracket && byte == b'[' && pattern.get(index + 1) == Some(&b':') {
             translated.extend_from_slice(b"\\[");
+            bracket_at_start = false;
+            bracket_has_member = true;
         } else {
             if !in_bracket && matches!(byte, b'(' | b')' | b'|' | b'{' | b'}') {
                 translated.push(b'\\');
             }
             translated.push(byte);
+            if in_bracket && byte != b']' {
+                bracket_at_start = false;
+                bracket_has_member = true;
+            }
         }
 
         if byte == b'\\' {
             escaped = true;
         } else if byte == b'[' && !in_bracket {
             in_bracket = true;
+            bracket_output_start = translated.len() - 1;
+            bracket_at_start = true;
+            bracket_negated = false;
+            bracket_has_member = false;
+            bracket_removed_empty_range = false;
         } else if byte == b']' && in_bracket {
             in_bracket = false;
+            if bracket_removed_empty_range && !bracket_has_member {
+                translated.truncate(bracket_output_start);
+                translated.extend_from_slice(if bracket_negated { b"(?m:.)" } else { b"(?!)" });
+            }
         }
     }
 

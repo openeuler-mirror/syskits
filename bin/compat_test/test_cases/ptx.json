@@ -9291,6 +9291,94 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[a-é[:digit:]]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n”；预期RC=0、stderr为空，stdout为0行、0字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[a-é[:digit:]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[a-z[.x.]]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n”；预期RC=0、stderr为空，stdout为11行、619字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[a-z[.x.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{Ä ä É é ² 2 ß z}{a}{ b c : [ ] d i g t -}{}\n\\xx {}{Ä ä É é ² 2 ß z a}{b}{ c : [ ] d i g t -}{}\n\\xx {}{Ä ä É é ² 2 ß z a b}{c}{ : [ ] d i g t -}{}\n\\xx {}{ä É é ² 2 ß z a b c : [ ]}{d}{ i g t -}{Ä}\n\\xx {}{É é ² 2 ß z a b c : [ ] d i}{g}{ t -}{Ä ä}\n\\xx {}{É é ² 2 ß z a b c : [ ] d}{i}{ g t -}{Ä ä}\n\\xx {}{é ² 2 ß z a b c : [ ] d i g}{t}{ -}{ä É}\n\\xx {}{Ä ä É é ² 2 ß}{z}{ a b c : [ ] d i g t -}{}\n\\xx {}{Ä ä É é ² 2}{ß}{ z a b c : [ ] d i g t -}{}\n\\xx {g t -}{Ä}{ä}{ É é ² 2 ß z a b c : [ ] d i}{}\n\\xx {}{Ä ä É}{é}{ ² 2 ß z a b c : [ ] d i g t -}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[a-z[=x=]]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n”；预期RC=0、stderr为空，stdout为11行、619字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[a-z[=x=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{Ä ä É é ² 2 ß z}{a}{ b c : [ ] d i g t -}{}\n\\xx {}{Ä ä É é ² 2 ß z a}{b}{ c : [ ] d i g t -}{}\n\\xx {}{Ä ä É é ² 2 ß z a b}{c}{ : [ ] d i g t -}{}\n\\xx {}{ä É é ² 2 ß z a b c : [ ]}{d}{ i g t -}{Ä}\n\\xx {}{É é ² 2 ß z a b c : [ ] d i}{g}{ t -}{Ä ä}\n\\xx {}{É é ² 2 ß z a b c : [ ] d}{i}{ g t -}{Ä ä}\n\\xx {}{é ² 2 ß z a b c : [ ] d i g}{t}{ -}{ä É}\n\\xx {}{Ä ä É é ² 2 ß}{z}{ a b c : [ ] d i g t -}{}\n\\xx {}{Ä ä É é ² 2}{ß}{ z a b c : [ ] d i g t -}{}\n\\xx {g t -}{Ä}{ä}{ É é ² 2 ß z a b c : [ ] d i}{}\n\\xx {}{Ä ä É}{é}{ ² 2 ß z a b c : [ ] d i g t -}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[é-a]+' input；input内容为“Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n”；预期RC=0、stderr为空，stdout为0行、0字节的TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'Ä ä É é ² 2 ß z a b c : [ ] d i g t -\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[é-a]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

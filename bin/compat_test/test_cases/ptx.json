@@ -6835,6 +6835,270 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\d] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第1次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\d]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n\\xx {b c \\_ `}{}{d}{ D w W s S 1 9 . + ? \\backslash{} x ] [ - a}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\D] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共133字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第2次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\D]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {c \\_ `}{d}{D}{ w W s S 1 9 . + ? \\backslash{} x ] [ - a b}{}\n\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\w] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共133字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第3次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\w]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n\\xx {\\_ `}{d D}{w}{ W s S 1 9 . + ? \\backslash{} x ] [ - a b c}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\W] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共133字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第4次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\W]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {`}{d D w}{W}{ s S 1 9 . + ? \\backslash{} x ] [ - a b c \\_}{}\n\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\s] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第5次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\s]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W}{s}{ S 1 9 . + ? \\backslash{} x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\S] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第6次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\S]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s}{S}{ 1 9 . + ? \\backslash{} x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\.] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第7次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\.]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9}{.}{ + ? \\backslash{} x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\+] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第8次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\+]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 .}{+}{ ? \\backslash{} x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\?] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第9次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\?]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 . +}{?}{ \\backslash{} x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\x] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共134字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第10次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\x]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W s S 1 9 . + ? \\backslash{}}{x}{ ] [ - a b c \\_ `}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [a\\-c] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为7条换行分隔、共459字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第11次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[a\\-c]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{d D w W s S 1 9 . + ?}{\\backslash{}}{ x ] [ - a b c \\_ `}{}\n\\xx {}{d D w W s S 1 9 . + ? \\backslash{} x}{]}{ [ - a b c \\_ `}{}\n\\xx {}{W s S 1 9 . + ? \\backslash{} x ] [ - a b c}{\\_}{ `}{D w}\n\\xx {}{s S 1 9 . + ? \\backslash{} x ] [ - a b c \\_}{`}{}{w W}\n\\xx {}{d D w W s S 1 9 . + ? \\backslash{} x ] [ -}{a}{ b c \\_ `}{}\n\\xx {}{D w W s S 1 9 . + ? \\backslash{} x ] [ - a}{b}{ c \\_ `}{d}\n\\xx {}{w W s S 1 9 . + ? \\backslash{} x ] [ - a b}{c}{ \\_ `}{d D}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [\\]] input；输入为input=d D w W s S 1 9 . + ? \\ x ] [ - a b c _ `\\n（42字节）；预期RC=0、stderr为空，stdout为0条换行分隔、共0字节的TeX索引；对应Cargo用例ptx_character_classes_treat_backslashes_like_gnu_emacs_regexps第12次调用",
+      "args": [
+        "-T",
+        "-W",
+        "[\\]]",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\144\\040\\104\\040\\167\\040\\127\\040\\163\\040\\123\\040\\061\\040\\071\\040\\056\\040\\053\\040\\077\\040\\134\\040\\170\\040\\135\\040\\133\\040\\055\\040\\141\\040\\142\\040\\143\\040\\137\\040\\140\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

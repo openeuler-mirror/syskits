@@ -893,6 +893,10 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8]) -> Vec<u8> {
     let mut in_bracket = false;
 
     for (index, &byte) in pattern.iter().enumerate() {
+        if in_bracket && !escaped && byte == b'\\' {
+            translated.extend_from_slice(b"\\\\");
+            continue;
+        }
         if escaped {
             if !in_bracket && matches!(byte, b'(' | b')' | b'|') {
                 translated.pop();

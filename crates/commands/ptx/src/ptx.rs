@@ -2398,8 +2398,65 @@ fn ptx_invalid_utf8_mask(bytes: &[u8]) -> Vec<bool> {
     invalid
 }
 
-fn next_context_end(context_reg: &Regex, text: &str, start: usize) -> usize {
-    match context_reg.find_at(text, start) {
+fn ptx_regex_find_at_valid_utf8(
+    regex: &Regex,
+    text: &str,
+    invalid_bytes: &[bool],
+    from: usize,
+) -> Option<(usize, usize)> {
+    debug_assert_eq!(text.len(), invalid_bytes.len());
+    let mut cursor = from;
+    while cursor < text.len() {
+        while cursor < text.len() && invalid_bytes[cursor] {
+            cursor += 1;
+        }
+        let segment_start = cursor;
+        while cursor < text.len() && !invalid_bytes[cursor] {
+            cursor += 1;
+        }
+        if segment_start < cursor
+            && let Some((start, end)) = regex.find(&text[segment_start..cursor])
+        {
+            return Some((segment_start + start, segment_start + end));
+        }
+    }
+    None
+}
+
+fn ptx_regex_find_iter_valid_utf8(
+    regex: &Regex,
+    text: &str,
+    invalid_bytes: &[bool],
+) -> Vec<(usize, usize)> {
+    debug_assert_eq!(text.len(), invalid_bytes.len());
+    let mut matches = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < text.len() {
+        while cursor < text.len() && invalid_bytes[cursor] {
+            cursor += 1;
+        }
+        let segment_start = cursor;
+        while cursor < text.len() && !invalid_bytes[cursor] {
+            cursor += 1;
+        }
+        if segment_start < cursor {
+            matches.extend(
+                regex
+                    .find_iter(&text[segment_start..cursor])
+                    .map(|(start, end)| (segment_start + start, segment_start + end)),
+            );
+        }
+    }
+    matches
+}
+
+fn next_context_end_valid_utf8(
+    context_reg: &Regex,
+    text: &str,
+    invalid_bytes: &[bool],
+    start: usize,
+) -> usize {
+    match ptx_regex_find_at_valid_utf8(context_reg, text, invalid_bytes, start) {
         Some((_, end)) if end > start => end,
         _ => text.len(),
     }
@@ -2409,6 +2466,26 @@ fn context_regexp_matches_at_boundary(context_reg: &Regex, text: &str) -> bool {
     let mut context_start = 0usize;
     while context_start < text.len() {
         let Some((start, end)) = context_reg.find_at(text, context_start) else {
+            break;
+        };
+        if start == context_start {
+            return true;
+        }
+        context_start = end;
+    }
+    false
+}
+
+fn context_regexp_matches_at_boundary_valid_utf8(
+    context_reg: &Regex,
+    text: &str,
+    invalid_bytes: &[bool],
+) -> bool {
+    let mut context_start = 0usize;
+    while context_start < text.len() {
+        let Some((start, end)) =
+            ptx_regex_find_at_valid_utf8(context_reg, text, invalid_bytes, context_start)
+        else {
             break;
         };
         if start == context_start {
@@ -2606,7 +2683,13 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
             offset,
         };
         let has_boundary_match = config.context_byte_regex.as_ref().map_or_else(
-            || context_regexp_matches_at_boundary(&context_reg, &content.text),
+            || {
+                context_regexp_matches_at_boundary_valid_utf8(
+                    &context_reg,
+                    &content.text,
+                    &content.invalid_utf8_bytes,
+                )
+            },
             |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
         ) || ptx_locale_context_matches_at_boundary(config, &content)?;
         if has_boundary_match {
@@ -2666,7 +2749,12 @@ fn ptx_create_word_set(
                 let end = trim_context_end_bytes(&content.raw_text, context_start, raw_end);
                 (raw_end, end)
             } else {
-                let raw_end = next_context_end(&ref_reg, &content.text, context_start);
+                let raw_end = next_context_end_valid_utf8(
+                    &ref_reg,
+                    &content.text,
+                    &content.invalid_utf8_bytes,
+                    context_start,
+                );
                 let end = trim_context_end(&content.text, context_start, raw_end);
                 (raw_end, end)
             };
@@ -2717,18 +2805,11 @@ fn ptx_create_word_set(
                 }
                 ranges
             } else {
-                let matches = reg.find_iter(context_text);
-                if config.word_regex.is_some() {
-                    matches
-                        .filter(|&(start, end)| {
-                            !content.invalid_utf8_bytes[context_start + start..context_start + end]
-                                .iter()
-                                .any(|&invalid| invalid)
-                        })
-                        .collect()
-                } else {
-                    matches.collect()
-                }
+                ptx_regex_find_iter_valid_utf8(
+                    &reg,
+                    context_text,
+                    &content.invalid_utf8_bytes[context_start..context_end],
+                )
             };
 
             for (start, end) in matches {

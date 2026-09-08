@@ -129,10 +129,12 @@ enum LocaleRegexEncoding {
 #[derive(Debug)]
 struct LocaleMultibyteValidator {
     locale: usize,
+    allow_high_single_byte: bool,
 }
 
 impl LocaleMultibyteValidator {
     fn from_environment() -> Option<Self> {
+        let codeset = ptx_locale_codeset();
         let locale_name = CString::new(ptx_locale_name().as_encoded_bytes()).ok()?;
         let locale = unsafe {
             ctcore::libc::newlocale(
@@ -146,6 +148,7 @@ impl LocaleMultibyteValidator {
         } else {
             Some(Self {
                 locale: locale as usize,
+                allow_high_single_byte: codeset.contains("BIG5"),
             })
         }
     }
@@ -162,7 +165,11 @@ impl LocaleMultibyteValidator {
             let mut wide: ctcore::libc::wchar_t = 0;
             let length = mbrtowc(&mut wide, bytes.as_ptr().cast(), bytes.len(), &mut state);
             ctcore::libc::uselocale(previous);
-            if length == usize::MAX || length == usize::MAX - 1 || length <= 1 {
+            if length == usize::MAX
+                || length == usize::MAX - 1
+                || length == 0
+                || (length == 1 && !self.allow_high_single_byte)
+            {
                 None
             } else {
                 char::from_u32(wide).map(|character| (length, character))

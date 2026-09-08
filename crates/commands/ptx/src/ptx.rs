@@ -1274,7 +1274,8 @@ impl WordFilter {
         let word_byte_pattern = arg_reg_bytes
             .as_ref()
             .filter(|pattern| {
-                config.single_byte_locale
+                config.is_ignore_case
+                    || config.single_byte_locale
                     || config.locale_regex_encoding.is_non_utf8_multibyte()
                     || std::str::from_utf8(pattern).is_err()
             })
@@ -1492,6 +1493,7 @@ fn ptx_unescape_bytes(bytes: &[u8]) -> Vec<u8> {
 
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     let mut config = PtxConfig {
+        is_ignore_case: matches.get_flag(ptx_options::PTX_IGNORE_CASE),
         single_byte_locale: ptx_is_single_byte_locale(),
         locale_regex_encoding: LocaleRegexEncoding::from_environment(),
         locale_validator: LocaleMultibyteValidator::from_environment().map(Arc::new),
@@ -1519,7 +1521,8 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         let bytes = ptx_unescape_bytes(reg.as_os_str().as_bytes());
         config.context_pattern_bytes = Some(bytes.clone());
         let byte_mode = std::str::from_utf8(&bytes).is_err();
-        if byte_mode
+        if config.is_ignore_case
+            || byte_mode
             || config.single_byte_locale
             || config.locale_regex_encoding.is_non_utf8_multibyte()
         {
@@ -1541,7 +1544,6 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         config.context_regex = "\n".to_string();
     }
     config.is_right_ref = matches.get_flag(ptx_options::PTX_RIGHT_SIDE_REFS);
-    config.is_ignore_case = matches.get_flag(ptx_options::PTX_IGNORE_CASE);
     if matches.contains_id(ptx_options::PTX_MACRO_NAME) {
         let value = matches
             .get_one::<OsString>(ptx_options::PTX_MACRO_NAME)
@@ -1665,7 +1667,12 @@ fn compile_byte_regex(
     let mut options = RegexOptions::REGEX_OPTION_NONE;
     if ignore_case {
         options |= RegexOptions::REGEX_OPTION_IGNORECASE;
-        if transcode_locale || encoding == LocaleRegexEncoding::SingleByte {
+        if transcode_locale
+            || matches!(
+                encoding,
+                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
+            )
+        {
             // onig exposes this option in onig_sys but omits it from RegexOptions.
             options |= unsafe {
                 RegexOptions::from_bits_unchecked(onig_sys::ONIG_OPTION_IGNORECASE_IS_ASCII)
@@ -4656,7 +4663,8 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
     if bytes.is_empty() {
         return Ok(());
     }
-    if config.single_byte_locale
+    if config.is_ignore_case
+        || config.single_byte_locale
         || config.locale_regex_encoding.is_non_utf8_multibyte()
         || std::str::from_utf8(&bytes).is_err()
     {

@@ -853,6 +853,8 @@ struct FileContent {
     text: String,
     /// 命令输出使用的原始字节。
     raw_text: Vec<u8>,
+    /// 多字节locale下正则不能匹配这些非法UTF-8字节。
+    invalid_utf8_bytes: Vec<bool>,
     chars_text: Vec<char>,
     byte_to_char: Vec<usize>,
     /// 每个物理行在完整文本中的起始字节偏移。
@@ -893,19 +895,60 @@ fn line_index_for_offset(line_starts: &[usize], offset: usize) -> usize {
 
 fn ptx_internal_text(bytes: &[u8], byte_mode: bool) -> String {
     if byte_mode {
-        bytes
-            .iter()
-            .map(|&byte| {
-                if byte.is_ascii() {
-                    char::from(byte)
-                } else {
-                    '\x01'
+        let mut text = String::with_capacity(bytes.len());
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            match std::str::from_utf8(&bytes[offset..]) {
+                Ok(valid) => {
+                    text.push_str(valid);
+                    break;
                 }
-            })
-            .collect()
+                Err(error) => {
+                    let valid_end = offset + error.valid_up_to();
+                    text.push_str(
+                        std::str::from_utf8(&bytes[offset..valid_end])
+                            .expect("validated UTF-8 prefix"),
+                    );
+                    let invalid_len = error.error_len().unwrap_or_else(|| bytes.len() - valid_end);
+                    text.extend(std::iter::repeat_n('\x01', invalid_len));
+                    offset = valid_end + invalid_len;
+                }
+            }
+        }
+        text
     } else {
         String::from_utf8(bytes.to_vec()).expect("validated UTF-8")
     }
+}
+
+fn ptx_internal_byte_text(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|&byte| {
+            if byte.is_ascii() {
+                char::from(byte)
+            } else {
+                '\x01'
+            }
+        })
+        .collect()
+}
+
+fn ptx_invalid_utf8_mask(bytes: &[u8]) -> Vec<bool> {
+    let mut invalid = vec![false; bytes.len()];
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        let Err(error) = std::str::from_utf8(&bytes[offset..]) else {
+            break;
+        };
+        let invalid_start = offset + error.valid_up_to();
+        let invalid_len = error
+            .error_len()
+            .unwrap_or_else(|| bytes.len() - invalid_start);
+        invalid[invalid_start..invalid_start + invalid_len].fill(true);
+        offset = invalid_start + invalid_len;
+    }
+    invalid
 }
 
 fn next_context_end(context_reg: &Regex, text: &str, start: usize) -> usize {
@@ -1059,9 +1102,16 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Resu
             raw_text.extend_from_slice(line);
         }
         let byte_mode = config.force_byte_mode || std::str::from_utf8(&raw_text).is_err();
+        let invalid_utf8_bytes = ptx_invalid_utf8_mask(&raw_text);
         let lines: Vec<String> = raw_lines
             .iter()
-            .map(|line| ptx_internal_text(line, byte_mode))
+            .map(|line| {
+                if config.force_byte_mode {
+                    ptx_internal_byte_text(line)
+                } else {
+                    ptx_internal_text(line, byte_mode)
+                }
+            })
             .collect();
         let mut text = String::new();
         let mut line_starts = Vec::with_capacity(lines.len());
@@ -1094,6 +1144,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> std::io::Resu
             },
             text,
             raw_text,
+            invalid_utf8_bytes,
             chars_text,
             byte_to_char,
             line_starts,
@@ -1162,7 +1213,18 @@ fn ptx_create_word_set(
                 }
                 ranges
             } else {
-                reg.find_iter(context_text).collect()
+                let matches = reg.find_iter(context_text);
+                if config.word_regex.is_some() {
+                    matches
+                        .filter(|&(start, end)| {
+                            !content.invalid_utf8_bytes[context_start + start..context_start + end]
+                                .iter()
+                                .any(|&invalid| invalid)
+                        })
+                        .collect()
+                } else {
+                    matches.collect()
+                }
             };
 
             for (start, end) in matches {
@@ -3306,6 +3368,7 @@ mod tests {
             text.push_str(line);
         }
         let raw_text = text.as_bytes().to_vec();
+        let invalid_utf8_bytes = ptx_invalid_utf8_mask(&raw_text);
         let raw_lines = lines.iter().map(|line| line.as_bytes().to_vec()).collect();
         FileContent {
             filename: filename.to_string(),
@@ -3314,6 +3377,7 @@ mod tests {
             byte_to_char: build_byte_to_char_map(&text),
             text,
             raw_text,
+            invalid_utf8_bytes,
             line_starts,
             chars_lines: lines.iter().map(|line| line.chars().collect()).collect(),
             lines,

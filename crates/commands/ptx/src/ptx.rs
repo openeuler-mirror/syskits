@@ -1374,6 +1374,61 @@ fn ptx_pattern_has_character_class_range(pattern: &[u8]) -> bool {
     false
 }
 
+fn ptx_character_class_has_equivalence_range_endpoint(class: &[u8]) -> bool {
+    if class.len() < 4 {
+        return false;
+    }
+    let content = &class[1..class.len() - 1];
+    let mut index = usize::from(content.first() == Some(&b'^'));
+    if content.get(index) == Some(&b']') {
+        index += 1;
+    }
+    while index < content.len() {
+        let start_symbol = ptx_bracket_symbol_end(content, index);
+        let start_end = start_symbol.map_or(index + 1, |(_, end)| end);
+        let end_start = start_end + 1;
+        if content.get(start_end) == Some(&b'-')
+            && end_start < content.len()
+            && (start_symbol.is_some_and(|(delimiter, _)| delimiter == b'=')
+                || ptx_bracket_symbol_end(content, end_start)
+                    .is_some_and(|(delimiter, _)| delimiter == b'='))
+        {
+            return true;
+        }
+        index = start_end;
+    }
+    false
+}
+
+fn ptx_pattern_has_equivalence_range_endpoint(pattern: &[u8]) -> bool {
+    let mut index = 0usize;
+    let mut escaped = false;
+    while index < pattern.len() {
+        let byte = pattern[index];
+        if escaped {
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        if byte == b'\\' {
+            escaped = true;
+            index += 1;
+            continue;
+        }
+        if byte == b'['
+            && let Some(end) = ptx_character_class_end(pattern, index)
+        {
+            if ptx_character_class_has_equivalence_range_endpoint(&pattern[index..=end]) {
+                return true;
+            }
+            index = end + 1;
+            continue;
+        }
+        index += 1;
+    }
+    false
+}
+
 fn ptx_push_onig_candidate_alternation(output: &mut Vec<u8>, candidates: &[Vec<u8>]) {
     if candidates.is_empty() {
         output.extend_from_slice(b"(?:(?!)\\x00)");
@@ -5228,11 +5283,21 @@ fn ptx_file_io_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
 }
 
 fn ptx_invalid_regex_error(pattern: &[u8]) -> Box<dyn CTError> {
+    ptx_regex_error(b"Invalid regular expression", pattern)
+}
+
+fn ptx_invalid_range_end_error(pattern: &[u8]) -> Box<dyn CTError> {
+    ptx_regex_error(b"Invalid range end", pattern)
+}
+
+fn ptx_regex_error(message: &[u8], pattern: &[u8]) -> Box<dyn CTError> {
     let byte_ctype = LocaleByteCtype::from_environment();
     let quoted = ptx_quote_pattern(pattern, &byte_ctype, ptx_is_single_byte_locale());
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
-    let _ = stderr.write_all(b": Invalid regular expression (for regexp ");
+    let _ = stderr.write_all(b": ");
+    let _ = stderr.write_all(message);
+    let _ = stderr.write_all(b" (for regexp ");
     let _ = stderr.write_all(&quoted);
     let _ = stderr.write_all(b")\n");
     CtSimpleError::new(1, "")
@@ -5361,6 +5426,18 @@ impl PtxSettings {
             if config
                 .context_pattern_bytes
                 .as_deref()
+                .is_some_and(ptx_pattern_has_equivalence_range_endpoint)
+            {
+                return Err(ptx_invalid_range_end_error(
+                    config
+                        .context_pattern_bytes
+                        .as_deref()
+                        .expect("checked context regexp"),
+                ));
+            }
+            if config
+                .context_pattern_bytes
+                .as_deref()
                 .is_some_and(ptx_has_chained_character_class_range)
             {
                 return Err(ptx_invalid_regex_error(
@@ -5431,6 +5508,9 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
     let bytes = ptx_unescape_bytes(value.as_os_str().as_bytes());
     if bytes.is_empty() {
         return Ok(());
+    }
+    if ptx_pattern_has_equivalence_range_endpoint(&bytes) {
+        return Err(ptx_invalid_range_end_error(&bytes));
     }
     if ptx_has_chained_character_class_range(&bytes) {
         return Err(ptx_invalid_regex_error(&bytes));

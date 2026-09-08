@@ -338,7 +338,7 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8]) -> Vec<u8> {
             translated.push(b'[');
             translated.push(b'\\');
         } else {
-            if !in_bracket && matches!(byte, b'(' | b')' | b'|') {
+            if !in_bracket && matches!(byte, b'(' | b')' | b'|' | b'{' | b'}') {
                 translated.push(b'\\');
             }
             translated.push(byte);

@@ -4649,6 +4649,133 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -G input output-extra extra-operand；输入为input=alpha beta\\n（11字节）；output-extra=sentinel（8字节）；预期RC=1、stderr为\"/usr/bin/ptx: extra operand 'extra-operand'\\nTry '/usr/bin/ptx --help' for more information.\\n\"，stdout为0条换行分隔、共0字节的roff索引；对应Cargo用例ptx_traditional_output_is_opened_before_later_failures第1次调用",
+      "args": [
+        "-G",
+        "input",
+        "output-extra",
+        "extra-operand"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\145\\170\\164\\162\\141'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\163\\145\\156\\164\\151\\156\\145\\154' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "/usr/bin/ptx: extra operand 'extra-operand'\nTry '/usr/bin/ptx --help' for more information.\n"
+        },
+        "verifications": [
+          {
+            "command": "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\145\\170\\164\\162\\141'); if [ -e \"$p\" ] || [ -L \"$p\" ]; then od -An -v -tx1 \"$p\" | tr -d ' \\n'; else printf missing; fi",
+            "expected_exit": 0,
+            "expected_stdout": "",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -G -W [ input output-regexp；输入为input=alpha beta\\n（11字节）；output-extra=（0字节）；output-regexp=sentinel（8字节）；预期RC=1、stderr为\"/usr/bin/ptx: Invalid regular expression (for regexp '[')\\n\"，stdout为0条换行分隔、共0字节的roff索引；对应Cargo用例ptx_traditional_output_is_opened_before_later_failures第2次调用",
+      "args": [
+        "-G",
+        "-W",
+        "[",
+        "input",
+        "output-regexp"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\145\\170\\164\\162\\141'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\162\\145\\147\\145\\170\\160'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\163\\145\\156\\164\\151\\156\\145\\154' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "/usr/bin/ptx: Invalid regular expression (for regexp '[')\n"
+        },
+        "verifications": [
+          {
+            "command": "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\162\\145\\147\\145\\170\\160'); if [ -e \"$p\" ] || [ -L \"$p\" ]; then od -An -v -tx1 \"$p\" | tr -d ' \\n'; else printf missing; fi",
+            "expected_exit": 0,
+            "expected_stdout": "",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -G missing-input output-input；输入为input=alpha beta\\n（11字节）；output-extra=（0字节）；output-input=sentinel（8字节）；output-regexp=（0字节）；预期RC=1、stderr为\"/usr/bin/ptx: missing-input: No such file or directory\\n\"，stdout为0条换行分隔、共0字节的roff索引；对应Cargo用例ptx_traditional_output_is_opened_before_later_failures第3次调用",
+      "args": [
+        "-G",
+        "missing-input",
+        "output-input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\145\\170\\164\\162\\141'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\163\\145\\156\\164\\151\\156\\145\\154' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\162\\145\\147\\145\\170\\160'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "/usr/bin/ptx: missing-input: No such file or directory\n"
+        },
+        "verifications": [
+          {
+            "command": "p=$(printf '%b' '\\157\\165\\164\\160\\165\\164\\055\\151\\156\\160\\165\\164'); if [ -e \"$p\" ] || [ -L \"$p\" ]; then od -An -v -tx1 \"$p\" | tr -d ' \\n'; else printf missing; fi",
+            "expected_exit": 0,
+            "expected_stdout": "",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -G -W [ input missing/output；输入为gnu/input=alpha beta\\n（11字节）；gnu/output-extra=（0字节）；gnu/output-input=（0字节）；gnu/output-regexp=（0字节）；input=alpha beta\\n（11字节）；syskits/input=alpha beta\\n（11字节）；syskits/output-extra=（0字节）；syskits/output-input=（0字节）；syskits/output-regexp=（0字节）；预期RC=1、stderr为\"/usr/bin/ptx: missing/output: No such file or directory\\n\"，stdout为0条换行分隔、共0字节的roff索引；对应Cargo用例ptx_traditional_output_is_opened_before_later_failures第4次调用",
+      "args": [
+        "-G",
+        "-W",
+        "[",
+        "input",
+        "missing/output"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\147\\156\\165\\057\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\147\\156\\165\\057\\157\\165\\164\\160\\165\\164\\055\\145\\170\\164\\162\\141'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\147\\156\\165\\057\\157\\165\\164\\160\\165\\164\\055\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\147\\156\\165\\057\\157\\165\\164\\160\\165\\164\\055\\162\\145\\147\\145\\170\\160'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\171\\163\\153\\151\\164\\163\\057\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\141\\154\\160\\150\\141\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\171\\163\\153\\151\\164\\163\\057\\157\\165\\164\\160\\165\\164\\055\\145\\170\\164\\162\\141'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\171\\163\\153\\151\\164\\163\\057\\157\\165\\164\\160\\165\\164\\055\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\"",
+        "p=$(printf '%b' '\\163\\171\\163\\153\\151\\164\\163\\057\\157\\165\\164\\160\\165\\164\\055\\162\\145\\147\\145\\170\\160'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "/usr/bin/ptx: missing/output: No such file or directory\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

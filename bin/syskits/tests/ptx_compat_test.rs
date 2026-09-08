@@ -168,3 +168,45 @@ fn ptx_reports_stdout_write_errors() {
         b"ptx: write error: No space left on device\n"
     );
 }
+
+#[test]
+fn ptx_terminating_options_skip_numeric_validation() {
+    let cases = [
+        (["--help", "-w", "bad"], true),
+        (["--he", "--width=bad", ""], true),
+        (["--version", "-g", "bad"], false),
+        (["--ver", "--gap-size=bad", ""], false),
+    ];
+
+    for posixly_correct in [false, true] {
+        for (args, is_help) in cases {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+            command
+                .arg("ptx")
+                .args(args.iter().filter(|arg| !arg.is_empty()));
+            if posixly_correct {
+                command.env("POSIXLY_CORRECT", "1");
+            } else {
+                command.env_remove("POSIXLY_CORRECT");
+            }
+
+            let output = command.output().expect("run syskits ptx");
+            assert_eq!(output.status.code(), Some(0), "args={args:?}");
+            assert!(output.stderr.is_empty(), "args={args:?}");
+            let stdout = String::from_utf8(output.stdout).expect("UTF-8 stdout");
+            if is_help {
+                assert!(
+                    stdout.starts_with("Produce a permuted index of file contents\n"),
+                    "args={args:?}"
+                );
+                assert!(stdout.contains("Usage: ptx"), "args={args:?}");
+            } else {
+                assert_eq!(
+                    stdout,
+                    format!("ptx {}\n", env!("CARGO_PKG_VERSION")),
+                    "args={args:?}"
+                );
+            }
+        }
+    }
+}

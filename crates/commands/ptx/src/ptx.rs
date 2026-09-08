@@ -3800,6 +3800,11 @@ fn validate_ptx_width_occurrences(args: &[OsString]) -> CTResult<()> {
             let Some(option) = ptx_canonical_long_option(name) else {
                 break;
             };
+            // GNU exits as soon as getopt encounters either terminal option,
+            // so later numeric options must not be prevalidated.
+            if matches!(option, b"help" | b"version") {
+                return Ok(());
+            }
             if matches!(option, b"width" | b"gap-size") {
                 let value = match attached {
                     Some(value) => value,

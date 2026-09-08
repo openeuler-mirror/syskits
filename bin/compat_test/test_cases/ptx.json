@@ -3145,6 +3145,50 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -W . input；输入为input=é x\\n（5字节 c3a920780a）；预期RC=0、stderr为空，stdout十六进制解码为4条换行分隔、共170字节的dumb索引，首条stdout可读为“                                  é    x\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\303\\251\\040\\170\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "20202020202020202020202020202020202020202020202020202020202020202020c3a920202020780a20202020202020202020202020202020202020202020202020202020202020202020c3a9202020780a2020202020202020202020202020202020202020202020202020202020202020202020c3202020a920780a202020202020202020202020202020202020202020202020202020202020202020202020202020c3a920780a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W . input；输入为input=é x\\n（5字节）；预期RC=0、stderr为空，stdout为3条换行分隔、共127字节的dumb索引；对应Cargo用例ptx_custom_regexps_follow_locale_character_width第2次调用",
+      "args": [
+        "-W",
+        ".",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C.UTF-8'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\303\\251\\040\\170\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                  é    x\n                                  é   x\n                                       é x\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -52,6 +52,17 @@ fn ptx_is_space_char(ch: char) -> bool {
     u8::try_from(ch).is_ok_and(ptx_is_space_byte)
 }
 
+fn ptx_is_single_byte_locale() -> bool {
+    let locale = std::env::var("LC_ALL")
+        .ok()
+        .or_else(|| std::env::var("LC_CTYPE").ok())
+        .or_else(|| std::env::var("LANG").ok())
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_uppercase();
+    locale == "C" || locale == "POSIX"
+}
+
 #[derive(Debug)]
 struct Regex {
     search: OnigRegex,
@@ -257,6 +268,8 @@ struct PtxConfig {
     word_byte_regex: Option<ByteRegex>,
     /// 保证内部文本偏移与原始字节一一对应。
     force_byte_mode: bool,
+    /// C/POSIX locale中的GNU正则按单字节执行。
+    single_byte_locale: bool,
 }
 
 impl Default for PtxConfig {
@@ -279,6 +292,7 @@ impl Default for PtxConfig {
             word_regex: None,
             word_byte_regex: None,
             force_byte_mode: false,
+            single_byte_locale: false,
             line_width: 72,
             gap_size: 3,
         }
@@ -453,7 +467,7 @@ impl WordFilter {
         let uses_custom_regex = arg_reg_bytes.is_some();
         let word_byte_pattern = arg_reg_bytes
             .as_ref()
-            .filter(|pattern| std::str::from_utf8(pattern).is_err())
+            .filter(|pattern| config.single_byte_locale || std::str::from_utf8(pattern).is_err())
             .map(|pattern| gnu_emacs_regex_to_onig_bytes(pattern));
         let arg_reg = arg_reg_bytes.as_ref().map(|bytes| {
             let byte_mode = std::str::from_utf8(bytes).is_err();
@@ -659,7 +673,10 @@ fn ptx_unescape_bytes(bytes: &[u8]) -> Vec<u8> {
 }
 
 fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
-    let mut config = PtxConfig::default();
+    let mut config = PtxConfig {
+        single_byte_locale: ptx_is_single_byte_locale(),
+        ..Default::default()
+    };
     let err_msg = "parsing options failed";
     if matches.get_flag(ptx_options::PTX_TRADITIONAL) {
         config.is_gnu_ext = false;
@@ -669,7 +686,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     if let Some(reg) = matches.get_one::<OsString>(ptx_options::PTX_SENTENCE_REGEXP) {
         let bytes = ptx_unescape_bytes(reg.as_os_str().as_bytes());
         let byte_mode = std::str::from_utf8(&bytes).is_err();
-        if byte_mode {
+        if byte_mode || config.single_byte_locale {
             config.context_byte_pattern = Some(gnu_emacs_regex_to_onig_bytes(&bytes));
             config.force_byte_mode = true;
         }

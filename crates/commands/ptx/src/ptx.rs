@@ -149,6 +149,31 @@ impl LocaleRegexEncoding {
         self != Self::Ascii
     }
 
+    fn valid_character_len(self, bytes: &[u8]) -> Option<usize> {
+        let &first = bytes.first()?;
+        if first.is_ascii() || self == Self::Ascii {
+            return Some(1);
+        }
+        let encoding = self.onig_encoding()?;
+        let mut probe = [0u8; 4];
+        let available = bytes.len().min(probe.len());
+        probe[..available].copy_from_slice(&bytes[..available]);
+        unsafe {
+            let encoding = &*encoding;
+            let encoded_length = encoding
+                .mbc_enc_len
+                .expect("Oniguruma encoding must provide character lengths");
+            let is_valid = encoding
+                .is_valid_mbc_string
+                .expect("Oniguruma encoding must validate byte strings");
+            let length = usize::try_from(encoded_length(probe.as_ptr())).ok()?;
+            if length <= 1 || length > bytes.len() || length > probe.len() {
+                return None;
+            }
+            (is_valid(probe.as_ptr(), probe.as_ptr().add(length)) != 0).then_some(length)
+        }
+    }
+
     fn mark_valid_multibyte_sequences(self, bytes: &[u8], printable: &mut [bool]) {
         let Some(encoding) = self.onig_encoding() else {
             return;
@@ -2097,6 +2122,13 @@ fn ptx_skip_something_bytes(
         return cursor;
     }
     if let Some(regex) = &config.word_byte_regex {
+        if regex
+            .encoding
+            .valid_character_len(&bytes[cursor..limit])
+            .is_none()
+        {
+            return cursor + 1;
+        }
         return regex
             .find_at(&bytes[cursor..limit], 0)
             .filter(|&(start, end)| start == 0 && end > 0)

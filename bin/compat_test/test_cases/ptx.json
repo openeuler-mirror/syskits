@@ -4949,6 +4949,135 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C，执行ptx -A -r -S  input；输入为input=R1\\xff\\nR2 alpha\\nR3 beta\\n（21字节 5231ff0a523220616c7068610a523320626574610a）；预期RC=0、stderr为空，stdout十六进制解码为3条换行分隔、共159字节的dumb索引，首条stdout可读为“input:1:                                 R2 alpha R3 beta\\n”；JSON中的十六进制stdout表示该命令的完整标准输出并逐字节保留非UTF-8或NUL数据",
+      "args": [
+        "2d41",
+        "2d72",
+        "2d53",
+        "",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\377\\012\\122\\062\\040\\141\\154\\160\\150\\141\\012\\122\\063\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "696e7075743a313a202020202020202020202020202020202020202020202020202020202020202020523220616c70686120523320626574610a696e7075743a313a202020202020202020202020202020202020202020202020202020205232202020616c70686120523320626574610a696e7075743a323a20202020202020202020202020202020202020523220616c706861205233202020626574610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -r input；输入为input=R1\\nR2 beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共89字节的dumb索引；对应Cargo用例ptx_input_reference_scanning_matches_gnu_state_transitions第1次调用",
+      "args": [
+        "-r",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "R1                                    R2 beta\nR1                               R2   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -R -r input；输入为input=R1\\nR2 beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共156字节的dumb索引；对应Cargo用例ptx_input_reference_scanning_matches_gnu_state_transitions第2次调用",
+      "args": [
+        "-R",
+        "-r",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                    R2 beta                                R1\n                               R2   beta                                   R1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -A -r input；输入为input=R1\\nR2 beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共95字节的dumb索引；对应Cargo用例ptx_input_reference_scanning_matches_gnu_state_transitions第3次调用",
+      "args": [
+        "-A",
+        "-r",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "input:1:                                 R2 beta\ninput:1:                            R2   beta\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -O -r input；输入为input=R1\\nR2 beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共55字节的roff索引；对应Cargo用例ptx_input_reference_scanning_matches_gnu_state_transitions第4次调用",
+      "args": [
+        "-O",
+        "-r",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \"R2 beta\" \"\" \"R1\"\n.xx \"\" \"R2\" \"beta\" \"\" \"R1\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -r input；输入为input=R1\\nR2 beta\\n（11字节）；预期RC=0、stderr为空，stdout为2条换行分隔、共51字节的TeX索引；对应Cargo用例ptx_input_reference_scanning_matches_gnu_state_transitions第5次调用",
+      "args": [
+        "-T",
+        "-r",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "p=$(printf '%b' '\\151\\156\\160\\165\\164'); parent=${p%/*}; if [ \"$parent\" != \"$p\" ]; then mkdir -p -- \"$parent\"; fi; printf '%b' '\\122\\061\\012\\122\\062\\040\\142\\145\\164\\141\\012' > \"$p\"; chmod 644 -- \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{R}{2 beta}{}{R1}\n\\xx {}{R2}{beta}{}{}{R1}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

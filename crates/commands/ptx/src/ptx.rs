@@ -675,6 +675,10 @@ struct WordRef {
     /// 当前上下文在完整文件字符数组中的结束位置
     context_char_end: usize,
     file_index: usize,
+    /// GNU输入引用扫描器为该关键字保存的原始引用字节。
+    input_reference: Vec<u8>,
+    /// 自动引用使用的GNU逻辑行号；与-r组合时可能不同于物理行号。
+    reference_line_nr: usize,
 }
 
 fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
@@ -1168,13 +1172,6 @@ fn ptx_input_reference_span(line: &str) -> Option<(usize, usize)> {
     Some((0, end))
 }
 
-fn ptx_input_reference_text(line: &str) -> &str {
-    match ptx_input_reference_span(line) {
-        Some((start, end)) => &line[start..end],
-        None => "",
-    }
-}
-
 fn ptx_input_reference_content_start(line: &str) -> usize {
     let content_base = ptx_input_reference_span(line).map_or(0, |(_, end)| end);
     let mut start = content_base;
@@ -1330,6 +1327,18 @@ fn ptx_create_word_set(
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
 
     for (file_idx, content) in file_map.iter().enumerate() {
+        let mut reference_line_start = 0usize;
+        let mut reference_scan = 0usize;
+        let mut reference_length = 0usize;
+        let mut reference_line_nr = 0usize;
+        if config.is_input_ref {
+            reference_scan =
+                ptx_skip_non_white_bytes(&content.raw_text, reference_scan, content.raw_text.len());
+            reference_length = reference_scan - reference_line_start;
+            reference_scan =
+                ptx_skip_white_bytes(&content.raw_text, reference_scan, content.raw_text.len());
+        }
+
         let mut context_start = 0usize;
         while context_start < content.raw_text.len() {
             let (context_end_raw, context_end) = if let Some(byte_regex) =
@@ -1344,18 +1353,7 @@ fn ptx_create_word_set(
                 (raw_end, end)
             };
             let context_text = &content.text[context_start..context_end];
-            let output_context_start = if config.is_input_ref {
-                let context_line_nr = line_index_for_offset(&content.line_starts, context_start);
-                let context_line_start = content.line_starts[context_line_nr];
-                if context_line_start == context_start {
-                    context_start
-                        + ptx_input_reference_content_start(&content.lines[context_line_nr])
-                } else {
-                    context_start
-                }
-            } else {
-                context_start
-            };
+            let mut output_context_start = context_start;
 
             let matches: Vec<(usize, usize)> = if let Some(byte_regex) = &config.word_byte_regex {
                 byte_regex
@@ -1422,10 +1420,23 @@ fn ptx_create_word_set(
                 let (global_beg, global_end) = (context_start + start, context_start + end);
                 let local_line_nr = line_index_for_offset(&content.line_starts, global_beg);
                 let line_start = content.line_starts[local_line_nr];
-                let line = &content.lines[local_line_nr];
                 if config.is_input_ref {
-                    let reference_content_start = ptx_input_reference_content_start(line);
-                    if global_beg < line_start + reference_content_start {
+                    while reference_scan < global_beg {
+                        if content.raw_text[reference_scan] == b'\n' {
+                            reference_line_nr += 1;
+                            reference_scan += 1;
+                            reference_line_start = reference_scan;
+                            reference_scan = ptx_skip_non_white_bytes(
+                                &content.raw_text,
+                                reference_scan,
+                                content.raw_text.len(),
+                            );
+                            reference_length = reference_scan - reference_line_start;
+                        } else {
+                            reference_scan += 1;
+                        }
+                    }
+                    if reference_scan > global_beg {
                         continue;
                     }
                 }
@@ -1450,6 +1461,15 @@ fn ptx_create_word_set(
                     word = filter_word;
                 }
 
+                if config.is_input_ref && reference_line_start == output_context_start {
+                    output_context_start = ptx_skip_non_white_bytes(
+                        &content.raw_text,
+                        output_context_start,
+                        context_end,
+                    );
+                    output_context_start =
+                        ptx_skip_white_bytes(&content.raw_text, output_context_start, context_end);
+                }
                 let global_char_position = content.byte_to_char[global_beg];
                 let global_char_position_end = content.byte_to_char[global_end];
                 let context_char_start = content.byte_to_char[output_context_start];
@@ -1470,6 +1490,18 @@ fn ptx_create_word_set(
                     global_char_position_end,
                     context_char_start,
                     context_char_end,
+                    input_reference: if config.is_input_ref {
+                        content.raw_text
+                            [reference_line_start..reference_line_start + reference_length]
+                            .to_vec()
+                    } else {
+                        Vec::new()
+                    },
+                    reference_line_nr: if config.is_input_ref {
+                        reference_line_nr
+                    } else {
+                        local_line_nr
+                    },
                 });
             }
 
@@ -1496,13 +1528,14 @@ fn ptx_get_reference(
     config: &PtxConfig,
     word_ref: &WordRef,
     file_name: &str,
-    line: &str,
+    _line: &str,
     _context_reg: &Regex,
 ) -> String {
     if config.is_auto_ref {
-        format!("{}:{}", file_name, word_ref.local_line_nr + 1)
+        format!("{}:{}", file_name, word_ref.reference_line_nr + 1)
     } else if config.is_input_ref {
-        ptx_input_reference_text(line).to_string()
+        let byte_mode = std::str::from_utf8(&word_ref.input_reference).is_err();
+        ptx_internal_text(&word_ref.input_reference, byte_mode)
     } else {
         String::new()
     }
@@ -1516,14 +1549,10 @@ fn ptx_get_reference_bytes(
     if config.is_auto_ref {
         let mut reference = content.raw_filename.clone();
         reference.push(b':');
-        reference.extend_from_slice((word_ref.local_line_nr + 1).to_string().as_bytes());
+        reference.extend_from_slice((word_ref.reference_line_nr + 1).to_string().as_bytes());
         reference
     } else if config.is_input_ref {
-        content.raw_lines[word_ref.local_line_nr]
-            .iter()
-            .copied()
-            .take_while(|&byte| !ptx_is_space_byte(byte))
-            .collect()
+        word_ref.input_reference.clone()
     } else {
         Vec::new()
     }
@@ -1912,6 +1941,13 @@ fn ptx_is_default_word_byte(config: &PtxConfig, byte: u8) -> bool {
 
 fn ptx_skip_white_bytes(bytes: &[u8], mut cursor: usize, limit: usize) -> usize {
     while cursor < limit && ptx_is_space_byte(bytes[cursor]) {
+        cursor += 1;
+    }
+    cursor
+}
+
+fn ptx_skip_non_white_bytes(bytes: &[u8], mut cursor: usize, limit: usize) -> usize {
+    while cursor < limit && !ptx_is_space_byte(bytes[cursor]) {
         cursor += 1;
     }
     cursor
@@ -4031,6 +4067,8 @@ mod tests {
             context_char_start: 0,
             context_char_end: 0,
             file_index: 0,
+            input_reference: Vec::new(),
+            reference_line_nr: local_line_nr,
         }
     }
 
@@ -4684,10 +4722,7 @@ mod tests {
             };
             let file_map = vec![test_file_content(
                 "test.txt",
-                vec![
-                    "openssl,https://githubs.com/openssl/openssl.git".to_string(),
-                    "ref hello world".to_string(),
-                ],
+                vec!["source openssl".to_string(), "ref hello world".to_string()],
                 0,
             )];
 
@@ -4696,8 +4731,9 @@ mod tests {
                 .map(|word_ref| word_ref.word)
                 .collect();
 
-            assert!(!words.iter().any(|word| word == "openssl"));
+            assert!(!words.iter().any(|word| word == "source"));
             assert!(!words.iter().any(|word| word == "ref"));
+            assert!(words.iter().any(|word| word == "openssl"));
             assert!(words.iter().any(|word| word == "hello"));
             assert!(words.iter().any(|word| word == "world"));
         }
@@ -4731,7 +4767,10 @@ mod tests {
                 ..Default::default()
             };
 
-            let word_ref = WordRef::default();
+            let word_ref = WordRef {
+                input_reference: b"123".to_vec(),
+                ..WordRef::default()
+            };
             let context_reg = Regex::new(&config.context_regex).unwrap();
             let reference = ptx_get_reference(
                 &config,

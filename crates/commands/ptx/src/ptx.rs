@@ -425,6 +425,15 @@ fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8]) -> Vec<u8> {
             if !in_bracket && matches!(byte, b'(' | b')' | b'|') {
                 translated.pop();
                 translated.push(byte);
+            } else if !in_bracket && matches!(byte, b'<' | b'>' | b'`' | b'\'') {
+                translated.pop();
+                match byte {
+                    b'<' => translated.extend_from_slice(b"(?<!\\w)(?=\\w)"),
+                    b'>' => translated.extend_from_slice(b"(?<=\\w)(?!\\w)"),
+                    b'`' => translated.extend_from_slice(b"\\A"),
+                    b'\'' => translated.extend_from_slice(b"\\z"),
+                    _ => unreachable!(),
+                }
             } else {
                 translated.push(byte);
             }

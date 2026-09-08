@@ -350,6 +350,8 @@ struct PtxConfig {
     macro_bytes: Vec<u8>,
     /// 上下文正则表达式
     context_regex: String,
+    /// 用户指定的上下文正则原始字节，用于GNU兼容诊断。
+    context_pattern_bytes: Option<Vec<u8>>,
     /// 非UTF-8上下文正则的原始字节模式及编译结果。
     context_byte_pattern: Option<Vec<u8>>,
     context_byte_regex: Option<ByteRegex>,
@@ -381,6 +383,7 @@ impl Default for PtxConfig {
             trunc_str: "/".to_owned(),
             trunc_bytes: b"/".to_vec(),
             context_regex: GNU_DEFAULT_CONTEXT_REGEX.to_owned(),
+            context_pattern_bytes: None,
             context_byte_pattern: None,
             context_byte_regex: None,
             word_break_bytes: None,
@@ -792,6 +795,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     }
     if let Some(reg) = matches.get_one::<OsString>(ptx_options::PTX_SENTENCE_REGEXP) {
         let bytes = ptx_unescape_bytes(reg.as_os_str().as_bytes());
+        config.context_pattern_bytes = Some(bytes.clone());
         let byte_mode = std::str::from_utf8(&bytes).is_err();
         if byte_mode || config.single_byte_locale {
             config.context_byte_pattern = Some(gnu_emacs_regex_to_onig_bytes(&bytes));
@@ -3409,11 +3413,13 @@ fn ptx_render_error_text(err: &dyn CTError) -> String {
     stderr
 }
 
-fn ptx_zero_length_regex_error(pattern: &str) -> Box<dyn CTError> {
-    CtSimpleError::new(
-        1,
-        format!("error: regular expression has a match of length zero: '{pattern}'"),
-    )
+fn ptx_zero_length_regex_error(pattern: &[u8]) -> Box<dyn CTError> {
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+    let _ = stderr.write_all(b": error: regular expression has a match of length zero: '");
+    let _ = stderr.write_all(pattern);
+    let _ = stderr.write_all(b"'\n");
+    CtSimpleError::new(1, "")
 }
 
 fn ptx_semantic_rows_for_settings(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
@@ -3544,7 +3550,11 @@ impl PtxSettings {
             )
         });
         if has_boundary_match {
-            return Err(ptx_zero_length_regex_error(&config.context_regex));
+            let pattern = config
+                .context_pattern_bytes
+                .as_deref()
+                .unwrap_or(config.context_regex.as_bytes());
+            return Err(ptx_zero_length_regex_error(pattern));
         }
 
         // 创建单词集合

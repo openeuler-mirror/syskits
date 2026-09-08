@@ -2291,6 +2291,37 @@ fn ptx_effective_line_width(config: &PtxConfig, reference_max_width: usize) -> u
     }
 }
 
+fn ptx_auto_reference_max_width(settings: &PtxSettings) -> usize {
+    settings
+        .file_map
+        .iter()
+        .map(|content| {
+            let line_ordinal = content.raw_lines.len().max(1) + 1;
+            content.raw_filename.len() + 1 + line_ordinal.to_string().len()
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+fn ptx_reference_max_width_bytes(settings: &PtxSettings) -> usize {
+    if settings.config.is_auto_ref {
+        return ptx_auto_reference_max_width(settings);
+    }
+    if !settings.config.is_input_ref {
+        return 0;
+    }
+
+    settings
+        .words
+        .iter()
+        .map(|word_ref| {
+            let content = &settings.file_map[word_ref.file_index];
+            ptx_get_reference_bytes(&settings.config, word_ref, content).len()
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 fn ptx_display_field(s: &str) -> String {
     s.chars()
         .map(|c| if ptx_is_space_char(c) { ' ' } else { c })
@@ -2764,16 +2795,7 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
             Box::new(stdout())
         });
 
-    let mut reference_max_width = 0usize;
-    if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
-    {
-        for word_ref in &settings.words {
-            // 通过索引直接获取文件内容
-            let content = &settings.file_map[word_ref.file_index];
-            let reference = ptx_get_reference_bytes(&settings.config, word_ref, content);
-            reference_max_width = reference_max_width.max(reference.len());
-        }
-    }
+    let reference_max_width = ptx_reference_max_width_bytes(settings);
     let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
 
     for word_ref in &settings.words {
@@ -2821,9 +2843,11 @@ fn ptx_exec(settings: &PtxSettings) -> CTResult<()> {
 }
 
 fn ptx_reference_max_width(settings: &PtxSettings, context_reg: &Regex) -> usize {
+    if settings.config.is_auto_ref {
+        return ptx_auto_reference_max_width(settings);
+    }
     let mut reference_max_width = 0usize;
-    if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
-    {
+    if settings.config.is_input_ref {
         for word_ref in &settings.words {
             let content = &settings.file_map[word_ref.file_index];
             let reference = ptx_get_reference(
@@ -2949,15 +2973,7 @@ fn ptx_collect_semantic_rows(settings: &PtxSettings) -> Vec<PtxSemanticRow> {
 }
 
 fn ptx_exec_to_writer(settings: &PtxSettings, writer: &mut impl Write) -> CTResult<()> {
-    let mut reference_max_width = 0usize;
-    if settings.config.is_auto_ref || settings.config.is_input_ref || !settings.config.is_right_ref
-    {
-        for word_ref in &settings.words {
-            let file_map_value = &settings.file_map[word_ref.file_index];
-            let reference = ptx_get_reference_bytes(&settings.config, word_ref, file_map_value);
-            reference_max_width = reference_max_width.max(reference.len());
-        }
-    }
+    let reference_max_width = ptx_reference_max_width_bytes(settings);
     let effective_line_width = ptx_effective_line_width(&settings.config, reference_max_width);
 
     for word_ref in &settings.words {

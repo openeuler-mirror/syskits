@@ -3088,12 +3088,42 @@ fn ptx_maximum_word_length_in_bytes(bytes: &[u8], config: &PtxConfig) -> usize {
             .max()
             .unwrap_or(0);
     }
-    if let (Some(regex), Ok(text)) = (&config.word_regex, std::str::from_utf8(bytes)) {
-        return regex
-            .find_iter(text)
-            .map(|(start, end)| end - start)
-            .max()
-            .unwrap_or(0);
+    if let Some(regex) = &config.word_regex {
+        let mut max_len = 0usize;
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            match std::str::from_utf8(&bytes[offset..]) {
+                Ok(text) => {
+                    max_len = max_len.max(
+                        regex
+                            .find_iter(text)
+                            .map(|(start, end)| end - start)
+                            .max()
+                            .unwrap_or(0),
+                    );
+                    break;
+                }
+                Err(error) => {
+                    let valid_len = error.valid_up_to();
+                    if valid_len > 0 {
+                        let text = std::str::from_utf8(&bytes[offset..offset + valid_len])
+                            .expect("validated UTF-8 prefix");
+                        max_len = max_len.max(
+                            regex
+                                .find_iter(text)
+                                .map(|(start, end)| end - start)
+                                .max()
+                                .unwrap_or(0),
+                        );
+                    }
+                    let invalid_len = error
+                        .error_len()
+                        .unwrap_or_else(|| bytes.len() - offset - valid_len);
+                    offset += valid_len + invalid_len;
+                }
+            }
+        }
+        return max_len;
     }
     let mut max_len = 0usize;
     let mut cursor = 0usize;
@@ -3312,14 +3342,19 @@ fn ptx_skip_something_bytes(
             .filter(|&(start, end)| start == 0 && end > 0)
             .map_or(cursor + 1, |(_, end)| cursor + end);
     }
-    if let (Some(regex), Ok(segment)) = (
-        &config.word_regex,
-        std::str::from_utf8(&bytes[cursor..limit]),
-    ) {
-        return regex
-            .find(segment)
-            .filter(|&(start, end)| start == 0 && end > 0)
-            .map_or(cursor + 1, |(_, end)| cursor + end);
+    if let Some(regex) = &config.word_regex {
+        let remaining = &bytes[cursor..limit];
+        let valid_len =
+            std::str::from_utf8(remaining).map_or_else(|error| error.valid_up_to(), str::len);
+        if valid_len > 0 {
+            let segment =
+                std::str::from_utf8(&remaining[..valid_len]).expect("validated UTF-8 prefix");
+            return regex
+                .find(segment)
+                .filter(|&(start, end)| start == 0 && end > 0)
+                .map_or(cursor + 1, |(_, end)| cursor + end);
+        }
+        return cursor + 1;
     }
 
     let mut next = cursor;

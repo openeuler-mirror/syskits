@@ -79,6 +79,7 @@ fn ptx_is_single_byte_locale() -> bool {
 #[derive(Debug)]
 struct LocaleByteCtype {
     alpha: [bool; 256],
+    print: [bool; 256],
     upper: [u8; 256],
 }
 
@@ -86,6 +87,7 @@ impl LocaleByteCtype {
     fn from_environment() -> Self {
         let mut table = Self {
             alpha: std::array::from_fn(|index| (index as u8).is_ascii_alphabetic()),
+            print: std::array::from_fn(|index| (index as u8).is_ascii_graphic() || index == 32),
             upper: std::array::from_fn(|index| (index as u8).to_ascii_uppercase()),
         };
         let Ok(locale_name) = CString::new(ptx_locale_name().as_encoded_bytes()) else {
@@ -103,6 +105,7 @@ impl LocaleByteCtype {
             }
             for byte in 0u16..=255 {
                 table.alpha[usize::from(byte)] = isalpha_l(i32::from(byte), locale) != 0;
+                table.print[usize::from(byte)] = isprint_l(i32::from(byte), locale) != 0;
                 table.upper[usize::from(byte)] = toupper_l(i32::from(byte), locale) as u8;
             }
             ctcore::libc::freelocale(locale);
@@ -114,6 +117,10 @@ impl LocaleByteCtype {
         self.alpha[usize::from(byte)]
     }
 
+    fn is_print(&self, byte: u8) -> bool {
+        self.print[usize::from(byte)]
+    }
+
     fn uppercase(&self, bytes: &mut [u8]) {
         for byte in bytes {
             *byte = self.upper[usize::from(*byte)];
@@ -123,6 +130,10 @@ impl LocaleByteCtype {
 
 unsafe extern "C" {
     fn isalpha_l(
+        character: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
+    fn isprint_l(
         character: ctcore::libc::c_int,
         locale: ctcore::libc::locale_t,
     ) -> ctcore::libc::c_int;
@@ -3416,12 +3427,93 @@ fn ptx_render_error_text(err: &dyn CTError) -> String {
     stderr
 }
 
-fn ptx_zero_length_regex_error(pattern: &[u8]) -> Box<dyn CTError> {
+fn ptx_push_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + ((byte >> 6) & 7));
+    output.push(b'0' + ((byte >> 3) & 7));
+    output.push(b'0' + (byte & 7));
+}
+
+fn ptx_quote_pattern(
+    pattern: &[u8],
+    byte_ctype: &LocaleByteCtype,
+    single_byte_locale: bool,
+) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(pattern.len() + 2);
+    quoted.push(b'\'');
+    let mut index = 0usize;
+    while index < pattern.len() {
+        let byte = pattern[index];
+        let escape = match byte {
+            b'\x07' => Some(b'a'),
+            b'\x08' => Some(b'b'),
+            b'\t' => Some(b't'),
+            b'\n' => Some(b'n'),
+            b'\x0b' => Some(b'v'),
+            b'\x0c' => Some(b'f'),
+            b'\r' => Some(b'r'),
+            b'\\' => Some(b'\\'),
+            b'\'' => Some(b'\''),
+            _ => None,
+        };
+        if let Some(escaped) = escape {
+            quoted.extend_from_slice(&[b'\\', escaped]);
+            index += 1;
+            continue;
+        }
+        if byte.is_ascii() {
+            if byte_ctype.is_print(byte) {
+                quoted.push(byte);
+            } else {
+                ptx_push_octal_escape(&mut quoted, byte);
+            }
+            index += 1;
+            continue;
+        }
+        if single_byte_locale {
+            if byte_ctype.is_print(byte) {
+                quoted.push(byte);
+            } else {
+                ptx_push_octal_escape(&mut quoted, byte);
+            }
+            index += 1;
+            continue;
+        }
+
+        let valid_len = match std::str::from_utf8(&pattern[index..]) {
+            Ok(valid) => valid.chars().next().map_or(0, char::len_utf8),
+            Err(error) if error.valid_up_to() > 0 => {
+                std::str::from_utf8(&pattern[index..index + error.valid_up_to()])
+                    .expect("validated UTF-8 prefix")
+                    .chars()
+                    .next()
+                    .map_or(0, char::len_utf8)
+            }
+            Err(_) => 0,
+        };
+        if valid_len == 0 {
+            ptx_push_octal_escape(&mut quoted, byte);
+            index += 1;
+        } else {
+            quoted.extend_from_slice(&pattern[index..index + valid_len]);
+            index += valid_len;
+        }
+    }
+    quoted.push(b'\'');
+    quoted
+}
+
+fn ptx_zero_length_regex_error(
+    pattern: &[u8],
+    byte_ctype: &LocaleByteCtype,
+    single_byte_locale: bool,
+) -> Box<dyn CTError> {
+    let quoted = ptx_quote_pattern(pattern, byte_ctype, single_byte_locale);
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
-    let _ = stderr.write_all(b": error: regular expression has a match of length zero: '");
-    let _ = stderr.write_all(pattern);
-    let _ = stderr.write_all(b"'\n");
+    let _ = stderr.write_all(b": error: regular expression has a match of length zero: ");
+    let _ = stderr.write_all(&quoted);
+    let _ = stderr.write_all(b"\n");
     CtSimpleError::new(1, "")
 }
 
@@ -3557,7 +3649,11 @@ impl PtxSettings {
                 .context_pattern_bytes
                 .as_deref()
                 .unwrap_or(config.context_regex.as_bytes());
-            return Err(ptx_zero_length_regex_error(pattern));
+            return Err(ptx_zero_length_regex_error(
+                pattern,
+                &config.byte_ctype,
+                config.single_byte_locale,
+            ));
         }
 
         // 创建单词集合

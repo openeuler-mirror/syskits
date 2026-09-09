@@ -306,7 +306,7 @@ impl IndexedSpec {
         &self,
         mut writer: impl Write,
         cursor: &mut ArgCursor<'a>,
-    ) -> Result<(), FormatError> {
+    ) -> Result<ControlFlow<()>, FormatError> {
         match &self.spec {
             Spec::Char { width, align_left } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
@@ -341,7 +341,7 @@ impl IndexedSpec {
                 for res in parse_escape_only(s.as_bytes()) {
                     match res?.write(&mut writer)? {
                         ControlFlow::Continue(()) => {}
-                        ControlFlow::Break(()) => break,
+                        ControlFlow::Break(()) => return Ok(ControlFlow::Break(())),
                     };
                 }
                 Ok(())
@@ -496,7 +496,8 @@ impl IndexedSpec {
                 };
                 write_number_aligned(writer, &formatted, width, align).map_err(FormatError::IoError)
             }
-        }
+        }?;
+        Ok(ControlFlow::Continue(()))
     }
 }
 
@@ -1056,7 +1057,10 @@ mod tests {
         let args = vec![FormatArgument::SignedInt(1_234_567)];
         let mut cursor = ArgCursor::new(&args);
         let mut out = Vec::new();
-        spec.write(&mut out, &mut cursor).unwrap();
+        assert_eq!(
+            spec.write(&mut out, &mut cursor).unwrap(),
+            ControlFlow::Continue(())
+        );
         let out = String::from_utf8(out).unwrap();
         if let Some((sep, _)) = locale_thousands_grouping() {
             assert!(out.contains(&sep), "output should contain locale separator");
@@ -1072,7 +1076,10 @@ mod tests {
         let args = vec![FormatArgument::UnsignedInt(1_234_567)];
         let mut cursor = ArgCursor::new(&args);
         let mut out = Vec::new();
-        spec.write(&mut out, &mut cursor).unwrap();
+        assert_eq!(
+            spec.write(&mut out, &mut cursor).unwrap(),
+            ControlFlow::Continue(())
+        );
         let out = String::from_utf8(out).unwrap();
         if let Some((sep, _)) = locale_thousands_grouping() {
             assert!(out.contains(&sep), "output should contain locale separator");
@@ -1088,7 +1095,10 @@ mod tests {
         let args = vec![FormatArgument::Float(12_345.678)];
         let mut cursor = ArgCursor::new(&args);
         let mut out = Vec::new();
-        spec.write(&mut out, &mut cursor).unwrap();
+        assert_eq!(
+            spec.write(&mut out, &mut cursor).unwrap(),
+            ControlFlow::Continue(())
+        );
         let out = String::from_utf8(out).unwrap();
         if let Some((sep, _)) = locale_thousands_grouping() {
             assert!(out.contains(&sep), "output should contain locale separator");
@@ -1104,7 +1114,10 @@ mod tests {
         let args = vec![FormatArgument::SignedInt(1234)];
         let mut cursor = ArgCursor::new(&args);
         let mut out = Vec::new();
-        spec.write(&mut out, &mut cursor).unwrap();
+        assert_eq!(
+            spec.write(&mut out, &mut cursor).unwrap(),
+            ControlFlow::Continue(())
+        );
         let out = String::from_utf8(out).unwrap();
         if let Some((sep, _)) = locale_thousands_grouping() {
             assert!(
@@ -1114,6 +1127,21 @@ mod tests {
         } else {
             assert_eq!(out, "+000001234");
         }
+    }
+
+    #[test]
+    fn test_write_escaped_string_propagates_end() {
+        let mut input: &[u8] = b"b";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let args = vec![FormatArgument::Unparsed("a\\cb".to_string())];
+        let mut cursor = ArgCursor::new(&args);
+        let mut out = Vec::new();
+
+        assert_eq!(
+            spec.write(&mut out, &mut cursor).unwrap(),
+            ControlFlow::Break(())
+        );
+        assert_eq!(out, b"a");
     }
 
     #[test]

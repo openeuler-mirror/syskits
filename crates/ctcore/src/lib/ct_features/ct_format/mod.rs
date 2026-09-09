@@ -137,10 +137,9 @@ impl<C: FormatChar> FormatItem<C> {
         cursor: &mut ArgCursor<'a>, // <--- 改用游标传递
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
-            Self::Spec(spec) => spec.write(writer, cursor)?,
-            Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
-        };
-        Ok(ControlFlow::Continue(()))
+            Self::Spec(spec) => spec.write(writer, cursor),
+            Self::Char(c) => c.write(writer).map_err(FormatError::IoError),
+        }
     }
 }
 

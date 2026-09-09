@@ -686,6 +686,23 @@ mod tests {
         }
 
         #[test]
+        fn float_arguments_accept_exponent_hex_and_infinity_syntax() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%f|%f|%f",
+                "1e2",
+                "0x1p3",
+                "infinity",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "100.000000|8.000000|inf");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

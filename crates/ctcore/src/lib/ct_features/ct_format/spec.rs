@@ -414,10 +414,16 @@ impl IndexedSpec {
                     .fmt(writer, i)
                     .map_err(FormatError::IoError)
                 } else {
+                    let suppress_zero = i == 0 && p == Some(0);
+                    let raw_digit_count = if suppress_zero {
+                        0
+                    } else {
+                        i.unsigned_abs().to_string().len()
+                    };
                     let mut raw = Vec::new();
                     num_format::SignedInt {
                         width: 0,
-                        precision: p,
+                        precision: suppress_zero.then_some(0),
                         positive_sign: *positive_sign,
                         alignment: NumberAlignment::Left,
                     }
@@ -425,6 +431,7 @@ impl IndexedSpec {
                     .map_err(FormatError::IoError)?;
 
                     let grouped = group_number_thousands(&String::from_utf8_lossy(&raw));
+                    let grouped = add_integer_precision_zeros(&grouped, raw_digit_count, p);
                     write_number_aligned(writer, &grouped, width, align)
                         .map_err(FormatError::IoError)
                 }
@@ -456,10 +463,16 @@ impl IndexedSpec {
                     .fmt(writer, i)
                     .map_err(FormatError::IoError)
                 } else {
+                    let suppress_zero = i == 0 && p == Some(0);
+                    let raw_digit_count = if suppress_zero {
+                        0
+                    } else {
+                        i.to_string().len()
+                    };
                     let mut raw = Vec::new();
                     num_format::UnsignedInt {
                         variant: *variant,
-                        precision: p,
+                        precision: suppress_zero.then_some(0),
                         width: 0,
                         alignment: NumberAlignment::Left,
                     }
@@ -467,6 +480,7 @@ impl IndexedSpec {
                     .map_err(FormatError::IoError)?;
 
                     let grouped = group_number_thousands(&String::from_utf8_lossy(&raw));
+                    let grouped = add_integer_precision_zeros(&grouped, raw_digit_count, p);
                     write_number_aligned(writer, &grouped, width, align)
                         .map_err(FormatError::IoError)
                 }
@@ -538,6 +552,27 @@ fn group_number_thousands(number: &str) -> String {
     };
 
     group_number_thousands_with(number, &sep, &grouping)
+}
+
+fn add_integer_precision_zeros(
+    grouped: &str,
+    raw_digit_count: usize,
+    precision: Option<usize>,
+) -> String {
+    let zero_count = precision.unwrap_or(0).saturating_sub(raw_digit_count);
+    if zero_count == 0 {
+        return grouped.to_string();
+    }
+
+    let sign_length = usize::from(matches!(
+        grouped.as_bytes().first(),
+        Some(b'+') | Some(b'-') | Some(b' ')
+    ));
+    let mut output = String::with_capacity(grouped.len() + zero_count);
+    output.push_str(&grouped[..sign_length]);
+    output.push_str(&"0".repeat(zero_count));
+    output.push_str(&grouped[sign_length..]);
+    output
 }
 
 fn group_number_thousands_with(number: &str, sep: &str, grouping: &[u8]) -> String {
@@ -924,6 +959,21 @@ mod tests {
             resolve_width(Some(CanAsterisk::Asterisk), None, &mut cursor),
             Err(FormatError::WriteError)
         ));
+    }
+
+    #[test]
+    fn grouped_integer_precision_zeros_are_not_grouped() {
+        let grouped = group_number_thousands_with("1234", ",", &[3, 0]);
+        assert_eq!(
+            add_integer_precision_zeros(&grouped, 4, Some(12)),
+            "000000001,234"
+        );
+
+        let grouped_negative = group_number_thousands_with("-1234", ",", &[3, 0]);
+        assert_eq!(
+            add_integer_precision_zeros(&grouped_negative, 4, Some(12)),
+            "-000000001,234"
+        );
     }
 
     #[test]

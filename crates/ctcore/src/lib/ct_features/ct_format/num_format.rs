@@ -456,19 +456,20 @@ fn format_float_shortest(
         return new_value;
     }
 
-    let mut exponent = f.log10().floor() as i32;
-    if f.abs() > f64::EPSILON && exponent <= -4 || exponent > precision as i32 {
+    let mut exponent = f.abs().log10().floor() as i32;
+    let mut normalized = f / 10.0_f64.powi(exponent);
+
+    // %g selects its notation from the exponent after rounding to the requested
+    // number of significant digits.
+    let scale = 10_f64.powi(precision as i32);
+    let rounded_normalized = (normalized * scale).round() / scale;
+    if rounded_normalized.abs() >= 10.0 {
+        normalized /= 10.0;
+        exponent += 1;
+    }
+
+    if exponent < -4 || exponent > precision as i32 {
         // 类似科学记数法（有几个不同之处）
-        let mut normalized = f / 10.0_f64.powi(exponent);
-
-        // 如果规范化后的值将四舍五入到大于10的值，我们需要修正。
-        let tmp_value = normalized * 10_f64.powi(precision as i32);
-        let value = tmp_value.round() / 10_f64.powi(precision as i32);
-        if value >= 10.0 {
-            normalized /= 10.0;
-            exponent += 1;
-        }
-
         let additional_dot = match (precision, force_decimal) {
             (0, ForceDecimal::Yes) => ".",
             _ => "",
@@ -1669,6 +1670,18 @@ mod test {
         assert_eq!(f(12.3456789), "12.3457");
         assert_eq!(f(1000000.0), "1e+06");
         assert_eq!(f(99999999.0), "1e+08");
+    }
+
+    #[test]
+    fn shortest_float_uses_rounded_exponent_at_notation_boundaries() {
+        use super::format_float_shortest;
+        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+
+        assert_eq!(f(0.0001), "0.0001");
+        assert_eq!(f(0.00001), "1e-05");
+        assert_eq!(f(999999.0), "999999");
+        assert_eq!(f(999999.5), "1e+06");
+        assert_eq!(f(1000000.0), "1e+06");
     }
 
     #[test]

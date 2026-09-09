@@ -772,6 +772,9 @@ fn resolve_width<'a>(
             if v < i64::from(i32::MIN) || v > i64::from(i32::MAX) {
                 return Err(FormatError::InvalidFieldWidth(source));
             }
+            if v == i64::from(i32::MIN) {
+                return Err(FormatError::WriteError);
+            }
             if v < 0 {
                 Ok((Some(v.unsigned_abs() as usize), true))
             } else {
@@ -922,6 +925,17 @@ mod tests {
                 &mut precision_cursor
             ),
             Err(FormatError::InvalidPrecision(value)) if value == b"2147483648"
+        ));
+    }
+
+    #[test]
+    fn dynamic_width_int_min_reports_write_error() {
+        let arguments = [FormatArgument::Unparsed(i32::MIN.to_string())];
+        let mut cursor = ArgCursor::new(&arguments);
+
+        assert!(matches!(
+            resolve_width(Some(CanAsterisk::Asterisk), None, &mut cursor),
+            Err(FormatError::WriteError)
         ));
     }
 

@@ -170,42 +170,15 @@ impl ParsedNumber {
 
     /// 解析一个数为 f64 类型
     pub fn parse_f64(input: &str) -> Result<f64, ParseError<'_, f64>> {
-        match Self::parse(input, false) {
-            Ok(v) => {
-                let v64 = v.into_f64();
-                Ok(v64)
-            }
-            Err(ParseError::CtNotNumeric) => Self::parse_f64_special_values(input),
-            Err(e) => Err(e.map(|v, rest| {
-                let ct_64 = v.into_f64();
-                ParseError::CtPartialMatch(ct_64, rest)
-            })),
+        if input.starts_with(['\'', '"']) {
+            return match Self::parse(input, false) {
+                Ok(value) => Ok(value.into_f64()),
+                Err(error) => {
+                    Err(error.map(|value, rest| ParseError::CtPartialMatch(value.into_f64(), rest)))
+                }
+            };
         }
-    }
-
-    fn parse_f64_special_values(input: &str) -> Result<f64, ParseError<'_, f64>> {
-        let (sign, rest) = if let Some(input) = input.strip_prefix('-') {
-            (-1.0, input)
-        } else {
-            (1.0, input)
-        };
-
-        let prefix = rest
-            .chars()
-            .take(3)
-            .map(|c| c.to_ascii_lowercase())
-            .collect::<String>();
-        let special = match prefix.as_str() {
-            "inf" => f64::INFINITY,
-            "nan" => f64::NAN,
-            _ => return Err(ParseError::CtNotNumeric),
-        }
-        .copysign(sign);
-        if rest.len() == 3 {
-            Ok(special)
-        } else {
-            Err(ParseError::CtPartialMatch(special, &rest[3..]))
-        }
+        parse_strtold_f64(input)
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -319,6 +292,184 @@ impl ParsedNumber {
             }
             None => Ok(parsed),
         }
+    }
+}
+
+fn parse_strtold_f64(input: &str) -> Result<f64, ParseError<'_, f64>> {
+    let trimmed = input.trim_start_matches(char::is_whitespace);
+    let whitespace = input.len() - trimmed.len();
+    let (negative, unsigned, sign_len) = match trimmed.as_bytes().first() {
+        Some(b'-') => (true, &trimmed[1..], 1),
+        Some(b'+') => (false, &trimmed[1..], 1),
+        _ => (false, trimmed, 0),
+    };
+    if unsigned.is_empty() {
+        return Err(ParseError::CtNotNumeric);
+    }
+
+    let lowercase = unsigned.to_ascii_lowercase();
+    if lowercase.starts_with("infinity") {
+        return finish_float_parse(
+            f64::INFINITY.copysign(if negative { -1.0 } else { 1.0 }),
+            input,
+            whitespace + sign_len + 8,
+        );
+    }
+    if lowercase.starts_with("inf") {
+        return finish_float_parse(
+            f64::INFINITY.copysign(if negative { -1.0 } else { 1.0 }),
+            input,
+            whitespace + sign_len + 3,
+        );
+    }
+    if lowercase.starts_with("nan") {
+        let mut consumed = 3;
+        if unsigned.as_bytes().get(3) == Some(&b'(') {
+            if let Some(close) = unsigned[4..].find(')') {
+                let payload = &unsigned[4..4 + close];
+                if payload
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                {
+                    consumed = 5 + close;
+                }
+            }
+        }
+        return finish_float_parse(
+            f64::NAN.copysign(if negative { -1.0 } else { 1.0 }),
+            input,
+            whitespace + sign_len + consumed,
+        );
+    }
+
+    if lowercase.starts_with("0x") {
+        return parse_hex_float(input, trimmed, whitespace, negative, sign_len);
+    }
+    parse_decimal_float(input, trimmed, whitespace)
+}
+
+fn parse_decimal_float<'a>(
+    input: &'a str,
+    trimmed: &str,
+    whitespace: usize,
+) -> Result<f64, ParseError<'a, f64>> {
+    let bytes = trimmed.as_bytes();
+    let mut index = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
+    let digits_start = index;
+    while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+        index += 1;
+    }
+    let mut has_digit = index > digits_start;
+    if bytes.get(index) == Some(&b'.') {
+        index += 1;
+        let fraction_start = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        has_digit |= index > fraction_start;
+    }
+    if !has_digit {
+        return Err(ParseError::CtNotNumeric);
+    }
+
+    if matches!(bytes.get(index), Some(b'e' | b'E')) {
+        let exponent_marker = index;
+        index += 1;
+        if matches!(bytes.get(index), Some(b'+' | b'-')) {
+            index += 1;
+        }
+        let exponent_start = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        if index == exponent_start {
+            index = exponent_marker;
+        }
+    }
+
+    let value = trimmed[..index]
+        .parse::<f64>()
+        .map_err(|_| ParseError::CtNotNumeric)?;
+    finish_float_parse(value, input, whitespace + index)
+}
+
+fn parse_hex_float<'a>(
+    input: &'a str,
+    trimmed: &str,
+    whitespace: usize,
+    negative: bool,
+    sign_len: usize,
+) -> Result<f64, ParseError<'a, f64>> {
+    let bytes = trimmed.as_bytes();
+    let mut index = sign_len + 2;
+    let mut value = 0.0;
+    let mut digits = 0usize;
+    while let Some(digit) = bytes.get(index).and_then(|byte| hex_digit(*byte)) {
+        value = value * 16.0 + f64::from(digit);
+        digits += 1;
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'.') {
+        index += 1;
+        let mut factor = 1.0 / 16.0;
+        while let Some(digit) = bytes.get(index).and_then(|byte| hex_digit(*byte)) {
+            value += f64::from(digit) * factor;
+            factor /= 16.0;
+            digits += 1;
+            index += 1;
+        }
+    }
+    if digits == 0 {
+        return Err(ParseError::CtNotNumeric);
+    }
+
+    let mut exponent = 0i32;
+    if matches!(bytes.get(index), Some(b'p' | b'P')) {
+        let exponent_marker = index;
+        index += 1;
+        let exponent_negative = bytes.get(index) == Some(&b'-');
+        if matches!(bytes.get(index), Some(b'+' | b'-')) {
+            index += 1;
+        }
+        let exponent_start = index;
+        let mut magnitude = 0i32;
+        while let Some(byte) = bytes.get(index).filter(|byte| byte.is_ascii_digit()) {
+            magnitude = magnitude
+                .saturating_mul(10)
+                .saturating_add(i32::from(*byte - b'0'));
+            index += 1;
+        }
+        if index == exponent_start {
+            index = exponent_marker;
+        } else {
+            exponent = if exponent_negative {
+                magnitude.saturating_neg()
+            } else {
+                magnitude
+            };
+        }
+    }
+    value *= 2.0_f64.powi(exponent);
+    if negative {
+        value = -value;
+    }
+    finish_float_parse(value, input, whitespace + index)
+}
+
+fn finish_float_parse<T>(value: T, input: &str, consumed: usize) -> Result<T, ParseError<'_, T>> {
+    if consumed == input.len() {
+        Ok(value)
+    } else {
+        Err(ParseError::CtPartialMatch(value, &input[consumed..]))
+    }
+}
+
+fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -846,8 +997,7 @@ mod tests {
 
         assert!(ParsedNumber::parse_f64(&format!("{}", i64::MIN)).is_ok());
         assert!(ParsedNumber::parse_f64(&format!("{}", u64::MAX)).is_ok());
-        assert!(matches!(ParsedNumber::parse_f64("-infinity"),
-                         Err(ParseError::CtPartialMatch(f, "inity")) if f == f64::NEG_INFINITY));
+        assert_eq!(Ok(f64::NEG_INFINITY), ParsedNumber::parse_f64("-infinity"));
         assert!(matches!(ParsedNumber::parse_f64("1.2.3"),
                          Err(ParseError::CtPartialMatch(f, ".3")) if f == 1.2));
         assert_eq!(Ok(f64::INFINITY), ParsedNumber::parse_f64("inf"));
@@ -856,6 +1006,14 @@ mod tests {
         assert!(ParsedNumber::parse_f64("NaN").unwrap().is_sign_positive());
         assert!(ParsedNumber::parse_f64("NaN").unwrap().is_nan());
         assert!(ParsedNumber::parse_f64("-NaN").unwrap().is_nan());
+    }
+
+    #[test]
+    fn float_parser_accepts_strtold_exponent_hex_and_special_syntax() {
+        assert_eq!(Ok(100.0), ParsedNumber::parse_f64("1e2"));
+        assert_eq!(Ok(8.0), ParsedNumber::parse_f64("0x1p3"));
+        assert_eq!(Ok(f64::INFINITY), ParsedNumber::parse_f64("infinity"));
+        assert!(ParsedNumber::parse_f64("nan(payload)").unwrap().is_nan());
     }
 
     #[test]

@@ -499,6 +499,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%f|%f|%f，参数1e2、0x1p3和infinity；预期RC=0并按GNU strtold语法解析十进制指数、十六进制指数及完整无穷大名称",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%f|%f|%f", "1e2", "0x1p3", "infinity"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "100.000000|8.000000|inf",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

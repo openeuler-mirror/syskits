@@ -880,6 +880,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为<%d>|<%u>且两个参数均为显式空字符串；预期空整数参数按零处理，RC=0、stdout为<0>|<0>、stderr为空",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["<%d>|<%u>", "", ""],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "<0>|<0>",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -1169,6 +1169,44 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%q，参数a'b仅含单引号及shell安全字符；GNU shell-escape使用更短的C双引号形式，预期输出\"a'b\"",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%q", "a'b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\"a'b\"",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；FORMAT=%q，参数a'b;同时包含单引号和shell特殊字符；不得误用C双引号回退，预期以单引号分段转义",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%q", "a'b;"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'a'\\''b;'",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

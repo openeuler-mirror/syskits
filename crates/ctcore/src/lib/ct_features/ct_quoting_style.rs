@@ -317,6 +317,13 @@ pub(crate) fn escape_unibyte_c_bytes(name: &[u8], quotes: CtQuotes) -> String {
 }
 
 pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
+    if name.is_ascii() {
+        let ascii = unsafe { std::str::from_utf8_unchecked(name) };
+        if shell_escape_can_use_c_quotes(ascii) {
+            return format!("\"{ascii}\"");
+        }
+    }
+
     let mut in_dollar = false;
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
@@ -409,9 +416,12 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
             show_control,
         } => {
             let name = name.to_string_lossy();
+            if *escape && shell_escape_can_use_c_quotes(&name) {
+                return format!("\"{name}\"");
+            }
             let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
                 (CtQuotes::Single, true)
-            } else if name.contains('\'') {
+            } else if name.contains('\'') && !*escape {
                 (CtQuotes::Double, true)
             } else if *always_quote {
                 (CtQuotes::Single, true)
@@ -432,6 +442,53 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
             }
         }
     }
+}
+
+fn shell_escape_can_use_c_quotes(name: &str) -> bool {
+    let mut encountered_apostrophe = false;
+    for (index, character) in name.chars().enumerate() {
+        if character == '\'' {
+            encountered_apostrophe = true;
+        }
+        if !c_and_shell_quote_compatible(character, index) {
+            return false;
+        }
+    }
+    encountered_apostrophe
+}
+
+fn c_and_shell_quote_compatible(character: char, index: usize) -> bool {
+    if !character.is_ascii() {
+        return !character.is_control();
+    }
+    if character.is_ascii_control() {
+        return false;
+    }
+    if matches!(character, '#' | '~') {
+        return index == 0;
+    }
+
+    !matches!(
+        character,
+        '?' | '\\'
+            | '{'
+            | '}'
+            | '!'
+            | '"'
+            | '$'
+            | '&'
+            | '('
+            | ')'
+            | '*'
+            | ';'
+            | '<'
+            | '='
+            | '>'
+            | '['
+            | '^'
+            | '`'
+            | '|'
+    )
 }
 
 impl fmt::Display for CtQuotingStyle {
@@ -990,6 +1047,24 @@ mod tests {
             escape_unibyte_shell_bytes(b"a\xc3\xa9b"),
             "'a'$'\\303\\251''b'"
         );
+    }
+
+    #[test]
+    fn shell_escape_quoting_minimizes_apostrophe_quotes() {
+        let style = CtQuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control: true,
+        };
+
+        assert_eq!(escape_unibyte_shell_bytes(b"a'b"), "\"a'b\"");
+        assert_eq!(escape_name(OsStr::new("a'b"), &style), "\"a'b\"");
+        assert_eq!(escape_unibyte_shell_bytes(b"#'"), "\"#'\"");
+        assert_eq!(escape_name(OsStr::new("#'"), &style), "\"#'\"");
+        assert_eq!(escape_unibyte_shell_bytes(b"a'b;"), "'a'\\''b;'");
+        assert_eq!(escape_name(OsStr::new("a'b;"), &style), "'a'\\''b;'");
+        assert_eq!(escape_unibyte_shell_bytes(b"a'b#"), "'a'\\''b#'");
+        assert_eq!(escape_name(OsStr::new("a'b#"), &style), "'a'\\''b#'");
     }
 
     #[test]

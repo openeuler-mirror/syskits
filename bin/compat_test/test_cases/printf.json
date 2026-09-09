@@ -346,6 +346,44 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；执行printf --help x；--help后仍有操作数时作为字面FORMAT；预期RC=0，stdout为6字节、内容=--help，stderr为66字节、提示忽略从x开始的多余参数",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["--help", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "--help",
+                    "stderr": "printf: warning: ignoring excess arguments, starting with ‘x’\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；执行printf --version x；--version后仍有操作数时作为字面FORMAT；预期RC=0，stdout为9字节、内容=--version，stderr为66字节、提示忽略从x开始的多余参数",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["--version", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "--version",
+                    "stderr": "printf: warning: ignoring excess arguments, starting with ‘x’\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

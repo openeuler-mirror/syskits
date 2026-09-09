@@ -25,9 +25,6 @@ use ctcore::ct_format::{ArgCursor, FormatArgument, parse_spec_and_escape};
 use std::ffi::OsString;
 use sys_locale::get_locale;
 
-const PRINTF_VERSION: &str = "version";
-const PRINTF_HELP: &str = "help";
-
 mod opt_flags {
     pub const PRINTF_FORMATSTRING: &str = "FORMATSTRING";
     pub const PRINTF_ARGUMENT: &str = "ARGUMENT";
@@ -100,6 +97,23 @@ fn printf_invocation_from_matches(args_match: &ArgMatches) -> CTResult<PrintfInv
         format_string,
         arguments,
     })
+}
+
+fn printf_special_output(argv: &[OsString]) -> Option<Vec<u8>> {
+    if argv.len() != 2 {
+        return None;
+    }
+
+    match argv[1].as_encoded_bytes() {
+        b"--help" => {
+            let mut command = ct_app();
+            let mut output = command.render_long_help().to_string().into_bytes();
+            output.push(b'\n');
+            Some(output)
+        }
+        b"--version" => Some(format!("printf {}\n", crate_version!()).into_bytes()),
+        _ => None,
+    }
 }
 
 fn printf_render_to_writer<W: Write>(
@@ -239,7 +253,18 @@ pub fn printf_main(args: impl ctcore::Args) -> CTResult<()> {
 
 pub fn printf_main_with_writer<W: Write>(args: impl ctcore::Args, mut writer: W) -> CTResult<()> {
     init_printf_locale();
-    let args_match = ct_app().get_matches_from(args);
+    let argv: Vec<OsString> = args.collect();
+    if let Some(output) = printf_special_output(&argv) {
+        writer
+            .write_all(&output)
+            .map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+        writer
+            .flush()
+            .map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+        return Ok(());
+    }
+
+    let args_match = ct_app().get_matches_from(argv);
     let invocation = printf_invocation_from_matches(&args_match)?;
     let stderr_text = printf_render_to_writer(&invocation, &mut writer)?;
     writer
@@ -258,6 +283,16 @@ pub fn printf_native_semantic(args: impl ctcore::Args) -> CTResult<PrintfSemanti
     init_printf_locale();
 
     let argv: Vec<OsString> = args.collect();
+    if let Some(output) = printf_special_output(&argv) {
+        let format_string = argv[1].to_string_lossy();
+        return Ok(printf_semantic_from_output(
+            &format_string,
+            output,
+            String::new(),
+            0,
+        ));
+    }
+
     let matches = match ct_app().try_get_matches_from(argv) {
         Ok(matches) => matches,
         Err(err) => return Ok(printf_semantic_from_parse_error(err)),
@@ -302,14 +337,6 @@ pub fn ct_app() -> Command {
     let after_help = t!("printf.after_help");
 
     let args = vec![
-        Arg::new(PRINTF_HELP)
-            .long(PRINTF_HELP)
-            .help(t!("printf.clap.printf_help"))
-            .action(ArgAction::Help),
-        Arg::new(PRINTF_VERSION)
-            .long(PRINTF_VERSION)
-            .help(t!("printf.clap.printf_version"))
-            .action(ArgAction::Version),
         Arg::new(opt_flags::PRINTF_FORMATSTRING).value_parser(OsStringValueParser::new()),
         Arg::new(opt_flags::PRINTF_ARGUMENT)
             .action(ArgAction::Append)
@@ -363,7 +390,7 @@ mod tests {
 
             let result = printf_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -371,7 +398,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--help"];
             let result = printf_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -384,9 +411,8 @@ mod tests {
     }
 
     mod tests_printf_app {
-        use crate::ct_app;
+        use crate::{ct_app, opt_flags};
 
-        use clap::error::ErrorKind;
         #[cfg(unix)]
         use std::os::unix::ffi::OsStringExt;
 
@@ -396,8 +422,13 @@ mod tests {
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_one::<std::ffi::OsString>(opt_flags::PRINTF_FORMATSTRING)
+                    .unwrap(),
+                "--version"
+            );
         }
 
         #[test]
@@ -406,8 +437,13 @@ mod tests {
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            let matches = result.unwrap();
+            assert_eq!(
+                matches
+                    .get_one::<std::ffi::OsString>(opt_flags::PRINTF_FORMATSTRING)
+                    .unwrap(),
+                "--help"
+            );
         }
 
         #[cfg(unix)]
@@ -563,6 +599,22 @@ mod tests {
             assert_eq!(semantic.classic_text, "+0001.25");
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
+        fn help_and_version_are_formats_when_followed_by_arguments() {
+            for format in ["--help", "--version"] {
+                let args = [ctcore::ct_util_name(), format, "x"];
+
+                let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+                assert_eq!(semantic.classic_text, format);
+                assert_eq!(
+                    semantic.stderr_text,
+                    "printf: warning: ignoring excess arguments, starting with ‘x’\n"
+                );
+                assert_eq!(semantic.exit_code, 0);
+            }
         }
 
         #[test]

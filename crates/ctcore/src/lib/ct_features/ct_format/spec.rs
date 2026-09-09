@@ -267,7 +267,8 @@ impl IndexedSpec {
                 }
             }
             c @ (b'a' | b'A' | b'e' | b'E' | b'f' | b'F' | b'g' | b'G') => {
-                if flags.localized_digits && matches!(c, b'a' | b'A' | b'e' | b'E') {
+                if (flags.localized_digits || flags.quote) && matches!(c, b'a' | b'A' | b'e' | b'E')
+                {
                     return Err(&start[..index]);
                 }
                 let float_alignment = if flags.minus {
@@ -1095,6 +1096,20 @@ mod tests {
     #[test]
     fn localized_digits_flag_rejects_character_and_string_conversions() {
         for specifier in [b"Ic".as_slice(), b"Is".as_slice()] {
+            let mut input = specifier;
+
+            assert_eq!(IndexedSpec::parse(&mut input), Err(specifier));
+        }
+    }
+
+    #[test]
+    fn grouping_flag_rejects_hexadecimal_and_scientific_float_conversions() {
+        for specifier in [
+            b"'a".as_slice(),
+            b"'A".as_slice(),
+            b"'e".as_slice(),
+            b"'E".as_slice(),
+        ] {
             let mut input = specifier;
 
             assert_eq!(IndexedSpec::parse(&mut input), Err(specifier));

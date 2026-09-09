@@ -918,6 +918,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%'a且参数为1；GNU分组标志不适用于十六进制浮点转换，预期RC=1、stdout为空并报告invalid conversion specification",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%'a", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: %'a: invalid conversion specification\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

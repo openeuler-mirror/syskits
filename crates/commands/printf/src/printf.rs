@@ -749,6 +749,17 @@ mod tests {
         }
 
         #[test]
+        fn explicit_empty_float_argument_is_zero_without_a_diagnostic() {
+            let args = [ctcore::ct_util_name(), "<%g>|<%f>", "", ""];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "<0>|<0.000000>");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn scientific_format_normalizes_negative_values() {
             let args = [ctcore::ct_util_name(), "%e", "-123"];
 

@@ -27,6 +27,10 @@ use super::num_parser::{ParseError, ParsedNumber};
 pub(super) fn parse_long_double(
     input: &str,
 ) -> Result<ExtendedBigDecimal, ParseError<'_, ExtendedBigDecimal>> {
+    if input.is_empty() {
+        return Ok(ExtendedBigDecimal::default());
+    }
+
     match ParsedNumber::parse_f64(input) {
         Ok(_) => parse_complete_long_double(input).map_err(|_| ParseError::CtNotNumeric),
         Err(ParseError::CtPartialMatch(_, rest)) => {
@@ -158,6 +162,14 @@ mod tests {
         assert_eq!(
             parse_long_double("-0e999999").unwrap(),
             ExtendedBigDecimal::MinusZero
+        );
+    }
+
+    #[test]
+    fn explicit_empty_argument_is_zero() {
+        assert_eq!(
+            parse_long_double("").unwrap(),
+            ExtendedBigDecimal::default()
         );
     }
 }

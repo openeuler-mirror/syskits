@@ -11768,6 +11768,25 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C.UTF-8，执行ptx -O -W '^.' input；input共47字节，依次为df 5b c0 7a df 5a df bf 22 ff 7b 5d 24 7f c1 24 30 bf 2e 80 7d 7b 2f 25 c1 7f f0 5c ef 80 24 ef 00 29 39 81 e0 0a 30 30 fe 2c 30 39 0c 09，包含非法UTF-8、NUL、换行、换页和制表符；预期RC=0、stderr为空，stdout十六进制解码为2条换行分隔、共118字节的.xx roff记录，完整保留各非打印字节及NUL，验证最大词长仅统计扫描器实际匹配",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\337\\133\\300\\172\\337\\132\\337\\277\\042\\377\\173\\135\\044\\177\\301\\044\\060\\277\\056\\200\\175\\173\\057\\045\\301\\177\\360\\134\\357\\200\\044\\357\\000\\051\\071\\201\\340\\012\\060\\060\\376\\054\\060\\071\\014\\011' > input"
+      ],
+      "args": ["2d4f", "2d57", "5e2e", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022dfbf2222ff7b5d247fc12430bf2e807d7b2f25c17ff05cef8024ef00293981e02220223030fe2c30392220222fc07adf5a220a2e787820222220222222ff7b5d247fc12430bf2e807d7b2f25c17ff05cef8024ef00293981e0203022202230fe2c30392220222f7adf5adfbf220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

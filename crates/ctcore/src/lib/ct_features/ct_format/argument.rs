@@ -98,7 +98,7 @@ impl<'a> ArgCursor<'a> {
             match arg {
                 FormatArgument::Unparsed(s) => {
                     let v = ParsedNumber::parse_u64(s);
-                    extract_value(v, s)
+                    extract_value_with_overflow(v, s, u64::MAX)
                 }
                 FormatArgument::Bytes(bytes) => parse_bytes_u64(bytes),
                 FormatArgument::UnsignedInt(n) => *n,
@@ -114,7 +114,7 @@ impl<'a> ArgCursor<'a> {
             match arg {
                 FormatArgument::Unparsed(s) => {
                     let v = ParsedNumber::parse_i64(s);
-                    extract_value(v, s)
+                    extract_value_with_overflow(v, s, signed_overflow_value(s))
                 }
                 FormatArgument::Bytes(bytes) => parse_bytes_i64(bytes),
                 FormatArgument::SignedInt(n) => *n,
@@ -170,14 +170,18 @@ impl<'a> ArgCursor<'a> {
 
 fn parse_bytes_u64(bytes: &[u8]) -> u64 {
     match std::str::from_utf8(bytes) {
-        Ok(input) => extract_value(ParsedNumber::parse_u64(input), input),
+        Ok(input) => extract_value_with_overflow(ParsedNumber::parse_u64(input), input, u64::MAX),
         Err(_) => invalid_numeric_bytes(bytes),
     }
 }
 
 fn parse_bytes_i64(bytes: &[u8]) -> i64 {
     match std::str::from_utf8(bytes) {
-        Ok(input) => extract_value(ParsedNumber::parse_i64(input), input),
+        Ok(input) => extract_value_with_overflow(
+            ParsedNumber::parse_i64(input),
+            input,
+            signed_overflow_value(input),
+        ),
         Err(_) => invalid_numeric_bytes(bytes),
     }
 }
@@ -208,6 +212,14 @@ fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
 // 函数首先检查解析结果 (p) 是否为 OK，即解析是否成功。如果是，则返回解析后的值 (v)。
 // 如果解析结果为 Err，表示解析过程中出现错误，函数会将退出代码设为 1（表示出现错误），然后继续处理错误。
 fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T {
+    extract_value_with_overflow(p, input, T::default())
+}
+
+fn extract_value_with_overflow<T: Default>(
+    p: Result<T, ParseError<'_, T>>,
+    input: &str,
+    overflow_value: T,
+) -> T {
     match p {
         Ok(v) => v,
         Err(e) => {
@@ -221,7 +233,7 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
             match e {
                 ParseError::CtOverflow => {
                     ct_show_error!("{}: Numerical result out of range", input_escaped.quote());
-                    Default::default()
+                    overflow_value
                 }
                 ParseError::CtNotNumeric => {
                     ct_show_error!("{}: expected a numeric value", input_escaped.quote());
@@ -241,6 +253,14 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                 }
             }
         }
+    }
+}
+
+fn signed_overflow_value(input: &str) -> i64 {
+    if input.starts_with('-') {
+        i64::MIN
+    } else {
+        i64::MAX
     }
 }
 

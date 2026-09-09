@@ -441,6 +441,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%d，参数9223372036854775808超出intmax_t范围；预期RC=1，stdout为9223372036854775807，stderr报告Numerical result out of range；溢出时保留strtoimax饱和值",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%d", "9223372036854775808"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "9223372036854775807",
+                    "stderr": "printf: '9223372036854775808': Numerical result out of range\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

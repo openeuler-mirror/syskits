@@ -709,6 +709,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%a|%A，参数为-1.5和-0；预期负有限值与负零均保留负号，符号位不参与指数计算",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%a|%A", "-1.5", "-0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-0x1.8p+0|-0X0P+0",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

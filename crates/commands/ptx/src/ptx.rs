@@ -3330,7 +3330,32 @@ fn ptx_content_maximum_word_length(content: &FileContent, config: &PtxConfig) ->
 }
 
 fn ptx_content_maximum_word_length_bytes(content: &FileContent, config: &PtxConfig) -> usize {
-    ptx_maximum_word_length_in_bytes(&content.raw_text, config)
+    let context_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
+    let mut maximum = 0usize;
+    let mut context_start = 0usize;
+    while context_start < content.raw_text.len() {
+        let (next_context_start, context_end) = if let Some(byte_regex) = &config.context_byte_regex
+        {
+            let raw_end = next_context_end_bytes(byte_regex, &content.raw_text, context_start);
+            let end = trim_context_end_bytes(&content.raw_text, context_start, raw_end);
+            (raw_end, end)
+        } else {
+            let raw_end = next_context_end_valid_utf8(
+                &context_reg,
+                &content.text,
+                &content.invalid_utf8_bytes,
+                context_start,
+            );
+            let end = trim_context_end(&content.text, context_start, raw_end);
+            (raw_end, end)
+        };
+        maximum = maximum.max(ptx_maximum_word_length_in_bytes(
+            &content.raw_text[context_start..context_end],
+            config,
+        ));
+        context_start = next_context_start;
+    }
+    maximum
 }
 
 fn ptx_global_maximum_word_length(file_map: &FileMap, config: &PtxConfig) -> usize {

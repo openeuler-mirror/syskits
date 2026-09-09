@@ -150,10 +150,15 @@ impl<'a> ArgCursor<'a> {
     }
 
     pub fn get_bytes(&mut self, idx: Option<usize>) -> &'a [u8] {
+        self.get_optional_bytes(idx).unwrap_or(b"")
+    }
+
+    pub fn get_optional_bytes(&mut self, idx: Option<usize>) -> Option<&'a [u8]> {
         match self.fetch(idx) {
-            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s.as_bytes(),
-            Some(FormatArgument::Bytes(bytes)) => bytes,
-            _ => b"",
+            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => Some(s.as_bytes()),
+            Some(FormatArgument::Bytes(bytes)) => Some(bytes),
+            Some(_) => Some(b""),
+            None => None,
         }
     }
 

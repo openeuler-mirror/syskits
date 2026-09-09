@@ -143,12 +143,17 @@ impl ParsedNumber {
     /// 将数字解析为 u64。不允许小数部分。
     pub fn parse_u64(input: &str) -> Result<u64, ParseError<'_, u64>> {
         match Self::parse(input, true) {
-            Ok(v) | Err(ParseError::CtPartialMatch(v, _)) if v.negative => {
-                Err(ParseError::CtNotNumeric)
-            }
-            Ok(v) => Ok(v.integral),
+            Ok(v) => Ok(if v.negative {
+                v.integral.wrapping_neg()
+            } else {
+                v.integral
+            }),
             Err(e) => Err(e.map(|v, rest| {
-                let ct_integral = v.integral;
+                let ct_integral = if v.negative {
+                    v.integral.wrapping_neg()
+                } else {
+                    v.integral
+                };
                 ParseError::CtPartialMatch(ct_integral, rest)
             })),
         }
@@ -231,10 +236,11 @@ impl ParsedNumber {
             }
         };
 
-        // 初始负号
-        let (negative, unsigned_str) = match input.strip_prefix('-') {
-            Some(input) => (true, input),
-            None => (false, input),
+        // 初始符号
+        let (negative, unsigned_str) = match input.as_bytes().first() {
+            Some(b'-') => (true, &input[1..]),
+            Some(b'+') => (false, &input[1..]),
+            _ => (false, input),
         };
 
         // 解析可选的基数前缀（"0b" / "0B" / "0" / "0x" / "0X"）。"0" 表示八进制，除非允许小数部分，此时它是不重要的前导 0。
@@ -778,15 +784,20 @@ mod tests {
             Err(ParseError::CtNotNumeric)
         ));
 
-        assert!(matches!(
-            ParsedNumber::parse_u64("-666"),
-            Err(ParseError::CtNotNumeric)
-        ));
+        assert_eq!(Ok(666u64.wrapping_neg()), ParsedNumber::parse_u64("-666"));
 
         assert_eq!(
             Ok(u64::MAX),
             ParsedNumber::parse_u64(&format!("{}", u64::MAX))
         );
+    }
+
+    #[test]
+    fn signed_prefixes_follow_strtoimax_and_strtoumax_semantics() {
+        assert_eq!(Ok(3), ParsedNumber::parse_i64("+3"));
+        assert_eq!(Ok(3), ParsedNumber::parse_u64("+3"));
+        assert_eq!(Ok(u64::MAX), ParsedNumber::parse_u64("-1"));
+        assert_eq!(Ok(u64::MAX), ParsedNumber::parse_u64("-0x1"));
     }
 
     #[test]

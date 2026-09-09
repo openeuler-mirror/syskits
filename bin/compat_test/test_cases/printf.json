@@ -422,6 +422,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%d|%u，参数为+3和-1；预期RC=0，stdout为3|18446744073709551615，stderr为空；整数接受前导加号且负数按uintmax_t回绕",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%d|%u", "+3", "-1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3|18446744073709551615",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

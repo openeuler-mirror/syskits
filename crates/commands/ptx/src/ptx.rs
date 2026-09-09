@@ -388,6 +388,24 @@ impl LocaleCollation {
         unsafe { ctcore::libc::uselocale(previous) };
         Some(matches)
     }
+
+    fn compile_error(&self, pattern: &[u8], fold_upper: Option<&[u8; 256]>) -> Option<Vec<u8>> {
+        let regex_api = glibc_regex_api()?;
+        let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
+        let mut regex: GlibcRegexPattern = unsafe { std::mem::zeroed() };
+        regex.translate = fold_upper.map_or(std::ptr::null_mut(), |upper| {
+            upper.as_ptr().cast_mut().cast()
+        });
+        let compile_error = unsafe {
+            (regex_api.compile_pattern)(pattern.as_ptr().cast(), pattern.len(), &mut regex)
+        };
+        let message = (!compile_error.is_null())
+            .then(|| unsafe { CStr::from_ptr(compile_error) }.to_bytes().to_vec());
+        regex.translate = std::ptr::null_mut();
+        unsafe { ctcore::libc::regfree((&raw mut regex).cast()) };
+        unsafe { ctcore::libc::uselocale(previous) };
+        message
+    }
 }
 
 impl Drop for LocaleCollation {
@@ -5349,6 +5367,22 @@ fn ptx_regex_error(message: &[u8], pattern: &[u8]) -> Box<dyn CTError> {
     CtSimpleError::new(1, "")
 }
 
+fn validate_ptx_locale_regexp(pattern: &[u8], config: &PtxConfig) -> CTResult<()> {
+    if !ptx_pattern_needs_locale_class_matching(pattern) {
+        return Ok(());
+    }
+    let Some(locale_collation) = config.locale_collation.as_deref() else {
+        return Ok(());
+    };
+    if let Some(message) = locale_collation.compile_error(
+        pattern,
+        config.is_ignore_case.then_some(&config.byte_ctype.upper),
+    ) {
+        return Err(ptx_regex_error(&message, pattern));
+    }
+    Ok(())
+}
+
 fn ptx_extra_operand_error(operand: &OsStr) -> Box<dyn CTError> {
     let byte_ctype = LocaleByteCtype::from_environment();
     let quoted = ptx_quote_pattern(operand.as_bytes(), &byte_ctype, ptx_is_single_byte_locale());
@@ -5469,6 +5503,13 @@ impl PtxSettings {
         if matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
             && config.context_regex != NEVER_MATCH_REGEX
         {
+            validate_ptx_locale_regexp(
+                config
+                    .context_pattern_bytes
+                    .as_deref()
+                    .expect("user context regexp has original bytes"),
+                &config,
+            )?;
             if config
                 .context_pattern_bytes
                 .as_deref()
@@ -5555,6 +5596,7 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
     if bytes.is_empty() {
         return Ok(());
     }
+    validate_ptx_locale_regexp(&bytes, config)?;
     if ptx_pattern_has_equivalence_range_endpoint(&bytes) {
         return Err(ptx_invalid_range_end_error(&bytes));
     }

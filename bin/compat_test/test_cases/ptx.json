@@ -10557,6 +10557,512 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[.ch.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.ch.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[.ch.]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[=ch=]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=ch=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[=ch=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[.é.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.é.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[.\\303\\251.]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[=é=]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=é=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[=\\303\\251=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[..]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[..]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[..]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W '[[==]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[==]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[==]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[.ch.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.ch.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[.ch.]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[=ch=]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=ch=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[=ch=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[.é.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.é.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[.\\303\\251.]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[=é=]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=é=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[=\\303\\251=]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[..]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[..]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[..]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S '[[==]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[==]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp '[[==]]+')\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[.ch.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.ch.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[.ch.]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[=ch=]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=ch=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[=ch=]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[.é.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.é.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[.é.]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[..]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[..]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[..]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[==]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[==]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[==]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[.ch.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.ch.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[.ch.]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[=ch=]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=ch=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[=ch=]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[.é.]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.é.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[.é.]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[..]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[..]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[..]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S '[[==]]+' input；input内容为“a ch é\\n”；预期RC=1、stdout为空，stderr报告Invalid collation character并引用无效括号符号",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[==]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid collation character (for regexp ‘[[==]]+’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W '[[=é=]]+' input；input内容为“a ch é\\n”；预期RC=0、stderr为空，stdout为单行TeX索引\\xx {}{a ch}{é}{}{}",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a ch é\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=é=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a ch}{é}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

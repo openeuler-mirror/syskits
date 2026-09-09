@@ -306,6 +306,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；格式参数字节=252e3173（%.1s），字符串参数字节=c3a9（UTF-8字符é）；预期RC=0，stdout为1字节、内容=c3（按字节精度截断），stderr为0字节、内容=空",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["252e3173", "c3a9"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c3",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

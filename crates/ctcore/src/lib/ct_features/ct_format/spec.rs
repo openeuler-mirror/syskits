@@ -325,16 +325,12 @@ impl IndexedSpec {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
                 let p = resolve_precision(*precision, self.precision_index, cursor);
                 let s = cursor.get_str(self.arg_index);
+                let bytes = s.as_bytes();
                 let truncated = match p {
-                    Some(prec) if prec < s.len() => &s[..prec],
-                    _ => s,
+                    Some(prec) if prec < bytes.len() => &bytes[..prec],
+                    _ => bytes,
                 };
-                write_padded(
-                    writer,
-                    truncated.as_bytes(),
-                    w.unwrap_or(0),
-                    *align_left || dyn_left,
-                )
+                write_padded(writer, truncated, w.unwrap_or(0), *align_left || dyn_left)
             }
             Spec::EscapedString => {
                 let s = cursor.get_str(self.arg_index);

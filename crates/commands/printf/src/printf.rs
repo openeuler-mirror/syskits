@@ -405,7 +405,9 @@ mod tests {
     }
 
     mod tests_printf_semantic {
-        use crate::printf_native_semantic;
+        use crate::{
+            FormatArgument, PrintfInvocation, printf_native_semantic, printf_render_to_writer,
+        };
 
         use std::ffi::OsString;
 
@@ -542,6 +544,20 @@ mod tests {
             assert_eq!(semantic.classic_text, "+0001.25");
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
+        fn string_precision_truncates_at_a_utf8_byte_boundary() {
+            let invocation = PrintfInvocation {
+                format_string: "%.1s".to_string(),
+                arguments: vec![FormatArgument::Unparsed("é".to_string())],
+            };
+            let mut output = Vec::new();
+
+            let stderr_text = printf_render_to_writer(&invocation, &mut output).unwrap();
+
+            assert_eq!(output, vec![0xc3]);
+            assert_eq!(stderr_text, "");
         }
     }
 }

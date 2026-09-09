@@ -343,7 +343,9 @@ impl IndexedSpec {
                 Ok(())
             }
             Spec::QuotedString => {
-                let bytes = cursor.get_bytes(self.arg_index);
+                let Some(bytes) = cursor.get_optional_bytes(self.arg_index) else {
+                    return Ok(ControlFlow::Continue(()));
+                };
                 if bytes.is_empty() {
                     writer.write_all(b"''").map_err(FormatError::IoError)
                 } else {

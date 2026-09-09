@@ -1150,6 +1150,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=en_US.UTF-8；FORMAT=%'.12d|%'.12u，参数均为1234；整数精度补零不参与千位分组，预期在有效数字1,234左侧补8个零",
+            "setup_commands": [
+                "export LC_ALL=en_US.UTF-8",
+                "export LANG=en_US.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%'.12d|%'.12u", "1234", "1234"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "000000001,234|000000001,234",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -1072,6 +1072,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%If|%Ig，参数均为12；glibc I标志使用C locale空替代数字表，预期f仅保留小数点、g不保留数字",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%If|%Ig", "12", "12"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": ".|",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -78,6 +78,7 @@ pub enum Spec {
         alignment: NumberAlignment,
         precision: Option<CanAsterisk<usize>>,
         thousand_separate: bool,
+        localized_digits: bool,
     },
 }
 
@@ -320,6 +321,7 @@ impl IndexedSpec {
                     alignment: float_alignment,
                     positive_sign,
                     thousand_separate: flags.quote,
+                    localized_digits: flags.localized_digits,
                 }
             }
             _ => return Err(&start[..index]),
@@ -491,6 +493,7 @@ impl IndexedSpec {
                 alignment,
                 precision,
                 thousand_separate,
+                localized_digits,
             } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
                 let p = resolve_precision(*precision, self.precision_index, cursor)?;
@@ -511,15 +514,35 @@ impl IndexedSpec {
                     alignment: align,
                 };
                 let format = num_format::Float { width, ..format };
-                writer
-                    .write_all(
-                        &GnuFloatFormat::from_float_format(&format, *thousand_separate).format(&f),
-                    )
-                    .map_err(FormatError::IoError)
+                let mut rendered =
+                    GnuFloatFormat::from_float_format(&format, *thousand_separate).format(&f);
+                if *localized_digits && printf_uses_empty_outdigits() {
+                    rendered = remove_ascii_digits_for_empty_outdigits(&rendered);
+                }
+                writer.write_all(&rendered).map_err(FormatError::IoError)
             }
         }?;
         Ok(ControlFlow::Continue(()))
     }
+}
+
+fn printf_uses_empty_outdigits() -> bool {
+    let locale = unsafe { crate::libc::setlocale(crate::libc::LC_CTYPE, std::ptr::null()) };
+    if locale.is_null() {
+        return false;
+    }
+    matches!(
+        unsafe { CStr::from_ptr(locale) }.to_bytes(),
+        b"C" | b"POSIX"
+    )
+}
+
+fn remove_ascii_digits_for_empty_outdigits(value: &[u8]) -> Vec<u8> {
+    value
+        .iter()
+        .copied()
+        .filter(|byte| !byte.is_ascii_digit())
+        .collect()
 }
 
 fn group_number_thousands(number: &str) -> String {
@@ -1119,6 +1142,14 @@ mod tests {
 
             assert_eq!(IndexedSpec::parse(&mut input), Err(specifier));
         }
+    }
+
+    #[test]
+    fn empty_outdigits_remove_digits_after_float_width_formatting() {
+        assert_eq!(
+            remove_ascii_digits_for_empty_outdigits(b"     +12.30e-04"),
+            b"     +.e-"
+        );
     }
 
     #[test]

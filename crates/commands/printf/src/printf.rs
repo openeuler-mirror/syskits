@@ -802,6 +802,26 @@ mod tests {
         }
 
         #[test]
+        fn hexadecimal_format_preserves_subnormal_values() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%a|%.3a|%a",
+                "0x1p-1074",
+                "0x1p-1074",
+                "0x0.fffffffffffffp-1022",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(
+                semantic.classic_text,
+                "0x1p-1074|0x1.000p-1074|0x1.ffffffffffffep-1023"
+            );
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn dynamic_width_and_precision_reject_values_above_int_max() {
             for (format, expected_error) in [
                 ("%*d", "printf: invalid field width: '2147483648'\n"),

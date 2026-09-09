@@ -517,14 +517,20 @@ fn format_float_hexadecimal(
 ) -> String {
     let negative = f.is_sign_negative();
     let magnitude = f.abs();
-    let (first_digit, mantissa, exponent) = if magnitude < f64::EPSILON {
+    let (first_digit, mantissa, exponent) = if magnitude == 0.0 {
         (0, 0, 0)
     } else {
         let bits = magnitude.to_bits();
-        let exponent_bits = ((bits >> 52) & 0x7fff) as i64;
-        let exponent = exponent_bits - 1023;
-        let mantissa = bits & 0xf_ffff_ffff_ffff;
-        (1, mantissa, exponent)
+        let exponent_bits = ((bits >> 52) & 0x7ff) as i64;
+        let raw_mantissa = bits & 0xf_ffff_ffff_ffff;
+        if exponent_bits == 0 {
+            let highest_bit = 63 - i64::from(raw_mantissa.leading_zeros());
+            let shift = (52 - highest_bit) as usize;
+            let normalized = raw_mantissa << shift;
+            (1, normalized & 0xf_ffff_ffff_ffff, highest_bit - 1074)
+        } else {
+            (1, raw_mantissa, exponent_bits - 1023)
+        }
     };
 
     const NATIVE_FRACTION_DIGITS: usize = 13;
@@ -1581,6 +1587,19 @@ mod test {
         assert_eq!(
             format_float_hexadecimal(1.0 / 65536.0, None, Case::Uppercase, ForceDecimal::No),
             "0X1P-16"
+        );
+        assert_eq!(
+            format_float_hexadecimal(f64::from_bits(1), None, Case::Lowercase, ForceDecimal::No),
+            "0x1p-1074"
+        );
+        assert_eq!(
+            format_float_hexadecimal(
+                f64::from_bits(0x000f_ffff_ffff_ffff),
+                None,
+                Case::Lowercase,
+                ForceDecimal::No,
+            ),
+            "0x1.ffffffffffffep-1023"
         );
     }
 

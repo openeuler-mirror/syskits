@@ -747,6 +747,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%a|%.3a|%a，参数覆盖最小和最大f64次正规值；预期非零次正规数规格化输出，不得被当作零",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%a|%.3a|%a", "0x1p-1074", "0x1p-1074", "0x0.fffffffffffffp-1022"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0x1p-1074|0x1.000p-1074|0x1.ffffffffffffep-1023",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

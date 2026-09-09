@@ -1131,6 +1131,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；执行printf %d not-a-number；多字节locale的数值错误诊断使用locale左右单引号，预期输出0、RC=1并报告expected a numeric value",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%d", "not-a-number"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0",
+                    "stderr": "printf: ‘not-a-number’: expected a numeric value\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -20,7 +20,7 @@ use crate::{
     },
     ct_show_error, ct_show_warning,
 };
-use std::ffi::OsStr;
+use std::ffi::{CStr, OsStr};
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 
@@ -348,8 +348,19 @@ fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
 }
 
 fn quote_numeric_argument(input: &OsStr) -> String {
-    if uses_unibyte_locale() {
+    quote_numeric_argument_for_locale(input, uses_unibyte_locale(), uses_utf8_codeset())
+}
+
+fn quote_numeric_argument_for_locale(
+    input: &OsStr,
+    unibyte_locale: bool,
+    utf8_codeset: bool,
+) -> String {
+    if unibyte_locale {
         return escape_unibyte_c_bytes(input.as_bytes(), CtQuotes::Single);
+    }
+    if utf8_codeset {
+        return quote_utf8_numeric_bytes(input.as_bytes());
     }
     escape_name(
         input,
@@ -357,6 +368,73 @@ fn quote_numeric_argument(input: &OsStr) -> String {
             quotes: CtQuotes::Single,
         },
     )
+}
+
+fn uses_utf8_codeset() -> bool {
+    let codeset = unsafe { crate::libc::nl_langinfo(crate::libc::CODESET) };
+    if codeset.is_null() {
+        return false;
+    }
+    matches!(
+        unsafe { CStr::from_ptr(codeset) }.to_bytes(),
+        b"UTF-8" | b"UTF8" | b"utf-8" | b"utf8"
+    )
+}
+
+fn quote_utf8_numeric_bytes(mut bytes: &[u8]) -> String {
+    let mut escaped = String::from("‘");
+    while !bytes.is_empty() {
+        match std::str::from_utf8(bytes) {
+            Ok(valid) => {
+                for character in valid.chars() {
+                    push_locale_quoted_character(&mut escaped, character);
+                }
+                break;
+            }
+            Err(error) => {
+                let valid_length = error.valid_up_to();
+                let (valid, rest) = bytes.split_at(valid_length);
+                for character in unsafe { std::str::from_utf8_unchecked(valid) }.chars() {
+                    push_locale_quoted_character(&mut escaped, character);
+                }
+
+                let invalid_length = error.error_len().unwrap_or(rest.len());
+                for byte in &rest[..invalid_length] {
+                    push_octal_byte(&mut escaped, *byte);
+                }
+                bytes = &rest[invalid_length..];
+            }
+        }
+    }
+    escaped.push('’');
+    escaped
+}
+
+fn push_locale_quoted_character(escaped: &mut String, character: char) {
+    match character {
+        '\x07' => escaped.push_str("\\a"),
+        '\x08' => escaped.push_str("\\b"),
+        '\t' => escaped.push_str("\\t"),
+        '\n' => escaped.push_str("\\n"),
+        '\x0b' => escaped.push_str("\\v"),
+        '\x0c' => escaped.push_str("\\f"),
+        '\r' => escaped.push_str("\\r"),
+        '\\' => escaped.push_str("\\\\"),
+        control if control.is_control() => {
+            let mut buffer = [0u8; 4];
+            for byte in control.encode_utf8(&mut buffer).as_bytes() {
+                push_octal_byte(escaped, *byte);
+            }
+        }
+        printable => escaped.push(printable),
+    }
+}
+
+fn push_octal_byte(escaped: &mut String, byte: u8) {
+    escaped.push('\\');
+    escaped.push(char::from(b'0' + (byte >> 6)));
+    escaped.push(char::from(b'0' + ((byte >> 3) & 7)));
+    escaped.push(char::from(b'0' + (byte & 7)));
 }
 
 // 该函数接收两个通用参数： T 和 ParseError<'_, T>。该函数用于从解析结果中提取值，并处理可能出现的解析错误。
@@ -625,6 +703,18 @@ mod tests {
         assert_eq!(quote_numeric_argument(OsStr::new(" ")), "' '");
         assert_eq!(quote_numeric_argument(OsStr::new("a b")), "'a b'");
         assert_eq!(quote_numeric_argument(OsStr::new("'")), "'\\''");
+    }
+
+    #[test]
+    fn multibyte_locale_numeric_diagnostics_use_locale_quotes() {
+        assert_eq!(
+            quote_numeric_argument_for_locale(OsStr::new("a'b"), false, true),
+            "‘a'b’"
+        );
+        assert_eq!(
+            quote_numeric_argument_for_locale(OsStr::from_bytes(b"\xff"), false, true),
+            "‘\\377’"
+        );
     }
 
     #[test]

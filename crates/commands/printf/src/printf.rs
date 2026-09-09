@@ -18,7 +18,7 @@ use std::io::{Write, stderr, stdout};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ops::ControlFlow;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_format::{ArgCursor, FormatArgument, parse_spec_and_escape};
@@ -51,7 +51,7 @@ pub struct PrintfSemantic {
 }
 
 struct PrintfInvocation {
-    format_string: String,
+    format_string: Vec<u8>,
     arguments: Vec<FormatArgument>,
 }
 
@@ -84,13 +84,14 @@ fn init_printf_locale() {
 
 fn printf_invocation_from_matches(args_match: &ArgMatches) -> CTResult<PrintfInvocation> {
     let format_string = args_match
-        .get_one::<String>(opt_flags::PRINTF_FORMATSTRING)
+        .get_one::<OsString>(opt_flags::PRINTF_FORMATSTRING)
         .ok_or_else(|| CTsageError::new(1, "missing operand"))?
-        .to_string();
+        .as_encoded_bytes()
+        .to_vec();
 
-    let arguments = match args_match.get_many::<String>(opt_flags::PRINTF_ARGUMENT) {
+    let arguments = match args_match.get_many::<OsString>(opt_flags::PRINTF_ARGUMENT) {
         Some(values) => values
-            .map(|value| FormatArgument::Unparsed(value.to_string()))
+            .map(|value| FormatArgument::Bytes(value.as_encoded_bytes().to_vec()))
             .collect(),
         None => Vec::new(),
     };
@@ -111,7 +112,7 @@ fn printf_render_to_writer<W: Write>(
     loop {
         let mut cursor = ArgCursor::new(args_slice);
 
-        for item in parse_spec_and_escape(invocation.format_string.as_bytes()) {
+        for item in parse_spec_and_escape(&invocation.format_string) {
             let item = item.map_err(|err| CtSimpleError::new(1, err.to_string()))?;
             match item
                 .write(&mut *writer, &mut cursor)
@@ -149,6 +150,7 @@ fn printf_excess_arguments_warning(arg: &FormatArgument) -> String {
 fn printf_argument_for_warning(arg: &FormatArgument) -> String {
     match arg {
         FormatArgument::Unparsed(s) | FormatArgument::String(s) => format!("‘{s}’"),
+        FormatArgument::Bytes(bytes) => format!("‘{}’", String::from_utf8_lossy(bytes)),
         FormatArgument::Char(c) => format!("‘{c}’"),
         FormatArgument::UnsignedInt(n) => format!("‘{n}’"),
         FormatArgument::SignedInt(n) => format!("‘{n}’"),
@@ -274,15 +276,16 @@ pub fn printf_native_semantic(args: impl ctcore::Args) -> CTResult<PrintfSemanti
     };
 
     let mut output = Vec::new();
+    let format_string = String::from_utf8_lossy(&invocation.format_string);
     match printf_render_to_writer(&invocation, &mut output) {
         Ok(stderr_text) => Ok(printf_semantic_from_output(
-            &invocation.format_string,
+            &format_string,
             output,
             stderr_text,
             0,
         )),
         Err(err) => Ok(printf_semantic_from_output(
-            &invocation.format_string,
+            &format_string,
             output,
             printf_error_text(err.as_ref()),
             err.code(),
@@ -307,8 +310,10 @@ pub fn ct_app() -> Command {
             .long(PRINTF_VERSION)
             .help(t!("printf.clap.printf_version"))
             .action(ArgAction::Version),
-        Arg::new(opt_flags::PRINTF_FORMATSTRING),
-        Arg::new(opt_flags::PRINTF_ARGUMENT).action(ArgAction::Append),
+        Arg::new(opt_flags::PRINTF_FORMATSTRING).value_parser(OsStringValueParser::new()),
+        Arg::new(opt_flags::PRINTF_ARGUMENT)
+            .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new()),
     ];
 
     Command::new(utility_name)
@@ -382,6 +387,8 @@ mod tests {
         use crate::ct_app;
 
         use clap::error::ErrorKind;
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
 
         #[test]
         fn test_ct_app_version() {
@@ -401,6 +408,18 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn accepts_non_utf8_linux_arguments() {
+            let args = vec![
+                std::ffi::OsString::from("printf"),
+                std::ffi::OsString::from("%s"),
+                std::ffi::OsString::from_vec(vec![0xff]),
+            ];
+
+            assert!(ct_app().try_get_matches_from(args).is_ok());
         }
     }
 
@@ -549,7 +568,7 @@ mod tests {
         #[test]
         fn string_precision_truncates_at_a_utf8_byte_boundary() {
             let invocation = PrintfInvocation {
-                format_string: "%.1s".to_string(),
+                format_string: b"%.1s".to_vec(),
                 arguments: vec![FormatArgument::Unparsed("é".to_string())],
             };
             let mut output = Vec::new();

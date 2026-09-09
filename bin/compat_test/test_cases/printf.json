@@ -326,6 +326,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C；格式参数字节=2573（%s），字符串参数字节=ff（无效UTF-8单字节）；预期RC=0，stdout为1字节、内容=ff（原样输出Linux参数字节），stderr为0字节、内容=空",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2573", "ff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

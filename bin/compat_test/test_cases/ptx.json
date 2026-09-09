@@ -11657,6 +11657,44 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -f -W '\\w+' input；input可读为“\\xC9lan \\xE9lan !\\n”，共13字节c9 6c 61 6e 20 e9 6c 61 6e 20 21 0a；预期RC=0、stderr为空，stdout十六进制解码为2行、53字节的roff记录“.xx \"\" \"\" \"\\xC9lan \\xE9lan !\" \"\"\\n”和“.xx \"\" \"\\xC9lan\" \"\\xE9lan !\" \"\"\\n”，JSON中的十六进制stdout逐字节表示这两条记录，验证单字节locale忽略大小写时\\w运算符可用",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\311lan \\351lan !\\n' > input"
+      ],
+      "args": ["2d4f", "2d66", "2d57", "5c772b", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022222022c96c616e20e96c616e2021222022220a2e78782022222022c96c616e222022e96c616e2021222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -O -f -W '\\W+' input；input可读为“\\xC9lan \\xE9lan !\\n”，共13字节c9 6c 61 6e 20 e9 6c 61 6e 20 21 0a；预期RC=0、stderr为空，stdout十六进制解码为2行、54字节的roff记录“.xx \"\" \"\\xC9lan\" \" \\xE9lan !\" \"\"\\n”和“.xx \"\" \"\\xC9lan \\xE9lan\" \" !\" \"\"\\n”，JSON中的十六进制stdout逐字节表示这两条记录，验证单字节locale忽略大小写时\\W运算符可用",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\311lan \\351lan !\\n' > input"
+      ],
+      "args": ["2d4f", "2d66", "2d57", "5c572b", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022c96c616e22202220e96c616e2021222022220a2e78782022222022c96c616e20e96c616e2220222021222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

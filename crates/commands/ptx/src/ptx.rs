@@ -632,8 +632,20 @@ fn ptx_class_pair(positive: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
     (positive, negative)
 }
 
-fn ptx_single_byte_classes(mut is_member: impl FnMut(u8) -> bool) -> (Vec<u8>, Vec<u8>) {
+fn ptx_single_byte_classes(
+    mut is_member: impl FnMut(u8) -> bool,
+    escape_members: bool,
+) -> (Vec<u8>, Vec<u8>) {
     let mut class = vec![b'['];
+    if escape_members {
+        for value in 0u16..=255 {
+            if is_member(value as u8) {
+                write!(class, r"\x{value:02X}").expect("writing to a Vec cannot fail");
+            }
+        }
+        class.push(b']');
+        return ptx_class_pair(class);
+    }
     let mut range_start = None;
     for value in 0u16..=256 {
         let member = value < 256 && is_member(value as u8);
@@ -675,14 +687,16 @@ fn ptx_unicode_classes(mut is_member: impl FnMut(u32) -> bool) -> (Vec<u8>, Vec<
 
 fn ptx_locale_word_classes(
     single_byte_locale: bool,
+    ignore_case: bool,
     encoding: LocaleRegexEncoding,
     byte_ctype: &LocaleByteCtype,
     locale_validator: Option<&LocaleMultibyteValidator>,
 ) -> (Vec<u8>, Vec<u8>) {
     if single_byte_locale {
-        return ptx_single_byte_classes(|byte| {
-            byte_ctype.is_alpha(byte) || byte.is_ascii_digit() || byte == b'_'
-        });
+        return ptx_single_byte_classes(
+            |byte| byte_ctype.is_alpha(byte) || byte.is_ascii_digit() || byte == b'_',
+            ignore_case,
+        );
     }
     if matches!(
         encoding,
@@ -699,12 +713,13 @@ fn ptx_locale_word_classes(
 
 fn ptx_locale_space_classes(
     single_byte_locale: bool,
+    ignore_case: bool,
     encoding: LocaleRegexEncoding,
     byte_ctype: &LocaleByteCtype,
     locale_validator: Option<&LocaleMultibyteValidator>,
 ) -> (Vec<u8>, Vec<u8>) {
     if single_byte_locale {
-        return ptx_single_byte_classes(|byte| byte_ctype.is_space(byte));
+        return ptx_single_byte_classes(|byte| byte_ctype.is_space(byte), ignore_case);
     }
     if matches!(
         encoding,
@@ -2090,12 +2105,14 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     };
     (config.regex_word_class, config.regex_non_word_class) = ptx_locale_word_classes(
         config.single_byte_locale,
+        config.is_ignore_case,
         config.locale_regex_encoding,
         &config.byte_ctype,
         config.locale_validator.as_deref(),
     );
     (config.regex_space_class, config.regex_non_space_class) = ptx_locale_space_classes(
         config.single_byte_locale,
+        config.is_ignore_case,
         config.locale_regex_encoding,
         &config.byte_ctype,
         config.locale_validator.as_deref(),
@@ -3971,7 +3988,8 @@ fn ptx_format_tex_line(
         maximum_word_length,
     );
     let keyafter_chars: Vec<char> = fields.keyafter.chars().collect();
-    let (key, after): (String, String) = if keyafter_chars.is_empty() && config.word_regex.is_some()
+    let (key, after): (String, String) = if keyafter_chars.is_empty()
+        && (config.word_regex.is_some() || config.word_byte_regex.is_some())
     {
         (keyword.chars().next().into_iter().collect(), String::new())
     } else {
@@ -4586,7 +4604,9 @@ fn ptx_format_tex_line_bytes(
         line_width,
         maximum_word_length,
     );
-    let (key, after) = if fields.keyafter.is_empty() && config.word_regex.is_some() {
+    let (key, after) = if fields.keyafter.is_empty()
+        && (config.word_regex.is_some() || config.word_byte_regex.is_some())
+    {
         (&keyword[..keyword.len().min(1)], &[][..])
     } else {
         let key_end = ptx_skip_something_bytes(&fields.keyafter, 0, fields.keyafter.len(), config);
@@ -5633,10 +5653,6 @@ impl PtxSettings {
         let mut word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_bytes = word_filter.break_set.clone();
         if word_filter.uses_custom_regex {
-            config.word_regex = Some(compile_user_regex(
-                &word_filter.word_regex,
-                config.is_ignore_case,
-            )?);
             if let Some(pattern) = &word_filter.word_byte_pattern {
                 config.word_byte_regex = Some(compile_user_byte_regex(
                     pattern,
@@ -5647,6 +5663,11 @@ impl PtxSettings {
                     config.single_byte_locale,
                 )?);
                 config.force_byte_mode = true;
+            } else {
+                config.word_regex = Some(compile_user_regex(
+                    &word_filter.word_regex,
+                    config.is_ignore_case,
+                )?);
             }
         }
 

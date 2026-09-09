@@ -21,6 +21,7 @@ use super::{
 use crate::ct_quoting_style::{CtQuotingStyle, escape_name};
 use std::ffi::CStr;
 use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::{io::Write, ops::ControlFlow};
 
 /// 用于格式化值的已解析说明符
@@ -324,8 +325,7 @@ impl IndexedSpec {
             } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
                 let p = resolve_precision(*precision, self.precision_index, cursor);
-                let s = cursor.get_str(self.arg_index);
-                let bytes = s.as_bytes();
+                let bytes = cursor.get_bytes(self.arg_index);
                 let truncated = match p {
                     Some(prec) if prec < bytes.len() => &bytes[..prec],
                     _ => bytes,
@@ -333,8 +333,8 @@ impl IndexedSpec {
                 write_padded(writer, truncated, w.unwrap_or(0), *align_left || dyn_left)
             }
             Spec::EscapedString => {
-                let s = cursor.get_str(self.arg_index);
-                for res in parse_escape_only(s.as_bytes()) {
+                let bytes = cursor.get_bytes(self.arg_index);
+                for res in parse_escape_only(bytes) {
                     match res?.write(&mut writer)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => return Ok(ControlFlow::Break(())),
@@ -343,14 +343,14 @@ impl IndexedSpec {
                 Ok(())
             }
             Spec::QuotedString => {
-                let s = cursor.get_str(self.arg_index);
-                if s.is_empty() {
+                let bytes = cursor.get_bytes(self.arg_index);
+                if bytes.is_empty() {
                     writer.write_all(b"''").map_err(FormatError::IoError)
                 } else {
                     writer
                         .write_all(
                             escape_name(
-                                OsStr::new(s),
+                                OsStr::from_bytes(bytes),
                                 &CtQuotingStyle::Shell {
                                     escape: true,
                                     always_quote: false,

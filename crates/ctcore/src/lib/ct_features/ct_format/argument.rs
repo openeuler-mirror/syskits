@@ -33,6 +33,8 @@ pub enum FormatArgument {
     Float(f64),
     /// 特殊参数，会被强制转换为其他变体
     Unparsed(String),
+    /// Linux命令行中的原始字节参数，由printf用于保留非UTF-8输入。
+    Bytes(Vec<u8>),
 }
 
 /// 支持随机索引访问的参数游标
@@ -82,6 +84,7 @@ impl<'a> ArgCursor<'a> {
                     let v = s.bytes().next();
                     v.unwrap_or(b'\0')
                 }
+                FormatArgument::Bytes(bytes) => bytes.first().copied().unwrap_or(b'\0'),
                 FormatArgument::Char(c) => *c as u8,
                 _ => b'\0',
             }
@@ -97,6 +100,7 @@ impl<'a> ArgCursor<'a> {
                     let v = ParsedNumber::parse_u64(s);
                     extract_value(v, s)
                 }
+                FormatArgument::Bytes(bytes) => parse_bytes_u64(bytes),
                 FormatArgument::UnsignedInt(n) => *n,
                 _ => 0,
             }
@@ -112,6 +116,7 @@ impl<'a> ArgCursor<'a> {
                     let v = ParsedNumber::parse_i64(s);
                     extract_value(v, s)
                 }
+                FormatArgument::Bytes(bytes) => parse_bytes_i64(bytes),
                 FormatArgument::SignedInt(n) => *n,
                 _ => 0,
             }
@@ -127,6 +132,7 @@ impl<'a> ArgCursor<'a> {
                     let v = ParsedNumber::parse_f64(s);
                     extract_value(v, s)
                 }
+                FormatArgument::Bytes(bytes) => parse_bytes_f64(bytes),
                 FormatArgument::Float(n) => *n,
                 _ => 0.0,
             }
@@ -136,10 +142,18 @@ impl<'a> ArgCursor<'a> {
     }
 
     pub fn get_str(&mut self, idx: Option<usize>) -> &'a str {
-        if let Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) = self.fetch(idx) {
-            s
-        } else {
-            ""
+        match self.fetch(idx) {
+            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
+            Some(FormatArgument::Bytes(bytes)) => std::str::from_utf8(bytes).unwrap_or(""),
+            _ => "",
+        }
+    }
+
+    pub fn get_bytes(&mut self, idx: Option<usize>) -> &'a [u8] {
+        match self.fetch(idx) {
+            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s.as_bytes(),
+            Some(FormatArgument::Bytes(bytes)) => bytes,
+            _ => b"",
         }
     }
 
@@ -147,6 +161,42 @@ impl<'a> ArgCursor<'a> {
     pub fn consumed_count(&self) -> usize {
         self.max_accessed
     }
+}
+
+fn parse_bytes_u64(bytes: &[u8]) -> u64 {
+    match std::str::from_utf8(bytes) {
+        Ok(input) => extract_value(ParsedNumber::parse_u64(input), input),
+        Err(_) => invalid_numeric_bytes(bytes),
+    }
+}
+
+fn parse_bytes_i64(bytes: &[u8]) -> i64 {
+    match std::str::from_utf8(bytes) {
+        Ok(input) => extract_value(ParsedNumber::parse_i64(input), input),
+        Err(_) => invalid_numeric_bytes(bytes),
+    }
+}
+
+fn parse_bytes_f64(bytes: &[u8]) -> f64 {
+    match std::str::from_utf8(bytes) {
+        Ok(input) => extract_value(ParsedNumber::parse_f64(input), input),
+        Err(_) => invalid_numeric_bytes(bytes),
+    }
+}
+
+fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
+    use std::os::unix::ffi::OsStrExt;
+
+    set_ct_exit_code(1);
+    let input = OsStr::from_bytes(bytes);
+    let escaped = escape_name(
+        input,
+        &CtQuotingStyle::C {
+            quotes: CtQuotes::None,
+        },
+    );
+    ct_show_error!("{}: expected a numeric value", escaped.quote());
+    T::default()
 }
 
 // 该函数接收两个通用参数： T 和 ParseError<'_, T>。该函数用于从解析结果中提取值，并处理可能出现的解析错误。

@@ -842,6 +842,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；浮点参数覆盖十进制及十六进制long double上溢和下溢；预期保留量化后的inf/0输出，同时逐项报告Numerical result out of range并返回RC=1",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%g|%g|%g|%g", "2e4932", "1e-5000", "0x1p16384", "0x1p-20000"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "inf|0|inf|0",
+                    "stderr": "printf: '2e4932': Numerical result out of range\nprintf: '1e-5000': Numerical result out of range\nprintf: '0x1p16384': Numerical result out of range\nprintf: '0x1p-20000': Numerical result out of range\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

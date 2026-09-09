@@ -956,6 +956,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%Lb且参数为x；GNU扩展%b不接受长度修饰符，预期RC=1、stdout为空并报告invalid conversion specification",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%Lb", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: %Lb: invalid conversion specification\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

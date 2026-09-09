@@ -370,7 +370,17 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                     PollFlags::empty()
                 };
 
-                if stdin_revents.intersects(PollFlags::POLLIN) {
+                if stdout_revents
+                    .intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
+                {
+                    // stdout失败与stdin可读同时发生时，GNU tee先处理输出错误。
+                    output.report_broken_pipe_for_stdout()?;
+                    stdout_active = false;
+
+                    if output.is_empty() {
+                        return Ok(());
+                    }
+                } else if stdin_revents.intersects(PollFlags::POLLIN) {
                     match stdin_lock.read(&mut buf) {
                         Ok(0) => {
                             // EOF
@@ -392,17 +402,6 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                             ct_show_error!("stdin: {}", strip_errno(&e));
                             return Err(e);
                         }
-                    }
-                } else if stdout_revents
-                    .intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
-                {
-                    // 人工触发 Broken Pipe 错误，交由 --output-error 策略处理
-                    output.report_broken_pipe_for_stdout()?; // Exit 模式下会抛出错误退出
-                    stdout_active = false;
-
-                    // 如果 stdout 是唯一的输出，那么它挂了我们就可以提前结束进程了
-                    if output.is_empty() {
-                        return Ok(());
                     }
                 } else if stdin_revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR) {
                     return Ok(());
@@ -588,7 +587,7 @@ impl MultiWriter {
             if writer.name == STANDARD_OUTPUT_NAME {
                 if let Err(e) = process_error(
                     mode.as_ref(),
-                    Error::from(IoErrorKind::BrokenPipe),
+                    Error::from_raw_os_error(nix::libc::EPIPE),
                     writer,
                     &mut errors,
                 ) {

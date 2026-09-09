@@ -468,6 +468,32 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "tstdin": "",
+            "command": "dirname",
+            "description": "LC_ALL=C、LANG=C下执行dirname -z /a/b，并将stdout连接到/dev/full；stdin为空且无文件fixture；预期RC=1、stdout不可捕获且为0字节，stderr为dirname: write error: No space left on device加换行；迁移原Cargo用例dirname_zero_reports_stdout_write_errors",
+            "args": [
+                "-z",
+                "/a/b"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "dirname: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
   }

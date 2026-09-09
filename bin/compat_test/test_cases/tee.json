@@ -105,6 +105,37 @@
               }
           },
           "cleanup_commands": ["rm -rf test_dir"]
+      },
+      {
+          "tstdin": "xxxxxxxx",
+          "command": "tee",
+          "description": "LC_ALL=C、LANG=C下执行tee --output-error=exit out；stdin为8字节xxxxxxxx，stdout连接到已关闭读端的管道，无预置文件fixture；预期RC=1、stdout为0字节，stderr为tee: 'standard output': Broken pipe加换行，并验证out存在且大小为0字节，确认stdout破管后不再把当前输入块写入文件；迁移原Cargo用例tee_exit_mode_does_not_write_a_block_after_stdout_breaks",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["--output-error=exit", "out"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "",
+                  "stderr": "tee: 'standard output': Broken pipe\n"
+              },
+              "verifications": [
+                  {
+                      "command": "stat -c '%s' out",
+                      "expected_exit": 0,
+                      "expected_stdout": "0\n",
+                      "expected_stderr": ""
+                  }
+              ]
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdout": "closed_pipe"
+              }
+          },
+          "cleanup_commands": []
       }
   ]
 }

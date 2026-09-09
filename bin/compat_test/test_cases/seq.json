@@ -1688,6 +1688,56 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "seq",
+            "description": "LC_ALL=C、LANG=C下执行seq 1 100000，并将stdout连接到已关闭读端的管道，SIGPIPE使用默认处置；stdin为空且无文件fixture；预期进程被SIGPIPE终止并折算RC=141，stdout和stderr均为0字节；迁移原Cargo用例seq_terminates_with_sigpipe_when_the_reader_closes",
+            "args": ["1", "100000"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "seq",
+            "description": "LC_ALL=C、LANG=C下执行seq 1 100000，并将stdout连接到已关闭读端的管道，子进程忽略SIGPIPE；stdin为空且无文件fixture；预期写调用收到EPIPE后RC=1、stdout为0字节，stderr为seq: write error: Broken pipe加换行；迁移原Cargo用例seq_reports_epipe_when_sigpipe_is_ignored",
+            "args": ["1", "100000"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: write error: Broken pipe\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

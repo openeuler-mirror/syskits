@@ -493,6 +493,75 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "LC_ALL=C、LANG=C下执行pinky -l root，并将stdout连接到/dev/full；stdin为空且使用系统root账户信息、无自建fixture；预期RC=1、stdout为0字节，stderr为pinky: write error: No space left on device加换行且不含panic；迁移原Cargo用例pinky_reports_stdout_write_errors",
+            "args": ["-l", "root"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pinky: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "LC_ALL=C、LANG=C下执行pinky --help，并将stdout连接到/dev/full；stdin为空且无文件fixture；预期RC=1、stdout为0字节，stderr仅为pinky: write error: No space left on device加换行；迁移原Cargo用例pinky_reports_help_and_version_write_errors的help调用",
+            "args": ["--help"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pinky: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "pinky",
+            "description": "LC_ALL=C、LANG=C下执行pinky --version，并将stdout连接到/dev/full；stdin为空且无文件fixture；预期RC=1、stdout为0字节，stderr仅为pinky: write error: No space left on device加换行；迁移原Cargo用例pinky_reports_help_and_version_write_errors的version调用",
+            "args": ["--version"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "pinky: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

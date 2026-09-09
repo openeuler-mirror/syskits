@@ -18,7 +18,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
 
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
@@ -163,7 +163,10 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
             &options.terminator,
         ) {
             Ok(_) => Ok(()),
-            Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
+            Err(e) => Err(CtSimpleError::new(
+                1,
+                format!("write error: {}", strip_errno(&e)),
+            )),
         };
     }
 
@@ -183,7 +186,10 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     match print_seq((first.number, increment.number, last.number), config) {
         Ok(_) => Ok(()),
-        Err(e) => Err(CtSimpleError::new(1, format!("write error: {e}"))),
+        Err(e) => Err(CtSimpleError::new(
+            1,
+            format!("write error: {}", strip_errno(&e)),
+        )),
     }
 }
 
@@ -236,7 +242,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
         &mut rows,
         &mut classic_buffer,
     )
-    .map_err(|e| CtSimpleError::new(1, format!("write error: {e}")))?;
+    .map_err(|e| CtSimpleError::new(1, format!("write error: {}", strip_errno(&e))))?;
 
     Ok(SeqSemantic {
         rows,

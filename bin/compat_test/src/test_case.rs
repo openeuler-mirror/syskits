@@ -55,8 +55,53 @@ pub enum FileType {
     Socket,      // 套接字
 }
 
+/// 命令标准输出或标准错误的连接方式。
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputStream {
+    /// 通过管道捕获输出并参与结果比较。
+    #[default]
+    Capture,
+    /// 继承测试运行器的对应标准流，兼容既有用例执行方式。
+    Inherit,
+    /// 将输出连接到 `/dev/null`。
+    Null,
+    /// 将输出连接到 `/dev/full`，用于验证写失败处理。
+    Full,
+    /// 将输出连接到没有读端的管道，用于验证 broken pipe 处理。
+    ClosedPipe,
+    /// 将输出连接到伪终端并捕获终端输出。
+    Tty,
+}
+
+/// 子进程执行时的 SIGPIPE 处置方式。
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalDisposition {
+    /// 使用正常的默认信号处置。
+    #[default]
+    Default,
+    /// 忽略 SIGPIPE，使写调用以 EPIPE 失败。
+    Ignore,
+}
+
+/// 非交互测试的标准流拓扑。
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, Eq)]
+pub struct StandardStreams {
+    #[serde(default)]
+    pub stdout: OutputStream,
+    #[serde(default)]
+    pub stderr: OutputStream,
+    #[serde(default)]
+    pub sigpipe: SignalDisposition,
+    /// 通过 Bash 启动被测命令，并保留 Bash 作为命令的直接父进程。
+    #[serde(default, rename = "useBash", alias = "use_bash")]
+    pub use_bash: bool,
+}
+
 /// 表示测试的环境设置
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(default)]
 pub struct TestEnvironment {
     /// 测试前要创建的文件和目录
     pub files: Vec<TestFile>,
@@ -72,6 +117,9 @@ pub struct TestEnvironment {
     pub umask: Option<String>,
     /// 资源限制设置
     pub resource_limits: Option<ResourceLimits>,
+    /// 非交互命令的标准流连接及 SIGPIPE 处置。
+    #[serde(default, rename = "standardStreams", alias = "standard_streams")]
+    pub standard_streams: Option<StandardStreams>,
 }
 
 /// Resource limits for the test environment
@@ -376,6 +424,43 @@ impl TestCase {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_deserialize_standard_stream_configuration() {
+        let json = r#"
+        {
+          "tests": [{
+            "tstdin": "",
+            "command": "printf",
+            "description": "exercise non-default standard streams",
+            "args": ["output"],
+            "expectation": {
+              "execution": {"exit_code": 1, "stdout": "", "stderr": ""},
+              "verifications": []
+            },
+            "environment": {
+              "standardStreams": {
+                "stdout": "closed_pipe",
+                "stderr": "tty",
+                "sigpipe": "ignore",
+                "useBash": true
+              }
+            }
+          }]
+        }
+        "#;
+
+        let suite: TestSuite = serde_json::from_str(json).expect("deserialize test suite");
+        let streams = suite.tests[0]
+            .environment
+            .standard_streams
+            .as_ref()
+            .expect("standard stream configuration");
+        assert_eq!(streams.stdout, OutputStream::ClosedPipe);
+        assert_eq!(streams.stderr, OutputStream::Tty);
+        assert_eq!(streams.sigpipe, SignalDisposition::Ignore);
+        assert!(streams.use_bash);
+    }
     use tempfile::TempDir;
 
     #[test]

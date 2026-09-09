@@ -279,6 +279,32 @@
             },
             "cleanup_commands": [],
             "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C、LANG=C下执行nohup true；stdin为空管道、stdout为非TTY捕获管道，仅stderr连接PTY；无文件fixture；预期RC=0、stdout为空，PTY stderr规范化为nohup: redirecting stderr to stdout加换行；迁移原Cargo用例nohup_reports_tty_stderr_redirection",
+            "args": [
+                "true"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "nohup: redirecting stderr to stdout\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stderr": "tty"
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
         }
     ]
-} 
+}

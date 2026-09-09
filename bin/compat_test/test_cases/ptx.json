@@ -1356,6 +1356,79 @@
       ]
     },
     {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591，执行ptx input；input显示为é\\n、原始字节为c3 a9 0a；预期输出为39个前导空格加é\\n，验证单字节locale按原始字节偏移处理合法UTF-8字节序列",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\303\\251\\n' > input"
+      ],
+      "args": ["input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                       é\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591，执行ptx -R input；input显示为é\\n、原始字节为c3 a9 0a；预期输出为36个前导空格加é\\n，验证右侧引用格式保持单字节原始偏移",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\303\\251\\n' > input"
+      ],
+      "args": ["-R", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "                                    é\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591，执行ptx -O input；input显示为é\\n、原始字节为c3 a9 0a；预期输出为.xx \"\" \"\" \"é\" \"\"\\n，验证roff格式保持连续原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\303\\251\\n' > input"
+      ],
+      "args": ["-O", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \"é\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=en_US.iso88591，执行ptx -T input；input按UTF-8查看为“é\\n”，实际为3字节c3 a9 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、17字节的TeX记录“\\xx {}{}{\\xC3}{\\xA9}{}\\n”，其完整原始字节为5c 78 78 20 7b 7d 7b 7d 7b c3 7d 7b a9 7d 7b 7d 0a，验证单字节locale将c3和a9放入两个字段且不因其可组成UTF-8字符而崩溃",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '\\303\\251\\n' > input"
+      ],
+      "args": ["2d54", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b7d7bc37d7ba97d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "command": "ptx",
       "description": "Test invalid regex in -S (backslash at end)",
       "args": ["-S", "foo\\"],

@@ -15,11 +15,14 @@ use super::long_double::{
 use crate::{
     ct_error::set_ct_exit_code,
     ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
-    ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name},
+    ct_quoting_style::{
+        CtQuotes, CtQuotingStyle, escape_name, escape_unibyte_c_bytes, uses_unibyte_locale,
+    },
     ct_show_error, ct_show_warning,
 };
 use std::ffi::OsStr;
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 
 unsafe extern "C" {
     fn mbrtowc(
@@ -338,8 +341,6 @@ fn character_constant_warning(utility_name: &str, trailing: &[u8]) -> Vec<u8> {
 }
 
 fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
-    use std::os::unix::ffi::OsStrExt;
-
     set_ct_exit_code(1);
     let escaped = quote_numeric_argument(OsStr::from_bytes(bytes));
     ct_show_error!("{}: expected a numeric value", escaped);
@@ -347,6 +348,9 @@ fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
 }
 
 fn quote_numeric_argument(input: &OsStr) -> String {
+    if uses_unibyte_locale() {
+        return escape_unibyte_c_bytes(input.as_bytes(), CtQuotes::Single);
+    }
     escape_name(
         input,
         &CtQuotingStyle::C {

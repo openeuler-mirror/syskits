@@ -19,11 +19,26 @@ use super::{
     parse_escape_only,
 };
 use crate::ct_format::long_double::GnuFloatFormat;
-use crate::ct_quoting_style::{CtQuotingStyle, escape_name};
+use crate::ct_quoting_style::{CtQuotingStyle, escape_name, escape_unibyte_shell_bytes};
 use std::ffi::CStr;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::{io::Write, ops::ControlFlow};
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+unsafe extern "C" {
+    fn __ctype_get_mb_cur_max() -> usize;
+}
+
+fn printf_uses_unibyte_locale() -> bool {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        unsafe { __ctype_get_mb_cur_max() == 1 }
+    }
+
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+    false
+}
 
 /// 用于格式化值的已解析说明符
 /// 可能需要多个参数来解析以*给出的宽度或精度值
@@ -363,6 +378,10 @@ impl IndexedSpec {
                 };
                 if bytes.is_empty() {
                     writer.write_all(b"''").map_err(FormatError::IoError)
+                } else if printf_uses_unibyte_locale() {
+                    writer
+                        .write_all(escape_unibyte_shell_bytes(bytes).as_bytes())
+                        .map_err(FormatError::IoError)
                 } else {
                     writer
                         .write_all(

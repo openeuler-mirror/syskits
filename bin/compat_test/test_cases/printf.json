@@ -1052,6 +1052,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C；格式参数字节=2571（%q），字符串参数字节=c3a9（UTF-8编码é）；C locale按单字节分类，预期两个高字节分别以三位八进制shell转义输出",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2571", "c3a9"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "272724275c3330335c32353127",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

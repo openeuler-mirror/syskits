@@ -284,6 +284,68 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
+pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
+    let mut in_dollar = false;
+    let mut must_quote = false;
+    let mut escaped_str = String::with_capacity(name.len());
+
+    for byte in name {
+        if !byte.is_ascii() {
+            if !in_dollar {
+                escaped_str.push_str("'$'");
+                in_dollar = true;
+            }
+            must_quote = true;
+            escaped_str.push('\\');
+            escaped_str.push(char::from(b'0' + (byte >> 6)));
+            escaped_str.push(char::from(b'0' + ((byte >> 3) & 0o7)));
+            escaped_str.push(char::from(b'0' + (byte & 0o7)));
+            continue;
+        }
+
+        let escaped = CtEscapedChar::new_shell(char::from(*byte), true, CtQuotes::Single);
+        match escaped.state {
+            CtEscapeState::Char(c) => {
+                if in_dollar {
+                    escaped_str.push_str("''");
+                    in_dollar = false;
+                }
+                escaped_str.push(c);
+            }
+            CtEscapeState::ForceQuote(c) => {
+                if in_dollar {
+                    escaped_str.push_str("''");
+                    in_dollar = false;
+                }
+                must_quote = true;
+                escaped_str.push(c);
+            }
+            CtEscapeState::Backslash('\'') => {
+                must_quote = true;
+                in_dollar = false;
+                escaped_str.push_str("'\\''");
+            }
+            _ => {
+                if !in_dollar {
+                    escaped_str.push_str("'$'");
+                    in_dollar = true;
+                }
+                must_quote = true;
+                for c in escaped {
+                    escaped_str.push(c);
+                }
+            }
+        }
+    }
+
+    must_quote = must_quote || matches!(name.first(), Some(b'~' | b'#'));
+    if must_quote {
+        format!("'{escaped_str}'")
+    } else {
+        escaped_str
+    }
+}
+
 pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
     match style {
         CtQuotingStyle::Literal { show_control } => {
@@ -378,7 +440,9 @@ impl fmt::Display for CtQuotes {
 
 #[cfg(test)]
 mod tests {
-    use crate::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
+    use crate::ct_quoting_style::{
+        CtQuotes, CtQuotingStyle, escape_name, escape_unibyte_shell_bytes,
+    };
     use std::ffi::OsStr;
 
     //拼写检查器忽略（tests/words）one'two one'two
@@ -885,6 +949,15 @@ mod tests {
             // println!("---------------------------");
             assert_eq!(escape_name(input, &style), expected_output);
         }
+    }
+
+    #[test]
+    fn unibyte_shell_quoting_escapes_each_non_ascii_byte() {
+        assert_eq!(escape_unibyte_shell_bytes(b"\xc3\xa9"), "''$'\\303\\251'");
+        assert_eq!(
+            escape_unibyte_shell_bytes(b"a\xc3\xa9b"),
+            "'a'$'\\303\\251''b'"
+        );
     }
 
     #[test]

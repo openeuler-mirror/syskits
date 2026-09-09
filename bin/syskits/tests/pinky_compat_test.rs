@@ -1,5 +1,4 @@
 use std::fs::OpenOptions;
-use std::os::unix::ffi::OsStringExt;
 use std::process::{Command, Stdio};
 
 #[test]

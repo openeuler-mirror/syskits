@@ -1,24 +1,9 @@
-#[cfg(all(unix, feature = "dirname"))]
-use std::ffi::OsString;
 #[cfg(all(target_os = "linux", feature = "dirname"))]
 use std::fs::OpenOptions;
 #[cfg(all(unix, feature = "dirname"))]
-use std::os::unix::ffi::OsStringExt;
+use std::process::Command;
 #[cfg(all(target_os = "linux", feature = "dirname"))]
 use std::process::Stdio;
-#[cfg(all(unix, feature = "dirname"))]
-use std::process::{Command, Output};
-
-#[cfg(all(unix, feature = "dirname"))]
-fn run_syskits(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_syskits"))
-        .arg("dirname")
-        .args(args)
-        .env("LC_ALL", "C")
-        .env("LANG", "C")
-        .output()
-        .expect("run syskits dirname")
-}
 
 #[cfg(all(unix, feature = "dirname"))]
 fn stderr_without_program(stderr: &[u8]) -> &[u8] {

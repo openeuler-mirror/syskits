@@ -163,7 +163,7 @@ fn parse_quantized_long_double(
 }
 
 fn parse_complete_long_double(input: &str) -> Result<ParsedLongDouble, ParseNumberError> {
-    let trimmed = input.trim_start_matches(char::is_whitespace);
+    let trimmed = input.trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}']);
     if let Some(rest) = trimmed.strip_prefix(['\'', '"']) {
         return rest
             .chars()
@@ -298,6 +298,18 @@ mod tests {
         assert_eq!(
             parse_long_double("").unwrap(),
             ExtendedBigDecimal::default()
+        );
+    }
+
+    #[test]
+    fn rejects_unicode_whitespace_in_c_locale_syntax() {
+        assert_eq!(
+            parse_long_double("\u{a0}1.5"),
+            Err(LongDoubleParseError::NotNumeric)
+        );
+        assert_eq!(
+            parse_long_double("\u{3000}1.5"),
+            Err(LongDoubleParseError::NotNumeric)
         );
     }
 

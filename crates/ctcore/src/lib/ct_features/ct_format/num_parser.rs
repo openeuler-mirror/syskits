@@ -316,7 +316,7 @@ impl ParsedNumber {
 }
 
 fn parse_strtold_f64(input: &str) -> Result<f64, ParseError<'_, f64>> {
-    let trimmed = input.trim_start_matches(char::is_whitespace);
+    let trimmed = input.trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}']);
     let whitespace = input.len() - trimmed.len();
     let (negative, unsigned, sign_len) = match trimmed.as_bytes().first() {
         Some(b'-') => (true, &trimmed[1..], 1),
@@ -1020,6 +1020,18 @@ mod tests {
         );
         assert_eq!(
             ParsedNumber::parse_i64("\u{a0}1"),
+            Err(ParseError::CtNotNumeric)
+        );
+    }
+
+    #[test]
+    fn float_parser_rejects_unicode_whitespace_in_c_locale_syntax() {
+        assert_eq!(
+            ParsedNumber::parse_f64("\u{a0}1.5"),
+            Err(ParseError::CtNotNumeric)
+        );
+        assert_eq!(
+            ParsedNumber::parse_f64("\u{2003}1.5"),
             Err(ParseError::CtNotNumeric)
         );
     }

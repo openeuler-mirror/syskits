@@ -1111,6 +1111,26 @@
             },
             "cleanup_commands": [],
             "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C；格式参数字节=2567（%g），参数字节=c2a0312e35（NBSP后跟1.5）；C locale不把Unicode空白视为前导空白，预期输出0、RC=1并逐字节八进制引用原参数",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2567", "c2a0312e35"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "30",
+                    "stderr": "7072696e74663a20275c3330325c323430312e35273a2065787065637465642061206e756d657269632076616c75650a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

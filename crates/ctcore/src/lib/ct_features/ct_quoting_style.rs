@@ -12,6 +12,11 @@ use std::char::from_digit;
 use std::ffi::OsStr;
 use std::fmt;
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+unsafe extern "C" {
+    fn __ctype_get_mb_cur_max() -> usize;
+}
+
 // 这些是在shell（如bash）中有特殊含义的字符。
 // 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
 const CT_SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
@@ -284,6 +289,33 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
+pub(crate) fn uses_unibyte_locale() -> bool {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        unsafe { __ctype_get_mb_cur_max() == 1 }
+    }
+
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+    false
+}
+
+pub(crate) fn escape_unibyte_c_bytes(name: &[u8], quotes: CtQuotes) -> String {
+    let mut escaped = String::with_capacity(name.len());
+    for byte in name {
+        if byte.is_ascii() {
+            escaped.extend(CtEscapedChar::new_c(char::from(*byte), quotes));
+        } else {
+            escaped.extend(CtEscapeOctal::from(char::from(*byte)));
+        }
+    }
+
+    match quotes {
+        CtQuotes::Single => format!("'{escaped}'"),
+        CtQuotes::Double => format!("\"{escaped}\""),
+        CtQuotes::None => escaped,
+    }
+}
+
 pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
     let mut in_dollar = false;
     let mut must_quote = false;
@@ -441,7 +473,7 @@ impl fmt::Display for CtQuotes {
 #[cfg(test)]
 mod tests {
     use crate::ct_quoting_style::{
-        CtQuotes, CtQuotingStyle, escape_name, escape_unibyte_shell_bytes,
+        CtQuotes, CtQuotingStyle, escape_name, escape_unibyte_c_bytes, escape_unibyte_shell_bytes,
     };
     use std::ffi::OsStr;
 
@@ -957,6 +989,14 @@ mod tests {
         assert_eq!(
             escape_unibyte_shell_bytes(b"a\xc3\xa9b"),
             "'a'$'\\303\\251''b'"
+        );
+    }
+
+    #[test]
+    fn unibyte_c_quoting_escapes_each_non_ascii_byte() {
+        assert_eq!(
+            escape_unibyte_c_bytes(b"\xc2\xa01.5", CtQuotes::Single),
+            "'\\302\\2401.5'"
         );
     }
 

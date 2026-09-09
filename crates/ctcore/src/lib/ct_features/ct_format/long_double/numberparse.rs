@@ -410,7 +410,7 @@ impl FromStr for PreciseNumber {
     type Err = ParseNumberError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim_start();
+        let s = s.trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}']);
         let (s, had_plus) = s
             .strip_prefix('+')
             .map_or((s, false), |value| (value, true));

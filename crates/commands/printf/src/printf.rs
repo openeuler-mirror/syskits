@@ -732,6 +732,23 @@ mod tests {
         }
 
         #[test]
+        fn floating_formats_preserve_long_double_argument_precision() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%g|%.20g|%.20f",
+                "0.1",
+                "0.1",
+                "0.1",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "0.1|0.1|0.10000000000000000000");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn scientific_format_normalizes_negative_values() {
             let args = [ctcore::ct_util_name(), "%e", "-123"];
 

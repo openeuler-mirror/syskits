@@ -10,7 +10,7 @@
  */
 use num_traits::Zero;
 
-use crate::extendedbigdecimal::ExtendedBigDecimal;
+use super::extendedbigdecimal::ExtendedBigDecimal;
 
 /// A number with a specified number of integer and fractional digits.
 ///

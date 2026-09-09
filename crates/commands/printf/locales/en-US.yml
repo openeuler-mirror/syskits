@@ -136,14 +136,9 @@ printf:
     `%.10e` means a scientific notation number with 10 significant digits
     `%.10g` means the same behavior for decimal and Sci. Note, respectively, and provides the shortest
     of each's output.
-    Like with GNU coreutils, the value after the decimal point is these outputs is parsed as a
-    double first before being rendered to text. For both implementations do not expect meaningful
-    precision past the 18th decimal place. When using a number of decimal places that is 18 or
-    higher, you can expect variation in output between GNU coreutils printf and this printf at the
-    18th decimal place of +/- 1
-    * `%f`: floating point value presented in decimal, truncated and displayed to 6 decimal places by
-    default. There is not past-double behavior parity with Coreutils printf, values are not
-    estimated or adjusted beyond input values.
+    Like GNU coreutils, floating point arguments are parsed and rounded using the target platform's
+    long double representation before being rendered to text.
+    * `%f`: floating point value presented in decimal and displayed to 6 decimal places by default.
     * `%e` or `%E`: floating point value presented in scientific notation
     7 significant digits by default
     `%E` means use to use uppercase E for the mantissa.
@@ -168,8 +163,8 @@ printf:
     will be interpreted as octal (base 8) for integer fields
     Hexadecimal: if the argument begins with 0x the proceeding characters will be interpreted
     will be interpreted as hex (base 16) for any numeric fields
-    for float fields, hexadecimal input results in a precision
-    limit (in converting input past the decimal point) of 10^-15
+    floating point fields retain the target platform's long double precision for decimal and
+    hexadecimal input
     Character Constant: if the argument begins with a single quote character, the first byte
     of the next character will be interpreted as an 8-bit unsigned integer. If there are
     additional bytes, they will throw an error (unless the environment variable POSIXLY_CORRECT

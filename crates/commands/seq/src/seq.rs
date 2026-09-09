@@ -23,16 +23,11 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 mod error;
-mod extendedbigdecimal;
-mod long_double_format;
-mod number;
-mod numberparse;
 use crate::error::SeqError;
-use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::long_double_format::{
-    GnuFloatFormat, long_double_linear_value, overflows_long_double, quantize_long_double,
+use ctcore::ct_format::long_double::{
+    ExtendedBigDecimal, GnuFloatFormat, ParseNumberError, PreciseNumber, long_double_linear_value,
+    overflows_long_double, quantize_long_double,
 };
-use crate::number::PreciseNumber;
 
 const SEQ_SEPARATOR: &str = "separator";
 const SEQ_TERMINATOR: &str = "terminator";
@@ -343,11 +338,7 @@ fn parse_number_arg(value: &str) -> CTResult<PreciseNumber> {
         .parse()
         .map_err(|error| SeqError::ParseError(value.to_string(), error))?;
     if overflows_long_double(&number.number) {
-        return Err(SeqError::ParseError(
-            value.to_string(),
-            crate::numberparse::ParseNumberError::Float,
-        )
-        .into());
+        return Err(SeqError::ParseError(value.to_string(), ParseNumberError::Float).into());
     }
     Ok(number)
 }

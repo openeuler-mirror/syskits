@@ -18,8 +18,8 @@ use num_bigint::BigInt;
 use num_traits::Num;
 use num_traits::Zero;
 
-use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::number::PreciseNumber;
+use super::extendedbigdecimal::ExtendedBigDecimal;
+use super::number::PreciseNumber;
 
 /// An error returned when parsing a number fails.
 #[derive(Debug, PartialEq, Eq)]
@@ -449,9 +449,7 @@ impl FromStr for PreciseNumber {
 mod tests {
     use bigdecimal::BigDecimal;
 
-    use crate::extendedbigdecimal::ExtendedBigDecimal;
-    use crate::number::PreciseNumber;
-    use crate::numberparse::ParseNumberError;
+    use super::{ExtendedBigDecimal, ParseNumberError, PreciseNumber};
 
     /// Convenience function for parsing a [`Number`] and unwrapping.
     fn parse(s: &str) -> ExtendedBigDecimal {

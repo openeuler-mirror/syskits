@@ -18,6 +18,7 @@ use super::{
     },
     parse_escape_only,
 };
+use crate::ct_format::long_double::GnuFloatFormat;
 use crate::ct_quoting_style::{CtQuotingStyle, escape_name};
 use std::ffi::CStr;
 use std::ffi::OsStr;
@@ -473,34 +474,23 @@ impl IndexedSpec {
                 } else {
                     *alignment
                 };
-                let f = cursor.get_f64(self.arg_index);
+                let f = cursor.get_long_double(self.arg_index);
                 let width = w.unwrap_or(0);
-                let align = if !f.is_finite() && align == NumberAlignment::RightZero {
-                    NumberAlignment::RightSpace
-                } else {
-                    align
-                };
-
-                let mut raw = Vec::new();
-                num_format::Float {
+                let format = num_format::Float {
                     width: 0,
                     precision: p,
                     variant: *variant,
                     case: *case,
                     force_decimal: *force_decimal,
                     positive_sign: *positive_sign,
-                    alignment: NumberAlignment::Left,
-                }
-                .fmt(&mut raw, f)
-                .map_err(FormatError::IoError)?;
-
-                let raw = String::from_utf8_lossy(&raw);
-                let formatted = if *thousand_separate {
-                    group_number_thousands(&raw)
-                } else {
-                    raw.into_owned()
+                    alignment: align,
                 };
-                write_number_aligned(writer, &formatted, width, align).map_err(FormatError::IoError)
+                let format = num_format::Float { width, ..format };
+                writer
+                    .write_all(
+                        &GnuFloatFormat::from_float_format(&format, *thousand_separate).format(&f),
+                    )
+                    .map_err(FormatError::IoError)
             }
         }?;
         Ok(ControlFlow::Continue(()))

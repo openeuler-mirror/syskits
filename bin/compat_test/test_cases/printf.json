@@ -804,6 +804,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%g|%.20g|%.20f且参数均为十进制0.1；预期按GNU long double精度解析后格式化，不得提前压缩为f64并暴露双精度误差",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%g|%.20g|%.20f", "0.1", "0.1", "0.1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0.1|0.1|0.10000000000000000000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

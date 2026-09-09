@@ -2408,10 +2408,8 @@ dependencies = [
 name = "ct_seq"
 version = "3.3.8"
 dependencies = [
- "bigdecimal",
  "clap",
  "ctcore",
- "num-bigint",
  "num-traits",
  "rust-i18n",
  "sys-locale 0.2.4",
@@ -2835,6 +2833,7 @@ dependencies = [
 name = "ctcore"
 version = "3.3.8"
 dependencies = [
+ "bigdecimal",
  "blake2b_simd",
  "blake3",
  "bs58",
@@ -2853,6 +2852,8 @@ dependencies = [
  "md-5",
  "memchr",
  "nix 0.28.0",
+ "num-bigint",
+ "num-traits",
  "once_cell",
  "os_display",
  "parse_datetime",

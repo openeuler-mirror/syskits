@@ -23,6 +23,7 @@
 
 mod argument;
 mod escape;
+pub mod long_double;
 pub mod num_format;
 pub mod num_parser;
 mod spec;

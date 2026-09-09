@@ -937,6 +937,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%d且参数为不完整十六进制前缀0x；预期仅转换前导零、stdout为0、RC=1并报告value not completely converted",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%d", "0x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0",
+                    "stderr": "printf: '0x': value not completely converted\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

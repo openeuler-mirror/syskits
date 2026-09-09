@@ -23,7 +23,7 @@ pub use number::PreciseNumber;
 pub use numberparse::ParseNumberError;
 
 use super::num_parser::{ParseError, ParsedNumber};
-use long_double_format::underflows_long_double;
+use long_double_format::{current_decimal_point, underflows_long_double};
 
 #[derive(Debug, PartialEq)]
 pub(super) enum LongDoubleParseError<'a> {
@@ -39,22 +39,89 @@ pub(super) fn parse_long_double(
         return Ok(ExtendedBigDecimal::default());
     }
 
-    match ParsedNumber::parse_f64(input) {
-        Ok(_) => parse_quantized_long_double(input),
-        Err(ParseError::CtPartialMatch(_, rest)) => {
-            let parsed_len = input.len() - rest.len();
-            match parse_quantized_long_double(&input[..parsed_len]) {
-                Ok(value) => Err(LongDoubleParseError::PartialMatch(value, rest)),
-                Err(LongDoubleParseError::OutOfRange(value)) => {
-                    Err(LongDoubleParseError::OutOfRange(value))
-                }
-                Err(_) => Err(LongDoubleParseError::NotNumeric),
-            }
+    let Some(attempt) = select_parse_attempt(input, &current_decimal_point()) else {
+        return Err(LongDoubleParseError::NotNumeric);
+    };
+    let rest = &input[attempt.consumed..];
+    match parse_quantized_long_double(&attempt.normalized_prefix) {
+        Ok(value) if rest.is_empty() => Ok(value),
+        Ok(value) => Err(LongDoubleParseError::PartialMatch(value, rest)),
+        Err(LongDoubleParseError::OutOfRange(value)) => {
+            Err(LongDoubleParseError::OutOfRange(value))
         }
-        Err(ParseError::CtNotNumeric | ParseError::CtOverflow) => {
-            Err(LongDoubleParseError::NotNumeric)
+        Err(_) => Err(LongDoubleParseError::NotNumeric),
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ParseAttempt {
+    normalized_prefix: String,
+    consumed: usize,
+}
+
+fn select_parse_attempt(input: &str, decimal_point: &str) -> Option<ParseAttempt> {
+    let locale_attempt = parse_attempt(input, decimal_point, true);
+    if locale_attempt
+        .as_ref()
+        .is_some_and(|attempt| attempt.consumed == input.len())
+    {
+        return locale_attempt;
+    }
+
+    let c_attempt = parse_attempt(input, ".", false);
+    match (locale_attempt, c_attempt) {
+        (Some(locale), Some(c)) if c.consumed > locale.consumed => Some(c),
+        (Some(locale), _) => Some(locale),
+        (None, c) => c,
+    }
+}
+
+fn parse_attempt(input: &str, decimal_point: &str, locale: bool) -> Option<ParseAttempt> {
+    let (normalized, offsets) = normalize_decimal_point(input, decimal_point, locale);
+    let normalized_consumed = match ParsedNumber::parse_f64(&normalized) {
+        Ok(_) => normalized.len(),
+        Err(ParseError::CtPartialMatch(_, rest)) => normalized.len() - rest.len(),
+        Err(ParseError::CtNotNumeric | ParseError::CtOverflow) => 0,
+    };
+    if normalized_consumed == 0 {
+        return None;
+    }
+
+    Some(ParseAttempt {
+        normalized_prefix: normalized[..normalized_consumed].to_string(),
+        consumed: offsets[normalized_consumed],
+    })
+}
+
+fn normalize_decimal_point(input: &str, decimal_point: &str, locale: bool) -> (String, Vec<usize>) {
+    let mut normalized = String::with_capacity(input.len());
+    let mut offsets = Vec::with_capacity(input.len() + 1);
+    offsets.push(0);
+    let mut index = 0;
+
+    while index < input.len() {
+        if !decimal_point.is_empty() && input[index..].starts_with(decimal_point) {
+            normalized.push('.');
+            index += decimal_point.len();
+            offsets.push(index);
+        } else if locale && decimal_point != "." && input.as_bytes()[index] == b'.' {
+            normalized.push('\u{1}');
+            index += 1;
+            offsets.push(index);
+        } else {
+            let character = input[index..]
+                .chars()
+                .next()
+                .expect("index is before the end of a UTF-8 string");
+            normalized.push(character);
+            for byte in 1..=character.len_utf8() {
+                offsets.push(index + byte);
+            }
+            index += character.len_utf8();
         }
     }
+
+    (normalized, offsets)
 }
 
 pub(super) fn long_double_from_f64(value: f64) -> ExtendedBigDecimal {
@@ -207,7 +274,10 @@ fn parse_saturating_exponent(exponent: &str) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ExtendedBigDecimal, LongDoubleParseError, parse_long_double};
+    use super::{
+        ExtendedBigDecimal, LongDoubleParseError, ParseAttempt, parse_long_double,
+        select_parse_attempt,
+    };
 
     #[test]
     fn parses_extreme_decimal_exponents_without_losing_the_value_class() {
@@ -245,5 +315,30 @@ mod tests {
                 "input: {input}"
             );
         }
+    }
+
+    #[test]
+    fn selects_the_longer_locale_or_c_decimal_prefix() {
+        assert_eq!(
+            select_parse_attempt("1,5", ","),
+            Some(ParseAttempt {
+                normalized_prefix: "1.5".to_string(),
+                consumed: 3,
+            })
+        );
+        assert_eq!(
+            select_parse_attempt("1.5", ","),
+            Some(ParseAttempt {
+                normalized_prefix: "1.5".to_string(),
+                consumed: 3,
+            })
+        );
+        assert_eq!(
+            select_parse_attempt("1,5.6", ","),
+            Some(ParseAttempt {
+                normalized_prefix: "1.5".to_string(),
+                consumed: 3,
+            })
+        );
     }
 }

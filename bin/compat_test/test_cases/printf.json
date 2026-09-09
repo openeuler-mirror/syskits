@@ -861,6 +861,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=en_DK.utf8；FORMAT为%f|%f，参数分别使用locale逗号和C locale点号小数点；预期按GNU cl_strtold最长前缀规则均解析为1.5并使用locale小数点输出",
+            "setup_commands": [
+                "export LC_ALL=en_DK.utf8",
+                "export LANG=en_DK.utf8",
+                "export LANGUAGE=en_DK.utf8"
+            ],
+            "args": ["%f|%f", "1,5", "1.5"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1,500000|1,500000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

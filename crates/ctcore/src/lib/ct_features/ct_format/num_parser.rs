@@ -449,11 +449,23 @@ fn parse_hex_float<'a>(
             };
         }
     }
-    value *= 2.0_f64.powi(exponent);
+    value = scale_float_by_power_of_two(value, exponent);
     if negative {
         value = -value;
     }
     finish_float_parse(value, input, whitespace + index)
+}
+
+fn scale_float_by_power_of_two(mut value: f64, mut exponent: i32) -> f64 {
+    while exponent > 1023 && value.is_finite() {
+        value *= 2.0_f64.powi(1023);
+        exponent -= 1023;
+    }
+    while exponent < -1022 && value != 0.0 {
+        value *= 2.0_f64.powi(-1022);
+        exponent += 1022;
+    }
+    value * 2.0_f64.powi(exponent)
 }
 
 fn finish_float_parse<T>(value: T, input: &str, consumed: usize) -> Result<T, ParseError<'_, T>> {
@@ -1014,6 +1026,13 @@ mod tests {
         assert_eq!(Ok(8.0), ParsedNumber::parse_f64("0x1p3"));
         assert_eq!(Ok(f64::INFINITY), ParsedNumber::parse_f64("infinity"));
         assert!(ParsedNumber::parse_f64("nan(payload)").unwrap().is_nan());
+    }
+
+    #[test]
+    fn hexadecimal_float_parser_preserves_minimum_subnormal_value() {
+        let parsed = ParsedNumber::parse_f64("0x1p-1074").unwrap();
+
+        assert_eq!(parsed.to_bits(), 1);
     }
 
     #[test]

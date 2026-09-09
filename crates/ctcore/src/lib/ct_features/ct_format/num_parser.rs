@@ -220,9 +220,27 @@ impl ParsedNumber {
         // 若可解析字符串仅包含 "0"，则不会消耗 "0" 前缀：额外的前导 "0" 不会影响结果。
         let (base, rest) = if let Some(rest) = unsigned_str.strip_prefix('0') {
             if let Some(rest) = rest.strip_prefix(['b', 'B']) {
-                (Base::CtBinary, rest)
+                if rest
+                    .chars()
+                    .next()
+                    .and_then(|c| Base::CtBinary.digit(c))
+                    .is_some()
+                {
+                    (Base::CtBinary, rest)
+                } else {
+                    (Base::CtOctal, unsigned_str)
+                }
             } else if let Some(rest) = rest.strip_prefix(['x', 'X']) {
-                (Base::CtHexadecimal, rest)
+                if rest
+                    .chars()
+                    .next()
+                    .and_then(|c| Base::CtHexadecimal.digit(c))
+                    .is_some()
+                {
+                    (Base::CtHexadecimal, rest)
+                } else {
+                    (Base::CtOctal, unsigned_str)
+                }
             } else if integral_only {
                 (Base::CtOctal, unsigned_str)
             } else {
@@ -961,6 +979,22 @@ mod tests {
         assert_eq!(Ok(3), ParsedNumber::parse_u64("+3"));
         assert_eq!(Ok(u64::MAX), ParsedNumber::parse_u64("-1"));
         assert_eq!(Ok(u64::MAX), ParsedNumber::parse_u64("-0x1"));
+    }
+
+    #[test]
+    fn base_prefix_without_a_digit_falls_back_to_leading_octal_zero() {
+        assert_eq!(
+            ParsedNumber::parse_i64("0x"),
+            Err(ParseError::CtPartialMatch(0, "x"))
+        );
+        assert_eq!(
+            ParsedNumber::parse_i64("-0Xg"),
+            Err(ParseError::CtPartialMatch(0, "Xg"))
+        );
+        assert_eq!(
+            ParsedNumber::parse_u64("+0b2"),
+            Err(ParseError::CtPartialMatch(0, "b2"))
+        );
     }
 
     #[test]

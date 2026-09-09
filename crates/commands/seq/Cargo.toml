@@ -1,4 +1,3 @@
-# spell-checker:ignore bigdecimal
 [package]
 name = "ct_seq"
 
@@ -19,9 +18,7 @@ path = "src/seq.rs"
 [dependencies]
 sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
-bigdecimal = { workspace = true }
 clap = { workspace = true }
-num-bigint = { workspace = true }
 num-traits = { workspace = true }
 ctcore = { workspace = true, features = ["format", "quoting-style"] }
 

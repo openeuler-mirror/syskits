@@ -44,6 +44,8 @@ pub enum ExtendedBigDecimal {
     MinusZero,
     /// 非数值
     Nan,
+    /// 带负号的非数值
+    MinusNan,
 }
 
 impl ExtendedBigDecimal {
@@ -56,6 +58,16 @@ impl ExtendedBigDecimal {
     /// 创建值为1的实例
     pub fn one() -> Self {
         Self::BigDecimal(1.into())
+    }
+
+    pub(crate) fn from_u64(value: u64) -> Self {
+        Self::BigDecimal(value.into())
+    }
+}
+
+impl Default for ExtendedBigDecimal {
+    fn default() -> Self {
+        Self::BigDecimal(BigDecimal::zero())
     }
 }
 
@@ -142,6 +154,7 @@ impl Display for ExtendedBigDecimal {
             Self::MinusInfinity => write!(f, "-inf"),
             Self::MinusZero => write!(f, "-0"),
             Self::Nan => write!(f, "nan"),
+            Self::MinusNan => write!(f, "-nan"),
         }
     }
 }
@@ -191,7 +204,7 @@ impl Add for ExtendedBigDecimal {
             (Self::MinusInfinity, _) | (_, Self::MinusInfinity) => Self::MinusInfinity,
 
             // 处理NaN
-            (Self::Nan, _) | (_, Self::Nan) => Self::Nan,
+            (Self::Nan | Self::MinusNan, _) | (_, Self::Nan | Self::MinusNan) => Self::Nan,
 
             // 处理负零
             (Self::MinusZero, _) => other,
@@ -202,7 +215,8 @@ impl Add for ExtendedBigDecimal {
 impl PartialOrd for ExtendedBigDecimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // 首先检查是否涉及 NaN
-        if matches!(self, Self::Nan) || matches!(other, Self::Nan) {
+        if matches!(self, Self::Nan | Self::MinusNan) || matches!(other, Self::Nan | Self::MinusNan)
+        {
             return None;
         }
 

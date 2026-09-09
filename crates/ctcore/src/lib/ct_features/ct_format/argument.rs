@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use super::long_double::{ExtendedBigDecimal, long_double_from_f64, parse_long_double};
 use crate::{
     ct_error::set_ct_exit_code,
     ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
@@ -146,6 +147,19 @@ impl<'a> ArgCursor<'a> {
         }
     }
 
+    pub fn get_long_double(&mut self, idx: Option<usize>) -> ExtendedBigDecimal {
+        if let Some(arg) = self.fetch(idx) {
+            match arg {
+                FormatArgument::Unparsed(s) => extract_value(parse_long_double(s), s),
+                FormatArgument::Bytes(bytes) => parse_bytes_long_double(bytes),
+                FormatArgument::Float(n) => long_double_from_f64(*n),
+                _ => ExtendedBigDecimal::default(),
+            }
+        } else {
+            ExtendedBigDecimal::default()
+        }
+    }
+
     pub fn get_str(&mut self, idx: Option<usize>) -> &'a str {
         match self.fetch(idx) {
             Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
@@ -226,6 +240,16 @@ fn parse_bytes_f64(bytes: &[u8]) -> f64 {
     }
     match std::str::from_utf8(bytes) {
         Ok(input) => extract_value(ParsedNumber::parse_f64(input), input),
+        Err(_) => invalid_numeric_bytes(bytes),
+    }
+}
+
+fn parse_bytes_long_double(bytes: &[u8]) -> ExtendedBigDecimal {
+    if let Some(value) = parse_bytes_character_constant(bytes) {
+        return ExtendedBigDecimal::from_u64(value);
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(input) => extract_value(parse_long_double(input), input),
         Err(_) => invalid_numeric_bytes(bytes),
     }
 }

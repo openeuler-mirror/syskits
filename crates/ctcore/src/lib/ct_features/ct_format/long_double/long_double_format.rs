@@ -18,28 +18,66 @@ use bigdecimal::BigDecimal;
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 
-use crate::extendedbigdecimal::ExtendedBigDecimal;
+use super::extendedbigdecimal::ExtendedBigDecimal;
+use crate::ct_format::num_format::{
+    Case, Float, FloatVariant, ForceDecimal, NumberAlignment, PositiveSign,
+};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 const LONG_DOUBLE_PRECISION: usize = 64;
 #[cfg(any(
     target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
     target_arch = "riscv64",
-    target_arch = "s390x"
+    target_arch = "s390x",
+    target_arch = "sparc64"
 ))]
 const LONG_DOUBLE_PRECISION: usize = 113;
+#[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
+const LONG_DOUBLE_PRECISION: usize = 106;
 #[cfg(not(any(
     target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "powerpc",
+    target_arch = "powerpc64",
     target_arch = "riscv64",
-    target_arch = "s390x"
+    target_arch = "s390x",
+    target_arch = "sparc64"
 )))]
 const LONG_DOUBLE_PRECISION: usize = 53;
 
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "riscv64",
+    target_arch = "s390x",
+    target_arch = "sparc64"
+))]
 const LONG_DOUBLE_MAX_EXPONENT: i32 = 16383;
-const LONG_DOUBLE_MIN_NORMAL_EXPONENT: i32 = -16382;
-const GROUPING_STOP: u8 = ctcore::libc::c_char::MAX.to_ne_bytes()[0];
+#[cfg(not(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "riscv64",
+    target_arch = "s390x",
+    target_arch = "sparc64"
+)))]
+const LONG_DOUBLE_MAX_EXPONENT: i32 = 1023;
+const LONG_DOUBLE_MIN_NORMAL_EXPONENT: i32 = 1 - LONG_DOUBLE_MAX_EXPONENT;
+const GROUPING_STOP: u8 = crate::libc::c_char::MAX.to_ne_bytes()[0];
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 const X87_HEX_LAYOUT: bool = true;
@@ -76,7 +114,7 @@ pub enum GnuFormatError {
 
 impl Error for GnuFormatError {}
 
-impl ctcore::ct_error::CTError for GnuFormatError {}
+impl crate::ct_error::CTError for GnuFormatError {}
 
 impl Display for GnuFormatError {
     fn fmt(&self, output: &mut Formatter<'_>) -> std::fmt::Result {
@@ -111,6 +149,34 @@ impl Display for GnuFormatError {
 }
 
 impl GnuFloatFormat {
+    pub(crate) fn from_float_format(format: &Float, grouping: bool) -> Self {
+        let conversion = match (format.variant, format.case) {
+            (FloatVariant::Decimal, Case::Lowercase) => b'f',
+            (FloatVariant::Decimal, Case::Uppercase) => b'F',
+            (FloatVariant::Scientific, Case::Lowercase) => b'e',
+            (FloatVariant::Scientific, Case::Uppercase) => b'E',
+            (FloatVariant::Shortest, Case::Lowercase) => b'g',
+            (FloatVariant::Shortest, Case::Uppercase) => b'G',
+            (FloatVariant::Hexadecimal, Case::Lowercase) => b'a',
+            (FloatVariant::Hexadecimal, Case::Uppercase) => b'A',
+        };
+        Self {
+            prefix: Vec::new(),
+            suffix: Vec::new(),
+            flags: Flags {
+                left: format.alignment == NumberAlignment::Left,
+                plus: format.positive_sign == PositiveSign::Plus,
+                space: format.positive_sign == PositiveSign::Space,
+                alternate: format.force_decimal == ForceDecimal::Yes,
+                zero: format.alignment == NumberAlignment::RightZero,
+                grouping,
+            },
+            width: format.width,
+            precision: format.precision,
+            conversion,
+        }
+    }
+
     pub fn try_parse(format: &[u8]) -> Result<Self, GnuFormatError> {
         let bytes = format;
         let mut percent = 0;
@@ -288,7 +354,7 @@ impl LocaleInfo {
         // SAFETY: localeconv returns pointers to process-locale storage that
         // remains valid until the next locale change; values are copied here.
         unsafe {
-            let locale = ctcore::libc::localeconv();
+            let locale = crate::libc::localeconv();
             let decimal_point = CStr::from_ptr((*locale).decimal_point)
                 .to_string_lossy()
                 .into_owned();
@@ -413,6 +479,7 @@ impl From<&ExtendedBigDecimal> for BinaryLongDouble {
             ExtendedBigDecimal::Infinity => Self::Infinity { negative: false },
             ExtendedBigDecimal::MinusInfinity => Self::Infinity { negative: true },
             ExtendedBigDecimal::Nan => Self::Nan { negative: false },
+            ExtendedBigDecimal::MinusNan => Self::Nan { negative: true },
             ExtendedBigDecimal::MinusZero => Self::Finite(BinaryFinite {
                 negative: true,
                 significand: BigUint::zero(),
@@ -434,7 +501,8 @@ pub fn quantize_long_double(value: &ExtendedBigDecimal) -> ExtendedBigDecimal {
         BinaryLongDouble::Finite(value) => value.to_extended_decimal(),
         BinaryLongDouble::Infinity { negative: false } => ExtendedBigDecimal::Infinity,
         BinaryLongDouble::Infinity { negative: true } => ExtendedBigDecimal::MinusInfinity,
-        BinaryLongDouble::Nan { .. } => ExtendedBigDecimal::Nan,
+        BinaryLongDouble::Nan { negative: false } => ExtendedBigDecimal::Nan,
+        BinaryLongDouble::Nan { negative: true } => ExtendedBigDecimal::MinusNan,
     }
 }
 
@@ -459,6 +527,7 @@ pub fn long_double_linear_value(
         ExtendedBigDecimal::MinusInfinity => ExtendedBigDecimal::MinusInfinity,
         ExtendedBigDecimal::MinusZero => ExtendedBigDecimal::MinusZero,
         ExtendedBigDecimal::Nan => ExtendedBigDecimal::Nan,
+        ExtendedBigDecimal::MinusNan => ExtendedBigDecimal::MinusNan,
     };
     quantize_long_double(&(quantize_long_double(first) + product))
 }
@@ -815,8 +884,8 @@ fn trim_scientific_fraction(value: String) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::number::PreciseNumber;
     use super::*;
-    use crate::number::PreciseNumber;
 
     fn render(format: &str, value: &str) -> String {
         let value = value.parse::<PreciseNumber>().unwrap().number;

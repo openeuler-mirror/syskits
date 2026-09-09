@@ -17,7 +17,7 @@ use std::os::unix::ffi::OsStrExt;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 
-use crate::numberparse::ParseNumberError;
+use ctcore::ct_format::long_double::ParseNumberError;
 
 #[derive(Debug, PartialEq)]
 pub enum SeqError {

@@ -75,7 +75,7 @@ pub enum NumberAlignment {
 
 pub struct SignedInt {
     pub width: usize,
-    pub precision: usize,
+    pub precision: Option<usize>,
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
 }
@@ -85,24 +85,24 @@ impl Formatter for SignedInt {
 
     // 该函数负责根据结构体中提供的规范格式化无符号整数值。
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x >= 0 {
-            match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
-
-        let s = format!("{:0width$}", x, width = self.precision);
-
-        if self.alignment == NumberAlignment::Left {
-            write!(writer, "{s:<width$}", width = self.width)
-        } else if self.alignment == NumberAlignment::RightSpace {
-            write!(writer, "{s:>width$}", width = self.width)
+        let prefix = if x < 0 {
+            "-"
         } else {
-            // self.alignment == NumberAlignment::RightZero
-            write!(writer, "{s:0>width$}", width = self.width)
-        }
+            match self.positive_sign {
+                PositiveSign::None => "",
+                PositiveSign::Plus => "+",
+                PositiveSign::Space => " ",
+            }
+        };
+        let raw_digits = if x == 0 && self.precision == Some(0) {
+            String::new()
+        } else {
+            x.unsigned_abs().to_string()
+        };
+        let precision_zeros = self.precision.unwrap_or(0).saturating_sub(raw_digits.len());
+        let digits = format!("{}{raw_digits}", "0".repeat(precision_zeros));
+
+        write_integer_aligned(&mut writer, prefix, &digits, self.width, self.alignment)
     }
 
     // 它定义了一个名为 try_from_spec 的方法，用于尝试从 Spec 实例创建一个新的 SignedInt 实例。
@@ -124,12 +124,10 @@ impl Formatter for SignedInt {
                 return Err(FormatError::WrongSpecType);
             };
 
-            let precision = if let Some(CanAsterisk::Fixed(x)) = precision {
-                x
-            } else if precision.is_none() {
-                0
-            } else {
-                return Err(FormatError::WrongSpecType);
+            let precision = match precision {
+                Some(CanAsterisk::Fixed(x)) => Some(x),
+                None => None,
+                Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
             };
 
             Ok(Self {
@@ -146,7 +144,7 @@ impl Formatter for SignedInt {
 
 pub struct UnsignedInt {
     pub width: usize,
-    pub precision: usize,
+    pub precision: Option<usize>,
     pub alignment: NumberAlignment,
     pub variant: UnsignedIntVariant,
 }
@@ -156,36 +154,26 @@ impl Formatter for UnsignedInt {
 
     // 该函数负责根据提供的规范格式化无符号整数值。
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        let mut s = String::new();
-
-        if let UnsignedIntVariant::Decimal = self.variant {
-            s = format!("{x}");
-        } else if let UnsignedIntVariant::Octal(_) = self.variant {
-            s = format!("{x:o}");
-        } else if let UnsignedIntVariant::Hexadecimal(Case::Lowercase, _) = self.variant {
-            s = format!("{x:x}");
-        } else if let UnsignedIntVariant::Hexadecimal(Case::Uppercase, _) = self.variant {
-            s = format!("{x:X}");
-        }
-
-        // 零不带有前缀。如果填充后的值不会以零开头，八进制值也不会带有前缀。
+        let raw_digits = if x == 0 && self.precision == Some(0) {
+            String::new()
+        } else {
+            match self.variant {
+                UnsignedIntVariant::Decimal => format!("{x}"),
+                UnsignedIntVariant::Octal(_) => format!("{x:o}"),
+                UnsignedIntVariant::Hexadecimal(Case::Lowercase, _) => format!("{x:x}"),
+                UnsignedIntVariant::Hexadecimal(Case::Uppercase, _) => format!("{x:X}"),
+            }
+        };
+        let precision_zeros = self.precision.unwrap_or(0).saturating_sub(raw_digits.len());
+        let digits = format!("{}{raw_digits}", "0".repeat(precision_zeros));
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
             (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
-            (1.., UnsignedIntVariant::Octal(Prefix::Yes)) if s.len() >= self.precision => "0",
+            (_, UnsignedIntVariant::Octal(Prefix::Yes)) if !digits.starts_with('0') => "0",
             _ => "",
         };
 
-        s = format!("{prefix}{s:0>width$}", width = self.precision);
-
-        if self.alignment == NumberAlignment::Left {
-            write!(writer, "{s:<width$}", width = self.width)
-        } else if self.alignment == NumberAlignment::RightSpace {
-            write!(writer, "{s:>width$}", width = self.width)
-        } else {
-            // self.alignment == NumberAlignment::RightZero
-            write!(writer, "{s:0>width$}", width = self.width)
-        }
+        write_integer_aligned(&mut writer, prefix, &digits, self.width, self.alignment)
     }
 
     // 该函数负责从提供的 Spec 结构创建 SignedInt 结构的新实例。
@@ -227,12 +215,10 @@ impl Formatter for UnsignedInt {
                 return Err(FormatError::WrongSpecType);
             };
 
-            let precision = if let Some(CanAsterisk::Fixed(x)) = precision {
-                x
-            } else if precision.is_none() {
-                0
-            } else {
-                return Err(FormatError::WrongSpecType);
+            let precision = match precision {
+                Some(CanAsterisk::Fixed(x)) => Some(x),
+                None => None,
+                Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
             };
 
             Ok(Self {
@@ -243,6 +229,25 @@ impl Formatter for UnsignedInt {
             })
         } else {
             Err(FormatError::WrongSpecType)
+        }
+    }
+}
+
+fn write_integer_aligned(
+    mut writer: impl Write,
+    prefix: &str,
+    digits: &str,
+    width: usize,
+    alignment: NumberAlignment,
+) -> std::io::Result<()> {
+    let padding = width.saturating_sub(prefix.len() + digits.len());
+    match alignment {
+        NumberAlignment::Left => write!(writer, "{prefix}{digits}{}", " ".repeat(padding)),
+        NumberAlignment::RightSpace => {
+            write!(writer, "{}{prefix}{digits}", " ".repeat(padding))
+        }
+        NumberAlignment::RightZero => {
+            write!(writer, "{prefix}{}{digits}", "0".repeat(padding))
         }
     }
 }
@@ -568,7 +573,7 @@ mod test {
         let signed_int = SignedInt::try_from_spec(spec).unwrap();
 
         assert_eq!(signed_int.width, 10);
-        assert_eq!(signed_int.precision, 4);
+        assert_eq!(signed_int.precision, Some(4));
         assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
         assert_eq!(signed_int.alignment, NumberAlignment::Left);
     }
@@ -589,7 +594,7 @@ mod test {
         assert!(result.is_ok());
         let signed_int = result.unwrap();
         assert_eq!(signed_int.width, 0);
-        assert_eq!(signed_int.precision, 4);
+        assert_eq!(signed_int.precision, Some(4));
         assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
         assert_eq!(signed_int.alignment, NumberAlignment::RightSpace);
     }
@@ -610,7 +615,7 @@ mod test {
         assert!(result.is_ok());
         let signed_int = result.unwrap();
         assert_eq!(signed_int.width, i64::MAX as usize);
-        assert_eq!(signed_int.precision, 4);
+        assert_eq!(signed_int.precision, Some(4));
         assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
         assert_eq!(signed_int.alignment, NumberAlignment::Left);
     }
@@ -631,7 +636,7 @@ mod test {
         assert!(result.is_ok());
         let signed_int = result.unwrap();
         assert_eq!(signed_int.width, 10);
-        assert_eq!(signed_int.precision, i64::MAX as usize);
+        assert_eq!(signed_int.precision, Some(i64::MAX as usize));
         assert_eq!(signed_int.positive_sign, PositiveSign::Plus);
         assert_eq!(signed_int.alignment, NumberAlignment::RightZero);
     }
@@ -640,7 +645,7 @@ mod test {
     fn test_signed_int_fmt_positive_plus() {
         let formatter = SignedInt {
             width: 8,
-            precision: 0,
+            precision: None,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::RightSpace,
         };
@@ -649,14 +654,14 @@ mod test {
         formatter.fmt(&mut buffer, 1234).unwrap();
         buffer.set_position(0);
         let result = buffer.get_ref();
-        assert_eq!(result, b"+    1234");
+        assert_eq!(result, b"   +1234");
     }
 
     #[test]
     fn test_signed_int_fmt_positive_space() {
         let formatter = SignedInt {
             width: 10,
-            precision: 0,
+            precision: None,
             positive_sign: PositiveSign::Space,
             alignment: NumberAlignment::Left,
         };
@@ -665,14 +670,14 @@ mod test {
         formatter.fmt(&mut buffer, 5678).unwrap();
         buffer.set_position(0);
         let result = buffer.get_ref();
-        assert_eq!(result, b" 5678      ");
+        assert_eq!(result, b" 5678     ");
     }
 
     #[test]
     fn test_signed_int_fmt_negative() {
         let formatter = SignedInt {
             width: 12,
-            precision: 0,
+            precision: None,
             positive_sign: PositiveSign::None,
             alignment: NumberAlignment::RightZero,
         };
@@ -681,7 +686,7 @@ mod test {
         formatter.fmt(&mut buffer, -9876).unwrap();
         buffer.set_position(0);
         let result = buffer.get_ref();
-        assert_eq!(result, b"0000000-9876");
+        assert_eq!(result, b"-00000009876");
     }
 
     #[test]
@@ -689,7 +694,7 @@ mod test {
         let formatter = UnsignedInt {
             variant: UnsignedIntVariant::Decimal,
             width: 10,
-            precision: 2,
+            precision: Some(2),
             alignment: NumberAlignment::Left,
         };
 
@@ -705,7 +710,7 @@ mod test {
         let formatter = UnsignedInt {
             variant: UnsignedIntVariant::Octal(Prefix::Yes),
             width: 8,
-            precision: 0,
+            precision: None,
             alignment: NumberAlignment::RightSpace,
         };
 
@@ -721,7 +726,7 @@ mod test {
         let formatter = UnsignedInt {
             variant: UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes),
             width: 16,
-            precision: 0,
+            precision: None,
             alignment: NumberAlignment::Left,
         };
 
@@ -737,7 +742,7 @@ mod test {
         let formatter = UnsignedInt {
             variant: UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes),
             width: 16,
-            precision: 0,
+            precision: None,
             alignment: NumberAlignment::RightZero,
         };
 
@@ -745,7 +750,7 @@ mod test {
         formatter.fmt(&mut buffer, 1234).unwrap();
         buffer.set_position(0);
         let result = buffer.get_ref();
-        assert_eq!(result, b"000000000000X4D2");
+        assert_eq!(result, b"0X000000000004D2");
     }
 
     #[test]
@@ -762,7 +767,7 @@ mod test {
 
         assert_eq!(unsigned_int.variant, UnsignedIntVariant::Decimal);
         assert_eq!(unsigned_int.width, 10);
-        assert_eq!(unsigned_int.precision, 2);
+        assert_eq!(unsigned_int.precision, Some(2));
         assert_eq!(unsigned_int.alignment, NumberAlignment::Left);
     }
 
@@ -780,7 +785,7 @@ mod test {
 
         assert_eq!(unsigned_int.variant, UnsignedIntVariant::Octal(Prefix::Yes));
         assert_eq!(unsigned_int.width, 8);
-        assert_eq!(unsigned_int.precision, 0); // Precision defaults to 0
+        assert_eq!(unsigned_int.precision, None);
         assert_eq!(unsigned_int.alignment, NumberAlignment::RightSpace);
     }
 
@@ -1575,7 +1580,7 @@ mod test {
             UnsignedInt {
                 variant: UnsignedIntVariant::Octal(Prefix::Yes),
                 width: 0,
-                precision: 0,
+                precision: None,
                 alignment: NumberAlignment::Left,
             }
             .fmt(&mut s, x)

@@ -480,6 +480,25 @@
                 }
             },
             "cleanup_commands": ["unset POSIXLY_CORRECT"]
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；组合整数FORMAT=%05d|%+5.3d|%#08x|%.0d；预期符号及0x前缀位于补零之前，显式零精度的零值不输出数字",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%05d|%+5.3d|%#08x|%.0d", "-42", "1", "42", "0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-0042| +001|0x00002a|",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

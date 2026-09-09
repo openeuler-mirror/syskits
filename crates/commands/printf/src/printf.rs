@@ -743,6 +743,25 @@ mod tests {
         }
 
         #[test]
+        fn shortest_format_uses_gnu_notation_boundaries() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%g|%g|%g|%g|%g",
+                "0.0001",
+                "0.00001",
+                "999999",
+                "999999.5",
+                "1000000",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "0.0001|1e-05|999999|1e+06|1e+06");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn dynamic_width_and_precision_reject_values_above_int_max() {
             for (format, expected_error) in [
                 ("%*d", "printf: invalid field width: '2147483648'\n"),

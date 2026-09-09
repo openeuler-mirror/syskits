@@ -671,6 +671,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT包含5个%g，参数依次为0.0001、0.00001、999999、999999.5、1000000；预期按-4下界和舍入后指数选择十进制或科学格式",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%g|%g|%g|%g|%g", "0.0001", "0.00001", "999999", "999999.5", "1000000"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0.0001|1e-05|999999|1e+06|1e+06",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

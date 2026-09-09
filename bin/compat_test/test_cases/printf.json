@@ -652,6 +652,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%e，参数为-123；预期负数按绝对值确定十进制指数并保留负号，RC=0、stdout为-1.230000e+02、stderr为空",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%e", "-123"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-1.230000e+02",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -411,13 +411,13 @@ fn format_float_scientific(
         return new_result;
     }
 
-    let mut exponent: i32 = f.log10().floor() as i32;
+    let mut exponent: i32 = f.abs().log10().floor() as i32;
     let mut normalized = f / 10.0_f64.powi(exponent);
 
     // 如果规范化后的值将被舍入为大于 10 的值，我们需要进行修正。
     let tmp_value = normalized * 10_f64.powi(precision as i32);
     let value = tmp_value.round() / 10_f64.powi(precision as i32);
-    if value >= 10.0 {
+    if value.abs() >= 10.0 {
         normalized /= 10.0;
         exponent += 1;
     }
@@ -1619,6 +1619,20 @@ mod test {
         assert_eq!(f(12.3456789), "1.234568e+01");
         assert_eq!(f(1000000.0), "1.000000e+06");
         assert_eq!(f(99999999.0), "1.000000e+08");
+    }
+
+    #[test]
+    fn scientific_float_normalizes_negative_values() {
+        use super::format_float_scientific;
+
+        assert_eq!(
+            format_float_scientific(-123.0, 6, Case::Lowercase, ForceDecimal::No),
+            "-1.230000e+02"
+        );
+        assert_eq!(
+            format_float_scientific(-9.999_999_6, 6, Case::Lowercase, ForceDecimal::No),
+            "-1.000000e+01"
+        );
     }
 
     #[test]

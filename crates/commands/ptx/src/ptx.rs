@@ -197,6 +197,7 @@ fn ptx_locale_codeset() -> String {
 enum LocaleRegexEncoding {
     #[default]
     Ascii,
+    Utf8,
     SingleByte,
     EucCn,
     EucTw,
@@ -418,7 +419,9 @@ impl Drop for LocaleCollation {
 impl LocaleRegexEncoding {
     fn from_environment() -> Self {
         let codeset = ptx_locale_codeset();
-        if codeset.contains("GB18030") || codeset.contains("GBK") {
+        if codeset.contains("UTF-8") || codeset.contains("UTF8") {
+            Self::Utf8
+        } else if codeset.contains("GB18030") || codeset.contains("GBK") {
             Self::Gb18030
         } else if codeset.contains("GB2312") {
             Self::EucCn
@@ -445,6 +448,7 @@ impl LocaleRegexEncoding {
     fn onig_encoding(self) -> Option<onig_sys::OnigEncoding> {
         let encoding = match self {
             Self::Ascii => return None,
+            Self::Utf8 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingUTF8),
             Self::SingleByte => std::ptr::addr_of_mut!(onig_sys::OnigEncodingISO_8859_1),
             Self::EucCn => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_CN),
             Self::EucTw => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_TW),
@@ -459,7 +463,7 @@ impl LocaleRegexEncoding {
     }
 
     fn is_non_utf8_multibyte(self) -> bool {
-        !matches!(self, Self::Ascii | Self::SingleByte)
+        !matches!(self, Self::Ascii | Self::Utf8 | Self::SingleByte)
     }
 
     fn valid_character_len(self, bytes: &[u8]) -> Option<usize> {
@@ -680,7 +684,11 @@ fn ptx_locale_word_classes(
             byte_ctype.is_alpha(byte) || byte.is_ascii_digit() || byte == b'_'
         });
     }
-    if encoding == LocaleRegexEncoding::Ascii || encoding.is_non_utf8_multibyte() {
+    if matches!(
+        encoding,
+        LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
+    ) || encoding.is_non_utf8_multibyte()
+    {
         let Some(validator) = locale_validator else {
             return (b"[[:alnum:]_]".to_vec(), b"[^[:alnum:]_]".to_vec());
         };
@@ -698,7 +706,11 @@ fn ptx_locale_space_classes(
     if single_byte_locale {
         return ptx_single_byte_classes(|byte| byte_ctype.is_space(byte));
     }
-    if encoding == LocaleRegexEncoding::Ascii || encoding.is_non_utf8_multibyte() {
+    if matches!(
+        encoding,
+        LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
+    ) || encoding.is_non_utf8_multibyte()
+    {
         let Some(validator) = locale_validator else {
             return (b"[[:space:]]".to_vec(), b"[^[:space:]]".to_vec());
         };
@@ -1285,7 +1297,10 @@ fn gnu_emacs_regex_to_rust_with_candidates(
         expand_locale_ranges: false,
         defer_locale_ranges: locale_candidates.is_none()
             && !config.single_byte_locale
-            && config.locale_regex_encoding == LocaleRegexEncoding::Ascii,
+            && matches!(
+                config.locale_regex_encoding,
+                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
+            ),
         locale_candidates,
         range_fold_upper: config.is_ignore_case.then_some(&config.byte_ctype.upper),
     };
@@ -1312,7 +1327,10 @@ fn gnu_emacs_regex_to_onig_bytes_with_candidates(
         expand_locale_ranges: config.single_byte_locale,
         defer_locale_ranges: locale_candidates.is_none()
             && !config.single_byte_locale
-            && config.locale_regex_encoding == LocaleRegexEncoding::Ascii,
+            && matches!(
+                config.locale_regex_encoding,
+                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
+            ),
         locale_candidates,
         range_fold_upper: config.is_ignore_case.then_some(&config.byte_ctype.upper),
     };
@@ -2261,7 +2279,9 @@ fn compile_byte_regex(
         if transcode_locale
             || matches!(
                 encoding,
-                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
+                LocaleRegexEncoding::Ascii
+                    | LocaleRegexEncoding::Utf8
+                    | LocaleRegexEncoding::SingleByte
             )
         {
             // onig exposes this option in onig_sys but omits it from RegexOptions.
@@ -2274,7 +2294,9 @@ fn compile_byte_regex(
     if ignore_case
         && matches!(
             encoding,
-            LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
+            LocaleRegexEncoding::Ascii
+                | LocaleRegexEncoding::Utf8
+                | LocaleRegexEncoding::SingleByte
         )
     {
         for byte in &mut folded_pattern {
@@ -2318,7 +2340,9 @@ fn compile_byte_regex(
         fold_upper: (ignore_case
             && matches!(
                 encoding,
-                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::SingleByte
+                LocaleRegexEncoding::Ascii
+                    | LocaleRegexEncoding::Utf8
+                    | LocaleRegexEncoding::SingleByte
             ))
         .then_some(byte_ctype.upper),
         encoding,

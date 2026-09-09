@@ -44,6 +44,7 @@ use std::sync::{Arc, OnceLock};
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
+const GNU_DEFAULT_CONTEXT_PATTERN: &[u8] = b"[.?!][]\"')}]*\\($\\|\t\\|  \\)[ \t\n]*";
 const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
 const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
 
@@ -2884,10 +2885,15 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
             |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
         ) || ptx_locale_context_matches_at_boundary(config, &content)?;
         if has_boundary_match {
+            let default_pattern = if config.is_gnu_ext && !config.is_input_ref {
+                GNU_DEFAULT_CONTEXT_PATTERN
+            } else {
+                config.context_regex.as_bytes()
+            };
             let pattern = config
                 .context_pattern_bytes
                 .as_deref()
-                .unwrap_or(config.context_regex.as_bytes());
+                .unwrap_or(default_pattern);
             return Err(ptx_zero_length_regex_error(
                 pattern,
                 &config.byte_ctype,

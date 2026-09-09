@@ -1103,6 +1103,46 @@
       ]
     },
     {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C，执行ptx input；input为句点.且无换行；预期RC=1、stdout为空，stderr使用ASCII单引号并显示GNU原始默认上下文正则[.?!][]\"')}]...而非Oniguruma内部改写表达式",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf . > input"
+      ],
+      "args": [
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: '[.?!][]\"\\')}]*\\\\($\\\\|\\t\\\\|  \\\\)[ \\t\\n]*'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx input；input为句点.且无换行；预期RC=1、stdout为空，stderr使用Unicode左右单引号并显示GNU原始默认上下文正则[.?!][]\"')}]...而非Oniguruma内部改写表达式",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf . > input"
+      ],
+      "args": [
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: ‘[.?!][]\"')}]*\\\\($\\\\|\\t\\\\|  \\\\)[ \\t\\n]*’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "command": "ptx",
       "description": "Test multiple files with whitespace trimming",
       "args": ["-w30"],

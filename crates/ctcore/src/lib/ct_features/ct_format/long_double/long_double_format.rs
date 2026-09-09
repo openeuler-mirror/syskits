@@ -382,6 +382,10 @@ impl LocaleInfo {
     }
 }
 
+pub(super) fn current_decimal_point() -> String {
+    LocaleInfo::current().decimal_point
+}
+
 fn group_integer(integer: &str, locale: &LocaleInfo) -> String {
     if locale.thousands_separator.is_empty()
         || locale.grouping.is_empty()

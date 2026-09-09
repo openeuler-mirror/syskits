@@ -23,24 +23,37 @@ pub use number::PreciseNumber;
 pub use numberparse::ParseNumberError;
 
 use super::num_parser::{ParseError, ParsedNumber};
+use long_double_format::underflows_long_double;
+
+#[derive(Debug, PartialEq)]
+pub(super) enum LongDoubleParseError<'a> {
+    NotNumeric,
+    PartialMatch(ExtendedBigDecimal, &'a str),
+    OutOfRange(ExtendedBigDecimal),
+}
 
 pub(super) fn parse_long_double(
     input: &str,
-) -> Result<ExtendedBigDecimal, ParseError<'_, ExtendedBigDecimal>> {
+) -> Result<ExtendedBigDecimal, LongDoubleParseError<'_>> {
     if input.is_empty() {
         return Ok(ExtendedBigDecimal::default());
     }
 
     match ParsedNumber::parse_f64(input) {
-        Ok(_) => parse_complete_long_double(input).map_err(|_| ParseError::CtNotNumeric),
+        Ok(_) => parse_quantized_long_double(input),
         Err(ParseError::CtPartialMatch(_, rest)) => {
             let parsed_len = input.len() - rest.len();
-            let value = parse_complete_long_double(&input[..parsed_len])
-                .map_err(|_| ParseError::CtNotNumeric)?;
-            Err(ParseError::CtPartialMatch(value, rest))
+            match parse_quantized_long_double(&input[..parsed_len]) {
+                Ok(value) => Err(LongDoubleParseError::PartialMatch(value, rest)),
+                Err(LongDoubleParseError::OutOfRange(value)) => {
+                    Err(LongDoubleParseError::OutOfRange(value))
+                }
+                Err(_) => Err(LongDoubleParseError::NotNumeric),
+            }
         }
-        Err(ParseError::CtNotNumeric) => Err(ParseError::CtNotNumeric),
-        Err(ParseError::CtOverflow) => Err(ParseError::CtOverflow),
+        Err(ParseError::CtNotNumeric | ParseError::CtOverflow) => {
+            Err(LongDoubleParseError::NotNumeric)
+        }
     }
 }
 
@@ -56,17 +69,43 @@ pub(super) fn long_double_from_f64(value: f64) -> ExtendedBigDecimal {
     } else if value == f64::NEG_INFINITY {
         ExtendedBigDecimal::MinusInfinity
     } else {
-        parse_complete_long_double(&value.to_string()).unwrap_or_default()
+        parse_complete_long_double(&value.to_string())
+            .map(|parsed| parsed.value)
+            .unwrap_or_default()
     }
 }
 
-fn parse_complete_long_double(input: &str) -> Result<ExtendedBigDecimal, ParseNumberError> {
+struct ParsedLongDouble {
+    value: ExtendedBigDecimal,
+    range_error: bool,
+}
+
+fn parse_quantized_long_double(
+    input: &str,
+) -> Result<ExtendedBigDecimal, LongDoubleParseError<'_>> {
+    let parsed = parse_complete_long_double(input).map_err(|_| LongDoubleParseError::NotNumeric)?;
+    let range_error = parsed.range_error
+        || overflows_long_double(&parsed.value)
+        || underflows_long_double(&parsed.value);
+    let value = quantize_long_double(&parsed.value);
+    if range_error {
+        Err(LongDoubleParseError::OutOfRange(value))
+    } else {
+        Ok(value)
+    }
+}
+
+fn parse_complete_long_double(input: &str) -> Result<ParsedLongDouble, ParseNumberError> {
     let trimmed = input.trim_start_matches(char::is_whitespace);
     if let Some(rest) = trimmed.strip_prefix(['\'', '"']) {
         return rest
             .chars()
             .next()
             .map(|value| ExtendedBigDecimal::from_u64(u64::from(value)))
+            .map(|value| ParsedLongDouble {
+                value,
+                range_error: false,
+            })
             .ok_or(ParseNumberError::Float);
     }
 
@@ -76,21 +115,29 @@ fn parse_complete_long_double(input: &str) -> Result<ExtendedBigDecimal, ParseNu
         _ => (false, trimmed),
     };
     if unsigned.to_ascii_lowercase().starts_with("nan") {
-        return Ok(if negative {
-            ExtendedBigDecimal::MinusNan
-        } else {
-            ExtendedBigDecimal::Nan
+        return Ok(ParsedLongDouble {
+            value: if negative {
+                ExtendedBigDecimal::MinusNan
+            } else {
+                ExtendedBigDecimal::Nan
+            },
+            range_error: false,
         });
     }
 
-    if let Some(value) = classify_extreme_decimal(trimmed) {
-        return Ok(value);
+    if let Some(parsed) = classify_extreme_decimal(trimmed) {
+        return Ok(parsed);
     }
 
-    input.parse::<PreciseNumber>().map(|number| number.number)
+    input
+        .parse::<PreciseNumber>()
+        .map(|number| ParsedLongDouble {
+            value: number.number,
+            range_error: false,
+        })
 }
 
-fn classify_extreme_decimal(input: &str) -> Option<ExtendedBigDecimal> {
+fn classify_extreme_decimal(input: &str) -> Option<ParsedLongDouble> {
     let (negative, unsigned) = match input.as_bytes().first() {
         Some(b'-') => (true, &input[1..]),
         Some(b'+') => (false, &input[1..]),
@@ -107,10 +154,13 @@ fn classify_extreme_decimal(input: &str) -> Option<ExtendedBigDecimal> {
     let digits = mantissa.bytes().filter(|byte| byte.is_ascii_digit());
     let first_nonzero = digits.clone().position(|byte| byte != b'0');
     let Some(first_nonzero) = first_nonzero else {
-        return Some(if negative {
-            ExtendedBigDecimal::MinusZero
-        } else {
-            ExtendedBigDecimal::default()
+        return Some(ParsedLongDouble {
+            value: if negative {
+                ExtendedBigDecimal::MinusZero
+            } else {
+                ExtendedBigDecimal::default()
+            },
+            range_error: false,
         });
     };
 
@@ -119,16 +169,22 @@ fn classify_extreme_decimal(input: &str) -> Option<ExtendedBigDecimal> {
         .saturating_sub(1)
         .saturating_add(exponent);
     if decimal_exponent > 100_000 {
-        Some(if negative {
-            ExtendedBigDecimal::MinusInfinity
-        } else {
-            ExtendedBigDecimal::Infinity
+        Some(ParsedLongDouble {
+            value: if negative {
+                ExtendedBigDecimal::MinusInfinity
+            } else {
+                ExtendedBigDecimal::Infinity
+            },
+            range_error: true,
         })
     } else if decimal_exponent < -100_000 {
-        Some(if negative {
-            ExtendedBigDecimal::MinusZero
-        } else {
-            ExtendedBigDecimal::default()
+        Some(ParsedLongDouble {
+            value: if negative {
+                ExtendedBigDecimal::MinusZero
+            } else {
+                ExtendedBigDecimal::default()
+            },
+            range_error: true,
         })
     } else {
         None
@@ -151,13 +207,15 @@ fn parse_saturating_exponent(exponent: &str) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ExtendedBigDecimal, parse_long_double};
+    use super::{ExtendedBigDecimal, LongDoubleParseError, parse_long_double};
 
     #[test]
     fn parses_extreme_decimal_exponents_without_losing_the_value_class() {
         assert_eq!(
-            parse_long_double("1e100001").unwrap(),
-            ExtendedBigDecimal::Infinity
+            parse_long_double("1e100001"),
+            Err(LongDoubleParseError::OutOfRange(
+                ExtendedBigDecimal::Infinity
+            ))
         );
         assert_eq!(
             parse_long_double("-0e999999").unwrap(),
@@ -171,5 +229,21 @@ mod tests {
             parse_long_double("").unwrap(),
             ExtendedBigDecimal::default()
         );
+    }
+
+    #[test]
+    fn reports_range_errors_with_the_quantized_long_double_value() {
+        for (input, expected) in [
+            ("2e4932", ExtendedBigDecimal::Infinity),
+            ("1e-5000", ExtendedBigDecimal::default()),
+            ("0x1p16384", ExtendedBigDecimal::Infinity),
+            ("0x1p-20000", ExtendedBigDecimal::default()),
+        ] {
+            assert_eq!(
+                parse_long_double(input),
+                Err(LongDoubleParseError::OutOfRange(expected)),
+                "input: {input}"
+            );
+        }
     }
 }

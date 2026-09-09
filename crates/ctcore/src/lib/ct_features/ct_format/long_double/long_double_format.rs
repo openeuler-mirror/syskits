@@ -540,6 +540,16 @@ pub fn overflows_long_double(value: &ExtendedBigDecimal) -> bool {
     BinaryFinite::from_ratio(negative, numerator, denominator).is_none()
 }
 
+pub(super) fn underflows_long_double(value: &ExtendedBigDecimal) -> bool {
+    let ExtendedBigDecimal::BigDecimal(value) = value else {
+        return false;
+    };
+    let (negative, numerator, denominator) = decimal_ratio(value);
+    !numerator.is_zero()
+        && floor_log2_ratio(&numerator, &denominator) < LONG_DOUBLE_MIN_NORMAL_EXPONENT
+        && BinaryFinite::from_ratio(negative, numerator, denominator).is_some()
+}
+
 fn decimal_ratio(value: &bigdecimal::BigDecimal) -> (bool, BigUint, BigUint) {
     let (integer, scale) = value.as_bigint_and_exponent();
     let negative = integer.sign() == num_bigint::Sign::Minus;
@@ -937,6 +947,23 @@ mod tests {
 
         assert!(!overflows_long_double(&maximum_range));
         assert!(overflows_long_double(&overflow));
+    }
+
+    #[test]
+    fn detects_nonzero_values_below_the_normal_long_double_range() {
+        let normal = format!("0x1p{LONG_DOUBLE_MIN_NORMAL_EXPONENT}")
+            .parse::<PreciseNumber>()
+            .unwrap()
+            .number;
+        let subnormal = format!("0x1p{}", LONG_DOUBLE_MIN_NORMAL_EXPONENT - 1)
+            .parse::<PreciseNumber>()
+            .unwrap()
+            .number;
+        let zero = "0e-5000".parse::<PreciseNumber>().unwrap().number;
+
+        assert!(!underflows_long_double(&normal));
+        assert!(underflows_long_double(&subnormal));
+        assert!(!underflows_long_double(&zero));
     }
 
     #[test]

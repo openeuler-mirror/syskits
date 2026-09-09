@@ -18,7 +18,6 @@ use crate::{
     ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name},
     ct_show_error, ct_show_warning,
 };
-use os_display::Quotable;
 use std::ffi::OsStr;
 
 unsafe extern "C" {
@@ -269,21 +268,16 @@ fn extract_long_double(
     match parsed {
         Ok(value) => value,
         Err(error) => {
-            let input_escaped = escape_name(
-                OsStr::new(input),
-                &CtQuotingStyle::C {
-                    quotes: CtQuotes::None,
-                },
-            );
+            let input_escaped = quote_numeric_argument(OsStr::new(input));
             match error {
                 LongDoubleParseError::OutOfRange(value) => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: Numerical result out of range", input_escaped.quote());
+                    ct_show_error!("{}: Numerical result out of range", input_escaped);
                     value
                 }
                 LongDoubleParseError::NotNumeric => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: expected a numeric value", input_escaped.quote());
+                    ct_show_error!("{}: expected a numeric value", input_escaped);
                     ExtendedBigDecimal::default()
                 }
                 LongDoubleParseError::PartialMatch(value, rest) => {
@@ -296,7 +290,7 @@ fn extract_long_double(
                         }
                     } else {
                         set_ct_exit_code(1);
-                        ct_show_error!("{}: value not completely converted", input_escaped.quote());
+                        ct_show_error!("{}: value not completely converted", input_escaped);
                     }
                     value
                 }
@@ -341,15 +335,18 @@ fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
     use std::os::unix::ffi::OsStrExt;
 
     set_ct_exit_code(1);
-    let input = OsStr::from_bytes(bytes);
-    let escaped = escape_name(
+    let escaped = quote_numeric_argument(OsStr::from_bytes(bytes));
+    ct_show_error!("{}: expected a numeric value", escaped);
+    T::default()
+}
+
+fn quote_numeric_argument(input: &OsStr) -> String {
+    escape_name(
         input,
         &CtQuotingStyle::C {
-            quotes: CtQuotes::None,
+            quotes: CtQuotes::Single,
         },
-    );
-    ct_show_error!("{}: expected a numeric value", escaped.quote());
-    T::default()
+    )
 }
 
 // 该函数接收两个通用参数： T 和 ParseError<'_, T>。该函数用于从解析结果中提取值，并处理可能出现的解析错误。
@@ -367,21 +364,16 @@ fn extract_value_with_overflow<T: Default>(
     match p {
         Ok(v) => v,
         Err(e) => {
-            let input_escaped = escape_name(
-                OsStr::new(input),
-                &CtQuotingStyle::C {
-                    quotes: CtQuotes::None,
-                },
-            );
+            let input_escaped = quote_numeric_argument(OsStr::new(input));
             match e {
                 ParseError::CtOverflow => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: Numerical result out of range", input_escaped.quote());
+                    ct_show_error!("{}: Numerical result out of range", input_escaped);
                     overflow_value
                 }
                 ParseError::CtNotNumeric => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: expected a numeric value", input_escaped.quote());
+                    ct_show_error!("{}: expected a numeric value", input_escaped);
                     Default::default()
                 }
                 ParseError::CtPartialMatch(v, rest) => {
@@ -394,7 +386,7 @@ fn extract_value_with_overflow<T: Default>(
                         }
                     } else {
                         set_ct_exit_code(1);
-                        ct_show_error!("{}: value not completely converted", input_escaped.quote());
+                        ct_show_error!("{}: value not completely converted", input_escaped);
                     }
                     v
                 }
@@ -616,5 +608,12 @@ mod tests {
         assert_eq!(parse_bytes_i64(b""), 0);
         assert_eq!(parse_bytes_u64(b""), 0);
         assert_eq!(crate::ct_error::get_ct_exit_code(), 0);
+    }
+
+    #[test]
+    fn numeric_diagnostic_quotes_keep_spaces_unescaped() {
+        assert_eq!(quote_numeric_argument(OsStr::new(" ")), "' '");
+        assert_eq!(quote_numeric_argument(OsStr::new("a b")), "'a b'");
+        assert_eq!(quote_numeric_argument(OsStr::new("'")), "'\\''");
     }
 }

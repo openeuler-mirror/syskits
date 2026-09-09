@@ -1013,6 +1013,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%d且参数为单个ASCII空格；预期stdout为0、RC=1，诊断中的空格保留在ASCII单引号内且不添加反斜杠",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%d", " "],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0",
+                    "stderr": "printf: ' ': expected a numeric value\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

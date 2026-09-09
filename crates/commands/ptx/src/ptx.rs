@@ -1946,7 +1946,7 @@ struct WordRef {
 }
 
 fn parse_positive_base0(value: &str, description: &str) -> CTResult<usize> {
-    let invalid = || CtSimpleError::new(1, format!("invalid {description}: '{value}'"));
+    let invalid = || ptx_invalid_numeric_arg_error(value.as_bytes(), description);
     let value_without_leading_space =
         value.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
     let unsigned = value_without_leading_space
@@ -2192,12 +2192,7 @@ fn compile_regex_case_lossy(pattern: &str, ignore_case: bool) -> Regex {
 }
 
 fn compile_user_regex(pattern: &str, ignore_case: bool) -> CTResult<Regex> {
-    compile_regex(pattern, ignore_case).map_err(|_| {
-        CtSimpleError::new(
-            1,
-            format!("Invalid regular expression (for regexp '{pattern}')"),
-        )
-    })
+    compile_regex(pattern, ignore_case).map_err(|_| ptx_invalid_regex_error(pattern.as_bytes()))
 }
 
 fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, onig::Error> {
@@ -5165,11 +5160,26 @@ fn ptx_quote_pattern(
     byte_ctype: &LocaleByteCtype,
     single_byte_locale: bool,
 ) -> Vec<u8> {
-    let mut quoted = Vec::with_capacity(pattern.len() + 2);
-    quoted.push(b'\'');
+    const UTF8_LEFT_QUOTE: &[u8] = "‘".as_bytes();
+    const UTF8_RIGHT_QUOTE: &[u8] = "’".as_bytes();
+
+    let (left_quote, right_quote): (&[u8], &[u8]) =
+        if ptx_locale_codeset().eq_ignore_ascii_case("UTF-8") {
+            (UTF8_LEFT_QUOTE, UTF8_RIGHT_QUOTE)
+        } else {
+            (b"'", b"'")
+        };
+    let mut quoted = Vec::with_capacity(pattern.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
     let printable = ptx_printable_byte_mask(pattern, byte_ctype, single_byte_locale);
     let mut index = 0usize;
     while index < pattern.len() {
+        if pattern[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
         let byte = pattern[index];
         let escape = match byte {
             b'\x07' => Some(b'a'),
@@ -5180,7 +5190,6 @@ fn ptx_quote_pattern(
             b'\x0c' => Some(b'f'),
             b'\r' => Some(b'r'),
             b'\\' => Some(b'\\'),
-            b'\'' => Some(b'\''),
             _ => None,
         };
         if let Some(escaped) = escape {
@@ -5195,7 +5204,7 @@ fn ptx_quote_pattern(
         }
         index += 1;
     }
-    quoted.push(b'\'');
+    quoted.extend_from_slice(right_quote);
     quoted
 }
 

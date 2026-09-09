@@ -59,6 +59,7 @@ pub enum FormatError {
     WrongSpecType,
     InvalidFieldWidth(Vec<u8>),
     InvalidPrecision(Vec<u8>),
+    WriteError,
     InvalidUniversalCharacterName { prefix: u8, value: u32 },
 }
 
@@ -113,6 +114,7 @@ impl Display for FormatError {
                     },
                 )
             ),
+            Self::WriteError => write!(f, "write error"),
             Self::InvalidUniversalCharacterName { prefix, value } => write!(
                 f,
                 "invalid universal character name \\{}{value:0width$x}",

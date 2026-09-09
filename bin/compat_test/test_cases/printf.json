@@ -1091,6 +1091,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%*d，动态宽度为INT_MIN且数值为1；glibc无法表示其绝对宽度，预期不输出填充、RC=1并报告write error",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%*d", "-2147483648", "1"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: write error\n"
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
         }
     ]
 }

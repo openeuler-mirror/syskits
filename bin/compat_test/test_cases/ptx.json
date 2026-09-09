@@ -796,6 +796,284 @@
       ]
     },
     {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -W \"a'b[\" input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“Invalid regular expression (for regexp ‘a'b[’)”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-W",
+        "a'b[",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid regular expression (for regexp ‘a'b[’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -W 'a’[' input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“Invalid regular expression (for regexp ‘a\\’[’)”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-W",
+        "a’[",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid regular expression (for regexp ‘a\\’[’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -w bad input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“invalid line width: ‘bad’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-w",
+        "bad",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: invalid line width: ‘bad’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -g bad input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“invalid gap width: ‘bad’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-g",
+        "bad",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: invalid gap width: ‘bad’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -G input output extra；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“extra operand ‘extra’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-G",
+        "input",
+        "output",
+        "extra"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: extra operand ‘extra’\nTry 'ptx --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -S '\\n' newline；newline文件仅含一个换行字节；预期RC=1、stdout为空，首条stderr为“error: regular expression has a match of length zero: ‘\\n’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-S",
+        "\\n",
+        "newline"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: ‘\\n’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8，执行ptx -W \"a'b[\" input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“Invalid regular expression (for regexp ‘a'b[’)”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-W",
+        "a'b[",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid regular expression (for regexp ‘a'b[’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8，执行ptx -W 'a’[' input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“Invalid regular expression (for regexp ‘a\\’[’)”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-W",
+        "a’[",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: Invalid regular expression (for regexp ‘a\\’[’)\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8，执行ptx -w bad input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“invalid line width: ‘bad’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-w",
+        "bad",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: invalid line width: ‘bad’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8，执行ptx -g bad input；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“invalid gap width: ‘bad’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-g",
+        "bad",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: invalid gap width: ‘bad’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8，执行ptx -G input output extra；input为alpha beta\\n；预期RC=1、stdout为空，首条stderr为“extra operand ‘extra’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-G",
+        "input",
+        "output",
+        "extra"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: extra operand ‘extra’\nTry 'ptx --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8，执行ptx -S '\\n' newline；newline文件仅含一个换行字节；预期RC=1、stdout为空，首条stderr为“error: regular expression has a match of length zero: ‘\\n’”，验证UTF-8 locale引用符号与右引号转义",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'alpha beta\\n' > input",
+        "printf '\\n' > newline"
+      ],
+      "args": [
+        "-S",
+        "\\n",
+        "newline"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: ‘\\n’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "command": "ptx",
       "description": "Test whitespace handling in output",
       "args": ["-w30"],

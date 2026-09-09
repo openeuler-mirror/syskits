@@ -209,6 +209,8 @@ impl ParsedNumber {
             }
         };
 
+        let input = input.trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}']);
+
         // 初始符号
         let (negative, unsigned_str) = match input.as_bytes().first() {
             Some(b'-') => (true, &input[1..]),
@@ -994,6 +996,20 @@ mod tests {
         assert_eq!(
             ParsedNumber::parse_u64("+0b2"),
             Err(ParseError::CtPartialMatch(0, "b2"))
+        );
+    }
+
+    #[test]
+    fn integer_parser_skips_leading_ascii_whitespace() {
+        assert_eq!(Ok(1), ParsedNumber::parse_i64(" \t\n\r\x0b\x0c1"));
+        assert_eq!(Ok(u64::MAX), ParsedNumber::parse_u64("\t-1"));
+        assert_eq!(
+            ParsedNumber::parse_i64(" 09"),
+            Err(ParseError::CtPartialMatch(0, "9"))
+        );
+        assert_eq!(
+            ParsedNumber::parse_i64("\u{a0}1"),
+            Err(ParseError::CtNotNumeric)
         );
     }
 

@@ -384,6 +384,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；字面FORMAT=literal后跟多余参数a'b；预期RC=0，stdout为7字节、内容=literal，stderr为64字节、使用ASCII单引号并转义参数内单引号",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["literal", "a'b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "literal",
+                    "stderr": "printf: warning: ignoring excess arguments, starting with 'a\\'b'\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

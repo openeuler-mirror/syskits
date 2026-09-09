@@ -22,7 +22,10 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, cr
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_format::{ArgCursor, FormatArgument, parse_spec_and_escape};
-use std::ffi::OsString;
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
+use std::borrow::Cow;
+use std::ffi::{CStr, OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -157,18 +160,40 @@ fn printf_render_to_writer<W: Write>(
 fn printf_excess_arguments_warning(arg: &FormatArgument) -> String {
     format!(
         "printf: warning: ignoring excess arguments, starting with {}\n",
-        printf_argument_for_warning(arg)
+        printf_argument_for_warning_with_style(arg, printf_uses_ascii_quotes())
     )
 }
 
-fn printf_argument_for_warning(arg: &FormatArgument) -> String {
-    match arg {
-        FormatArgument::Unparsed(s) | FormatArgument::String(s) => format!("‘{s}’"),
-        FormatArgument::Bytes(bytes) => format!("‘{}’", String::from_utf8_lossy(bytes)),
-        FormatArgument::Char(c) => format!("‘{c}’"),
-        FormatArgument::UnsignedInt(n) => format!("‘{n}’"),
-        FormatArgument::SignedInt(n) => format!("‘{n}’"),
-        FormatArgument::Float(n) => format!("‘{n}’"),
+fn printf_uses_ascii_quotes() -> bool {
+    let locale = unsafe { ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null()) };
+    if locale.is_null() {
+        return false;
+    }
+    matches!(
+        unsafe { CStr::from_ptr(locale) }.to_bytes(),
+        b"C" | b"POSIX"
+    )
+}
+
+fn printf_argument_for_warning_with_style(arg: &FormatArgument, ascii_quotes: bool) -> String {
+    let value: Cow<'_, OsStr> = match arg {
+        FormatArgument::Unparsed(s) | FormatArgument::String(s) => Cow::Borrowed(OsStr::new(s)),
+        FormatArgument::Bytes(bytes) => Cow::Borrowed(OsStr::from_bytes(bytes)),
+        FormatArgument::Char(c) => Cow::Owned(OsString::from(c.to_string())),
+        FormatArgument::UnsignedInt(n) => Cow::Owned(OsString::from(n.to_string())),
+        FormatArgument::SignedInt(n) => Cow::Owned(OsString::from(n.to_string())),
+        FormatArgument::Float(n) => Cow::Owned(OsString::from(n.to_string())),
+    };
+
+    if ascii_quotes {
+        escape_name(
+            &value,
+            &CtQuotingStyle::C {
+                quotes: CtQuotes::Single,
+            },
+        )
+    } else {
+        format!("‘{}’", value.to_string_lossy())
     }
 }
 
@@ -461,7 +486,8 @@ mod tests {
 
     mod tests_printf_semantic {
         use crate::{
-            FormatArgument, PrintfInvocation, printf_native_semantic, printf_render_to_writer,
+            FormatArgument, PrintfInvocation, printf_argument_for_warning_with_style,
+            printf_native_semantic, printf_render_to_writer,
         };
 
         use std::ffi::OsString;
@@ -511,6 +537,16 @@ mod tests {
                 "printf: warning: ignoring excess arguments, starting with ‘alpha’\n"
             );
             assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
+        fn c_locale_excess_argument_warning_uses_ascii_quotes() {
+            let argument = FormatArgument::Bytes(b"a'b".to_vec());
+
+            assert_eq!(
+                printf_argument_for_warning_with_style(&argument, true),
+                "'a\\'b'"
+            );
         }
 
         #[test]

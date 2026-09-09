@@ -255,6 +255,13 @@ impl IndexedSpec {
                 }
             }
             c @ (b'a' | b'A' | b'e' | b'E' | b'f' | b'F' | b'g' | b'G') => {
+                let float_alignment = if flags.minus {
+                    NumberAlignment::Left
+                } else if flags.zero {
+                    NumberAlignment::RightZero
+                } else {
+                    NumberAlignment::RightSpace
+                };
                 let force_decimal = if flags.hash {
                     ForceDecimal::Yes
                 } else {
@@ -279,7 +286,7 @@ impl IndexedSpec {
                     variant,
                     force_decimal,
                     case,
-                    alignment,
+                    alignment: float_alignment,
                     positive_sign,
                     thousand_separate: flags.quote,
                 }
@@ -462,37 +469,32 @@ impl IndexedSpec {
                 };
                 let f = cursor.get_f64(self.arg_index);
                 let width = w.unwrap_or(0);
-
-                if !thousand_separate {
-                    num_format::Float {
-                        width,
-                        precision: p,
-                        variant: *variant,
-                        case: *case,
-                        force_decimal: *force_decimal,
-                        positive_sign: *positive_sign,
-                        alignment: align,
-                    }
-                    .fmt(writer, f)
-                    .map_err(FormatError::IoError)
+                let align = if !f.is_finite() && align == NumberAlignment::RightZero {
+                    NumberAlignment::RightSpace
                 } else {
-                    let mut raw = Vec::new();
-                    num_format::Float {
-                        width: 0,
-                        precision: p,
-                        variant: *variant,
-                        case: *case,
-                        force_decimal: *force_decimal,
-                        positive_sign: *positive_sign,
-                        alignment: NumberAlignment::Left,
-                    }
-                    .fmt(&mut raw, f)
-                    .map_err(FormatError::IoError)?;
+                    align
+                };
 
-                    let grouped = group_number_thousands(&String::from_utf8_lossy(&raw));
-                    write_number_aligned(writer, &grouped, width, align)
-                        .map_err(FormatError::IoError)
+                let mut raw = Vec::new();
+                num_format::Float {
+                    width: 0,
+                    precision: p,
+                    variant: *variant,
+                    case: *case,
+                    force_decimal: *force_decimal,
+                    positive_sign: *positive_sign,
+                    alignment: NumberAlignment::Left,
                 }
+                .fmt(&mut raw, f)
+                .map_err(FormatError::IoError)?;
+
+                let raw = String::from_utf8_lossy(&raw);
+                let formatted = if *thousand_separate {
+                    group_number_thousands(&raw)
+                } else {
+                    raw.into_owned()
+                };
+                write_number_aligned(writer, &formatted, width, align).map_err(FormatError::IoError)
             }
         }
     }

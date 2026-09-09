@@ -362,7 +362,18 @@ fn parse_strtold_f64(input: &str) -> Result<f64, ParseError<'_, f64>> {
         );
     }
 
-    if lowercase.starts_with("0x") {
+    let hex_significand_starts = unsigned
+        .as_bytes()
+        .get(2)
+        .and_then(|byte| hex_digit(*byte))
+        .is_some()
+        || (unsigned.as_bytes().get(2) == Some(&b'.')
+            && unsigned
+                .as_bytes()
+                .get(3)
+                .and_then(|byte| hex_digit(*byte))
+                .is_some());
+    if lowercase.starts_with("0x") && hex_significand_starts {
         return parse_hex_float(input, trimmed, whitespace, negative, sign_len);
     }
     parse_decimal_float(input, trimmed, whitespace)
@@ -1076,6 +1087,19 @@ mod tests {
         assert_eq!(Ok(8.0), ParsedNumber::parse_f64("0x1p3"));
         assert_eq!(Ok(f64::INFINITY), ParsedNumber::parse_f64("infinity"));
         assert!(ParsedNumber::parse_f64("nan(payload)").unwrap().is_nan());
+    }
+
+    #[test]
+    fn float_hex_prefix_requires_a_significand_digit() {
+        assert_eq!(
+            ParsedNumber::parse_f64("0x"),
+            Err(ParseError::CtPartialMatch(0.0, "x"))
+        );
+        assert_eq!(
+            ParsedNumber::parse_f64("-0Xg"),
+            Err(ParseError::CtPartialMatch(-0.0, "Xg"))
+        );
+        assert_eq!(Ok(0.0625), ParsedNumber::parse_f64("0x.1"));
     }
 
     #[test]

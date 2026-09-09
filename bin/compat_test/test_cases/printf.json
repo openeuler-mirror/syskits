@@ -690,6 +690,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT依次为%a、%.0a、%.1a、%#.0a，输入为指数0的十六进制浮点边界；预期省略精度时去除无效零，显式精度按二进制值舍入并由#保留小数点",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%a|%.0a|%.1a|%#.0a", "1.5", "1.5", "1.96875", "1.5"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0x1.8p+0|0x2p+0|0x2.0p+0|0x2.p+0",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

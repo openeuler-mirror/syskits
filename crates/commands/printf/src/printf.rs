@@ -707,5 +707,19 @@ mod tests {
             assert_eq!(output, vec![0xc3]);
             assert_eq!(stderr_text, "");
         }
+
+        #[test]
+        fn non_utf8_character_constant_uses_its_first_byte() {
+            let invocation = PrintfInvocation {
+                format_string: b"%d".to_vec(),
+                arguments: vec![FormatArgument::Bytes(vec![b'\'', 0xff])],
+            };
+            let mut output = Vec::new();
+
+            let stderr_text = printf_render_to_writer(&invocation, &mut output).unwrap();
+
+            assert_eq!(output, b"255");
+            assert_eq!(stderr_text, "");
+        }
     }
 }

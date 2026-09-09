@@ -467,7 +467,7 @@ impl IndexedSpec {
                 thousand_separate,
             } => {
                 let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
-                let p = resolve_precision(*precision, self.precision_index, cursor)?.unwrap_or(6);
+                let p = resolve_precision(*precision, self.precision_index, cursor)?;
                 let align = if dyn_left {
                     NumberAlignment::Left
                 } else {

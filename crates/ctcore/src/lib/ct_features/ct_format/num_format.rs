@@ -259,14 +259,14 @@ pub struct Float {
     pub width: usize,
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
-    pub precision: usize,
+    pub precision: Option<usize>,
 }
 
 impl Default for Float {
     fn default() -> Self {
         Self {
             width: 0,
-            precision: 6,
+            precision: None,
             case: Case::Lowercase,
             variant: FloatVariant::Decimal,
             force_decimal: ForceDecimal::No,
@@ -292,11 +292,21 @@ impl Formatter for Float {
         let s = match x.is_finite() {
             true => {
                 if self.variant == FloatVariant::Decimal {
-                    format_float_decimal(x, self.precision, self.force_decimal)
+                    format_float_decimal(x, self.precision.unwrap_or(6), self.force_decimal)
                 } else if self.variant == FloatVariant::Scientific {
-                    format_float_scientific(x, self.precision, self.case, self.force_decimal)
+                    format_float_scientific(
+                        x,
+                        self.precision.unwrap_or(6),
+                        self.case,
+                        self.force_decimal,
+                    )
                 } else if self.variant == FloatVariant::Shortest {
-                    format_float_shortest(x, self.precision, self.case, self.force_decimal)
+                    format_float_shortest(
+                        x,
+                        self.precision.unwrap_or(6),
+                        self.case,
+                        self.force_decimal,
+                    )
                 } else {
                     // self.variant == FloatVariant::Hexadecimal
                     format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
@@ -343,13 +353,9 @@ impl Formatter for Float {
             };
 
             let precision = if let Some(CanAsterisk::Fixed(x)) = precision {
-                x
+                Some(x)
             } else if precision.is_none() {
-                if matches!(variant, FloatVariant::Shortest) {
-                    6
-                } else {
-                    0
-                }
+                None
             } else {
                 return Err(FormatError::WrongSpecType);
             };
@@ -505,7 +511,7 @@ fn format_float_shortest(
 // 函数将浮点数格式化为十六进制字符串。
 fn format_float_hexadecimal(
     f: f64,
-    precision: usize,
+    precision: Option<usize>,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
@@ -519,20 +525,60 @@ fn format_float_hexadecimal(
         (1, mantissa, exponent)
     };
 
-    let mut s = if precision == 0 {
-        if force_decimal == ForceDecimal::No {
-            format!("0x{first_digit}p{exponent:+x}")
-        } else {
-            format!("0x{first_digit}.p{exponent:+x}")
+    const NATIVE_FRACTION_DIGITS: usize = 13;
+    let (first_digit, mut fraction) = match precision {
+        None => {
+            let mut fraction = format!("{mantissa:0>NATIVE_FRACTION_DIGITS$x}");
+            while fraction.ends_with('0') {
+                fraction.pop();
+            }
+            (first_digit as u64, fraction)
         }
-    } else {
-        format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+x}")
+        Some(wanted) if wanted < NATIVE_FRACTION_DIGITS => {
+            let significand = ((first_digit as u64) << 52) | mantissa;
+            let shift = 4 * (NATIVE_FRACTION_DIGITS - wanted);
+            let rounded = round_shift_right_ties_even(significand, shift);
+            let digits = format!("{rounded:0>width$x}", width = wanted + 1);
+            let (first, fraction) = digits.split_at(1);
+            (
+                u64::from_str_radix(first, 16).unwrap(),
+                fraction.to_string(),
+            )
+        }
+        Some(wanted) => {
+            let mut fraction = format!("{mantissa:0>NATIVE_FRACTION_DIGITS$x}");
+            fraction.push_str(&"0".repeat(wanted - NATIVE_FRACTION_DIGITS));
+            (first_digit as u64, fraction)
+        }
     };
+
+    if let Some(wanted) = precision {
+        fraction.truncate(wanted);
+    }
+    let point = if !fraction.is_empty() || force_decimal == ForceDecimal::Yes {
+        "."
+    } else {
+        ""
+    };
+    let mut s = format!("0x{first_digit:x}{point}{fraction}p{exponent:+x}");
 
     if Case::Uppercase == case {
         s.make_ascii_uppercase();
     }
     s
+}
+
+fn round_shift_right_ties_even(value: u64, shift: usize) -> u64 {
+    debug_assert!((1..64).contains(&shift));
+    let truncated = value >> shift;
+    let remainder = value & ((1_u64 << shift) - 1);
+    let halfway = 1_u64 << (shift - 1);
+
+    if remainder > halfway || (remainder == halfway && truncated & 1 == 1) {
+        truncated + 1
+    } else {
+        truncated
+    }
 }
 
 // 它将字符串的可变引用作为输入，并删除字符串尾部的零和小数点。
@@ -815,7 +861,7 @@ mod test {
             width: 10,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
-            precision: 2,
+            precision: Some(2),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -833,7 +879,7 @@ mod test {
             width: 5,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
-            precision: 1,
+            precision: Some(1),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -852,7 +898,7 @@ mod test {
             width: 5,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::RightSpace,
-            precision: 1,
+            precision: Some(1),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -870,7 +916,7 @@ mod test {
             width: 10,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::RightSpace,
-            precision: 1,
+            precision: Some(1),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -888,7 +934,7 @@ mod test {
             width: 10,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::RightSpace,
-            precision: 3,
+            precision: Some(3),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -907,7 +953,7 @@ mod test {
             width: 15,
             positive_sign: PositiveSign::Space,
             alignment: NumberAlignment::RightZero,
-            precision: 4,
+            precision: Some(4),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -926,7 +972,7 @@ mod test {
             width: 20,
             positive_sign: PositiveSign::Plus,
             alignment: NumberAlignment::Left,
-            precision: 0,
+            precision: Some(0),
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -957,7 +1003,7 @@ mod test {
         assert_eq!(float.width, 10);
         assert_eq!(float.positive_sign, PositiveSign::Plus);
         assert_eq!(float.alignment, NumberAlignment::Left);
-        assert_eq!(float.precision, 6);
+        assert_eq!(float.precision, Some(6));
     }
 
     #[test]
@@ -981,7 +1027,7 @@ mod test {
         assert_eq!(float.width, 10);
         assert_eq!(float.positive_sign, PositiveSign::Plus);
         assert_eq!(float.alignment, NumberAlignment::Left);
-        assert_eq!(float.precision, 6); // Default precision for Shortest
+        assert_eq!(float.precision, None); // Formatting supplies the default precision.
     }
 
     #[test]
@@ -1005,7 +1051,7 @@ mod test {
         assert_eq!(float.width, 0);
         assert_eq!(float.positive_sign, PositiveSign::Plus);
         assert_eq!(float.alignment, NumberAlignment::Left);
-        assert_eq!(float.precision, 0);
+        assert_eq!(float.precision, Some(0));
     }
 
     #[test]
@@ -1364,11 +1410,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal() {
         let f = 123456.789;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.e240c9fbe76c9p+10";
+        let expected = "0x1.e240cap+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1376,11 +1422,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_zero() {
         let f = 0.0;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x0.0000000000000p+0";
+        let expected = "0x0.000000p+0";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1389,11 +1435,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_positive_number() {
         let f = 123456.789;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.e240c9fbe76c9p+10";
+        let expected = "0x1.e240cap+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1401,11 +1447,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_positive_number2() {
         let f = 123456.789;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Uppercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0X1.E240C9FBE76C9P+10";
+        let expected = "0X1.E240CAP+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1413,11 +1459,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_negative_number() {
         let f = -123456.789;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.e240c9fbe76c9p+810";
+        let expected = "0x1.e240cap+810";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1426,11 +1472,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_zero_precision() {
         let f = 123456.789;
-        let precision = 0;
+        let precision = Some(0);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1p+10";
+        let expected = "0x2p+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1438,11 +1484,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_zero_precision_forced() {
         let f = 123456.789;
-        let precision = 0;
+        let precision = Some(0);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::Yes;
 
-        let expected = "0x1.p+10";
+        let expected = "0x2.p+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1450,11 +1496,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_force_decimal_zero_precision() {
         let f = 123456.789;
-        let precision = 0;
+        let precision = Some(0);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::Yes;
 
-        let expected = "0x1.p+10";
+        let expected = "0x2.p+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1463,11 +1509,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_invalid_input() {
         let f: f64 = 0.0;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Uppercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0X0.0000000000000P+0";
+        let expected = "0X0.000000P+0";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1476,11 +1522,11 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_zero_input() {
         let f: f64 = 0.0;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Uppercase;
         let force_decimal = ForceDecimal::Yes;
 
-        let expected = "0X0.0000000000000P+0";
+        let expected = "0X0.000000P+0";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1489,14 +1535,34 @@ mod test {
     #[test]
     fn test_format_float_hexadecimal_inf_input() {
         let f = f64::INFINITY;
-        let precision = 6;
+        let precision = Some(6);
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.0000000000000p+400";
+        let expected = "0x1.000000p+400";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn hexadecimal_float_trims_default_precision_and_rounds_explicit_precision() {
+        assert_eq!(
+            format_float_hexadecimal(1.5, None, Case::Lowercase, ForceDecimal::No),
+            "0x1.8p+0"
+        );
+        assert_eq!(
+            format_float_hexadecimal(1.5, Some(0), Case::Lowercase, ForceDecimal::No),
+            "0x2p+0"
+        );
+        assert_eq!(
+            format_float_hexadecimal(1.96875, Some(1), Case::Lowercase, ForceDecimal::No),
+            "0x2.0p+0"
+        );
+        assert_eq!(
+            format_float_hexadecimal(1.5, Some(0), Case::Lowercase, ForceDecimal::Yes),
+            "0x2.p+0"
+        );
     }
 
     #[test]

@@ -491,6 +491,24 @@ mod tests {
         };
 
         use std::ffi::OsString;
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
+
+        #[cfg(unix)]
+        #[test]
+        fn quoted_string_escapes_non_printable_multibyte_argument() {
+            let args = [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("%q"),
+                OsString::from_vec(vec![0xc2, 0x81]),
+            ];
+
+            let semantic = printf_native_semantic(args.into_iter()).unwrap();
+
+            assert_eq!(semantic.classic_text, "''$'\\302\\201'");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
 
         #[test]
         fn semantic_collects_rows_without_trailing_newline() {

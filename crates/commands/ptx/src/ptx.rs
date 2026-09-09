@@ -1018,11 +1018,14 @@ impl ByteRegex {
                 search_from = invalid + 1;
                 continue;
             }
+            let match_limit = self
+                .first_invalid_byte_at_or_after(bytes, start)
+                .unwrap_or(bytes.len());
             let mut longest_region = Region::new();
             self.longest.search_with_encoding(
                 self.encoding.encoded(bytes),
                 start,
-                bytes.len(),
+                match_limit,
                 SearchOptions::SEARCH_OPTION_NONE,
                 Some(&mut longest_region),
             )?;
@@ -1076,12 +1079,18 @@ impl ByteRegex {
                 search_from = invalid + 1;
                 continue;
             }
+            let raw_match_limit = transcoded
+                .first_invalid_at_or_after(start)
+                .unwrap_or(bytes.len());
+            let match_limit = transcoded
+                .utf8_offset_at_or_after(raw_match_limit)?
+                .saturating_sub(utf8_base);
             let mut longest_region = Region::new();
             let relative_start = utf8_start - utf8_base;
             self.longest.search_with_options(
                 text,
                 relative_start,
-                text.len(),
+                match_limit,
                 SearchOptions::SEARCH_OPTION_NONE,
                 Some(&mut longest_region),
             )?;

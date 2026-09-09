@@ -11787,6 +11787,44 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C.UTF-8，执行ptx -O -f -W '[^ ]+' input；input为\\x80A\\xFF B\\n，共6字节80 41 ff 20 42 0a；预期RC=0、stderr为空，stdout十六进制解码为2条共41字节的roff记录：.xx \"\" \"\\x80\" \"A\\xFF B\" \"\"\\n和.xx \"\" \"\\x80A\\xFF\" \"B\" \"\"\\n，验证否定字符类保留非法字节前的匹配",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\200A\\377 B\\n' > input"
+      ],
+      "args": ["2d4f", "2d66", "2d57", "5b5e205d2b", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e787820222220228022202241ff2042222022220a2e787820222220228041ff22202242222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=zh_CN.gb18030，执行ptx -O -W '[^ ]+' input；input为\\x80A\\xFF B\\n，共6字节80 41 ff 20 42 0a；预期RC=0、stderr为空，stdout十六进制解码为2条共41字节的roff记录：.xx \"\" \"\\x80\" \"A\\xFF B\" \"\"\\n和.xx \"\" \"\\x80A\\xFF\" \"B\" \"\"\\n，验证转码正则保留非法多字节前的匹配",
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gb18030",
+        "printf '\\200A\\377 B\\n' > input"
+      ],
+      "args": ["2d4f", "2d57", "5b5e205d2b", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e787820222220228022202241ff2042222022220a2e787820222220228041ff22202242222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

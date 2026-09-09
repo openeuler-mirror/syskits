@@ -382,10 +382,13 @@ fn format_float_non_finite(f: f64, case: Case) -> String {
     debug_assert!(!f.is_finite());
 
     if f.is_nan() {
-        return match case {
-            Case::Lowercase => "nan".to_string(),
-            Case::Uppercase => "NAN".to_string(),
+        let sign = if f.is_sign_negative() { "-" } else { "" };
+        let text = if case == Case::Lowercase {
+            "nan"
+        } else {
+            "NAN"
         };
+        return format!("{sign}{text}");
     }
 
     let s = format!("{f}");
@@ -1090,6 +1093,9 @@ mod test {
         let actual = format_float_non_finite(f, case);
 
         assert_eq!(actual, expected);
+
+        let negative = format_float_non_finite(-f64::NAN, Case::Uppercase);
+        assert_eq!(negative, "-NAN");
     }
 
     #[test]

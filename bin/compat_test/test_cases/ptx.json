@@ -11695,6 +11695,79 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -W '^.' input；input字节为ff 41 20 42 0a，验证非法UTF-8字节后的片段不会重新触发行首锚点",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\377A B\\n' > input"
+      ],
+      "args": ["-W", "^.", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -O -W '^.' input；input字节为ff 41 20 42 0a，验证roff模式不会在非法字节后重启行首锚点",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\377A B\\n' > input"
+      ],
+      "args": ["-O", "-W", "^.", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8下执行ptx -T -W '^.' input；input字节为ff 41 20 42 0a，验证TeX模式不会在非法字节后重启行首锚点",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\377A B\\n' > input"
+      ],
+      "args": ["-T", "-W", "^.", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节用例：LC_ALL=C.UTF-8，执行ptx -O -S '^.' -W A input；input可读为“\\xFFA B\\n”，共5字节ff 41 20 42 0a；预期RC=0、stderr为空，stdout十六进制解码为1行、20字节的roff记录“.xx \"\" \"\\xFF\" \"A B\" \"\"\\n”，JSON中的十六进制stdout逐字节表示宏名、非法字节ff、关键词A、右侧上下文B和换行，验证句正则不会在非法字节后重启行首锚点",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\377A B\\n' > input"
+      ],
+      "args": ["2d4f", "2d53", "5e2e", "2d57", "41", "696e707574"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2e78782022222022ff222022412042222022220a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

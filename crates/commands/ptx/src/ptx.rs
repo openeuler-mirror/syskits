@@ -747,7 +747,31 @@ impl Regex {
     }
 
     fn find(&self, text: &str) -> Option<(usize, usize)> {
-        self.find_at(text, 0)
+        self.find_with_options(text, SearchOptions::SEARCH_OPTION_NONE)
+    }
+
+    fn find_with_options(
+        &self,
+        text: &str,
+        search_options: SearchOptions,
+    ) -> Option<(usize, usize)> {
+        let mut region = Region::new();
+        let start = self.search.search_with_options(
+            text,
+            0,
+            text.len(),
+            search_options,
+            Some(&mut region),
+        )?;
+        let mut longest_region = Region::new();
+        self.longest.search_with_options(
+            text,
+            start,
+            text.len(),
+            search_options,
+            Some(&mut longest_region),
+        )?;
+        longest_region.pos(0)
     }
 
     fn find_at(&self, text: &str, from: usize) -> Option<(usize, usize)> {
@@ -971,11 +995,16 @@ impl ByteRegex {
         let mut search_from = from;
         while search_from <= bytes.len() {
             let mut region = Region::new();
+            let search_options = if search_from == from {
+                SearchOptions::SEARCH_OPTION_NONE
+            } else {
+                SearchOptions::SEARCH_OPTION_NOTBOL
+            };
             let start = self.search.search_with_encoding(
                 self.encoding.encoded(bytes),
                 search_from,
                 bytes.len(),
-                SearchOptions::SEARCH_OPTION_NONE,
+                search_options,
                 Some(&mut region),
             );
             let Some(start) = start else {
@@ -1027,11 +1056,16 @@ impl ByteRegex {
                 .utf8_offset_at_or_after(search_from)?
                 .saturating_sub(utf8_base);
             let mut region = Region::new();
+            let search_options = if search_from == from {
+                SearchOptions::SEARCH_OPTION_NONE
+            } else {
+                SearchOptions::SEARCH_OPTION_NOTBOL
+            };
             let utf8_start = self.search.search_with_options(
                 text,
                 utf8_from,
                 text.len(),
-                SearchOptions::SEARCH_OPTION_NONE,
+                search_options,
                 Some(&mut region),
             )?;
             let utf8_start = utf8_base + utf8_start;
@@ -2663,10 +2697,17 @@ fn ptx_regex_find_at_valid_utf8(
         while cursor < text.len() && !invalid_bytes[cursor] {
             cursor += 1;
         }
-        if segment_start < cursor
-            && let Some((start, end)) = regex.find(&text[segment_start..cursor])
-        {
-            return Some((segment_start + start, segment_start + end));
+        if segment_start < cursor {
+            let search_options = if segment_start == from {
+                SearchOptions::SEARCH_OPTION_NONE
+            } else {
+                SearchOptions::SEARCH_OPTION_NOTBOL
+            };
+            if let Some((start, end)) =
+                regex.find_with_options(&text[segment_start..cursor], search_options)
+            {
+                return Some((segment_start + start, segment_start + end));
+            }
         }
     }
     None
@@ -2689,11 +2730,34 @@ fn ptx_regex_find_iter_valid_utf8(
             cursor += 1;
         }
         if segment_start < cursor {
-            matches.extend(
-                regex
-                    .find_iter(&text[segment_start..cursor])
-                    .map(|(start, end)| (segment_start + start, segment_start + end)),
-            );
+            let segment_end = cursor;
+            let mut next_start = segment_start;
+            let mut previous_end = None;
+            let mut first_search = true;
+            while next_start <= segment_end {
+                let search_options = if first_search && segment_start > 0 {
+                    SearchOptions::SEARCH_OPTION_NOTBOL
+                } else {
+                    SearchOptions::SEARCH_OPTION_NONE
+                };
+                let Some((start, end)) =
+                    regex.find_with_options(&text[next_start..segment_end], search_options)
+                else {
+                    break;
+                };
+                first_search = false;
+                let (start, end) = (next_start + start, next_start + end);
+                if start == end && previous_end == Some(end) {
+                    next_start = text[end..segment_end]
+                        .chars()
+                        .next()
+                        .map_or(segment_end + 1, |ch| end + ch.len_utf8());
+                    continue;
+                }
+                matches.push((start, end));
+                previous_end = Some(end);
+                next_start = end;
+            }
         }
     }
     matches

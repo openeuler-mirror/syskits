@@ -50,15 +50,36 @@ const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
 type GlibcReCompilePattern = unsafe extern "C" fn(
     *const ctcore::libc::c_char,
     usize,
-    *mut ctcore::libc::regex_t,
+    *mut GlibcRegexPattern,
 ) -> *const ctcore::libc::c_char;
 type GlibcReMatch = unsafe extern "C" fn(
-    *mut ctcore::libc::regex_t,
+    *mut GlibcRegexPattern,
     *const ctcore::libc::c_char,
     ctcore::libc::regoff_t,
     ctcore::libc::regoff_t,
     *mut ctcore::libc::c_void,
 ) -> ctcore::libc::regoff_t;
+
+#[repr(C)]
+struct GlibcRegexPattern {
+    buffer: *mut ctcore::libc::c_void,
+    allocated: usize,
+    used: usize,
+    syntax: ctcore::libc::c_ulong,
+    fastmap: *mut ctcore::libc::c_char,
+    translate: *mut ctcore::libc::c_char,
+    re_nsub: usize,
+    bitfield: u8,
+}
+
+const _: () = {
+    assert!(
+        std::mem::size_of::<GlibcRegexPattern>() == std::mem::size_of::<ctcore::libc::regex_t>()
+    );
+    assert!(
+        std::mem::align_of::<GlibcRegexPattern>() == std::mem::align_of::<ctcore::libc::regex_t>()
+    );
+};
 
 struct GlibcRegexApi {
     compile_pattern: GlibcReCompilePattern,
@@ -322,20 +343,13 @@ impl LocaleCollation {
         fold_upper: Option<&[u8; 256]>,
     ) -> Option<Vec<Vec<u8>>> {
         let regex_api = glibc_regex_api()?;
-        let mut folded_pattern = pattern.to_vec();
-        if let Some(upper) = fold_upper {
-            for byte in &mut folded_pattern {
-                *byte = upper[usize::from(*byte)];
-            }
-        }
         let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
-        let mut regex: ctcore::libc::regex_t = unsafe { std::mem::zeroed() };
+        let mut regex: GlibcRegexPattern = unsafe { std::mem::zeroed() };
+        regex.translate = fold_upper.map_or(std::ptr::null_mut(), |upper| {
+            upper.as_ptr().cast_mut().cast()
+        });
         let compile_error = unsafe {
-            (regex_api.compile_pattern)(
-                folded_pattern.as_ptr().cast(),
-                folded_pattern.len(),
-                &mut regex,
-            )
+            (regex_api.compile_pattern)(pattern.as_ptr().cast(), pattern.len(), &mut regex)
         };
         if !compile_error.is_null() {
             unsafe { ctcore::libc::uselocale(previous) };
@@ -346,28 +360,31 @@ impl LocaleCollation {
             .iter()
             .filter(|candidate| !candidate.contains(&0))
         {
-            let mut folded_candidate = candidate.clone();
-            if let Some(upper) = fold_upper {
-                for byte in &mut folded_candidate {
-                    *byte = upper[usize::from(*byte)];
-                }
-            }
-            let Ok(length) = ctcore::libc::regoff_t::try_from(folded_candidate.len()) else {
+            let Ok(length) = ctcore::libc::regoff_t::try_from(candidate.len()) else {
                 continue;
             };
             if unsafe {
                 (regex_api.is_match)(
                     &mut regex,
-                    folded_candidate.as_ptr().cast(),
+                    candidate.as_ptr().cast(),
                     length,
                     0,
                     std::ptr::null_mut(),
                 ) >= 0
             } {
-                matches.push(candidate.clone());
+                let mut matching = candidate.clone();
+                if let Some(upper) = fold_upper {
+                    for byte in &mut matching {
+                        *byte = upper[usize::from(*byte)];
+                    }
+                }
+                matches.push(matching);
             }
         }
-        unsafe { ctcore::libc::regfree(&mut regex) };
+        matches.sort_unstable();
+        matches.dedup();
+        regex.translate = std::ptr::null_mut();
+        unsafe { ctcore::libc::regfree((&raw mut regex).cast()) };
         unsafe { ctcore::libc::uselocale(previous) };
         Some(matches)
     }
@@ -1345,7 +1362,29 @@ fn ptx_character_class_has_range(class: &[u8]) -> bool {
     false
 }
 
-fn ptx_pattern_has_character_class_range(pattern: &[u8]) -> bool {
+fn ptx_character_class_has_bracket_symbol(class: &[u8]) -> bool {
+    if class.len() < 4 {
+        return false;
+    }
+    let content = &class[1..class.len() - 1];
+    let mut index = usize::from(content.first() == Some(&b'^'));
+    if content.get(index) == Some(&b']') {
+        index += 1;
+    }
+    while index < content.len() {
+        if ptx_bracket_symbol_end(content, index).is_some() {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn ptx_character_class_needs_locale_matching(class: &[u8]) -> bool {
+    ptx_character_class_has_range(class) || ptx_character_class_has_bracket_symbol(class)
+}
+
+fn ptx_pattern_needs_locale_class_matching(pattern: &[u8]) -> bool {
     let mut index = 0usize;
     let mut escaped = false;
     while index < pattern.len() {
@@ -1363,7 +1402,7 @@ fn ptx_pattern_has_character_class_range(pattern: &[u8]) -> bool {
         if byte == b'['
             && let Some(end) = ptx_character_class_end(pattern, index)
         {
-            if ptx_character_class_has_range(&pattern[index..=end]) {
+            if ptx_character_class_needs_locale_matching(&pattern[index..=end]) {
                 return true;
             }
             index = end + 1;
@@ -1481,7 +1520,7 @@ fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
         if !in_bracket
             && byte == b'['
             && let Some(end) = ptx_character_class_end(pattern, index)
-            && ptx_character_class_has_range(&pattern[index..=end])
+            && ptx_character_class_needs_locale_matching(&pattern[index..=end])
             && let Some(locale_collation) = context.locale_collation
         {
             let class = &pattern[index..=end];
@@ -2291,21 +2330,31 @@ struct FileContent {
 type FileMap = Vec<FileContent>;
 
 fn ptx_collect_locale_regex_candidates(file_map: &FileMap, config: &PtxConfig) -> Vec<Vec<u8>> {
-    let Some(validator) = config.locale_validator.as_deref() else {
-        return Vec::new();
-    };
     let mut candidates = BTreeSet::new();
     for file in file_map {
-        ptx_add_locale_regex_candidates(&file.raw_text, validator, &mut candidates);
+        ptx_add_locale_regex_candidates(&file.raw_text, config, &mut candidates);
     }
     candidates.into_iter().collect()
 }
 
 fn ptx_add_locale_regex_candidates(
     bytes: &[u8],
-    validator: &LocaleMultibyteValidator,
+    config: &PtxConfig,
     candidates: &mut BTreeSet<Vec<u8>>,
 ) {
+    if config.single_byte_locale {
+        candidates.extend(
+            bytes
+                .iter()
+                .copied()
+                .filter(|&byte| byte != 0)
+                .map(|byte| vec![byte]),
+        );
+        return;
+    }
+    let Some(validator) = config.locale_validator.as_deref() else {
+        return;
+    };
     let mut index = 0usize;
     while index < bytes.len() {
         let byte = bytes[index];
@@ -2331,20 +2380,17 @@ fn ptx_locale_context_matches_at_boundary(
     config: &PtxConfig,
     content: &FileContent,
 ) -> CTResult<bool> {
-    if config.single_byte_locale || config.locale_regex_encoding.is_non_utf8_multibyte() {
+    if config.locale_regex_encoding.is_non_utf8_multibyte() {
         return Ok(false);
     }
     let Some(pattern) = config.context_pattern_bytes.as_deref() else {
         return Ok(false);
     };
-    if !ptx_pattern_has_character_class_range(pattern) {
+    if !ptx_pattern_needs_locale_class_matching(pattern) {
         return Ok(false);
     }
-    let Some(validator) = config.locale_validator.as_deref() else {
-        return Ok(false);
-    };
     let mut candidates = BTreeSet::new();
-    ptx_add_locale_regex_candidates(&content.raw_text, validator, &mut candidates);
+    ptx_add_locale_regex_candidates(&content.raw_text, config, &mut candidates);
     let candidates: Vec<Vec<u8>> = candidates.into_iter().collect();
     if candidates.is_empty() {
         return Ok(false);
@@ -2382,7 +2428,7 @@ fn ptx_recompile_locale_range_regexps(
     word_filter: &mut WordFilter,
     file_map: &FileMap,
 ) -> CTResult<()> {
-    if config.single_byte_locale || config.locale_regex_encoding.is_non_utf8_multibyte() {
+    if config.locale_regex_encoding.is_non_utf8_multibyte() {
         return Ok(());
     }
     let candidates = ptx_collect_locale_regex_candidates(file_map, config);
@@ -2395,7 +2441,7 @@ fn ptx_recompile_locale_range_regexps(
 
     if let Some(pattern) = config.context_pattern_bytes.clone()
         && !pattern.is_empty()
-        && ptx_pattern_has_character_class_range(&pattern)
+        && ptx_pattern_needs_locale_class_matching(&pattern)
     {
         let byte_mode = std::str::from_utf8(&pattern).is_err();
         if config.is_ignore_case || byte_mode || has_invalid_input {
@@ -2423,7 +2469,7 @@ fn ptx_recompile_locale_range_regexps(
     }
 
     if let Some(pattern) = word_filter.word_pattern_bytes.as_deref()
-        && ptx_pattern_has_character_class_range(pattern)
+        && ptx_pattern_needs_locale_class_matching(pattern)
     {
         let byte_mode = std::str::from_utf8(pattern).is_err();
         if config.is_ignore_case || byte_mode || has_invalid_input {

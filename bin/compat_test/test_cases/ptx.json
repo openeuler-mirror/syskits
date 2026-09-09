@@ -9709,6 +9709,854 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [[.a.]]+ input（词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为1行、22字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.a.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A . z}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -f -W [[.a.]]+ input（忽略大小写词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为2行、43字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[.a.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A . z}{}\n\\xx {}{a}{A}{ . z}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S [[.a.]]+ -W . input（句边界正则并以点号为词）；input内容为“a A . z\\n”；预期RC=1、stdout为空，stderr报告match of length zero并引用模式[[.a.]]+",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.a.]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: '[[.a.]]+'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [[=a=]]+ input（词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为1行、22字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=a=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A . z}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -f -W [[=a=]]+ input（忽略大小写词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为2行、43字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[=a=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A . z}{}\n\\xx {}{a}{A}{ . z}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S [[=a=]]+ -W . input（句边界正则并以点号为词）；input内容为“a A . z\\n”；预期RC=1、stdout为空，stderr报告match of length zero并引用模式[[=a=]]+",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: '[[=a=]]+'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [[.z.]]+ input（词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为1行、21字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.z.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A .}{z}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -f -W [[.z.]]+ input（忽略大小写词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为1行、21字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[.z.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A .}{z}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S [[.z.]]+ -W . input（句边界正则并以点号为词）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为7行、151字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.z.]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a}{ }{A . z}{}\n\\xx {}{a A}{ }{. z}{}\n\\xx {}{a A .}{ }{z}{}\n\\xx {}{a A}{.}{ z}{}\n\\xx {}{a}{A}{ . z}{}\n\\xx {}{}{a}{ A . z}{}\n\\xx {}{a A .}{z}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -W [[=z=]]+ input（词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为1行、21字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A .}{z}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -f -W [[=z=]]+ input（忽略大小写词正则）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为1行、21字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A .}{z}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=C下执行ptx -T -S [[=z=]]+ -W . input（句边界正则并以点号为词）；input内容为“a A . z\\n”；预期RC=0、stderr为空，stdout为7行、151字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf 'a A . z\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=z=]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a}{ }{A . z}{}\n\\xx {}{a A}{ }{. z}{}\n\\xx {}{a A .}{ }{z}{}\n\\xx {}{a A}{.}{ z}{}\n\\xx {}{a}{A}{ . z}{}\n\\xx {}{}{a}{ A . z}{}\n\\xx {}{a A .}{z}{}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W [[.a.]]+ input（词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为1行、31字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.a.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A á ä é z .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -f -W [[.a.]]+ input（忽略大小写词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为2行、61字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[.a.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A á ä é z .}{}\n\\xx {}{a}{A}{ á ä é z .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S [[.a.]]+ -W . input（句边界正则并以点号为词）；input内容为“a A á ä é z .\\n”；预期RC=1、stdout为空，stderr报告match of length zero并引用模式[[.a.]]+",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.a.]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: ‘[[.a.]]+’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W [[=a=]]+ input（词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为4行、121字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=a=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a}{A}{ á ä é z .}{}\n\\xx {}{}{a}{ A á ä é z .}{}\n\\xx {}{a A}{á}{ ä é z .}{}\n\\xx {}{a A á}{ä}{ é z .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -f -W [[=a=]]+ input（忽略大小写词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为4行、121字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[=a=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{}{a}{ A á ä é z .}{}\n\\xx {}{a}{A}{ á ä é z .}{}\n\\xx {}{a A}{á}{ ä é z .}{}\n\\xx {}{a A á}{ä}{ é z .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S [[=a=]]+ -W . input（句边界正则并以点号为词）；input内容为“a A á ä é z .\\n”；预期RC=1、stdout为空，stderr报告match of length zero并引用模式[[=a=]]+",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: ‘[[=a=]]+’\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W [[.z.]]+ input（词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为1行、30字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[.z.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A á ä é}{z}{ .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -f -W [[.z.]]+ input（忽略大小写词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为1行、30字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[.z.]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A á ä é}{z}{ .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S [[.z.]]+ -W . input（句边界正则并以点号为词）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为13行、347字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.z.]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a}{ }{A á ä é z}{}\n\\xx {}{a A}{ }{á ä é z}{}\n\\xx {}{a A á}{ }{ä é z}{}\n\\xx {}{a A á ä}{ }{é z}{}\n\\xx {}{a A á ä é}{ }{z}{}\n\\xx {}{}{ }{.}{}\n\\xx {}{}{.}{}{}\n\\xx {}{a}{A}{ á ä é z}{}\n\\xx {}{}{a}{ A á ä é z}{}\n\\xx {}{a A á ä é}{z}{}{}\n\\xx {}{a A}{á}{ ä é z}{}\n\\xx {}{a A á}{ä}{ é z}{}\n\\xx {}{a A á ä}{é}{ z}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -W [[=z=]]+ input（词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为1行、30字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-W",
+        "[[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A á ä é}{z}{ .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -f -W [[=z=]]+ input（忽略大小写词正则）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为1行、30字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-f",
+        "-W",
+        "[[=z=]]+",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a A á ä é}{z}{ .}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.utf8下执行ptx -T -S [[=z=]]+ -W . input（句边界正则并以点号为词）；input内容为“a A á ä é z .\\n”；预期RC=0、stderr为空，stdout为13行、347字节的\\xx TeX索引",
+      "setup_commands": [
+        "export LC_ALL=en_US.utf8",
+        "printf 'a A á ä é z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=z=]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\\xx {}{a}{ }{A á ä é z}{}\n\\xx {}{a A}{ }{á ä é z}{}\n\\xx {}{a A á}{ }{ä é z}{}\n\\xx {}{a A á ä}{ }{é z}{}\n\\xx {}{a A á ä é}{ }{z}{}\n\\xx {}{}{ }{.}{}\n\\xx {}{}{.}{}{}\n\\xx {}{a}{A}{ á ä é z}{}\n\\xx {}{}{a}{ A á ä é z}{}\n\\xx {}{a A á ä é}{z}{}{}\n\\xx {}{a A}{á}{ ä é z}{}\n\\xx {}{a A á}{ä}{ é z}{}\n\\xx {}{a A á ä}{é}{ z}{}\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -W [[.a.]]+ input（词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示1条换行分隔、共28字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d57",
+        "5b5b2e612e5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b7d7b617d7b204120e120e420e9207a202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -f -W [[.a.]]+ input（忽略大小写词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示2条换行分隔、共55字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d66",
+        "2d57",
+        "5b5b2e612e5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b7d7b617d7b204120e120e420e9207a202e7d7b7d0a5c7878207b7d7b617d7b417d7b20e120e420e9207a202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -S [[.a.]]+ -W . input（句边界正则并以点号为词）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=1、stdout为空，stderr报告match of length zero并引用模式[[.a.]]+",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[.a.]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: '[[.a.]]+'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -W [[=a=]]+ input（词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示4条换行分隔、共109字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d57",
+        "5b5b3d613d5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b617d7b417d7b20e120e420e9207a202e7d7b7d0a5c7878207b7d7b7d7b617d7b204120e120e420e9207a202e7d7b7d0a5c7878207b7d7b6120417d7be17d7b20e420e9207a202e7d7b7d0a5c7878207b7d7b61204120e17d7be47d7b20e9207a202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -f -W [[=a=]]+ input（忽略大小写词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示4条换行分隔、共109字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d66",
+        "2d57",
+        "5b5b3d613d5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b7d7b617d7b204120e120e420e9207a202e7d7b7d0a5c7878207b7d7b617d7b417d7b20e120e420e9207a202e7d7b7d0a5c7878207b7d7b6120417d7be17d7b20e420e9207a202e7d7b7d0a5c7878207b7d7b61204120e17d7be47d7b20e9207a202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -S [[=a=]]+ -W . input（句边界正则并以点号为词）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=1、stdout为空，stderr报告match of length zero并引用模式[[=a=]]+",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "-T",
+        "-S",
+        "[[=a=]]+",
+        "-W",
+        ".",
+        "input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: error: regular expression has a match of length zero: '[[=a=]]+'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -W [[.z.]]+ input（词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示1条换行分隔、共27字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d57",
+        "5b5b2e7a2e5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b61204120e120e420e97d7b7a7d7b202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -f -W [[.z.]]+ input（忽略大小写词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示1条换行分隔、共27字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d66",
+        "2d57",
+        "5b5b2e7a2e5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b61204120e120e420e97d7b7a7d7b202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -S [[.z.]]+ -W . input（句边界正则并以点号为词）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示13条换行分隔、共314字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d53",
+        "5b5b2e7a2e5d5d2b",
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b617d7b207d7b4120e120e420e9207a7d7b7d0a5c7878207b7d7b6120417d7b207d7be120e420e9207a7d7b7d0a5c7878207b7d7b61204120e17d7b207d7be420e9207a7d7b7d0a5c7878207b7d7b61204120e120e47d7b207d7be9207a7d7b7d0a5c7878207b7d7b61204120e120e420e97d7b207d7b7a7d7b7d0a5c7878207b7d7b7d7b207d7b2e7d7b7d0a5c7878207b7d7b7d7b2e7d7b7d7b7d0a5c7878207b7d7b617d7b417d7b20e120e420e9207a7d7b7d0a5c7878207b7d7b7d7b617d7b204120e120e420e9207a7d7b7d0a5c7878207b7d7b61204120e120e420e97d7b7a7d7b7d7b7d0a5c7878207b7d7b6120417d7be17d7b20e420e9207a7d7b7d0a5c7878207b7d7b61204120e17d7be47d7b20e9207a7d7b7d0a5c7878207b7d7b61204120e120e47d7be97d7b207a7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -W [[=z=]]+ input（词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示1条换行分隔、共27字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d57",
+        "5b5b3d7a3d5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b61204120e120e420e97d7b7a7d7b202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -f -W [[=z=]]+ input（忽略大小写词正则）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示1条换行分隔、共27字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d66",
+        "2d57",
+        "5b5b3d7a3d5d5d2b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b61204120e120e420e97d7b7a7d7b202e7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591下执行ptx -T -S [[=z=]]+ -W . input（句边界正则并以点号为词）；input原始字节为61 20 41 20 e1 20 e4 20 e9 20 7a 20 2e 0a（按ISO-8859-1为a A á ä é z .\\n）；预期RC=0、stderr为空，stdout十六进制表示13条换行分隔、共314字节的\\xx TeX记录，其中e1/e4/e9分别保留á/ä/é的ISO-8859-1原始字节",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf 'a A \\341 \\344 \\351 z .\\n' > input"
+      ],
+      "args": [
+        "2d54",
+        "2d53",
+        "5b5b3d7a3d5d5d2b",
+        "2d57",
+        "2e",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "5c7878207b7d7b617d7b207d7b4120e120e420e9207a7d7b7d0a5c7878207b7d7b6120417d7b207d7be120e420e9207a7d7b7d0a5c7878207b7d7b61204120e17d7b207d7be420e9207a7d7b7d0a5c7878207b7d7b61204120e120e47d7b207d7be9207a7d7b7d0a5c7878207b7d7b61204120e120e420e97d7b207d7b7a7d7b7d0a5c7878207b7d7b7d7b207d7b2e7d7b7d0a5c7878207b7d7b7d7b2e7d7b7d7b7d0a5c7878207b7d7b617d7b417d7b20e120e420e9207a7d7b7d0a5c7878207b7d7b7d7b617d7b204120e120e420e9207a7d7b7d0a5c7878207b7d7b61204120e120e420e97d7b7a7d7b7d7b7d0a5c7878207b7d7b6120417d7be17d7b20e420e9207a7d7b7d0a5c7878207b7d7b61204120e17d7be47d7b20e9207a7d7b7d0a5c7878207b7d7b61204120e120e47d7be97d7b207a7d7b7d0a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

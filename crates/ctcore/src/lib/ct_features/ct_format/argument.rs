@@ -19,6 +19,7 @@ use crate::{
     ct_show_error, ct_show_warning,
 };
 use std::ffi::OsStr;
+use std::io::Write;
 
 unsafe extern "C" {
     fn mbrtowc(
@@ -300,8 +301,6 @@ fn extract_long_double(
 }
 
 fn parse_bytes_character_constant(bytes: &[u8]) -> Option<u64> {
-    use std::os::unix::ffi::OsStrExt;
-
     let rest = bytes
         .strip_prefix(b"\'")
         .or_else(|| bytes.strip_prefix(b"\""))?;
@@ -323,12 +322,19 @@ fn parse_bytes_character_constant(bytes: &[u8]) -> Option<u64> {
 
     let trailing = &rest[consumed..];
     if !trailing.is_empty() && std::env::var_os("POSIXLY_CORRECT").is_none() {
-        ct_show_warning!(
-            "{}: character(s) following character constant have been ignored",
-            OsStr::from_bytes(trailing).to_string_lossy(),
-        );
+        let warning = character_constant_warning(crate::ct_util_name(), trailing);
+        let _ = std::io::stderr().lock().write_all(&warning);
     }
     Some(value)
+}
+
+fn character_constant_warning(utility_name: &str, trailing: &[u8]) -> Vec<u8> {
+    let mut warning = Vec::with_capacity(utility_name.len() + trailing.len() + 80);
+    warning.extend_from_slice(utility_name.as_bytes());
+    warning.extend_from_slice(b": warning: ");
+    warning.extend_from_slice(trailing);
+    warning.extend_from_slice(b": character(s) following character constant have been ignored\n");
+    warning
 }
 
 fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
@@ -615,5 +621,13 @@ mod tests {
         assert_eq!(quote_numeric_argument(OsStr::new(" ")), "' '");
         assert_eq!(quote_numeric_argument(OsStr::new("a b")), "'a b'");
         assert_eq!(quote_numeric_argument(OsStr::new("'")), "'\\''");
+    }
+
+    #[test]
+    fn character_constant_warning_preserves_trailing_bytes() {
+        assert_eq!(
+            character_constant_warning("printf", &[0xa9]),
+            b"printf: warning: \xa9: character(s) following character constant have been ignored\n"
+        );
     }
 }

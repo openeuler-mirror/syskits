@@ -1032,6 +1032,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C；格式参数字节=2564（%d），字符常量参数字节=22c3a9（双引号、UTF-8编码é）；预期取首字节c3输出十进制195，并在warning中原样保留尾随无效字节a9",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2564", "22c3a9"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "313935",
+                    "stderr": "7072696e74663a207761726e696e673a20a93a2063686172616374657228732920666f6c6c6f77696e672063686172616374657220636f6e7374616e742068617665206265656e2069676e6f7265640a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

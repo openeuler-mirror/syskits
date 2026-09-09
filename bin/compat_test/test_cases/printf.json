@@ -556,6 +556,63 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为不完整Unicode转义\\u123，仅含3个十六进制位；预期RC=1、stdout为空并报告missing hexadecimal number in escape",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["\\u123"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: missing hexadecimal number in escape\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%b，参数为UTF-16代理码点转义\\uD800；预期RC=1、stdout为空并报告invalid universal character name \\ud800",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%b", "\\uD800"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: invalid universal character name \\ud800\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为完整8位但超出Unicode标量范围的\\U00110000；预期RC=0并完整输出大写ASCII回退表示\\U00110000，stderr为空",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["\\U00110000"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\\U00110000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

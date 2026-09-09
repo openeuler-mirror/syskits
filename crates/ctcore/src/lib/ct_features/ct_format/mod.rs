@@ -58,6 +58,7 @@ pub enum FormatError {
     WrongSpecType,
     InvalidFieldWidth(Vec<u8>),
     InvalidPrecision(Vec<u8>),
+    InvalidUniversalCharacterName { prefix: u8, value: u32 },
 }
 
 impl Error for FormatError {}
@@ -110,6 +111,12 @@ impl Display for FormatError {
                         quotes: CtQuotes::Single,
                     },
                 )
+            ),
+            Self::InvalidUniversalCharacterName { prefix, value } => write!(
+                f,
+                "invalid universal character name \\{}{value:0width$x}",
+                char::from(*prefix),
+                width = if *prefix == b'u' { 4 } else { 8 },
             ),
             Self::IoError(_) => write!(f, "io error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
@@ -167,6 +174,13 @@ impl FormatChar for EscapedChar {
                     }
                 } else {
                     writer.write_all(&buffer[..len])?;
+                }
+            }
+            Self::Unicode(code) => {
+                if *code < 0x10000 {
+                    write!(writer, "\\u{code:04X}")?;
+                } else {
+                    write!(writer, "\\U{code:08X}")?;
                 }
             }
             Self::Backslash(c) => {

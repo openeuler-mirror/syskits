@@ -719,6 +719,50 @@ mod tests {
         }
 
         #[test]
+        fn unicode_escapes_validate_digit_count_and_surrogate_range() {
+            for (format, arguments, expected_error) in [
+                (
+                    "\\u123",
+                    Vec::<&str>::new(),
+                    "printf: missing hexadecimal number in escape\n",
+                ),
+                (
+                    "%b",
+                    vec!["\\u123"],
+                    "printf: missing hexadecimal number in escape\n",
+                ),
+                (
+                    "\\uD800",
+                    Vec::<&str>::new(),
+                    "printf: invalid universal character name \\ud800\n",
+                ),
+                (
+                    "%b",
+                    vec!["\\uD800"],
+                    "printf: invalid universal character name \\ud800\n",
+                ),
+            ] {
+                let mut args = vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from(format),
+                ];
+                args.extend(arguments.into_iter().map(OsString::from));
+
+                let semantic = printf_native_semantic(args.into_iter()).unwrap();
+
+                assert_eq!(semantic.classic_text, "");
+                assert_eq!(semantic.stderr_text, expected_error);
+                assert_eq!(semantic.exit_code, 1);
+            }
+
+            let args = [ctcore::ct_util_name(), "\\U00110000"];
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+            assert_eq!(semantic.classic_text, "\\U00110000");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

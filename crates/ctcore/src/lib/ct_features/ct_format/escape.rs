@@ -17,6 +17,8 @@ pub enum EscapedChar {
     Byte(u8),
     /// 一个 Unicode 字符
     Char(char),
+    /// 完整解析且大于 Unicode 最大标量值的代码点
+    Unicode(u32),
     /// 前缀带反斜杠的字符（即无效的转义序列）
     Backslash(u8),
     /// 指定字符串应停止(\c)
@@ -104,30 +106,32 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
     }
 }
 
-//所选代码是所提供 Rust 代码中 parse_unicode 函数的一部分。该函数负责解析形式为 \uHHHH 和 \UHHHHH 的 Unicode 转义序列。
-//
-// 下面是所选代码的明细：
-// 1. 该函数接收两个参数：代表输入字符串的字节片段的可变引用（&mut [u8]），以及 Unicode 转义序列中的十六进制数字个数（u8）。
-// 2. 函数首先使用 split_first()? 方法从输入片段中取出第一个字节。该字节代表 Unicode 转义序列的第一个十六进制数字。
-// 3. 然后，函数使用 Base 枚举的 convert_digit()? 方法将第一个字节转换为相应的数值。该方法会检查字节是否为有效的十六进制数字，如果是则返回相应的数值（0-15），否则返回 None。
-// 4. 然后，函数将返回的数值转换为 u32，并将其存储在 ret 变量中。
-// 5. 然后，函数进入一个循环，迭代 Unicode 转义序列的剩余十六进制数字。在每次迭代中，函数都会从输入片段中取出下一个字节，使用 Base 枚举的 convert_digit()? 方法将其转换为相应的数值，并使用位运算将该数值乘加到 ret 变量中。
-// 6. 循环结束后，函数最后使用 char::from_u32() 方法将数字值转换为 Unicode 字符并返回。
-// 待办事项：当解析失败时，应打印警告并可能终止执行。
-// 待办事项： 如果字符不能转换为u32，则应打印输入。
-fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
-    let (c, rest) = input.split_first()?;
-    let mut ret = Base::Hex.convert_digit(*c)? as u32;
-    *input = rest;
-
-    for _ in 1..digits {
-        let (c, rest) = input.split_first()?;
-        let n = Base::Hex.convert_digit(*c)?;
-        ret = ret.wrapping_mul(Base::Hex as u32).wrapping_add(n as u32);
+// Parse the exact digit count required by \u and \U while retaining values
+// above the Unicode range for GNU's ASCII fallback representation.
+fn parse_unicode_escape(input: &mut &[u8], digits: u8, prefix: u8) -> Result<u32, FormatError> {
+    let mut value = 0u32;
+    for _ in 0..digits {
+        let (byte, rest) = input
+            .split_first()
+            .ok_or(FormatError::MissingHexadecimalNumber)?;
+        let digit = Base::Hex
+            .convert_digit(*byte)
+            .ok_or(FormatError::MissingHexadecimalNumber)?;
+        value = value.wrapping_mul(16).wrapping_add(u32::from(digit));
         *input = rest;
     }
 
-    char::from_u32(ret)
+    if (0xD800..=0xDFFF).contains(&value) {
+        return Err(FormatError::InvalidUniversalCharacterName { prefix, value });
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
+    parse_unicode_escape(input, digits, b'u')
+        .ok()
+        .and_then(char::from_u32)
 }
 
 use super::FormatError;
@@ -167,14 +171,16 @@ pub fn parse_escape_code(rest: &mut &[u8], is_b_format: bool) -> Result<EscapedC
                 Some(c) => Ok(EscapedChar::Byte(c)),
                 None => Err(FormatError::MissingHexadecimalNumber),
             },
-            b'u' => match parse_unicode(rest, 4) {
-                Some(c) => Ok(EscapedChar::Char(c)),
-                None => Ok(EscapedChar::Backslash(b'u')),
-            },
-            b'U' => match parse_unicode(rest, 8) {
-                Some(c) => Ok(EscapedChar::Char(c)),
-                None => Ok(EscapedChar::Backslash(b'U')),
-            },
+            b'u' => parse_unicode_escape(rest, 4, b'u').map(|value| {
+                char::from_u32(value)
+                    .map(EscapedChar::Char)
+                    .unwrap_or(EscapedChar::Unicode(value))
+            }),
+            b'U' => parse_unicode_escape(rest, 8, b'U').map(|value| {
+                char::from_u32(value)
+                    .map(EscapedChar::Char)
+                    .unwrap_or(EscapedChar::Unicode(value))
+            }),
             c => Ok(EscapedChar::Backslash(*c)),
         }
     } else {
@@ -577,12 +583,37 @@ mod test {
     }
 
     #[test]
+    fn unicode_escape_distinguishes_incomplete_surrogate_and_out_of_range_values() {
+        let mut incomplete: &[u8] = b"u123";
+        assert!(matches!(
+            parse_escape_code(&mut incomplete, false),
+            Err(FormatError::MissingHexadecimalNumber)
+        ));
+
+        let mut surrogate: &[u8] = b"uD800";
+        assert!(matches!(
+            parse_escape_code(&mut surrogate, false),
+            Err(FormatError::InvalidUniversalCharacterName {
+                prefix: b'u',
+                value: 0xD800
+            })
+        ));
+
+        let mut out_of_range: &[u8] = b"U00110000";
+        assert_eq!(
+            parse_escape_code(&mut out_of_range, false).unwrap(),
+            EscapedChar::Unicode(0x0011_0000)
+        );
+        assert_eq!(out_of_range, b"");
+    }
+
+    #[test]
     fn test_parse_escape_code_invalid_unicode() {
         let mut input: &[u8] = b"uXXXX";
-        assert_eq!(
-            parse_escape_code(&mut input, false).unwrap(),
-            EscapedChar::Backslash(b'u')
-        );
+        assert!(matches!(
+            parse_escape_code(&mut input, false),
+            Err(FormatError::MissingHexadecimalNumber)
+        ));
         assert_eq!(input, b"XXXX");
     }
 
@@ -721,10 +752,10 @@ mod test {
     #[test]
     fn test_parse_escape_code_boundary_unicode_max() {
         let mut input: &[u8] = b"u{10FFFF}"; // Max Unicode code point
-        assert_eq!(
-            parse_escape_code(&mut input, false).unwrap(),
-            EscapedChar::Backslash(b'u')
-        );
+        assert!(matches!(
+            parse_escape_code(&mut input, false),
+            Err(FormatError::MissingHexadecimalNumber)
+        ));
         assert_eq!(input, b"{10FFFF}");
     }
 

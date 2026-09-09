@@ -766,6 +766,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT覆盖f/F/e/E/g/G/a/A且参数均为nan；预期NaN文本大小写跟随转换字符",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%f|%F|%e|%E|%g|%G|%a|%A", "nan", "nan", "nan", "nan", "nan", "nan", "nan", "nan"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "nan|NAN|nan|NAN|nan|NAN|nan|NAN",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

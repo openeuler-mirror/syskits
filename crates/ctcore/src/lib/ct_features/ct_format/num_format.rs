@@ -381,6 +381,13 @@ impl Formatter for Float {
 fn format_float_non_finite(f: f64, case: Case) -> String {
     debug_assert!(!f.is_finite());
 
+    if f.is_nan() {
+        return match case {
+            Case::Lowercase => "nan".to_string(),
+            Case::Uppercase => "NAN".to_string(),
+        };
+    }
+
     let s = format!("{f}");
 
     match case {
@@ -1079,7 +1086,7 @@ mod test {
         let f = f64::NAN;
         let case = Case::Lowercase;
 
-        let expected = "NaN";
+        let expected = "nan";
         let actual = format_float_non_finite(f, case);
 
         assert_eq!(actual, expected);

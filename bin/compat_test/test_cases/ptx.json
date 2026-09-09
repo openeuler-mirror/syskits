@@ -1448,6 +1448,60 @@
       ]
     },
     {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -O -f -W '\\w+' input；input为Alpha beta\\n；预期输出为.xx \"\" \"\" \"Alpha beta\" \"\"\\n.xx \"\" \"Alpha\" \"beta\" \"\"\\n，验证忽略大小写时UTF-8 locale的\\w运算符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'Alpha beta\\n' > input"
+      ],
+      "args": ["-O", "-f", "-W", "\\w+", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"\" \"Alpha beta\" \"\"\n.xx \"\" \"Alpha\" \"beta\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -O -f -W '\\s+' input；input为Alpha beta\\n；预期输出为.xx \"\" \"Alpha\" \" beta\" \"\"\\n，验证忽略大小写时UTF-8 locale的\\s运算符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'Alpha beta\\n' > input"
+      ],
+      "args": ["-O", "-f", "-W", "\\s+", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"Alpha\" \" beta\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C.UTF-8，执行ptx -O -f -W '\\W+' input；input为Alpha beta\\n；预期输出为.xx \"\" \"Alpha\" \" beta\" \"\"\\n，验证忽略大小写时UTF-8 locale的\\W运算符",
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf 'Alpha beta\\n' > input"
+      ],
+      "args": ["-O", "-f", "-W", "\\W+", "input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ".xx \"\" \"Alpha\" \" beta\" \"\"\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "command": "ptx",
       "description": "Test invalid regex in -W (backslash at end)",
       "args": ["-W", "bar\\\\\\"],

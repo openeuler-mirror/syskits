@@ -178,7 +178,7 @@ impl IndexedSpec {
         };
 
         let mut temp_idx = index;
-        let _ = Spec::parse_length(rest, &mut temp_idx);
+        let length = Spec::parse_length(rest, &mut temp_idx);
         index = temp_idx;
 
         let type_spec = match rest.get(index) {
@@ -217,13 +217,13 @@ impl IndexedSpec {
                 }
             }
             b'b' => {
-                if flags.any() || width.is_some() || precision.is_some() {
+                if flags.any() || width.is_some() || precision.is_some() || length.is_some() {
                     return Err(&start[..index]);
                 }
                 Spec::EscapedString
             }
             b'q' => {
-                if flags.any() || width.is_some() || precision.is_some() {
+                if flags.any() || width.is_some() || precision.is_some() || length.is_some() {
                     return Err(&start[..index]);
                 }
                 Spec::QuotedString
@@ -1110,6 +1110,15 @@ mod tests {
             b"'e".as_slice(),
             b"'E".as_slice(),
         ] {
+            let mut input = specifier;
+
+            assert_eq!(IndexedSpec::parse(&mut input), Err(specifier));
+        }
+    }
+
+    #[test]
+    fn length_modifiers_reject_escaped_and_quoted_string_extensions() {
+        for specifier in [b"Lb".as_slice(), b"zq".as_slice()] {
             let mut input = specifier;
 
             assert_eq!(IndexedSpec::parse(&mut input), Err(specifier));

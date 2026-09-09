@@ -192,7 +192,12 @@ impl IndexedSpec {
         let spec = match type_spec {
             b'c' => {
                 // 对于字符类型，单引号标志是非法的
-                if flags.hash || flags.zero || flags.quote || precision.is_some() {
+                if flags.hash
+                    || flags.zero
+                    || flags.quote
+                    || flags.localized_digits
+                    || precision.is_some()
+                {
                     return Err(&start[..index]);
                 }
                 Spec::Char {
@@ -202,7 +207,7 @@ impl IndexedSpec {
             }
             b's' => {
                 // 对于字符串类型，单引号标志是非法的
-                if flags.hash || flags.zero || flags.quote {
+                if flags.hash || flags.zero || flags.quote || flags.localized_digits {
                     return Err(&start[..index]);
                 }
                 Spec::String {
@@ -1085,6 +1090,15 @@ mod tests {
             IndexedSpec::parse(&mut input).map(|indexed| indexed.spec),
             Ok(expected)
         );
+    }
+
+    #[test]
+    fn localized_digits_flag_rejects_character_and_string_conversions() {
+        for specifier in [b"Ic".as_slice(), b"Is".as_slice()] {
+            let mut input = specifier;
+
+            assert_eq!(IndexedSpec::parse(&mut input), Err(specifier));
+        }
     }
 
     #[test]

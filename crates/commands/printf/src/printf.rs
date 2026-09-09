@@ -822,6 +822,28 @@ mod tests {
         }
 
         #[test]
+        fn floating_formats_apply_conversion_case_to_nan() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%f|%F|%e|%E|%g|%G|%a|%A",
+                "nan",
+                "nan",
+                "nan",
+                "nan",
+                "nan",
+                "nan",
+                "nan",
+                "nan",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "nan|NAN|nan|NAN|nan|NAN|nan|NAN");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn dynamic_width_and_precision_reject_values_above_int_max() {
             for (format, expected_error) in [
                 ("%*d", "printf: invalid field width: '2147483648'\n"),

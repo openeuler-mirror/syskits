@@ -37,6 +37,9 @@ use std::{
 };
 
 use crate::ct_error::CTError;
+use crate::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 
 use self::{
     escape::{EscapedChar, parse_escape_code},
@@ -53,6 +56,8 @@ pub enum FormatError {
     TooManySpecs(Vec<u8>),
     NeedAtLeastOneSpec(Vec<u8>),
     WrongSpecType,
+    InvalidFieldWidth(Vec<u8>),
+    InvalidPrecision(Vec<u8>),
 }
 
 impl Error for FormatError {}
@@ -86,6 +91,26 @@ impl Display for FormatError {
                 String::from_utf8_lossy(s)
             ),
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
+            Self::InvalidFieldWidth(value) => write!(
+                f,
+                "invalid field width: {}",
+                escape_name(
+                    OsStr::from_bytes(value),
+                    &CtQuotingStyle::C {
+                        quotes: CtQuotes::Single,
+                    },
+                )
+            ),
+            Self::InvalidPrecision(value) => write!(
+                f,
+                "invalid precision: {}",
+                escape_name(
+                    OsStr::from_bytes(value),
+                    &CtQuotingStyle::C {
+                        quotes: CtQuotes::Single,
+                    },
+                )
+            ),
             Self::IoError(_) => write!(f, "io error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),

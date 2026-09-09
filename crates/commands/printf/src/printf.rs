@@ -703,6 +703,22 @@ mod tests {
         }
 
         #[test]
+        fn dynamic_width_and_precision_reject_values_above_int_max() {
+            for (format, expected_error) in [
+                ("%*d", "printf: invalid field width: '2147483648'\n"),
+                ("%.*f", "printf: invalid precision: '2147483648'\n"),
+            ] {
+                let args = [ctcore::ct_util_name(), format, "2147483648", "1"];
+
+                let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+                assert_eq!(semantic.classic_text, "");
+                assert_eq!(semantic.stderr_text, expected_error);
+                assert_eq!(semantic.exit_code, 1);
+            }
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

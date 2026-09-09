@@ -460,6 +460,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C且POSIXLY_CORRECT=1；FORMAT=%d，字符常量参数为'AB；预期RC=0，stdout为65，stderr为空；仅取首字节且POSIX模式抑制尾随字符警告",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C",
+                "export POSIXLY_CORRECT=1"
+            ],
+            "args": ["%d", "'AB"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "65",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["unset POSIXLY_CORRECT"]
         }
     ]
 }

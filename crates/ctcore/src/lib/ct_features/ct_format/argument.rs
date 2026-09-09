@@ -18,6 +18,15 @@ use crate::{
 use os_display::Quotable;
 use std::ffi::OsStr;
 
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut crate::libc::wchar_t,
+        bytes: *const crate::libc::c_char,
+        length: usize,
+        state: *mut crate::libc::mbstate_t,
+    ) -> usize;
+}
+
 /// 格式化参数
 ///
 /// 这些变体各自仅被其相应的指令接受。例如，FormatArgument::Char 需要一个 %c 指令。
@@ -169,6 +178,9 @@ impl<'a> ArgCursor<'a> {
 }
 
 fn parse_bytes_u64(bytes: &[u8]) -> u64 {
+    if let Some(value) = parse_bytes_character_constant(bytes) {
+        return value;
+    }
     match std::str::from_utf8(bytes) {
         Ok(input) => extract_value_with_overflow(ParsedNumber::parse_u64(input), input, u64::MAX),
         Err(_) => invalid_numeric_bytes(bytes),
@@ -176,6 +188,9 @@ fn parse_bytes_u64(bytes: &[u8]) -> u64 {
 }
 
 fn parse_bytes_i64(bytes: &[u8]) -> i64 {
+    if let Some(value) = parse_bytes_character_constant(bytes) {
+        return value as i64;
+    }
     match std::str::from_utf8(bytes) {
         Ok(input) => extract_value_with_overflow(
             ParsedNumber::parse_i64(input),
@@ -187,10 +202,45 @@ fn parse_bytes_i64(bytes: &[u8]) -> i64 {
 }
 
 fn parse_bytes_f64(bytes: &[u8]) -> f64 {
+    if let Some(value) = parse_bytes_character_constant(bytes) {
+        return value as f64;
+    }
     match std::str::from_utf8(bytes) {
         Ok(input) => extract_value(ParsedNumber::parse_f64(input), input),
         Err(_) => invalid_numeric_bytes(bytes),
     }
+}
+
+fn parse_bytes_character_constant(bytes: &[u8]) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let rest = bytes
+        .strip_prefix(b"\'")
+        .or_else(|| bytes.strip_prefix(b"\""))?;
+    let first = *rest.first()?;
+    let mut value = u64::from(first);
+    let mut consumed = 1;
+
+    if rest.len() > 1 {
+        unsafe {
+            let mut state: crate::libc::mbstate_t = std::mem::zeroed();
+            let mut wide: crate::libc::wchar_t = 0;
+            let length = mbrtowc(&mut wide, rest.as_ptr().cast(), rest.len(), &mut state);
+            if length != usize::MAX && length != usize::MAX - 1 && length != 0 {
+                value = wide as u64;
+                consumed = length;
+            }
+        }
+    }
+
+    let trailing = &rest[consumed..];
+    if !trailing.is_empty() && std::env::var_os("POSIXLY_CORRECT").is_none() {
+        ct_show_warning!(
+            "{}: character(s) following character constant have been ignored",
+            OsStr::from_bytes(trailing).to_string_lossy(),
+        );
+    }
+    Some(value)
 }
 
 fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
@@ -223,7 +273,6 @@ fn extract_value_with_overflow<T: Default>(
     match p {
         Ok(v) => v,
         Err(e) => {
-            set_ct_exit_code(1);
             let input_escaped = escape_name(
                 OsStr::new(input),
                 &CtQuotingStyle::C {
@@ -232,21 +281,25 @@ fn extract_value_with_overflow<T: Default>(
             );
             match e {
                 ParseError::CtOverflow => {
+                    set_ct_exit_code(1);
                     ct_show_error!("{}: Numerical result out of range", input_escaped.quote());
                     overflow_value
                 }
                 ParseError::CtNotNumeric => {
+                    set_ct_exit_code(1);
                     ct_show_error!("{}: expected a numeric value", input_escaped.quote());
                     Default::default()
                 }
                 ParseError::CtPartialMatch(v, rest) => {
-                    // 同时兼容单引号和双引号的警告判定
                     if input.starts_with('\'') || input.starts_with('"') {
-                        ct_show_warning!(
-                            "{}: character(s) following character constant have been ignored",
-                            &rest,
-                        );
+                        if std::env::var_os("POSIXLY_CORRECT").is_none() {
+                            ct_show_warning!(
+                                "{}: character(s) following character constant have been ignored",
+                                &rest,
+                            );
+                        }
                     } else {
+                        set_ct_exit_code(1);
                         ct_show_error!("{}: value not completely converted", input_escaped.quote());
                     }
                     v

@@ -253,6 +253,20 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "%b中的\\c终止整个输出",
+            "args": ["%bX", "a\\cb"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

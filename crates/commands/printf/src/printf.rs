@@ -523,6 +523,17 @@ mod tests {
         }
 
         #[test]
+        fn semantic_percent_b_c_stops_entire_output() {
+            let args = [ctcore::ct_util_name(), "%bX", "a\\cb"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "a");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

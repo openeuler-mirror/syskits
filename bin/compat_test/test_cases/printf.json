@@ -728,6 +728,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT为%a|%A，参数为0x1p16和0x1p-16；预期p/P后的正负指数均以十进制输出",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%a|%A", "0x1p16", "0x1p-16"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0x1p+16|0X1P-16",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

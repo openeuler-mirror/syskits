@@ -563,7 +563,7 @@ fn format_float_hexadecimal(
         ""
     };
     let sign = if negative { "-" } else { "" };
-    let mut s = format!("{sign}0x{first_digit:x}{point}{fraction}p{exponent:+x}");
+    let mut s = format!("{sign}0x{first_digit:x}{point}{fraction}p{exponent:+}");
 
     if Case::Uppercase == case {
         s.make_ascii_uppercase();
@@ -982,7 +982,7 @@ mod test {
         formatter.fmt(&mut buffer, 1234.567).unwrap();
         buffer.set_position(0);
         let result = buffer.get_ref();
-        assert_eq!(result, b"+0X1P+A              ");
+        assert_eq!(result, b"+0X1P+10             ");
     }
 
     #[test]
@@ -1417,7 +1417,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.e240cap+10";
+        let expected = "0x1.e240cap+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1442,7 +1442,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.e240cap+10";
+        let expected = "0x1.e240cap+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1454,7 +1454,7 @@ mod test {
         let case = Case::Uppercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0X1.E240CAP+10";
+        let expected = "0X1.E240CAP+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1466,7 +1466,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "-0x1.e240cap+10";
+        let expected = "-0x1.e240cap+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1479,7 +1479,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x2p+10";
+        let expected = "0x2p+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1491,7 +1491,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::Yes;
 
-        let expected = "0x2.p+10";
+        let expected = "0x2.p+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1503,7 +1503,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::Yes;
 
-        let expected = "0x2.p+10";
+        let expected = "0x2.p+16";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1542,7 +1542,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.000000p+400";
+        let expected = "0x1.000000p+1024";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1573,6 +1573,14 @@ mod test {
         assert_eq!(
             format_float_hexadecimal(-0.0, None, Case::Uppercase, ForceDecimal::No),
             "-0X0P+0"
+        );
+        assert_eq!(
+            format_float_hexadecimal(65536.0, None, Case::Lowercase, ForceDecimal::No),
+            "0x1p+16"
+        );
+        assert_eq!(
+            format_float_hexadecimal(1.0 / 65536.0, None, Case::Uppercase, ForceDecimal::No),
+            "0X1P-16"
         );
     }
 

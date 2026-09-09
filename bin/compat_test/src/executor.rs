@@ -13,7 +13,7 @@
 //! 提供并行和串行测试执行功能，支持命令执行和结果比较
 
 use crate::config::SyskitsMode;
-use crate::sandbox::IsolatedSandbox;
+use crate::sandbox::{CommandStreamOptions, IsolatedSandbox};
 use crate::test_case::TestCase;
 use crate::{CommandResult, ComparisonResult, Result, TestConfig, TestError};
 use std::ffi::OsString;
@@ -165,6 +165,7 @@ impl CommandExecutor {
                     &args_os,
                     &mut sandbox,
                     timeout,
+                    test_case.environment.standard_streams.as_ref(),
                 )?
             }
         } else if test_case.tty {
@@ -182,6 +183,7 @@ impl CommandExecutor {
                 &test_case.args,
                 &mut sandbox,
                 timeout,
+                test_case.environment.standard_streams.as_ref(),
             )?
         };
         // 执行验证命令
@@ -252,6 +254,7 @@ impl CommandExecutor {
                     &test_case.args,
                     &mut coreutils_sandbox,
                     timeout,
+                    test_case.environment.standard_streams.as_ref(),
                 )?
             }
         } else if use_bytes {
@@ -272,6 +275,7 @@ impl CommandExecutor {
                     &args_os,
                     &mut coreutils_sandbox,
                     timeout,
+                    test_case.environment.standard_streams.as_ref(),
                 )?
             }
         } else if test_case.tty {
@@ -289,6 +293,7 @@ impl CommandExecutor {
                 &test_case.args,
                 &mut coreutils_sandbox,
                 timeout,
+                test_case.environment.standard_streams.as_ref(),
             )?
         };
 
@@ -377,6 +382,7 @@ impl CommandExecutor {
         args: &[String],
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
+        streams: Option<&crate::test_case::StandardStreams>,
     ) -> Result<CommandResult> {
         let (cmd, args) = match self.config.mode {
             SyskitsMode::Single => {
@@ -403,7 +409,11 @@ impl CommandExecutor {
             SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
         };
 
-        sandbox.execute_command(&cmd, &args, Some(tstdin), true, timeout)
+        if let Some(streams) = streams {
+            sandbox.execute_command_with_streams(&cmd, &args, Some(tstdin), true, timeout, streams)
+        } else {
+            sandbox.execute_command(&cmd, &args, Some(tstdin), true, timeout)
+        }
     }
 
     /// 在沙箱中执行 syskits 命令（伪终端）
@@ -450,6 +460,7 @@ impl CommandExecutor {
         args: &[OsString],
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
+        streams: Option<&crate::test_case::StandardStreams>,
     ) -> Result<CommandResult> {
         let (cmd, args) = match self.config.mode {
             SyskitsMode::Single => {
@@ -475,7 +486,21 @@ impl CommandExecutor {
             SyskitsMode::Multiple => (command.to_string(), args.to_vec()),
         };
 
-        sandbox.execute_command_bytes(&cmd, &args, Some(tstdin), true, timeout, true)
+        if let Some(streams) = streams {
+            sandbox.execute_command_bytes_with_streams(
+                &cmd,
+                &args,
+                Some(tstdin),
+                true,
+                timeout,
+                CommandStreamOptions {
+                    output_hex: true,
+                    streams,
+                },
+            )
+        } else {
+            sandbox.execute_command_bytes(&cmd, &args, Some(tstdin), true, timeout, true)
+        }
     }
 
     /// 在沙箱中执行 syskits 命令（原始字节参数，伪终端）
@@ -522,10 +547,22 @@ impl CommandExecutor {
         args: &[String],
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
+        streams: Option<&crate::test_case::StandardStreams>,
     ) -> Result<CommandResult> {
         self.prepare_coreutils_path(sandbox);
 
-        sandbox.execute_command(command, args, Some(tstdin), true, timeout)
+        if let Some(streams) = streams {
+            sandbox.execute_command_with_streams(
+                command,
+                args,
+                Some(tstdin),
+                true,
+                timeout,
+                streams,
+            )
+        } else {
+            sandbox.execute_command(command, args, Some(tstdin), true, timeout)
+        }
     }
 
     /// 在沙箱中执行 GNU coreutils 命令（伪终端）
@@ -550,11 +587,23 @@ impl CommandExecutor {
         args: &[String],
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
+        streams: Option<&crate::test_case::StandardStreams>,
     ) -> Result<CommandResult> {
         self.prepare_coreutils_path(sandbox);
         let cmdline = Self::build_shell_command_line(command, args);
         let shell_args = vec!["-lc".to_string(), cmdline];
-        sandbox.execute_command("bash", &shell_args, Some(tstdin), true, timeout)
+        if let Some(streams) = streams {
+            sandbox.execute_command_with_streams(
+                "bash",
+                &shell_args,
+                Some(tstdin),
+                true,
+                timeout,
+                streams,
+            )
+        } else {
+            sandbox.execute_command("bash", &shell_args, Some(tstdin), true, timeout)
+        }
     }
 
     /// 在沙箱中通过 bash 执行基线命令（伪终端）
@@ -580,10 +629,25 @@ impl CommandExecutor {
         args: &[OsString],
         sandbox: &mut IsolatedSandbox,
         timeout: Option<u64>,
+        streams: Option<&crate::test_case::StandardStreams>,
     ) -> Result<CommandResult> {
         self.prepare_coreutils_path(sandbox);
 
-        sandbox.execute_command_bytes(command, args, Some(tstdin), true, timeout, true)
+        if let Some(streams) = streams {
+            sandbox.execute_command_bytes_with_streams(
+                command,
+                args,
+                Some(tstdin),
+                true,
+                timeout,
+                CommandStreamOptions {
+                    output_hex: true,
+                    streams,
+                },
+            )
+        } else {
+            sandbox.execute_command_bytes(command, args, Some(tstdin), true, timeout, true)
+        }
     }
 
     /// 在沙箱中执行 GNU coreutils 命令（原始字节参数，伪终端）
@@ -780,8 +844,8 @@ mod tests {
     use super::*;
     use crate::config::SyskitsMode;
     use crate::test_case::{
-        CommandExecution, FunctionalVerification, IgnoreFields, TestCase, TestEnvironment,
-        TestExpectation,
+        CommandExecution, FunctionalVerification, IgnoreFields, OutputStream, StandardStreams,
+        TestCase, TestEnvironment, TestExpectation,
     };
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -2271,6 +2335,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_command_executor_applies_standard_stream_configuration() {
+        let mut test_case = create_simple_test_case();
+        test_case.command = "printf".to_string();
+        test_case.args = vec!["output".to_string()];
+        test_case.environment.standard_streams = Some(StandardStreams {
+            stdout: OutputStream::Full,
+            ..StandardStreams::default()
+        });
+        test_case.expectation.execution = CommandExecution {
+            exit_code: Some(1),
+            stdout: Some(String::new()),
+            stderr: None,
+        };
+
+        let config = TestConfig {
+            syskits_path: PathBuf::from("/usr/bin/printf"),
+            coreutils_path: None,
+            ..Default::default()
+        };
+        let result = CommandExecutor::new(config)
+            .execute_test(&test_case)
+            .expect("execute test");
+
+        assert!(result.passed, "differences: {:?}", result.differences);
+    }
+
     // 辅助函数：创建一个简单的测试用例
     fn create_simple_test_case() -> TestCase {
         TestCase {
@@ -2467,10 +2558,23 @@ mod tests {
         let timeout = Some(5u64);
 
         // 尝试执行命令，但不检查结果，因为执行结果取决于环境
-        let result_single =
-            executor_single.execute_syskits(stdin, command, &args, &mut sandbox, timeout);
-        let result_multiple =
-            executor_multiple.execute_syskits(stdin, command, &args, &mut sandbox, timeout);
+        let streams = StandardStreams::default();
+        let result_single = executor_single.execute_syskits(
+            stdin,
+            command,
+            &args,
+            &mut sandbox,
+            timeout,
+            Some(&streams),
+        );
+        let result_multiple = executor_multiple.execute_syskits(
+            stdin,
+            command,
+            &args,
+            &mut sandbox,
+            timeout,
+            Some(&streams),
+        );
 
         // 只验证函数不会崩溃
         match result_single {
@@ -2521,14 +2625,22 @@ mod tests {
         let timeout = Some(5u64);
 
         // 尝试执行命令，但不检查结果，因为执行结果取决于环境
-        let result_with_coreutils =
-            executor_with_coreutils.execute_coreutils(stdin, command, &args, &mut sandbox, timeout);
+        let streams = StandardStreams::default();
+        let result_with_coreutils = executor_with_coreutils.execute_coreutils(
+            stdin,
+            command,
+            &args,
+            &mut sandbox,
+            timeout,
+            Some(&streams),
+        );
         let result_without_coreutils = executor_without_coreutils.execute_coreutils(
             stdin,
             command,
             &args,
             &mut sandbox,
             timeout,
+            Some(&streams),
         );
 
         // 只验证函数不会崩溃

@@ -13,7 +13,9 @@
 //! 提供命令执行的隔离环境，支持资源限制和环境变量管理
 
 use crate::CommandResult;
-use crate::test_case::{FileType, TestCase, TestFile};
+use crate::test_case::{
+    FileType, OutputStream, SignalDisposition, StandardStreams, TestCase, TestFile,
+};
 use crate::{Result, TestError};
 use hex;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
@@ -26,9 +28,9 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, File, Permissions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -41,6 +43,75 @@ use tempfile::TempDir;
 
 fn tty_stdin_needs_eof(stdin_content: Option<&[u8]>) -> bool {
     stdin_content.is_some_and(|content| !content.is_empty())
+}
+
+pub(crate) struct CommandStreamOptions<'a> {
+    pub output_hex: bool,
+    pub streams: &'a StandardStreams,
+}
+
+fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>)> {
+    match mode {
+        OutputStream::Capture => Ok((Stdio::piped(), None)),
+        OutputStream::Inherit => Ok((Stdio::inherit(), None)),
+        OutputStream::Null => Ok((Stdio::null(), None)),
+        OutputStream::Full => {
+            let full = fs::OpenOptions::new().write(true).open("/dev/full")?;
+            Ok((Stdio::from(full), None))
+        }
+        OutputStream::ClosedPipe => {
+            let (read_end, write_end) = nix::unistd::pipe()
+                .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;
+            drop(read_end);
+            Ok((Stdio::from(write_end), None))
+        }
+        OutputStream::Tty => {
+            let pty = openpty(None, None)
+                .map_err(|e| TestError::ExecutionError(format!("Failed to create pty: {e}")))?;
+            let master_fd = pty.master.as_raw_fd();
+            let mut flags =
+                OFlag::from_bits_truncate(fcntl(master_fd, FcntlArg::F_GETFL).map_err(|e| {
+                    TestError::ExecutionError(format!("Failed to read pty flags: {e}"))
+                })?);
+            flags.insert(OFlag::O_NONBLOCK);
+            fcntl(master_fd, FcntlArg::F_SETFL(flags))
+                .map_err(|e| TestError::ExecutionError(format!("Failed to set pty flags: {e}")))?;
+            Ok((Stdio::from(pty.slave), Some(pty.master)))
+        }
+    }
+}
+
+fn read_pty_output(master: OwnedFd, process_done: Arc<AtomicBool>) -> Result<Vec<u8>> {
+    let mut master = File::from(master);
+    let mut output = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        match master.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(size) => output.extend_from_slice(&buffer[..size]),
+            Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if process_done.load(Ordering::Acquire) {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) => return Err(TestError::IoError(error)),
+        }
+    }
+
+    let mut normalized = Vec::with_capacity(output.len());
+    let mut index = 0;
+    while index < output.len() {
+        if output[index..].starts_with(b"\r\n") {
+            normalized.push(b'\n');
+            index += 2;
+        } else {
+            normalized.push(output[index]);
+            index += 1;
+        }
+    }
+    Ok(normalized)
 }
 
 /// 信号处理器
@@ -550,6 +621,31 @@ impl IsolatedSandbox {
         self.execute_command_bytes(cmd, &os_args, stdin_bytes, is_record_result, timeout, false)
     }
 
+    /// 执行命令，并按用例配置连接标准输出、标准错误和 SIGPIPE。
+    pub fn execute_command_with_streams(
+        &mut self,
+        cmd: &str,
+        args: &[String],
+        stdin_content: Option<&str>,
+        is_record_result: bool,
+        timeout: Option<u64>,
+        streams: &StandardStreams,
+    ) -> Result<CommandResult> {
+        let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        let stdin_bytes = stdin_content.map(str::as_bytes);
+        self.execute_command_bytes_with_streams(
+            cmd,
+            &os_args,
+            stdin_bytes,
+            is_record_result,
+            timeout,
+            CommandStreamOptions {
+                output_hex: false,
+                streams,
+            },
+        )
+    }
+
     /// 执行命令（字符串参数，伪终端模式）
     pub fn execute_command_tty(
         &mut self,
@@ -574,6 +670,32 @@ impl IsolatedSandbox {
         timeout: Option<u64>,
         output_hex: bool,
     ) -> Result<CommandResult> {
+        self.execute_command_bytes_with_streams(
+            cmd,
+            args,
+            stdin_content,
+            is_record_result,
+            timeout,
+            CommandStreamOptions {
+                output_hex,
+                streams: &StandardStreams {
+                    stderr: OutputStream::Inherit,
+                    ..StandardStreams::default()
+                },
+            },
+        )
+    }
+
+    /// 执行命令（原始字节参数及可配置标准流）。
+    pub(crate) fn execute_command_bytes_with_streams(
+        &mut self,
+        cmd: &str,
+        args: &[OsString],
+        stdin_content: Option<&[u8]>,
+        is_record_result: bool,
+        timeout: Option<u64>,
+        options: CommandStreamOptions<'_>,
+    ) -> Result<CommandResult> {
         self.debug_fmt(format_args!("Executing command: {cmd} {args:?}"));
         self.debug_fmt(format_args!(
             "Current working directory: {:?}",
@@ -581,20 +703,45 @@ impl IsolatedSandbox {
         ));
 
         let encode_if_hex = |value: &str| {
-            if output_hex {
+            if options.output_hex {
                 hex::encode(value.as_bytes())
             } else {
                 value.to_string()
             }
         };
 
-        let mut command = Command::new(cmd);
+        let streams = options.streams;
+        let (stdout, stdout_tty) = configured_output(streams.stdout)?;
+        let (stderr, stderr_tty) = configured_output(streams.stderr)?;
+        let mut command = if streams.use_bash {
+            let mut command = Command::new("bash");
+            command
+                .args(["-c", "\"$@\"; status=$?; :; exit \"$status\"", "bash", cmd])
+                .args(args);
+            command
+        } else {
+            let mut command = Command::new(cmd);
+            command.args(args);
+            command
+        };
         command
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .args(args)
+            .stdout(stdout)
+            .stderr(stderr)
             .current_dir(&self.current_dir)
             .envs(&self.current_env);
+
+        let sigpipe = streams.sigpipe;
+        unsafe {
+            command.pre_exec(move || {
+                let handler = match sigpipe {
+                    SignalDisposition::Default => signal::SigHandler::SigDfl,
+                    SignalDisposition::Ignore => signal::SigHandler::SigIgn,
+                };
+                signal::signal(signal::Signal::SIGPIPE, handler).map_err(std::io::Error::other)?;
+                Ok(())
+            });
+        }
 
         let mut child = match command.spawn() {
             Ok(child) => child,
@@ -609,12 +756,23 @@ impl IsolatedSandbox {
                 });
             }
         };
+        let pty_readers_done = Arc::new(AtomicBool::new(false));
+        let stdout_tty_reader = stdout_tty.map(|master| {
+            let process_done = Arc::clone(&pty_readers_done);
+            thread::spawn(move || read_pty_output(master, process_done))
+        });
+        let stderr_tty_reader = stderr_tty.map(|master| {
+            let process_done = Arc::clone(&pty_readers_done);
+            thread::spawn(move || read_pty_output(master, process_done))
+        });
 
         // 启动命令
         if let Some(content) = stdin_content {
             if let Some(stdin) = child.stdin.as_mut() {
                 if !content.is_empty() {
                     if let Err(e) = stdin.write_all(content) {
+                        let _ = child.kill();
+                        pty_readers_done.store(true, Ordering::Release);
                         self.debug_fmt(format_args!("Failed to write to stdin: {e}"));
                         let stderr = encode_if_hex(&format!("Failed to write to stdin: {e}"));
                         return Ok(CommandResult {
@@ -629,7 +787,7 @@ impl IsolatedSandbox {
             }
         }
 
-        let output;
+        let mut output;
         let timeout_args;
         // 等待命令执行完成并获取输出
         if let Some(timeout_secs) = timeout {
@@ -646,6 +804,8 @@ impl IsolatedSandbox {
                     Ok(Some(_)) => break,
                     Ok(None) => thread::sleep(Duration::from_millis(100)),
                     Err(e) => {
+                        let _ = child.kill();
+                        pty_readers_done.store(true, Ordering::Release);
                         let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                         return Ok(CommandResult {
                             stdout: String::new(),
@@ -662,6 +822,7 @@ impl IsolatedSandbox {
                     output
                 }
                 Err(e) => {
+                    pty_readers_done.store(true, Ordering::Release);
                     self.debug_fmt(format_args!("Failed to wait for command: {e}"));
                     let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                     return Ok(CommandResult {
@@ -678,6 +839,7 @@ impl IsolatedSandbox {
                     output
                 }
                 Err(e) => {
+                    pty_readers_done.store(true, Ordering::Release);
                     self.debug_fmt(format_args!("Failed to wait for command: {e}"));
                     let stderr = encode_if_hex(&format!("Failed to wait for command: {e}"));
                     return Ok(CommandResult {
@@ -689,7 +851,19 @@ impl IsolatedSandbox {
             };
         }
 
-        let result = if output_hex {
+        pty_readers_done.store(true, Ordering::Release);
+        if let Some(reader) = stdout_tty_reader {
+            output.stdout = reader.join().map_err(|_| {
+                TestError::ExecutionError("stdout PTY reader thread panicked".to_string())
+            })??;
+        }
+        if let Some(reader) = stderr_tty_reader {
+            output.stderr = reader.join().map_err(|_| {
+                TestError::ExecutionError("stderr PTY reader thread panicked".to_string())
+            })??;
+        }
+
+        let result = if options.output_hex {
             CommandResult::from_output_hex(output)
         } else {
             CommandResult::from(output)
@@ -701,7 +875,7 @@ impl IsolatedSandbox {
         self.debug_fmt(format_args!("stderr: {}", result.stderr));
 
         // Check if stdout contains null bytes
-        if !output_hex && result.stdout.contains('\0') {
+        if !options.output_hex && result.stdout.contains('\0') {
             self.debug("Warning: stdout contains null bytes");
             if self.debug {
                 println!("DEBUG: stdout hex representation:");
@@ -724,7 +898,7 @@ impl IsolatedSandbox {
             self.add_env("CMD_EXIT_CODE", &result.exit_code.to_string());
 
             // Check for null bytes in stdout before setting environment variable
-            if !output_hex && result.stdout.contains('\0') {
+            if !options.output_hex && result.stdout.contains('\0') {
                 self.debug("Warning: Found null bytes when setting CMD_STDOUT");
                 // Replace null bytes with visible characters to avoid environment variable issues
                 let safe_stdout = result.stdout.replace('\0', "\\0");
@@ -1077,7 +1251,8 @@ impl IsolatedSandbox {
 mod tests {
     use super::*;
     use crate::test_case::{
-        CommandExecution, IgnoreFields, TestCase, TestEnvironment, TestExpectation,
+        CommandExecution, IgnoreFields, OutputStream, SignalDisposition, StandardStreams, TestCase,
+        TestEnvironment, TestExpectation,
     };
     use std::fs;
     use std::sync::Arc;
@@ -1108,6 +1283,145 @@ mod tests {
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "test input");
         assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_stdout_full_reports_write_error() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stdout: OutputStream::Full,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "/usr/bin/printf",
+            &["output".to_string()],
+            None,
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 1);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.contains("write error"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_closed_stdout_uses_default_sigpipe() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stdout: OutputStream::ClosedPipe,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "seq",
+            &["1".to_string(), "100000".to_string()],
+            None,
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 141);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_closed_stdout_can_ignore_sigpipe() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stdout: OutputStream::ClosedPipe,
+            sigpipe: SignalDisposition::Ignore,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "seq",
+            &["1".to_string(), "100000".to_string()],
+            None,
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 1);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.contains("write error: Broken pipe"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_bash_keeps_bash_as_parent() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            use_bash: true,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "sh",
+            &["-c".to_string(), "cat /proc/$PPID/comm".to_string()],
+            None,
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "bash\n");
+        assert!(result.stderr.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_can_attach_only_stderr_to_tty() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stderr: OutputStream::Tty,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "sh",
+            &[
+                "-c".to_string(),
+                "test -t 2 && printf 'tty\\n' >&2".to_string(),
+            ],
+            None,
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert!(result.stdout.is_empty());
+        assert_eq!(result.stderr, "tty\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_drains_large_stderr_pty_while_child_runs() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stderr: OutputStream::Tty,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "sh",
+            &[
+                "-c".to_string(),
+                "/usr/bin/yes x | /usr/bin/head -c 131072 >&2".to_string(),
+            ],
+            None,
+            true,
+            Some(2),
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert!(result.stdout.is_empty());
+        assert_eq!(result.stderr.len(), 131_072);
         Ok(())
     }
 

@@ -747,6 +747,108 @@
           }
         ]
       }
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od --strings testfile；stdin为0字节；输入fixture为9字节内容testfile加换行的普通文件testfile；预期--strings不吞掉后续文件操作数，RC=0且stdout、stderr均为空；迁移原Cargo用例od_long_strings_without_bytes_keeps_following_operand_as_file",
+      "args": ["--strings", "testfile"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "testfile",
+            "content": "testfile\n",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od --width testfile；stdin为0字节；输入fixture为11字节内容afsafajksa加换行的普通文件testfile；预期--width未带宽度时把后续参数作为文件名，RC=0、stderr为空并输出两行默认八进制转储；迁移原Cargo用例od_long_width_without_bytes_keeps_following_operand_as_file",
+      "args": ["--width", "testfile"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "0000000 063141 060563 060546 065552 060563 000012\n0000013\n",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "testfile",
+            "content": "afsafajksa\n",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od -w testfile；stdin为0字节；输入fixture为11字节内容afsafajksa加换行的普通文件testfile；预期-w未附加宽度时把后续参数作为文件名，RC=0、stderr为空并输出两行默认八进制转储；迁移原Cargo用例od_short_width_without_attached_bytes_keeps_following_operand_as_file",
+      "args": ["-w", "testfile"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "0000000 063141 060563 060546 065552 060563 000012\n0000013\n",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "testfile",
+            "content": "afsafajksa\n",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
     }
     ]
 }

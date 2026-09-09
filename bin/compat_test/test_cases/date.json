@@ -991,6 +991,33 @@
       },
       "cleanup_commands": [],
       "tstdin": ""
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、LANG=C、TZ=Asia/Shanghai下执行date --debug -d 2020-01-02 +%F；stdin为空且无文件fixture；预期RC=0，stdout为2020-01-02加换行，stderr为10行GNU解析轨迹，明确记录日期、TZ环境值、午夜默认时间、epoch和UTC/UTC+08最终时间；迁移原Cargo用例date_debug_for_ymd_date_reports_parse_trace",
+      "args": [
+        "--debug",
+        "-d",
+        "2020-01-02",
+        "+%F"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "export TZ='Asia/Shanghai'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2020-01-02\n",
+          "stderr": "date: parsed date part: (Y-M-D) 2020-01-02\ndate: input timezone: TZ=\"Asia/Shanghai\" environment value\ndate: warning: using midnight as starting time: 00:00:00\ndate: starting date/time: '(Y-M-D) 2020-01-02 00:00:00'\ndate: '(Y-M-D) 2020-01-02 00:00:00' = 1577894400 epoch-seconds\ndate: timezone: TZ=\"Asia/Shanghai\" environment value\ndate: final: 1577894400.000000000 (epoch-seconds)\ndate: final: (Y-M-D) 2020-01-01 16:00:00 (UTC)\ndate: final: (Y-M-D) 2020-01-02 00:00:00 (UTC+08)\ndate: output format: '%F'\n"
+        }
+      },
+      "environment": {
+        "standardStreams": {}
+      },
+      "cleanup_commands": []
     }
   ]
 }

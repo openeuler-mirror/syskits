@@ -892,6 +892,147 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "LC_ALL=C、LANG=C且清除OpenMP限制变量后执行nproc，并将stdout连接到/dev/full；stdin为空且无文件fixture；预期RC=1、stdout为0字节，stderr为nproc: write error: No space left on device加换行；迁移原Cargo用例nproc_reports_stdout_write_errors",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset OMP_NUM_THREADS",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "nproc: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "LC_ALL=C、LANG=C且清除OpenMP限制变量后执行nproc --help；stdin为空且无文件fixture；预期RC=0、stderr为空；stdout布局允许实现差异，但验证Usage: nproc标题恰好出现1次，防止包装层重复输出；迁移原Cargo用例nproc_does_not_duplicate_errors_or_display_output的help调用",
+            "args": ["--help"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset OMP_NUM_THREADS",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | grep -c '^Usage: nproc '",
+                        "expected_exit": 0,
+                        "expected_stdout": "1\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "environment": {
+                "standardStreams": {}
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "LC_ALL=C、LANG=C且清除OpenMP限制变量后执行nproc --version；stdin为空且无文件fixture；预期RC=0、stderr为空；stdout版本详情允许实现差异，但验证以nproc开头的版本标题恰好1行，防止包装层重复输出；迁移原Cargo用例nproc_does_not_duplicate_errors_or_display_output的version调用",
+            "args": ["--version"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset OMP_NUM_THREADS",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | grep -c '^nproc '",
+                        "expected_exit": 0,
+                        "expected_stdout": "1\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "environment": {
+                "standardStreams": {}
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "LC_ALL=C、LANG=C且清除OpenMP限制变量后执行nproc --ignore=x；stdin为空且无文件fixture；预期RC=1、stdout为空，stderr仅输出一次nproc: invalid number: 'x'加换行；迁移原Cargo用例nproc_does_not_duplicate_errors_or_display_output的invalid调用",
+            "args": ["--ignore=x"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset OMP_NUM_THREADS",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "nproc: invalid number: 'x'\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {}
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nproc",
+            "description": "LC_ALL=C、LANG=C且清除OpenMP限制变量后执行nproc --ignore；stdin为空且无文件fixture；预期RC=1、stdout为空；stderr布局允许实现差异，但验证option '--ignore' requires an argument诊断恰好出现1次；迁移原Cargo用例nproc_does_not_duplicate_errors_or_display_output的missing调用",
+            "args": ["--ignore"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset OMP_NUM_THREADS",
+                "unset OMP_THREAD_LIMIT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDERR\" | grep -c \"option '--ignore' requires an argument\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "1\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "environment": {
+                "standardStreams": {}
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

@@ -11844,6 +11844,190 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C、LANG=C下执行ptx input，并将stdout连接到/dev/full；fixture input内容为alpha beta加换行、共11字节；预期RC=1、stdout为0字节，stderr为ptx: write error: No space left on device加换行；迁移原Cargo用例ptx_reports_stdout_write_errors",
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "printf 'alpha beta\\n' > input"
+      ],
+      "args": ["input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "ptx: write error: No space left on device\n"
+        }
+      },
+      "environment": {
+        "standardStreams": {
+          "stdout": "full"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "清除POSIXLY_CORRECT后执行ptx --help -w bad；stdin为空且无文件fixture；终止选项必须优先于其后的非法宽度，预期RC=0、stderr为空；stdout帮助布局允许实现差异，但验证Usage中的ptx行恰好出现1次；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第1种参数",
+      "setup_commands": ["unset POSIXLY_CORRECT"],
+      "args": ["--help", "-w", "bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c 'Usage: .*ptx'",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "清除POSIXLY_CORRECT后执行ptx --he --width=bad；stdin为空且无文件fixture；缩写help终止选项必须优先于非法宽度，预期RC=0、stderr为空；stdout帮助布局允许实现差异，但验证Usage中的ptx行恰好出现1次；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第2种参数",
+      "setup_commands": ["unset POSIXLY_CORRECT"],
+      "args": ["--he", "--width=bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c 'Usage: .*ptx'",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "清除POSIXLY_CORRECT后执行ptx --version -g bad；stdin为空且无文件fixture；version终止选项必须优先于其后的非法gap-size，预期RC=0、stderr为空；stdout版本详情允许实现差异，但验证ptx版本标题恰好1行；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第3种参数",
+      "setup_commands": ["unset POSIXLY_CORRECT"],
+      "args": ["--version", "-g", "bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c '^ptx '",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "清除POSIXLY_CORRECT后执行ptx --ver --gap-size=bad；stdin为空且无文件fixture；缩写version终止选项必须优先于非法gap-size，预期RC=0、stderr为空；stdout版本详情允许实现差异，但验证ptx版本标题恰好1行；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第4种参数",
+      "setup_commands": ["unset POSIXLY_CORRECT"],
+      "args": ["--ver", "--gap-size=bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c '^ptx '",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "POSIXLY_CORRECT=1下执行ptx --help -w bad；stdin为空且无文件fixture；终止选项在POSIX模式也必须优先于非法宽度，预期RC=0、stderr为空；stdout帮助布局允许实现差异，但验证Usage中的ptx行恰好出现1次；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第5种参数",
+      "setup_commands": ["export POSIXLY_CORRECT='1'"],
+      "args": ["--help", "-w", "bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c 'Usage: .*ptx'",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "POSIXLY_CORRECT=1下执行ptx --he --width=bad；stdin为空且无文件fixture；缩写help终止选项在POSIX模式也必须优先于非法宽度，预期RC=0、stderr为空；stdout帮助布局允许实现差异，但验证Usage中的ptx行恰好出现1次；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第6种参数",
+      "setup_commands": ["export POSIXLY_CORRECT='1'"],
+      "args": ["--he", "--width=bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c 'Usage: .*ptx'",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "POSIXLY_CORRECT=1下执行ptx --version -g bad；stdin为空且无文件fixture；version终止选项在POSIX模式也必须优先于非法gap-size，预期RC=0、stderr为空；stdout版本详情允许实现差异，但验证ptx版本标题恰好1行；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第7种参数",
+      "setup_commands": ["export POSIXLY_CORRECT='1'"],
+      "args": ["--version", "-g", "bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c '^ptx '",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "POSIXLY_CORRECT=1下执行ptx --ver --gap-size=bad；stdin为空且无文件fixture；缩写version终止选项在POSIX模式也必须优先于非法gap-size，预期RC=0、stderr为空；stdout版本详情允许实现差异，但验证ptx版本标题恰好1行；迁移原Cargo用例ptx_terminating_options_skip_numeric_validation第8种参数",
+      "setup_commands": ["export POSIXLY_CORRECT='1'"],
+      "args": ["--ver", "--gap-size=bad"],
+      "environment": {"standardStreams": {}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": null, "stderr": ""},
+        "verifications": [
+          {
+            "command": "printf '%s' \"$CMD_STDOUT\" | grep -c '^ptx '",
+            "expected_exit": 0,
+            "expected_stdout": "1\n",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": []
     }
   ]
 }

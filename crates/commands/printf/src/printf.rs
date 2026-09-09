@@ -791,6 +791,17 @@ mod tests {
         }
 
         #[test]
+        fn hexadecimal_format_writes_decimal_exponents() {
+            let args = [ctcore::ct_util_name(), "%a|%A", "0x1p16", "0x1p-16"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "0x1p+16|0X1P-16");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn dynamic_width_and_precision_reject_values_above_int_max() {
             for (format, expected_error) in [
                 ("%*d", "printf: invalid field width: '2147483648'\n"),

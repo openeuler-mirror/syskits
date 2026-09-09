@@ -638,6 +638,17 @@ mod tests {
         }
 
         #[test]
+        fn integer_arguments_accept_plus_and_wrap_negative_unsigned_values() {
+            let args = [ctcore::ct_util_name(), "%d|%u", "+3", "-1"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "3|18446744073709551615");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

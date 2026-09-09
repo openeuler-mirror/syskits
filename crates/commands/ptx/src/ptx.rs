@@ -2841,7 +2841,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
         let lines: Vec<String> = raw_lines
             .iter()
             .map(|line| {
-                if config.force_byte_mode {
+                if config.force_byte_mode || config.single_byte_locale {
                     ptx_internal_byte_text(line)
                 } else {
                     ptx_internal_text(line, byte_mode)

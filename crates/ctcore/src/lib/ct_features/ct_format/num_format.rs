@@ -342,6 +342,7 @@ impl Formatter for Float {
             alignment,
             precision,
             thousand_separate: _,
+            localized_digits: _,
         } = s
         {
             let width = if let Some(CanAsterisk::Fixed(x)) = width {
@@ -1012,6 +1013,7 @@ mod test {
             alignment: NumberAlignment::Left,
             precision: Some(CanAsterisk::Fixed(6)),
             thousand_separate: false,
+            localized_digits: false,
         };
 
         let float = Float::try_from_spec(spec).unwrap();
@@ -1036,6 +1038,7 @@ mod test {
             alignment: NumberAlignment::Left,
             precision: None, // Precision not provided
             thousand_separate: false,
+            localized_digits: false,
         };
 
         let float = Float::try_from_spec(spec).unwrap();
@@ -1060,6 +1063,7 @@ mod test {
             alignment: NumberAlignment::Left,
             precision: Some(CanAsterisk::Fixed(0)), // Zero precision
             thousand_separate: false,
+            localized_digits: false,
         };
 
         let float = Float::try_from_spec(spec).unwrap();

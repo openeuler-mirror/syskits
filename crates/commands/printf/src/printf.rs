@@ -649,6 +649,25 @@ mod tests {
         }
 
         #[test]
+        fn integer_overflow_outputs_saturated_values() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%d|%d|%u|%u",
+                "9223372036854775808",
+                "-9223372036854775809",
+                "18446744073709551616",
+                "-18446744073709551616",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(
+                semantic.classic_text,
+                "9223372036854775807|-9223372036854775808|18446744073709551615|18446744073709551615"
+            );
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

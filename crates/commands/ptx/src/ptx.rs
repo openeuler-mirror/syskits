@@ -1508,6 +1508,23 @@ fn ptx_pattern_needs_locale_class_matching(pattern: &[u8]) -> bool {
     false
 }
 
+fn ptx_pattern_has_bracket_symbol(pattern: &[u8]) -> bool {
+    let mut index = 0usize;
+    while index < pattern.len() {
+        if pattern[index] == b'['
+            && let Some(end) = ptx_character_class_end(pattern, index)
+        {
+            if ptx_character_class_has_bracket_symbol(&pattern[index..=end]) {
+                return true;
+            }
+            index = end + 1;
+        } else {
+            index += 1;
+        }
+    }
+    false
+}
+
 fn ptx_character_class_has_equivalence_range_endpoint(class: &[u8]) -> bool {
     if class.len() < 4 {
         return false;
@@ -2556,6 +2573,10 @@ fn ptx_recompile_locale_range_regexps(
     if let Some(pattern) = config.context_pattern_bytes.clone()
         && !pattern.is_empty()
         && ptx_pattern_needs_locale_class_matching(&pattern)
+        && (!config.single_byte_locale
+            || config.is_ignore_case
+            || std::str::from_utf8(&pattern).is_err()
+            || ptx_pattern_has_bracket_symbol(&pattern))
     {
         let byte_mode = std::str::from_utf8(&pattern).is_err();
         if config.is_ignore_case || byte_mode || has_invalid_input {
@@ -2584,6 +2605,10 @@ fn ptx_recompile_locale_range_regexps(
 
     if let Some(pattern) = word_filter.word_pattern_bytes.as_deref()
         && ptx_pattern_needs_locale_class_matching(pattern)
+        && (!config.single_byte_locale
+            || config.is_ignore_case
+            || std::str::from_utf8(pattern).is_err()
+            || ptx_pattern_has_bracket_symbol(pattern))
     {
         let byte_mode = std::str::from_utf8(pattern).is_err();
         if config.is_ignore_case || byte_mode || has_invalid_input {

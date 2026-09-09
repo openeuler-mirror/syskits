@@ -668,6 +668,24 @@ mod tests {
         }
 
         #[test]
+        fn integer_fields_place_sign_prefix_and_zero_padding_like_printf() {
+            let args = [
+                ctcore::ct_util_name(),
+                "%05d|%+5.3d|%#08x|%.0d",
+                "-42",
+                "1",
+                "42",
+                "0",
+            ];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "-0042| +001|0x00002a|");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn semantic_zero_pads_float_after_explicit_sign() {
             let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
 

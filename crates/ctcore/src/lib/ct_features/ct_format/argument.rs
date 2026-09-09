@@ -213,6 +213,9 @@ fn argument_source_bytes(arg: &FormatArgument) -> Vec<u8> {
 }
 
 fn parse_bytes_u64(bytes: &[u8]) -> u64 {
+    if bytes.is_empty() {
+        return 0;
+    }
     if let Some(value) = parse_bytes_character_constant(bytes) {
         return value;
     }
@@ -223,6 +226,9 @@ fn parse_bytes_u64(bytes: &[u8]) -> u64 {
 }
 
 fn parse_bytes_i64(bytes: &[u8]) -> i64 {
+    if bytes.is_empty() {
+        return 0;
+    }
     if let Some(value) = parse_bytes_character_constant(bytes) {
         return value as i64;
     }
@@ -601,5 +607,14 @@ mod tests {
         let result: Result<u32, ParseError<u32>> = Err(ParseError::CtOverflow);
 
         assert_eq!(extract_value(result, "input"), 0);
+    }
+
+    #[test]
+    fn empty_byte_integer_arguments_are_zero_without_an_error_status() {
+        crate::ct_error::set_ct_exit_code(0);
+
+        assert_eq!(parse_bytes_i64(b""), 0);
+        assert_eq!(parse_bytes_u64(b""), 0);
+        assert_eq!(crate::ct_error::get_ct_exit_code(), 0);
     }
 }

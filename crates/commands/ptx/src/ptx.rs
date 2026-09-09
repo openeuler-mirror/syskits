@@ -2114,6 +2114,22 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     if config.is_input_ref && !matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP) {
         config.context_regex = "\n".to_string();
     }
+    if config.is_gnu_ext
+        && !config.is_input_ref
+        && !matches.contains_id(ptx_options::PTX_SENTENCE_REGEXP)
+    {
+        config.context_byte_regex = Some(
+            compile_byte_regex(
+                GNU_DEFAULT_CONTEXT_REGEX.as_bytes(),
+                config.is_ignore_case,
+                &config.byte_ctype,
+                config.locale_regex_encoding,
+                config.locale_validator.clone(),
+                config.single_byte_locale,
+            )
+            .expect("GNU default context regexp must compile"),
+        );
+    }
     config.is_right_ref = matches.get_flag(ptx_options::PTX_RIGHT_SIDE_REFS);
     if matches.contains_id(ptx_options::PTX_MACRO_NAME) {
         let value = matches

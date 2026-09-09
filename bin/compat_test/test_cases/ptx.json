@@ -1169,6 +1169,60 @@
       ]
     },
     {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=C，执行ptx input；input原始字节为2e 80（句点后接0x80且无换行）；预期RC=0且stdout/stderr均为空，验证非法字节前的句点不会被误判为完整输入末尾",
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '.\\200' > input"
+      ],
+      "args": ["input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=en_US.iso88591，执行ptx input；input原始字节为2e 80（句点后接0x80且无换行）；预期RC=0且stdout/stderr均为空，验证单字节locale下默认上下文正则保留真实输入边界",
+      "setup_commands": [
+        "export LC_ALL=en_US.iso88591",
+        "printf '.\\200' > input"
+      ],
+      "args": ["input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "LC_ALL=zh_CN.gb18030，执行ptx input；input原始字节为2e 80（句点后接0x80且无换行）；预期RC=0且stdout/stderr均为空，验证多字节locale下默认上下文正则不会在非法字节前提前结束",
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gb18030",
+        "printf '.\\200' > input"
+      ],
+      "args": ["input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "command": "ptx",
       "description": "Test -A with absolute path (heap reference test)",
       "args": ["-w1", "-A"],

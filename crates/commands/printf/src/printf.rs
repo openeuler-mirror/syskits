@@ -780,6 +780,17 @@ mod tests {
         }
 
         #[test]
+        fn hexadecimal_format_preserves_negative_sign() {
+            let args = [ctcore::ct_util_name(), "%a|%A", "-1.5", "-0"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "-0x1.8p+0|-0X0P+0");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn dynamic_width_and_precision_reject_values_above_int_max() {
             for (format, expected_error) in [
                 ("%*d", "printf: invalid field width: '2147483648'\n"),

@@ -515,10 +515,12 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    let (first_digit, mantissa, exponent) = if f.abs() < f64::EPSILON {
+    let negative = f.is_sign_negative();
+    let magnitude = f.abs();
+    let (first_digit, mantissa, exponent) = if magnitude < f64::EPSILON {
         (0, 0, 0)
     } else {
-        let bits = f.to_bits();
+        let bits = magnitude.to_bits();
         let exponent_bits = ((bits >> 52) & 0x7fff) as i64;
         let exponent = exponent_bits - 1023;
         let mantissa = bits & 0xf_ffff_ffff_ffff;
@@ -560,7 +562,8 @@ fn format_float_hexadecimal(
     } else {
         ""
     };
-    let mut s = format!("0x{first_digit:x}{point}{fraction}p{exponent:+x}");
+    let sign = if negative { "-" } else { "" };
+    let mut s = format!("{sign}0x{first_digit:x}{point}{fraction}p{exponent:+x}");
 
     if Case::Uppercase == case {
         s.make_ascii_uppercase();
@@ -1463,7 +1466,7 @@ mod test {
         let case = Case::Lowercase;
         let force_decimal = ForceDecimal::No;
 
-        let expected = "0x1.e240cap+810";
+        let expected = "-0x1.e240cap+10";
         let actual = format_float_hexadecimal(f, precision, case, force_decimal);
 
         assert_eq!(actual, expected);
@@ -1562,6 +1565,14 @@ mod test {
         assert_eq!(
             format_float_hexadecimal(1.5, Some(0), Case::Lowercase, ForceDecimal::Yes),
             "0x2.p+0"
+        );
+        assert_eq!(
+            format_float_hexadecimal(-1.5, None, Case::Lowercase, ForceDecimal::No),
+            "-0x1.8p+0"
+        );
+        assert_eq!(
+            format_float_hexadecimal(-0.0, None, Case::Uppercase, ForceDecimal::No),
+            "-0X0P+0"
         );
     }
 

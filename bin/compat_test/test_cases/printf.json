@@ -613,6 +613,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C；格式参数字节=2571（%q），字符串参数字节=c281（UTF-8编码的不可打印控制字符U+0081）；预期RC=0，stdout为13字节、内容=272724275c3330325c32303127（''$'\\302\\201'），stderr为0字节、内容=空",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2571", "c281"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "272724275c3330325c32303127",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

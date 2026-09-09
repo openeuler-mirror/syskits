@@ -226,6 +226,23 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
     let mut escaped_str = String::with_capacity(name.len());
 
     for c in name.chars() {
+        if c.is_control() && !c.is_ascii() {
+            if !in_dollar {
+                escaped_str.push_str("'$'");
+                in_dollar = true;
+            }
+            must_quote = true;
+
+            let mut encoded = [0; 4];
+            for byte in c.encode_utf8(&mut encoded).as_bytes() {
+                escaped_str.push('\\');
+                escaped_str.push(char::from(b'0' + (byte >> 6)));
+                escaped_str.push(char::from(b'0' + ((byte >> 3) & 0o7)));
+                escaped_str.push(char::from(b'0' + (byte & 0o7)));
+            }
+            continue;
+        }
+
         let escaped = CtEscapedChar::new_shell(c, true, quotes);
         match escaped.state {
             CtEscapeState::Char(x) => {

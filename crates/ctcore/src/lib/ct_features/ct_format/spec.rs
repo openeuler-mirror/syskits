@@ -841,6 +841,21 @@ mod tests {
     use crate::ct_format::argument::FormatArgument;
 
     #[test]
+    fn quoted_string_escapes_non_printable_multibyte_bytes() {
+        let mut input: &[u8] = b"q";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let arguments = [FormatArgument::Bytes(vec![0xc2, 0x81])];
+        let mut cursor = ArgCursor::new(&arguments);
+        let mut output = Vec::new();
+
+        assert!(matches!(
+            spec.write(&mut output, &mut cursor),
+            Ok(ControlFlow::Continue(()))
+        ));
+        assert_eq!(output, b"''$'\\302\\201'");
+    }
+
+    #[test]
     fn dynamic_width_and_precision_reject_values_above_int_max() {
         let arguments = [FormatArgument::Bytes(b"2147483648".to_vec())];
         let mut width_cursor = ArgCursor::new(&arguments);

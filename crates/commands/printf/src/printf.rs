@@ -511,6 +511,17 @@ mod tests {
         }
 
         #[test]
+        fn localized_digits_flag_is_accepted_for_decimal_integer() {
+            let args = [ctcore::ct_util_name(), "%Id", "3"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "3");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
+
+        #[test]
         fn semantic_collects_rows_without_trailing_newline() {
             let args = [ctcore::ct_util_name(), "%s", "alpha"];
 

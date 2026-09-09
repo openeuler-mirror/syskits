@@ -118,8 +118,31 @@ impl FormatChar for EscapedChar {
             Self::Byte(c) => {
                 writer.write_all(&[*c])?;
             }
+            Self::Char('\0') => {
+                writer.write_all(&[0])?;
+            }
             Self::Char(c) => {
-                write!(writer, "{c}")?;
+                let max_len = unsafe { crate::libc::sysconf(crate::libc::_SC_MB_LEN_MAX) };
+                let max_len = usize::try_from(max_len)
+                    .ok()
+                    .filter(|len| *len > 0)
+                    .unwrap_or(16);
+                let mut buffer = vec![0u8; max_len];
+                let wide = [*c as crate::libc::wchar_t, 0];
+                let len = unsafe {
+                    crate::libc::wcstombs(buffer.as_mut_ptr().cast(), wide.as_ptr(), buffer.len())
+                };
+
+                if len == usize::MAX {
+                    let code = *c as u32;
+                    if code < 0x10000 {
+                        write!(writer, "\\u{code:04X}")?;
+                    } else {
+                        write!(writer, "\\U{code:08X}")?;
+                    }
+                } else {
+                    writer.write_all(&buffer[..len])?;
+                }
             }
             Self::Backslash(c) => {
                 writer.write_all(&[b'\\', *c])?;

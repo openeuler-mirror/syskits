@@ -267,6 +267,45 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "C locale中Unicode转义使用ASCII回退表示",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["\\u4E2D|\\U0001F600"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\\u4E2D|\\U0001F600",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "C locale中Unicode NUL转义输出原始零字节",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["5c7530303030"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "00",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

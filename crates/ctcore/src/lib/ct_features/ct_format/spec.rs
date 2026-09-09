@@ -310,7 +310,7 @@ impl IndexedSpec {
     ) -> Result<ControlFlow<()>, FormatError> {
         match &self.spec {
             Spec::Char { width, align_left } => {
-                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
                 write_padded(
                     writer,
                     &[cursor.get_char(self.arg_index)],
@@ -323,8 +323,8 @@ impl IndexedSpec {
                 align_left,
                 precision,
             } => {
-                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
-                let p = resolve_precision(*precision, self.precision_index, cursor);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
+                let p = resolve_precision(*precision, self.precision_index, cursor)?;
                 let bytes = cursor.get_bytes(self.arg_index);
                 let truncated = match p {
                     Some(prec) if prec < bytes.len() => &bytes[..prec],
@@ -371,8 +371,8 @@ impl IndexedSpec {
                 alignment,
                 thousand_separate,
             } => {
-                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
-                let p = resolve_precision(*precision, self.precision_index, cursor);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
+                let p = resolve_precision(*precision, self.precision_index, cursor)?;
                 let align = if dyn_left {
                     NumberAlignment::Left
                 } else {
@@ -413,8 +413,8 @@ impl IndexedSpec {
                 alignment,
                 thousand_separate,
             } => {
-                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
-                let p = resolve_precision(*precision, self.precision_index, cursor);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
+                let p = resolve_precision(*precision, self.precision_index, cursor)?;
                 let align = if dyn_left {
                     NumberAlignment::Left
                 } else {
@@ -458,8 +458,8 @@ impl IndexedSpec {
                 precision,
                 thousand_separate,
             } => {
-                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor);
-                let p = resolve_precision(*precision, self.precision_index, cursor).unwrap_or(6);
+                let (w, dyn_left) = resolve_width(*width, self.width_index, cursor)?;
+                let p = resolve_precision(*precision, self.precision_index, cursor)?.unwrap_or(6);
                 let align = if dyn_left {
                     NumberAlignment::Left
                 } else {
@@ -718,18 +718,21 @@ fn resolve_width<'a>(
     option: Option<CanAsterisk<usize>>,
     idx: Option<usize>,
     cursor: &mut ArgCursor<'a>,
-) -> (Option<usize>, bool) {
+) -> Result<(Option<usize>, bool), FormatError> {
     match option {
-        None => (None, false),
+        None => Ok((None, false)),
         Some(CanAsterisk::Asterisk) => {
-            let v = cursor.get_i64(idx);
+            let (v, source) = cursor.get_i64_with_source(idx);
+            if v < i64::from(i32::MIN) || v > i64::from(i32::MAX) {
+                return Err(FormatError::InvalidFieldWidth(source));
+            }
             if v < 0 {
-                (Some(v.unsigned_abs() as usize), true)
+                Ok((Some(v.unsigned_abs() as usize), true))
             } else {
-                (Some(v as usize), false)
+                Ok((Some(v as usize), false))
             }
         }
-        Some(CanAsterisk::Fixed(w)) => (Some(w), false),
+        Some(CanAsterisk::Fixed(w)) => Ok((Some(w), false)),
     }
 }
 
@@ -738,14 +741,20 @@ fn resolve_precision<'a>(
     option: Option<CanAsterisk<usize>>,
     idx: Option<usize>,
     cursor: &mut ArgCursor<'a>,
-) -> Option<usize> {
+) -> Result<Option<usize>, FormatError> {
     match option {
-        None => None,
+        None => Ok(None),
         Some(CanAsterisk::Asterisk) => {
-            let v = cursor.get_i64(idx);
-            if v < 0 { None } else { Some(v as usize) }
+            let (v, source) = cursor.get_i64_with_source(idx);
+            if v < 0 {
+                Ok(None)
+            } else if v > i64::from(i32::MAX) {
+                Err(FormatError::InvalidPrecision(source))
+            } else {
+                Ok(Some(v as usize))
+            }
         }
-        Some(CanAsterisk::Fixed(p)) => Some(p),
+        Some(CanAsterisk::Fixed(p)) => Ok(Some(p)),
     }
 }
 
@@ -830,6 +839,30 @@ fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
 mod tests {
     use super::*;
     use crate::ct_format::argument::FormatArgument;
+
+    #[test]
+    fn dynamic_width_and_precision_reject_values_above_int_max() {
+        let arguments = [FormatArgument::Bytes(b"2147483648".to_vec())];
+        let mut width_cursor = ArgCursor::new(&arguments);
+        let mut precision_cursor = ArgCursor::new(&arguments);
+
+        assert!(matches!(
+            resolve_width(
+                Some(CanAsterisk::Asterisk),
+                None,
+                &mut width_cursor
+            ),
+            Err(FormatError::InvalidFieldWidth(value)) if value == b"2147483648"
+        ));
+        assert!(matches!(
+            resolve_precision(
+                Some(CanAsterisk::Asterisk),
+                None,
+                &mut precision_cursor
+            ),
+            Err(FormatError::InvalidPrecision(value)) if value == b"2147483648"
+        ));
+    }
 
     #[test]
     fn test_parse_simple_specifier() {

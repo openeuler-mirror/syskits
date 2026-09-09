@@ -119,19 +119,15 @@ impl<'a> ArgCursor<'a> {
     }
 
     pub fn get_i64(&mut self, idx: Option<usize>) -> i64 {
-        if let Some(arg) = self.fetch(idx) {
-            match arg {
-                FormatArgument::Unparsed(s) => {
-                    let v = ParsedNumber::parse_i64(s);
-                    extract_value_with_overflow(v, s, signed_overflow_value(s))
-                }
-                FormatArgument::Bytes(bytes) => parse_bytes_i64(bytes),
-                FormatArgument::SignedInt(n) => *n,
-                _ => 0,
-            }
-        } else {
-            0
-        }
+        self.fetch(idx).map(parse_argument_i64).unwrap_or(0)
+    }
+
+    pub(crate) fn get_i64_with_source(&mut self, idx: Option<usize>) -> (i64, Vec<u8>) {
+        let Some(arg) = self.fetch(idx) else {
+            return (0, Vec::new());
+        };
+
+        (parse_argument_i64(arg), argument_source_bytes(arg))
     }
 
     pub fn get_f64(&mut self, idx: Option<usize>) -> f64 {
@@ -174,6 +170,29 @@ impl<'a> ArgCursor<'a> {
     /// 返回当前批次中最多消耗了几个参数
     pub fn consumed_count(&self) -> usize {
         self.max_accessed
+    }
+}
+
+fn parse_argument_i64(arg: &FormatArgument) -> i64 {
+    match arg {
+        FormatArgument::Unparsed(s) => {
+            let v = ParsedNumber::parse_i64(s);
+            extract_value_with_overflow(v, s, signed_overflow_value(s))
+        }
+        FormatArgument::Bytes(bytes) => parse_bytes_i64(bytes),
+        FormatArgument::SignedInt(n) => *n,
+        _ => 0,
+    }
+}
+
+fn argument_source_bytes(arg: &FormatArgument) -> Vec<u8> {
+    match arg {
+        FormatArgument::Unparsed(s) | FormatArgument::String(s) => s.as_bytes().to_vec(),
+        FormatArgument::Bytes(bytes) => bytes.clone(),
+        FormatArgument::Char(c) => c.to_string().into_bytes(),
+        FormatArgument::UnsignedInt(n) => n.to_string().into_bytes(),
+        FormatArgument::SignedInt(n) => n.to_string().into_bytes(),
+        FormatArgument::Float(n) => n.to_string().into_bytes(),
     }
 }
 

@@ -521,5 +521,16 @@ mod tests {
             assert_eq!(semantic.rows[0].text, "alpha");
             assert!(!semantic.rows[0].terminated);
         }
+
+        #[test]
+        fn semantic_zero_pads_float_after_explicit_sign() {
+            let args = [ctcore::ct_util_name(), "%+08.2f", "1.25"];
+
+            let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert_eq!(semantic.classic_text, "+0001.25");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
+        }
     }
 }

@@ -239,6 +239,20 @@
             "cleanup_commands": [
                 "unset VAR"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "数值格式0/+标志组合在符号后补零",
+            "args": ["%+08.2f", "1.25"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "+0001.25",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

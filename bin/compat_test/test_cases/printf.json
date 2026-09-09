@@ -633,6 +633,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%Id，参数为3；glibc I标志用于本地化数字且在C locale不改变内容，预期RC=0、stdout为3、stderr为空",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%Id", "3"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

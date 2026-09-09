@@ -91,6 +91,7 @@ struct Flags {
     hash: bool,
     zero: bool,
     quote: bool,
+    localized_digits: bool,
 }
 
 impl Flags {
@@ -104,6 +105,7 @@ impl Flags {
                 b'#' => flags.hash = true,
                 b'0' => flags.zero = true,
                 b'\'' => flags.quote = true,
+                b'I' => flags.localized_digits = true,
                 _ => break,
             }
             *index += 1;
@@ -236,6 +238,9 @@ impl IndexedSpec {
                 if flags.hash && *c == b'u' {
                     return Err(&start[..index]);
                 }
+                if flags.localized_digits && *c != b'u' {
+                    return Err(&start[..index]);
+                }
                 // 千分位分组不支持八进制和十六进制 (o, x, X)
                 if flags.quote && *c != b'u' {
                     return Err(&start[..index]);
@@ -256,6 +261,9 @@ impl IndexedSpec {
                 }
             }
             c @ (b'a' | b'A' | b'e' | b'E' | b'f' | b'F' | b'g' | b'G') => {
+                if flags.localized_digits && matches!(c, b'a' | b'A' | b'e' | b'E') {
+                    return Err(&start[..index]);
+                }
                 let float_alignment = if flags.minus {
                     NumberAlignment::Left
                 } else if flags.zero {
@@ -1068,6 +1076,23 @@ mod tests {
         };
         assert_eq!(
             IndexedSpec::parse(&mut input).map(|is| is.spec),
+            Ok(expected)
+        );
+    }
+
+    #[test]
+    fn test_parse_specifier_with_localized_digits_flag() {
+        let mut input: &[u8] = b"Id";
+        let expected = Spec::SignedInt {
+            width: None,
+            precision: None,
+            alignment: NumberAlignment::RightSpace,
+            positive_sign: PositiveSign::None,
+            thousand_separate: false,
+        };
+
+        assert_eq!(
+            IndexedSpec::parse(&mut input).map(|indexed| indexed.spec),
             Ok(expected)
         );
     }

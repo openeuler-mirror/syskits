@@ -146,6 +146,52 @@ pub struct IsolatedSandbox {
     debug: bool,
 }
 
+fn split_shell_words(input: &str) -> std::result::Result<Vec<String>, &'static str> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut quote = None;
+    let mut escaped = false;
+
+    for character in input.chars() {
+        if escaped {
+            current.push(character);
+            escaped = false;
+            continue;
+        }
+        match quote {
+            Some('\'') => {
+                if character == '\'' {
+                    quote = None;
+                } else {
+                    current.push(character);
+                }
+            }
+            Some('"') => match character {
+                '"' => quote = None,
+                '\\' => escaped = true,
+                _ => current.push(character),
+            },
+            _ => match character {
+                '\'' | '"' => quote = Some(character),
+                '\\' => escaped = true,
+                character if character.is_whitespace() => {
+                    if !current.is_empty() {
+                        words.push(std::mem::take(&mut current));
+                    }
+                }
+                _ => current.push(character),
+            },
+        }
+    }
+    if escaped || quote.is_some() {
+        return Err("unterminated quoted value");
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    Ok(words)
+}
+
 impl IsolatedSandbox {
     /// 创建新的隔离沙箱
     pub fn new(debug: bool) -> Result<Self> {
@@ -182,6 +228,9 @@ impl IsolatedSandbox {
     pub fn setup(&mut self, test_case: &TestCase) -> Result<()> {
         self.debug_fmt(format_args!("Starting sandbox environment setup"));
         self.debug_fmt(format_args!("Sandbox root directory: {:?}", self.path()));
+
+        self.current_env
+            .extend(test_case.environment.env_vars.clone());
 
         // 创建测试所需的文件和目录
         for file in &test_case.environment.files {
@@ -349,6 +398,7 @@ impl IsolatedSandbox {
         match command.split_whitespace().next() {
             Some("cd") => self.builtin_cd(command),
             Some("export") => self.builtin_export(command),
+            Some("unset") => self.builtin_unset(command),
             Some("umask") => self.builtin_umask(command),
             _ => self.execute_external_command(command),
         }
@@ -387,11 +437,38 @@ impl IsolatedSandbox {
 
     /// 处理export命令
     fn builtin_export(&mut self, command: &str) -> Result<CommandResult> {
-        let args: Vec<&str> = command.split_whitespace().skip(1).collect();
+        let args = match split_shell_words(command.strip_prefix("export").unwrap_or_default()) {
+            Ok(args) => args,
+            Err(message) => {
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("export: {message}\n"),
+                    exit_code: 1,
+                });
+            }
+        };
         for arg in args {
             if let Some((key, value)) = arg.split_once('=') {
                 self.current_env.insert(key.to_string(), value.to_string());
             }
+        }
+        Ok(CommandResult::default())
+    }
+
+    /// 处理unset命令
+    fn builtin_unset(&mut self, command: &str) -> Result<CommandResult> {
+        let args = match split_shell_words(command.strip_prefix("unset").unwrap_or_default()) {
+            Ok(args) => args,
+            Err(message) => {
+                return Ok(CommandResult {
+                    stdout: String::new(),
+                    stderr: format!("unset: {message}\n"),
+                    exit_code: 1,
+                });
+            }
+        };
+        for key in args {
+            self.current_env.remove(&key);
         }
         Ok(CommandResult::default())
     }
@@ -1320,6 +1397,20 @@ mod tests {
     }
 
     #[test]
+    fn test_shell_environment_builtins_persist_quoted_values_and_unsets() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+
+        sandbox.execute_shell_command("export LC_ALL='C.UTF-8'")?;
+        assert_eq!(sandbox.get_env("LC_ALL"), Some("C.UTF-8"));
+
+        sandbox.add_env("POSIXLY_CORRECT", "1");
+        sandbox.execute_shell_command("unset POSIXLY_CORRECT")?;
+        assert_eq!(sandbox.get_env("POSIXLY_CORRECT"), None);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_command_execution_with_working_dir() -> Result<()> {
         let mut sandbox = IsolatedSandbox::new(false)?;
 
@@ -1450,11 +1541,10 @@ mod tests {
             timestamp: None,
         });
 
-        // 手动添加环境变量到sandbox
-        sandbox.add_env("TEST_ENV_VAR", "test_value");
-
         // 设置沙箱环境
         sandbox.setup(&test_case)?;
+
+        assert_eq!(sandbox.get_env("TEST_ENV_VAR"), Some("test_value"));
 
         // 验证工作目录
         assert_eq!(

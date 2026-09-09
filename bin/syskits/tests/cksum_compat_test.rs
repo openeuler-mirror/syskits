@@ -1,27 +1,6 @@
-use std::io::Write;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use tempfile::TempDir;
-
-fn expected_crc_debug_stderr() -> &'static str {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if std::arch::is_x86_feature_detected!("pclmulqdq")
-            && std::arch::is_x86_feature_detected!("avx")
-        {
-            "cksum: using pclmul hardware support\n"
-        } else {
-            "cksum: pclmul support not detected\n"
-        }
-    }
-
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-    {
-        ""
-    }
-}
 
 #[test]
 fn cksum_verify_only_options_fail_outside_check_mode() {

@@ -1,18 +1,5 @@
 use std::process::Command;
 
-#[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
-
-fn locale_available(locale: &str) -> bool {
-    let output = Command::new("locale")
-        .arg("-a")
-        .output()
-        .expect("list installed locales");
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .any(|installed| installed == locale)
-}
-
 #[test]
 fn seq_terminates_with_sigpipe_when_the_reader_closes() {
     let output = Command::new("/bin/bash")

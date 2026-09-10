@@ -1004,6 +1004,32 @@
             },
             "cleanup_commands": ["rm -f wc-output-a wc-output-b"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；通过保留为直接父进程的bash将stdout连接到无读端管道；GNU按默认SIGPIPE处置终止且不输出write error，预期RC=141",
+            "args": ["-c", "wc-pipe-input"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf 'pipe\\n' > wc-pipe-input"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-pipe-input"],
+            "tstdin": ""
         }
     ]
 }

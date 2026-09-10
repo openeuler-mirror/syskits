@@ -527,6 +527,29 @@
         {
             "tstdin": "",
             "command": "who",
+            "description": "export LC_ALL='C'，export TZ='UTC0'；执行who -r utmp；输入fixture：RUN_LVL记录PID=13109，高字节为前一运行级别字符3、低字节为当前运行级别字符5，时间2024-02-29 13:00:00 UTC；预期RC=0，stdout末尾注释为last=3，stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "printf '%s\\n' '[1] [13109] [~~  ] [runlevel] [~           ] [kernel              ] [0.0.0.0        ] [2024-02-29T13:00:00,000000+00:00]' | /usr/bin/utmpdump -r > utmp"
+            ],
+            "args": [
+                "-r",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "         run-level 5  Feb 29 13:00                   last=3\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
             "description": "LC_TIME=POSIX locale 测试 - 英文月份格式",
             "setup_commands": [
                 "export LC_TIME=POSIX"

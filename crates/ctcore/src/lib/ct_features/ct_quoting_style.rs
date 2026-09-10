@@ -20,7 +20,7 @@ unsafe extern "C" {
 // 这些是在shell（如bash）中有特殊含义的字符。
 // 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
 const CT_SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-const CT_SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
+const CT_SPECIAL_SHELL_CHARS: &str = "`$&*()|[{};\\'\"<>?! ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CtQuotingStyle {
@@ -1065,6 +1065,20 @@ mod tests {
         assert_eq!(escape_name(OsStr::new("a'b;"), &style), "'a'\\''b;'");
         assert_eq!(escape_unibyte_shell_bytes(b"a'b#"), "'a'\\''b#'");
         assert_eq!(escape_name(OsStr::new("a'b#"), &style), "'a'\\''b#'");
+    }
+
+    #[test]
+    fn shell_escape_quoting_leaves_right_bracket_unquoted() {
+        let style = CtQuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control: true,
+        };
+
+        assert_eq!(escape_unibyte_shell_bytes(b"]"), "]");
+        assert_eq!(escape_name(OsStr::new("a]"), &style), "a]");
+        assert_eq!(escape_unibyte_shell_bytes(b"["), "'['");
+        assert_eq!(escape_name(OsStr::new("a["), &style), "'a['");
     }
 
     #[test]

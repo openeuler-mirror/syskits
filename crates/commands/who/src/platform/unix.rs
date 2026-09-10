@@ -344,6 +344,14 @@ fn pad_right_bytes(value: &[u8], target_width: usize) -> Vec<u8> {
     output
 }
 
+fn trim_user_name(name: &[u8]) -> &[u8] {
+    let length = name
+        .iter()
+        .rposition(|byte| *byte != b' ')
+        .map_or(0, |index| index + 1);
+    &name[..length]
+}
+
 impl Who {
     #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> CTResult<()> {
@@ -363,7 +371,7 @@ impl Who {
                 .filter(|utmpx| {
                     utmpx.is_user_process() && should_keep_user_pid(check_pids, true, utmpx.pid())
                 })
-                .map(|utmpx| utmpx.user_bytes().to_vec())
+                .map(|utmpx| trim_user_name(utmpx.user_bytes()).to_vec())
                 .collect::<Vec<_>>();
             let mut output = Vec::new();
             for (index, user) in users.iter().enumerate() {
@@ -1257,6 +1265,13 @@ mod tests {
             pad_right_bytes("中".as_bytes(), 4),
             ["中".as_bytes(), b" "].concat()
         );
+    }
+
+    #[test]
+    fn count_output_trims_only_trailing_ascii_spaces_from_user_names() {
+        assert_eq!(trim_user_name(b"alice   "), b"alice");
+        assert_eq!(trim_user_name(b"a b"), b"a b");
+        assert_eq!(trim_user_name(&[0xff, b' ']), &[0xff]);
     }
 
     #[test]

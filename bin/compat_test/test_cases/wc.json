@@ -851,6 +851,27 @@
             },
             "cleanup_commands": ["rm -f wc-invalid-locale"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "原始字节用例：LC_ALL=C；统计文件名包含0xff且不含换行的普通文件；GNU成功输出时原样保留文件名字节，预期RC=0、stderr为空、stdout完整十六进制为3020312033206e6f6e7574662dff0a",
+            "args": ["6e6f6e7574662dff"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf '%b' '\\156\\157\\156\\165\\164\\146\\055\\377'); printf '%b' '\\141\\142\\143' > \"$p\"; chmod 644 -- \"$p\""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3020312033206e6f6e7574662dff0a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

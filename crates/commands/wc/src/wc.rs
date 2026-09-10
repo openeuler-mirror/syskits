@@ -300,6 +300,22 @@ impl<'a> WcInput<'a> {
         }
     }
 
+    /// Convert the input to the byte-preserving title used by classic output.
+    fn to_output_title(&self) -> Option<Cow<'_, [u8]>> {
+        match self {
+            Self::Path(path) => {
+                let bytes = path.as_os_str().as_encoded_bytes();
+                Some(if bytes.contains(&b'\n') {
+                    Cow::Owned(escape_name(path.as_os_str(), WC_QS_ESCAPE).into_bytes())
+                } else {
+                    Cow::Borrowed(bytes)
+                })
+            }
+            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(WC_STDIN_REPR.as_bytes())),
+            Self::Stdin(StdinKind::Implicit) => None,
+        }
+    }
+
     /// 将输入转换为错误显示的形式
     fn path_display(&self) -> String {
         match self {
@@ -1457,20 +1473,21 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
             max(total_word_count.max_line_length, word_count.max_line_length);
 
         if are_stats_visible {
-            let maybe_title = input.to_title();
-            let maybe_title_str = maybe_title.as_deref();
-            let _ =
-                print_stats(settings, &word_count, maybe_title_str, number_width).map_err(|err| {
-                    let title = maybe_title_str.unwrap_or("<stdin>");
+            let maybe_title = input.to_output_title();
+            let maybe_title_bytes = maybe_title.as_deref();
+            let _ = print_stats(settings, &word_count, maybe_title_bytes, number_width).map_err(
+                |err| {
+                    let title = input.path_display();
                     ct_show!(err.map_err_context(|| format!("failed to print result for {title}")))
-                });
+                },
+            );
         }
     }
 
     let total_row_visible = settings.total_when.is_total_row_visible(num_inputs);
     if total_row_visible {
         let total_text = t!("wc.total_row");
-        let title = are_stats_visible.then_some(total_text.as_str());
+        let title = are_stats_visible.then_some(total_text.as_bytes());
         print_stats(settings, &total_word_count, title, number_width).unwrap_or_else(|err| {
             ct_show!(err.map_err_context(|| "failed to print total".into()));
         });
@@ -1532,7 +1549,7 @@ fn saturating_add_with_overflow(lhs: usize, rhs: usize) -> (usize, bool) {
 fn print_stats(
     settings: &WcSettings,
     result: &WcWordCount,
-    title: Option<&str>,
+    title: Option<&[u8]>,
     number_width: usize,
 ) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
@@ -1546,7 +1563,13 @@ fn render_stats_line(
     number_width: usize,
 ) -> io::Result<String> {
     let mut buffer = Vec::new();
-    write_stats(&mut buffer, settings, result, title, number_width)?;
+    write_stats(
+        &mut buffer,
+        settings,
+        result,
+        title.map(str::as_bytes),
+        number_width,
+    )?;
     let line = String::from_utf8(buffer).expect("wc output is valid utf-8");
     Ok(line.trim_end_matches('\n').to_string())
 }
@@ -1555,7 +1578,7 @@ fn write_stats<W: Write>(
     writer: &mut W,
     settings: &WcSettings,
     result: &WcWordCount,
-    title: Option<&str>,
+    title: Option<&[u8]>,
     number_width: usize,
 ) -> io::Result<()> {
     let maybe_cols = &[
@@ -1573,7 +1596,9 @@ fn write_stats<W: Write>(
     }
 
     if let Some(title) = title {
-        writeln!(writer, "{space}{title}")
+        writer.write_all(space.as_bytes())?;
+        writer.write_all(title)?;
+        writer.write_all(b"\n")
     } else {
         writeln!(writer)
     }
@@ -2178,6 +2203,20 @@ mod tests {
         );
         assert_eq!(input_stdin_explicit.to_title(), Some(Cow::Borrowed("-")));
         assert!(input_stdin_implicit.to_title().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_output_title_preserves_non_utf8_path_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = OsString::from_vec(b"nonutf-\xff".to_vec());
+        let input = WcInput::Path(Cow::Owned(PathBuf::from(path)));
+
+        assert_eq!(
+            input.to_output_title().as_deref(),
+            Some(&b"nonutf-\xff"[..])
+        );
     }
 
     #[test]

@@ -855,6 +855,26 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who --=；GNU getopt_long将空名称视为全部长选项的共同前缀，应按longopts顺序报告全部模糊候选，预期RC=1、stdout为空并输出简洁诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--="
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: option '--=' is ambiguous; possibilities: '--all' '--boot' '--count' '--dead' '--heading' '--login' '--lookup' '--message' '--mesg' '--process' '--runlevel' '--short' '--time' '--users' '--writable' '--help' '--version'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

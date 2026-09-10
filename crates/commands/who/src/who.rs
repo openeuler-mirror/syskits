@@ -262,9 +262,6 @@ enum LongOptionMatch {
 }
 
 fn match_long_option(name: &[u8]) -> LongOptionMatch {
-    if name.is_empty() {
-        return LongOptionMatch::None;
-    }
     if let Some((option, _)) = WHO_LONG_OPTIONS
         .iter()
         .find(|(option, _)| option.as_bytes() == name)
@@ -442,6 +439,17 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "option '--l' is ambiguous; possibilities: '--login' '--lookup'"
+        );
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn empty_long_option_name_is_ambiguous_with_all_options() {
+        let args = ["who", "--="].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "option '--=' is ambiguous; possibilities: '--all' '--boot' '--count' '--dead' '--heading' '--login' '--lookup' '--message' '--mesg' '--process' '--runlevel' '--short' '--time' '--users' '--writable' '--help' '--version'"
         );
         assert!(error.usage());
     }

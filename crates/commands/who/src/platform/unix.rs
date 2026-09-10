@@ -13,7 +13,10 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
-use ctcore::libc::{ESRCH, S_IWGRP, STDIN_FILENO, kill, ttyname};
+use ctcore::libc::{
+    CLOCK_BOOTTIME, CLOCK_REALTIME, ESRCH, S_IWGRP, STDIN_FILENO, clock_gettime, kill, timespec,
+    ttyname,
+};
 use rust_i18n::t;
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -228,6 +231,55 @@ fn should_keep_user_pid(check_pids: bool, is_user_process: bool, pid: i32) -> bo
     status == 0 || std::io::Error::last_os_error().raw_os_error() != Some(ESRCH)
 }
 
+fn linux_boot_time() -> Option<i64> {
+    for path in [
+        "/var/lib/systemd/random-seed",
+        "/var/lib/urandom/random-seed",
+        "/var/lib/random-seed",
+        ct_utmpx::DEFAULT_FILE,
+    ] {
+        if let Ok(metadata) = std::fs::metadata(path) {
+            return Some(metadata.mtime());
+        }
+    }
+
+    let mut uptime = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let mut now = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    if unsafe { clock_gettime(CLOCK_BOOTTIME, &mut uptime) } != 0
+        || unsafe { clock_gettime(CLOCK_REALTIME, &mut now) } != 0
+    {
+        return None;
+    }
+
+    Some(now.tv_sec - uptime.tv_sec - i64::from(now.tv_nsec < uptime.tv_nsec))
+}
+
+fn fallback_boot_time(source: &str, need_boot_time: bool, saw_boot_time: bool) -> Option<i64> {
+    (need_boot_time && !saw_boot_time && source == ct_utmpx::DEFAULT_FILE)
+        .then(linux_boot_time)
+        .flatten()
+}
+
+fn time_string_from_timestamp(timestamp: i64) -> String {
+    let utc = time::OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
+    let offset = time::UtcOffset::local_offset_at(utc).unwrap_or(time::UtcOffset::UTC);
+    let local = utc.to_offset(offset);
+    let format = if hard_locale_time() {
+        "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]"
+    } else {
+        "[month repr:short] [day padding:space] [hour]:[minute]"
+    };
+    local
+        .format(&time::format_description::parse(format).unwrap())
+        .unwrap()
+}
+
 fn time_string(utmpx: &CtUtmpx) -> String {
     // Use ctcore's hard_locale_time() function (consistent with GNU coreutils)
     let time_fmt = if hard_locale_time() {
@@ -321,6 +373,7 @@ impl Who {
         } else {
             let records = CtUtmpx::iter_all_records_from(f);
             let mut boot_time = i64::MIN;
+            let mut saw_boot_time = false;
 
             if self.is_include_heading {
                 self.print_head();
@@ -362,6 +415,20 @@ impl Who {
 
                 boot_time =
                     updated_boot_time(boot_time, utmpx.record_type(), utmpx.timestamp_seconds());
+                saw_boot_time |= utmpx.record_type() == ct_utmpx::BOOT_TIME;
+            }
+
+            if let Some(timestamp) = fallback_boot_time(f, self.is_need_boottime, saw_boot_time) {
+                self.print_line(
+                    "",
+                    ' ',
+                    &t!("who.output.system_boot"),
+                    &time_string_from_timestamp(timestamp),
+                    "",
+                    "",
+                    "",
+                    "",
+                );
             }
         }
         Ok(())
@@ -871,6 +938,7 @@ impl Who {
 
         let records = CtUtmpx::iter_all_records_from(&source_file);
         let mut boot_time = i64::MIN;
+        let mut saw_boot_time = false;
         if self.is_include_heading {
             let row = self.heading_row();
             self.push_row(
@@ -907,6 +975,7 @@ impl Who {
                 updated_boot_time(boot_time, utmpx.record_type(), utmpx.timestamp_seconds());
             if self.is_my_line_only && current_tty != utmpx.tty_device() {
                 boot_time = next_boot_time;
+                saw_boot_time |= utmpx.record_type() == ct_utmpx::BOOT_TIME;
                 continue;
             }
 
@@ -1002,6 +1071,23 @@ impl Who {
                 self.push_row(&mut semantic, row, display);
             }
             boot_time = next_boot_time;
+            saw_boot_time |= utmpx.record_type() == ct_utmpx::BOOT_TIME;
+        }
+
+        if let Some(timestamp) =
+            fallback_boot_time(&source_file, self.is_need_boottime, saw_boot_time)
+        {
+            let time = time_string_from_timestamp(timestamp);
+            let (row, display) = self.build_simple_row(
+                "boot_time",
+                "",
+                &t!("who.output.system_boot"),
+                &time,
+                "",
+                "",
+                "",
+            );
+            self.push_row(&mut semantic, row, display);
         }
 
         Ok(semantic)
@@ -1058,6 +1144,17 @@ mod tests {
         assert!(should_keep_user_pid(true, false, missing_pid));
         assert!(should_keep_user_pid(true, true, 0));
         assert!(should_keep_user_pid(true, true, std::process::id() as i32));
+    }
+
+    #[test]
+    fn boot_fallback_is_limited_to_missing_default_records() {
+        assert!(fallback_boot_time(ct_utmpx::DEFAULT_FILE, true, false).is_some());
+        assert_eq!(
+            fallback_boot_time(ct_utmpx::DEFAULT_FILE, false, false),
+            None
+        );
+        assert_eq!(fallback_boot_time(ct_utmpx::DEFAULT_FILE, true, true), None);
+        assert_eq!(fallback_boot_time("other-utmp", true, false), None);
     }
 
     #[test]

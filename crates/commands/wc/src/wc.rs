@@ -893,6 +893,23 @@ fn word_count_from_reader<T: WcWordCountable>(
         return word_count_from_c_locale_reader(reader);
     }
 
+    if is_c_locale
+        && settings.is_show_chars
+        && !settings.is_show_lines
+        && !settings.is_show_words
+        && !settings.is_show_max_line_length
+    {
+        let (bytes, error) = count_bytes_handle(&mut reader);
+        return (
+            WcWordCount {
+                bytes,
+                chars: bytes,
+                ..WcWordCount::default()
+            },
+            error,
+        );
+    }
+
     #[cfg(unix)]
     if !locale.is_c
         && (settings.is_show_chars || settings.is_show_words || settings.is_show_max_line_length)
@@ -1949,9 +1966,9 @@ impl Tool for Wc {
 mod tests {
     use std::borrow::Cow;
     use std::ffi::OsString;
-    use std::io::{Seek, SeekFrom, Write};
+    use std::io::{BufReader, Read, Seek, SeekFrom, Write};
     #[cfg(unix)]
-    use std::os::fd::AsRawFd;
+    use std::os::fd::{AsRawFd, RawFd};
     use std::path::PathBuf;
     #[cfg(unix)]
     use std::sync::Mutex;
@@ -1965,6 +1982,33 @@ mod tests {
 
     struct FailingWriter {
         attempts: usize,
+    }
+
+    #[cfg(unix)]
+    struct PanicOnReadFile(File);
+
+    #[cfg(unix)]
+    impl Read for PanicOnReadFile {
+        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+            panic!("C locale character-only counting must not read a sized regular file")
+        }
+    }
+
+    #[cfg(unix)]
+    impl WcWordCountable for PanicOnReadFile {
+        type Buffered = BufReader<Self>;
+
+        fn buffered(self) -> Self::Buffered {
+            BufReader::new(self)
+        }
+
+        fn inner_file(&mut self) -> Option<&mut File> {
+            Some(&mut self.0)
+        }
+
+        fn raw_fd(&self) -> Option<RawFd> {
+            Some(self.0.as_raw_fd())
+        }
     }
 
     impl Write for FailingWriter {
@@ -2922,6 +2966,53 @@ mod tests {
         }
 
         assert!(WcLocale::from_environment().is_c);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_c_locale_character_only_count_uses_regular_file_size() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::c_locale_character_only_count_uses_regular_file_size_child",
+            ])
+            .env("WC_C_LOCALE_CHAR_FAST_CHILD", "1")
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn c_locale_character_only_count_uses_regular_file_size_child() {
+        if std::env::var_os("WC_C_LOCALE_CHAR_FAST_CHILD").is_none() {
+            return;
+        }
+
+        let mut file = tempfile().expect("tempfile");
+        file.write_all(b"thirteen-byte").expect("write test file");
+        file.flush().expect("flush test file");
+        let settings = WcSettings {
+            is_show_bytes: false,
+            is_show_chars: true,
+            is_show_lines: false,
+            is_show_words: false,
+            is_show_max_line_length: false,
+            files0_from: None,
+            total_when: WcTotalWhen::Auto,
+        };
+
+        let (count, error) = word_count_from_reader(PanicOnReadFile(file), &settings);
+
+        assert!(error.is_none());
+        assert_eq!(count.chars, 13);
+        assert_eq!(count.bytes, 13);
     }
 
     #[test]

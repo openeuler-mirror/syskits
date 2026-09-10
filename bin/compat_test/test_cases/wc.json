@@ -650,6 +650,47 @@
             },
             "cleanup_commands": ["rm -f wc-prefix-a wc-prefix-b"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；--files0-from=-从重定向stdin读取三个NUL分隔记录：有效文件、禁止的-、有效文件；GNU报告中间记录后继续统计并输出总计，预期RC=1",
+            "args": ["--files0-from=-"],
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT",
+                "printf 'x\\n' > wc-files0-good"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0 1 2 wc-files0-good\n0 1 2 wc-files0-good\n0 2 4 total\n",
+                    "stderr": "wc: when reading file names from stdin, no file name of '-' allowed\n"
+                }
+            },
+            "cleanup_commands": ["rm -f wc-files0-good"],
+            "tstdin": "wc-files0-good\u0000-\u0000wc-files0-good\u0000"
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；--files0-from=-从重定向普通文件预读一小一大两个文件名；GNU根据文件总大小使用三列宽度对齐计数",
+            "args": ["-c", "--files0-from=-"],
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT",
+                "printf xx > wc-files0-small",
+                "printf '%123s' '' > wc-files0-large"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "  2 wc-files0-small\n123 wc-files0-large\n125 total\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-files0-small wc-files0-large"],
+            "tstdin": "wc-files0-small\u0000wc-files0-large\u0000"
         }
     ]
 }

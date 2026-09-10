@@ -332,6 +332,7 @@ pub(crate) fn escape_unibyte_c_bytes(name: &[u8], quotes: CtQuotes) -> String {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
     if name.is_ascii() {
         let ascii = unsafe { std::str::from_utf8_unchecked(name) };
@@ -356,6 +357,7 @@ pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
     }
 }
 
+#[cfg(test)]
 fn escape_unibyte_shell_bytes_pass(name: &[u8], mut in_dollar: bool) -> (String, bool, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
@@ -409,6 +411,168 @@ fn escape_unibyte_shell_bytes_pass(name: &[u8], mut in_dollar: bool) -> (String,
         }
     }
     (escaped_str, must_quote, in_dollar)
+}
+
+#[derive(Clone, Copy)]
+enum ShellByteSegment {
+    Ascii {
+        byte: u8,
+        index: usize,
+    },
+    Locale {
+        start: usize,
+        end: usize,
+        printable: bool,
+    },
+}
+
+pub(crate) fn escape_shell_bytes_with_classifier<F>(name: &[u8], mut classify: F) -> Vec<u8>
+where
+    F: FnMut(&[u8]) -> (usize, bool),
+{
+    if name.is_empty() {
+        return b"''".to_vec();
+    }
+
+    let mut segments = Vec::with_capacity(name.len());
+    let mut index = 0;
+    while index < name.len() {
+        let byte = name[index];
+        if byte.is_ascii() {
+            segments.push(ShellByteSegment::Ascii { byte, index });
+            index += 1;
+        } else {
+            let (length, printable) = classify(&name[index..]);
+            let length = length.clamp(1, name.len() - index);
+            segments.push(ShellByteSegment::Locale {
+                start: index,
+                end: index + length,
+                printable,
+            });
+            index += length;
+        }
+    }
+
+    let mut encountered_apostrophe = false;
+    let mut all_c_and_shell_quote_compatible = true;
+    for segment in &segments {
+        match *segment {
+            ShellByteSegment::Ascii { byte, index } => {
+                let character = char::from(byte);
+                encountered_apostrophe |= character == '\'';
+                all_c_and_shell_quote_compatible &= c_and_shell_quote_compatible(character, index);
+            }
+            ShellByteSegment::Locale { printable, .. } => {
+                all_c_and_shell_quote_compatible &= printable;
+            }
+        }
+    }
+
+    if encountered_apostrophe && all_c_and_shell_quote_compatible {
+        let mut escaped = Vec::with_capacity(name.len() + 2);
+        escaped.push(b'"');
+        escaped.extend_from_slice(name);
+        escaped.push(b'"');
+        return escaped;
+    }
+
+    let (escaped, must_quote, in_dollar) = escape_shell_byte_segments_pass(name, &segments, false);
+    let (escaped, mut must_quote) = if encountered_apostrophe && in_dollar {
+        let (escaped, must_quote, _) = escape_shell_byte_segments_pass(name, &segments, true);
+        (escaped, must_quote)
+    } else {
+        (escaped, must_quote)
+    };
+
+    must_quote |= matches!(name.first(), Some(b'~' | b'#'));
+    if must_quote {
+        let mut quoted = Vec::with_capacity(escaped.len() + 2);
+        quoted.push(b'\'');
+        quoted.extend_from_slice(&escaped);
+        quoted.push(b'\'');
+        quoted
+    } else {
+        escaped
+    }
+}
+
+fn escape_shell_byte_segments_pass(
+    name: &[u8],
+    segments: &[ShellByteSegment],
+    mut in_dollar: bool,
+) -> (Vec<u8>, bool, bool) {
+    let mut must_quote = false;
+    let mut escaped = Vec::with_capacity(name.len());
+
+    for segment in segments {
+        match *segment {
+            ShellByteSegment::Ascii { byte, .. } => {
+                let escaped_character =
+                    CtEscapedChar::new_shell(char::from(byte), true, CtQuotes::Single);
+                match escaped_character.state {
+                    CtEscapeState::Char(character) => {
+                        if in_dollar {
+                            escaped.extend_from_slice(b"''");
+                            in_dollar = false;
+                        }
+                        escaped.push(character as u8);
+                    }
+                    CtEscapeState::ForceQuote(character) => {
+                        if in_dollar {
+                            escaped.extend_from_slice(b"''");
+                            in_dollar = false;
+                        }
+                        must_quote = true;
+                        escaped.push(character as u8);
+                    }
+                    CtEscapeState::Backslash('\'') => {
+                        must_quote = true;
+                        in_dollar = false;
+                        escaped.extend_from_slice(b"'\\''");
+                    }
+                    _ => {
+                        if !in_dollar {
+                            escaped.extend_from_slice(b"'$'");
+                            in_dollar = true;
+                        }
+                        must_quote = true;
+                        escaped.extend(escaped_character.map(|character| character as u8));
+                    }
+                }
+            }
+            ShellByteSegment::Locale {
+                start,
+                end,
+                printable,
+            } => {
+                let bytes = &name[start..end];
+                if printable {
+                    if in_dollar {
+                        escaped.extend_from_slice(b"''");
+                        in_dollar = false;
+                    }
+                    must_quote |= bytes[1..]
+                        .iter()
+                        .any(|byte| matches!(byte, b'[' | b'\\' | b'^' | b'`' | b'|'));
+                    escaped.extend_from_slice(bytes);
+                } else {
+                    if !in_dollar {
+                        escaped.extend_from_slice(b"'$'");
+                        in_dollar = true;
+                    }
+                    must_quote = true;
+                    for byte in bytes {
+                        escaped.push(b'\\');
+                        escaped.push(b'0' + (byte >> 6));
+                        escaped.push(b'0' + ((byte >> 3) & 0o7));
+                        escaped.push(b'0' + (byte & 0o7));
+                    }
+                }
+            }
+        }
+    }
+
+    (escaped, must_quote, in_dollar)
 }
 
 pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
@@ -556,7 +720,8 @@ impl fmt::Display for CtQuotes {
 #[cfg(test)]
 mod tests {
     use crate::ct_quoting_style::{
-        CtQuotes, CtQuotingStyle, escape_name, escape_unibyte_c_bytes, escape_unibyte_shell_bytes,
+        CtQuotes, CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier,
+        escape_unibyte_c_bytes, escape_unibyte_shell_bytes,
     };
     use std::ffi::OsStr;
 
@@ -1072,6 +1237,42 @@ mod tests {
         assert_eq!(
             escape_unibyte_shell_bytes(b"a\xc3\xa9b"),
             "'a'$'\\303\\251''b'"
+        );
+    }
+
+    #[test]
+    fn shell_byte_quoting_uses_locale_character_boundaries_and_printability() {
+        // Invalid UTF-8 byte ff -> ASCII shell text ''$'\377'.
+        assert_eq!(
+            escape_shell_bytes_with_classifier(&[0xff], |_| (1, false)),
+            b"''$'\\377'"
+        );
+
+        // Printable GBK bytes c2 81 -> the same two raw bytes.
+        assert_eq!(
+            escape_shell_bytes_with_classifier(&[0xc2, 0x81], |_| (2, true)),
+            vec![0xc2, 0x81]
+        );
+
+        // Printable GBK e2 80 followed by incomplete 8b -> 'e2 80'$'\213'.
+        let mixed = escape_shell_bytes_with_classifier(&[0xe2, 0x80, 0x8b], |bytes| {
+            if bytes.starts_with(&[0xe2, 0x80]) {
+                (2, true)
+            } else {
+                (1, false)
+            }
+        });
+        assert_eq!(
+            mixed,
+            vec![
+                b'\'', 0xe2, 0x80, b'\'', b'$', b'\'', b'\\', b'2', b'1', b'3', b'\''
+            ]
+        );
+
+        // Printable ISO-8859-1 byte ff -> the same raw byte.
+        assert_eq!(
+            escape_shell_bytes_with_classifier(&[0xff], |_| (1, true)),
+            vec![0xff]
         );
     }
 

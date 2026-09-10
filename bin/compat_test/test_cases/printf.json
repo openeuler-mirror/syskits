@@ -1245,6 +1245,86 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；格式参数字节=2571（%q），参数字节=ff（非法UTF-8）；预期按原始单字节输出shell八进制转义''$'\\377'，不得替换为UTF-8 replacement character",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2571", "ff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "272724275c33373727",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=zh_CN.gbk；格式参数字节=2571（%q），参数字节=c281（GBK合法可打印双字节字符）；预期原样输出c281，不得按两个不可打印字节转义",
+            "setup_commands": [
+                "export LC_ALL=zh_CN.gbk",
+                "export LANG=zh_CN.gbk",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2571", "c281"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c281",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=zh_CN.gbk；格式参数字节=2571（%q），参数字节=e2808b（可打印GBK字符e280后接残缺字节8b）；预期原样引用e280并将8b转为shell八进制转义",
+            "setup_commands": [
+                "export LC_ALL=zh_CN.gbk",
+                "export LANG=zh_CN.gbk",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2571", "e2808b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "27e2802724275c32313327",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=en_US.iso88591；格式参数字节=2571（%q），参数字节=ff（ISO-8859-1可打印单字节）；预期原样输出ff，不得固定转为八进制转义",
+            "setup_commands": [
+                "export LC_ALL=en_US.iso88591",
+                "export LANG=en_US.iso88591",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2571", "ff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -709,6 +709,28 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who a b c；GNU仅允许FILE或ARG1 ARG2，第三个操作数c应报告extra operand，预期RC=1、stdout为空并输出GNU简洁诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: extra operand 'c'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

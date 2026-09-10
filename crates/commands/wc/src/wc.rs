@@ -1859,6 +1859,15 @@ mod tests {
     }
 
     #[test]
+    fn test_files0_conflict_uses_gnu_lowercase_diagnostic() {
+        set_locale("en-US");
+        assert_eq!(
+            WcError::disabled_files(&OsString::from("extra")).to_string(),
+            "extra operand 'extra'\nfile operands cannot be combined with --files0-from"
+        );
+    }
+
+    #[test]
     fn test_tool_implementation() {
         let tool = Wc;
 

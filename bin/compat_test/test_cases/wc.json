@@ -1314,6 +1314,50 @@
         },
         {
             "command": "wc",
+            "description": "LC_ALL=C；无参数选项--chars携带附加值；GNU getopt_long报告规范选项名及doesn't allow an argument",
+            "args": ["--chars=x"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: option '--chars' doesn't allow an argument\nTry 'wc --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；--chars唯一缩写--cha携带附加值；GNU getopt_long仍报告规范选项名及doesn't allow an argument",
+            "args": ["--cha=x"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: option '--chars' doesn't allow an argument\nTry 'wc --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
             "description": "LC_ALL=C；--total使用空值；GNU XARGMATCH将同时匹配auto和always的空前缀报告为ambiguous并列出有效参数",
             "args": ["--total="],
             "setup_commands": [

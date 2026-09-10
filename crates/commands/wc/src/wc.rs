@@ -623,6 +623,12 @@ fn validate_gnu_option_arguments(args: &[OsString]) -> CTResult<()> {
             Some(separator) => (&long[..separator], Some(&long[separator + 1..])),
             None => (long, None),
         };
+        if let (Some(canonical), Some(_)) = (canonical_no_value_option(option), attached_value) {
+            return Err(CTsageError::new(
+                1,
+                format!("option '--{canonical}' doesn't allow an argument"),
+            ));
+        }
         let Some(canonical) = canonical_value_option(option) else {
             index += 1;
             continue;
@@ -650,6 +656,27 @@ fn validate_gnu_option_arguments(args: &[OsString]) -> CTResult<()> {
 
 fn canonical_value_option(option: &[u8]) -> Option<&'static str> {
     let mut matches = ["files0-from", "total"].into_iter().filter(|candidate| {
+        !option.is_empty()
+            && option.len() <= candidate.len()
+            && candidate.as_bytes().starts_with(option)
+    });
+    let canonical = matches.next()?;
+    matches.next().is_none().then_some(canonical)
+}
+
+fn canonical_no_value_option(option: &[u8]) -> Option<&'static str> {
+    let mut matches = [
+        "bytes",
+        "chars",
+        "lines",
+        "words",
+        "debug",
+        "max-line-length",
+        "help",
+        "version",
+    ]
+    .into_iter()
+    .filter(|candidate| {
         !option.is_empty()
             && option.len() <= candidate.len()
             && candidate.as_bytes().starts_with(option)
@@ -2259,6 +2286,29 @@ mod tests {
                 .expect_err("invalid total mode should fail");
 
             assert_eq!(error.to_string(), expected);
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn test_no_value_long_options_reject_attached_values_with_gnu_diagnostic() {
+        for (argument, canonical) in [
+            ("--bytes=x", "bytes"),
+            ("--cha=x", "chars"),
+            ("--lines=x", "lines"),
+            ("--words=x", "words"),
+            ("--max-line-length=x", "max-line-length"),
+            ("--debug=x", "debug"),
+            ("--help=x", "help"),
+            ("--version=x", "version"),
+        ] {
+            let error = wc_main([OsString::from("wc"), OsString::from(argument)].into_iter())
+                .expect_err("no-value option should reject an attached value");
+
+            assert_eq!(
+                error.to_string(),
+                format!("option '--{canonical}' doesn't allow an argument")
+            );
             assert!(error.usage());
         }
     }

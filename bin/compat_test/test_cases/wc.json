@@ -1289,6 +1289,31 @@
         },
         {
             "command": "wc",
+            "description": "Linux；LC_ALL=C；无文件操作数且stdin重定向自13字节普通文件；GNU通过fstat将隐式stdin文件大小用于默认三列宽度估算",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf 'one two\\nabcd\\n' > wc-implicit-stdin"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdinFile": "wc-implicit-stdin"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": " 2  3 13\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-implicit-stdin"],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
             "description": "LC_ALL=C；--total位于参数末尾且缺少必需值；GNU报告规范选项名及requires an argument并附加Try提示",
             "args": ["--total"],
             "setup_commands": [

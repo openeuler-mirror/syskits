@@ -1627,7 +1627,9 @@ fn word_count_from_input(input: &WcInput<'_>, settings: &WcSettings) -> CountRes
 fn compute_number_width(inputs: &WcInputs, settings: &WcSettings) -> usize {
     match inputs {
         WcInputs::Stdin if settings.number_enabled() == 1 => 1,
-        WcInputs::Stdin => WC_MINIMUM_WIDTH,
+        WcInputs::Stdin => {
+            compute_number_width_from_paths(&[WcInput::Stdin(StdinKind::Implicit)], settings, true)
+        }
         WcInputs::Files0From(_) => 1,
         WcInputs::Files0FromStdin(inputs) => {
             compute_number_width_from_paths(inputs, settings, false)
@@ -3253,6 +3255,21 @@ mod tests {
         let settings = WcSettings::new(&matches);
 
         assert_eq!(compute_number_width(&inputs, &settings), 1);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_compute_number_width_uses_implicit_regular_stdin_size() {
+        let _lock = STDIN_TEST_LOCK.lock().unwrap();
+        let mut stdin_file = tempfile::tempfile().unwrap();
+        stdin_file.write_all(b"one two\nabcd\n").unwrap();
+        stdin_file.seek(SeekFrom::Start(0)).unwrap();
+        let _saved_stdin = SavedStdin::replace_with(&stdin_file);
+
+        assert_eq!(
+            compute_number_width(&WcInputs::Stdin, &WcSettings::default()),
+            2
+        );
     }
 
     #[test]

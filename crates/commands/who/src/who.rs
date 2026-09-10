@@ -51,65 +51,78 @@ pub fn ct_app() -> Command {
             .long(who_flags::WHO_ALL)
             .short('a')
             .help(t!("who.clap.options.all"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_ALL),
         Arg::new(who_flags::WHO_BOOT)
             .long(who_flags::WHO_BOOT)
             .short('b')
             .help(t!("who.clap.options.boot"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_BOOT),
         Arg::new(who_flags::WHO_DEAD)
             .long(who_flags::WHO_DEAD)
             .short('d')
             .help(t!("who.clap.options.dead"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_DEAD),
         Arg::new(who_flags::WHO_HEADING)
             .long(who_flags::WHO_HEADING)
             .short('H')
             .help(t!("who.clap.options.heading"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_HEADING),
         Arg::new(who_flags::WHO_LOGIN)
             .long(who_flags::WHO_LOGIN)
             .short('l')
             .help(t!("who.clap.options.login"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_LOGIN),
         Arg::new(who_flags::WHO_LOOKUP)
             .long(who_flags::WHO_LOOKUP)
             .help(t!("who.clap.options.lookup"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_LOOKUP),
         Arg::new(who_flags::WHO_ONLY_HOSTNAME_USER)
             .short('m')
             .help(t!("who.clap.options.only_hostname_user"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_ONLY_HOSTNAME_USER),
         Arg::new(who_flags::WHO_PROCESS)
             .long(who_flags::WHO_PROCESS)
             .short('p')
             .help(t!("who.clap.options.process"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_PROCESS),
         Arg::new(who_flags::WHO_COUNT)
             .long(who_flags::WHO_COUNT)
             .short('q')
             .help(t!("who.clap.options.count"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_COUNT),
         Arg::new(who_flags::WHO_RUNLEVEL)
             .long(who_flags::WHO_RUNLEVEL)
             .short('r')
             .help(t!("who.clap.options.runlevel"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_RUNLEVEL),
         Arg::new(who_flags::WHO_SHORT)
             .long(who_flags::WHO_SHORT)
             .short('s')
             .help(t!("who.clap.options.short"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_SHORT),
         Arg::new(who_flags::WHO_TIME)
             .long(who_flags::WHO_TIME)
             .short('t')
             .help(t!("who.clap.options.time"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_TIME),
         Arg::new(who_flags::WHO_USERS)
             .long(who_flags::WHO_USERS)
             .short('u')
             .help(t!("who.clap.options.users"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(who_flags::WHO_USERS),
         Arg::new(who_flags::WHO_MESG)
             .long(who_flags::WHO_MESG)
             .short('T')
@@ -400,6 +413,38 @@ mod tests {
         let matches = command.try_get_matches_from(args).unwrap();
 
         assert!(matches.get_flag(who_flags::WHO_MESG));
+    }
+
+    #[test]
+    fn test_ct_app_repeated_boolean_options_are_idempotent() {
+        let repeated_options = [
+            ["-a", "--all"],
+            ["-b", "--boot"],
+            ["-d", "--dead"],
+            ["-H", "--heading"],
+            ["-l", "--login"],
+            ["--lookup", "--lookup"],
+            ["-m", "-m"],
+            ["-p", "--process"],
+            ["-q", "--count"],
+            ["-r", "--runlevel"],
+            ["-s", "--short"],
+            ["-t", "--time"],
+            ["-u", "--users"],
+        ];
+
+        for options in repeated_options {
+            let matches = ct_app().try_get_matches_from([
+                ctcore::ct_util_name(),
+                options[0],
+                options[1],
+                "utmp",
+            ]);
+            assert!(
+                matches.is_ok(),
+                "repeated options {options:?} were rejected"
+            );
+        }
     }
 
     #[test]

@@ -297,10 +297,18 @@ fn linux_boot_time() -> Option<i64> {
     Some(now.tv_sec - uptime.tv_sec - i64::from(now.tv_nsec < uptime.tv_nsec))
 }
 
-fn fallback_boot_time(source: &OsStr, need_boot_time: bool, saw_boot_time: bool) -> Option<i64> {
-    (need_boot_time && !saw_boot_time && source == OsStr::new(ct_utmpx::DEFAULT_FILE))
-        .then(linux_boot_time)
-        .flatten()
+fn fallback_boot_time(
+    source: &OsStr,
+    need_boot_time: bool,
+    saw_boot_time: bool,
+    my_line_only: bool,
+) -> Option<i64> {
+    (need_boot_time
+        && !saw_boot_time
+        && !my_line_only
+        && source == OsStr::new(ct_utmpx::DEFAULT_FILE))
+    .then(linux_boot_time)
+    .flatten()
 }
 
 fn time_string(timestamp: i64) -> String {
@@ -436,7 +444,12 @@ impl Who {
                 saw_boot_time |= utmpx.record_type() == ct_utmpx::BOOT_TIME;
             }
 
-            if let Some(timestamp) = fallback_boot_time(f, self.is_need_boottime, saw_boot_time) {
+            if let Some(timestamp) = fallback_boot_time(
+                f,
+                self.is_need_boottime,
+                saw_boot_time,
+                self.is_my_line_only,
+            ) {
                 self.print_line(
                     "",
                     ' ',
@@ -1103,9 +1116,12 @@ impl Who {
             saw_boot_time |= utmpx.record_type() == ct_utmpx::BOOT_TIME;
         }
 
-        if let Some(timestamp) =
-            fallback_boot_time(&source_file, self.is_need_boottime, saw_boot_time)
-        {
+        if let Some(timestamp) = fallback_boot_time(
+            &source_file,
+            self.is_need_boottime,
+            saw_boot_time,
+            self.is_my_line_only,
+        ) {
             let time = time_string(timestamp);
             let (row, display) = self.build_simple_row(
                 "boot_time",
@@ -1280,13 +1296,14 @@ mod tests {
     #[test]
     fn boot_fallback_is_limited_to_missing_default_records() {
         let default_file = OsStr::new(ct_utmpx::DEFAULT_FILE);
-        assert!(fallback_boot_time(default_file, true, false).is_some());
-        assert_eq!(fallback_boot_time(default_file, false, false), None);
-        assert_eq!(fallback_boot_time(default_file, true, true), None);
+        assert!(fallback_boot_time(default_file, true, false, false).is_some());
+        assert_eq!(fallback_boot_time(default_file, false, false, false), None);
+        assert_eq!(fallback_boot_time(default_file, true, true, false), None);
         assert_eq!(
-            fallback_boot_time(OsStr::new("other-utmp"), true, false),
+            fallback_boot_time(OsStr::new("other-utmp"), true, false, false),
             None
         );
+        assert_eq!(fallback_boot_time(default_file, true, false, true), None);
     }
 
     #[test]

@@ -691,6 +691,26 @@
             },
             "cleanup_commands": ["rm -f wc-files0-small wc-files0-large"],
             "tstdin": "wc-files0-small\u0000wc-files0-large\u0000"
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；输入为UTF-8编码的中文字节和换行；GNU C locale逐字节处理，高字节不可打印但-m仍按字节计数",
+            "args": ["-w", "-m", "-L", "wc-c-high-bytes"],
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '\\344\\270\\255\\012' > wc-c-high-bytes"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0 4 0 wc-c-high-bytes\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-c-high-bytes"],
+            "tstdin": ""
         }
     ]
 }

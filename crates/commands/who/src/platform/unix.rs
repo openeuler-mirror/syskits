@@ -198,6 +198,19 @@ fn idle_string_local<'a>(when: i64, boot_time: i64, now: i64) -> Cow<'a, str> {
     }
 }
 
+fn runlevel_comment(previous: u8) -> Option<String> {
+    if !(b' '..=b'~').contains(&previous) {
+        return None;
+    }
+
+    let previous = if previous == b'N' {
+        'S'
+    } else {
+        char::from(previous)
+    };
+    Some(format!("last={previous}"))
+}
+
 fn time_string(utmpx: &CtUtmpx) -> String {
     // Use ctcore's hard_locale_time() function (consistent with GNU coreutils)
     let time_fmt = if hard_locale_time() {
@@ -331,18 +344,14 @@ impl Who {
 
     #[inline]
     fn print_runlevel(&self, utmpx: &CtUtmpx) {
-        let last_runlevel = (utmpx.pid() / 256) as u8 as char;
+        let last_runlevel = (utmpx.pid() / 256) as u8;
         let current_runlevel = (utmpx.pid() % 256) as u8 as char;
         // Creating the run-level string
         let label = t!("who.output.run_level");
         let runlevel_line = format!("{label} {current_runlevel}");
 
         // 生成有关最后运行级别的注释
-        let comment = if last_runlevel == 'N' {
-            "last=S".to_string()
-        } else {
-            "last=N".to_string()
-        };
+        let comment = runlevel_comment(last_runlevel);
 
         self.print_line(
             "",
@@ -351,11 +360,7 @@ impl Who {
             &time_string(utmpx),
             "",
             "",
-            if last_runlevel.is_control() {
-                ""
-            } else {
-                &comment
-            },
+            comment.as_deref().unwrap_or(""),
             "",
         );
     }
@@ -863,26 +868,18 @@ impl Who {
                 self.push_row(&mut semantic, row, display);
             } else if self.is_need_runlevel && run_level_chk(utmpx.record_type()) {
                 if cfg!(target_os = "linux") {
-                    let last_runlevel = (utmpx.pid() / 256) as u8 as char;
+                    let last_runlevel = (utmpx.pid() / 256) as u8;
                     let current_runlevel = (utmpx.pid() % 256) as u8 as char;
                     let label = t!("who.output.run_level");
                     let runlevel_line = format!("{label} {current_runlevel}");
-                    let comment = if last_runlevel == 'N' {
-                        "last=S".to_string()
-                    } else {
-                        "last=N".to_string()
-                    };
+                    let comment = runlevel_comment(last_runlevel);
                     let (row, display) = self.build_simple_row(
                         "runlevel",
                         "",
                         &runlevel_line,
                         &time_string(&utmpx),
                         "",
-                        if last_runlevel.is_control() {
-                            ""
-                        } else {
-                            &comment
-                        },
+                        comment.as_deref().unwrap_or(""),
                         "",
                     );
                     self.push_row(&mut semantic, row, display);
@@ -987,6 +984,15 @@ mod tests {
             .unwrap();
         let who = who_from_matches(&matches);
         assert!(!who.is_short_output);
+    }
+
+    #[test]
+    fn runlevel_comment_reports_the_actual_printable_previous_level() {
+        assert_eq!(runlevel_comment(b'N').as_deref(), Some("last=S"));
+        assert_eq!(runlevel_comment(b'3').as_deref(), Some("last=3"));
+        assert_eq!(runlevel_comment(b' ').as_deref(), Some("last= "));
+        assert_eq!(runlevel_comment(0x1f), None);
+        assert_eq!(runlevel_comment(0xa0), None);
     }
 
     #[test]

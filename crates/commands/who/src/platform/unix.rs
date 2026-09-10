@@ -10,6 +10,7 @@
  */
 
 use ctcore::ct_display::Quotable;
+use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
@@ -229,6 +230,18 @@ fn should_keep_user_pid(check_pids: bool, is_user_process: bool, pid: i32) -> bo
 
     let status = unsafe { kill(pid, 0) };
     status == 0 || std::io::Error::last_os_error().raw_os_error() != Some(ESRCH)
+}
+
+fn tty_permissions_allow_messages(mode: u32, gid: u32, tty_group: Option<u32>) -> bool {
+    tty_group == Some(gid) && mode & S_IWGRP != 0
+}
+
+fn tty_is_writable(metadata: &std::fs::Metadata) -> bool {
+    tty_permissions_allow_messages(
+        metadata.mode(),
+        metadata.gid(),
+        ct_entries::grp2gid("tty").ok(),
+    )
 }
 
 fn linux_boot_time() -> Option<i64> {
@@ -547,12 +560,7 @@ impl Who {
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
-                #[cfg(target_os = "linux")]
-                let iwgrp = S_IWGRP;
-                let mesg = match meta.mode() & iwgrp == 0 {
-                    true => '-',
-                    false => '+',
-                };
+                let mesg = if tty_is_writable(&meta) { '+' } else { '-' };
 
                 (mesg, meta.atime())
             }
@@ -755,10 +763,7 @@ impl Who {
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
-                let mesg = match meta.mode() & S_IWGRP == 0 {
-                    true => '-',
-                    false => '+',
-                };
+                let mesg = if tty_is_writable(&meta) { '+' } else { '-' };
 
                 (mesg, meta.atime())
             }
@@ -1144,6 +1149,24 @@ mod tests {
         assert!(should_keep_user_pid(true, false, missing_pid));
         assert!(should_keep_user_pid(true, true, 0));
         assert!(should_keep_user_pid(true, true, std::process::id() as i32));
+    }
+
+    #[test]
+    fn tty_message_status_requires_the_tty_group_and_group_write_permission() {
+        let tty_gid = 5;
+
+        assert!(tty_permissions_allow_messages(
+            S_IWGRP,
+            tty_gid,
+            Some(tty_gid)
+        ));
+        assert!(!tty_permissions_allow_messages(
+            S_IWGRP,
+            tty_gid + 1,
+            Some(tty_gid)
+        ));
+        assert!(!tty_permissions_allow_messages(0, tty_gid, Some(tty_gid)));
+        assert!(!tty_permissions_allow_messages(S_IWGRP, tty_gid, None));
     }
 
     #[test]

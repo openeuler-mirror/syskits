@@ -25,7 +25,7 @@ use sys_locale::get_locale;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
-use ctcore::ct_error::{CTError, CTResult, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_show;
@@ -335,6 +335,22 @@ impl<'a> WcInput<'a> {
         match self {
             Self::Path(path) => escape_name(path.as_os_str(), WC_QS_ESCAPE),
             Self::Stdin(_) => String::from(WC_STDIN_REPR),
+        }
+    }
+
+    fn diagnostic_title(&self) -> Cow<'_, [u8]> {
+        match self {
+            Self::Path(path) => {
+                #[cfg(unix)]
+                {
+                    Cow::Owned(quote_output_name(path.as_os_str()))
+                }
+                #[cfg(not(unix))]
+                {
+                    Cow::Owned(escape_name(path.as_os_str(), WC_QS_ESCAPE).into_bytes())
+                }
+            }
+            Self::Stdin(_) => Cow::Borrowed(b"standard input"),
         }
     }
 
@@ -1485,10 +1501,10 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
         if let CountResult::Success(word_count_tmp) = word_cnt {
             word_count = word_count_tmp;
         } else if let CountResult::Interrupted(word_count_tmp, err) = word_cnt {
-            ct_show!(err.map_err_context(|| input.path_display()));
+            show_input_io_error(&input, &err);
             word_count = word_count_tmp;
         } else if let CountResult::Failure(err) = word_cnt {
-            ct_show!(err.map_err_context(|| input.path_display()));
+            show_input_io_error(&input, &err);
             continue;
         }
 
@@ -1587,6 +1603,26 @@ fn saturating_add_with_overflow(lhs: usize, rhs: usize) -> (usize, bool) {
         Some(sum) => (sum, false),
         None => (usize::MAX, true),
     }
+}
+
+fn render_input_io_error(utility_name: &str, input: &WcInput, error: &io::Error) -> Vec<u8> {
+    let title = input.diagnostic_title();
+    let message = strip_errno(error);
+    let mut diagnostic =
+        Vec::with_capacity(utility_name.len() + title.len() + message.len() + b": : \n".len());
+    diagnostic.extend_from_slice(utility_name.as_bytes());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(&title);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message.as_bytes());
+    diagnostic.push(b'\n');
+    diagnostic
+}
+
+fn show_input_io_error(input: &WcInput, error: &io::Error) {
+    set_ct_exit_code(1);
+    let diagnostic = render_input_io_error(ctcore::ct_util_name(), input, error);
+    let _ = io::stderr().lock().write_all(&diagnostic);
 }
 
 fn print_stats(
@@ -2273,6 +2309,21 @@ mod tests {
         assert_eq!(
             input.to_output_title().as_deref(),
             Some(&b"'a'$'\\377\\n''b'"[..])
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_input_io_diagnostic_quotes_non_utf8_path_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = OsString::from_vec(b"missing-\xff".to_vec());
+        let input = WcInput::Path(Cow::Owned(PathBuf::from(path)));
+        let error = io::Error::from_raw_os_error(libc::ENOENT);
+
+        assert_eq!(
+            render_input_io_error("wc", &input, &error),
+            b"wc: 'missing-'$'\\377': No such file or directory\n"
         );
     }
 

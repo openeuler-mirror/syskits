@@ -1344,6 +1344,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%g，参数0x1p-16445是精确可表示的long double次正规值；预期RC=0且不报告范围错误",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%g", "0x1p-16445"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "3.6452e-4951",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

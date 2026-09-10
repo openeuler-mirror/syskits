@@ -151,10 +151,10 @@ fn parse_quantized_long_double(
     input: &str,
 ) -> Result<ExtendedBigDecimal, LongDoubleParseError<'_>> {
     let parsed = parse_complete_long_double(input).map_err(|_| LongDoubleParseError::NotNumeric)?;
+    let value = quantize_long_double(&parsed.value);
     let range_error = parsed.range_error
         || overflows_long_double(&parsed.value)
-        || underflows_long_double(&parsed.value);
-    let value = quantize_long_double(&parsed.value);
+        || (underflows_long_double(&parsed.value) && parsed.value != value);
     if range_error {
         Err(LongDoubleParseError::OutOfRange(value))
     } else {
@@ -327,6 +327,26 @@ mod tests {
                 "input: {input}"
             );
         }
+    }
+
+    #[cfg(any(
+        target_arch = "x86",
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "loongarch64",
+        target_arch = "mips",
+        target_arch = "mips64",
+        target_arch = "riscv64",
+        target_arch = "s390x",
+        target_arch = "sparc64"
+    ))]
+    #[test]
+    fn accepts_exact_hexadecimal_subnormal_without_a_range_error() {
+        assert!(parse_long_double("0x1p-16445").is_ok());
+        assert!(matches!(
+            parse_long_double("1e-4932"),
+            Err(LongDoubleParseError::OutOfRange(_))
+        ));
     }
 
     #[test]

@@ -324,6 +324,13 @@ impl<'a> WcInput<'a> {
         }
     }
 
+    fn files0_source_display(&self) -> String {
+        match self {
+            Self::Path(path) => escape_name(path.as_os_str(), WC_QS_ESCAPE),
+            Self::Stdin(_) => String::from(WC_STDIN_REPR),
+        }
+    }
+
     /// 当给定 --files0-from 时，我们可以给定一个路径或 stdin。二者都可以是流或普通文件。
     /// 如果给定的文件小于 10MB，它将被消耗并转化为一个 Input::Paths 的 Vec，
     /// 扫描该 Vec 可以确定最终打印的列的宽度。
@@ -417,7 +424,7 @@ impl WcError {
     fn zero_length(ctx: Option<(&WcInput, usize)>) -> Self {
         match ctx {
             Some((path, idx)) => Self::ZeroLengthFileNameCtx {
-                path: path.path_display().into(),
+                path: path.files0_source_display().into(),
                 idx,
             },
             None => Self::ZeroLengthFileName,
@@ -2235,6 +2242,17 @@ mod tests {
         assert_eq!(
             WcError::zero_length(None).to_string(),
             "invalid zero-length file name"
+        );
+    }
+
+    #[test]
+    fn test_files0_from_stdin_zero_length_error_uses_dash_source() {
+        rust_i18n::set_locale("en-US");
+        let source = WcInput::Stdin(StdinKind::Explicit);
+
+        assert_eq!(
+            WcError::zero_length(Some((&source, 2))).to_string(),
+            "-:2: invalid zero-length file name"
         );
     }
 

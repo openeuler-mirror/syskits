@@ -891,6 +891,26 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；--files0-from=-先读取零长度记录再读取有效空文件名；GNU以-和记录号标识stdin列表来源，报告错误后继续统计并输出总计",
+            "args": ["--files0-from=-"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                ": > wc-files0-after-empty"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0 0 0 wc-files0-after-empty\n0 0 0 total\n",
+                    "stderr": "wc: -:1: invalid zero-length file name\n"
+                }
+            },
+            "cleanup_commands": ["rm -f wc-files0-after-empty"],
+            "tstdin": "\u0000wc-files0-after-empty\u0000"
         }
     ]
 }

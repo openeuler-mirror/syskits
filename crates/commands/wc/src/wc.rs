@@ -364,9 +364,15 @@ impl<'a> WcInput<'a> {
     fn try_as_files0(&self) -> CTResult<Option<Vec<WcInput<'static>>>> {
         match self {
             Self::Path(path) => match fs::metadata(path) {
-                Ok(meta) if meta.is_file() && meta.len() <= (10 << 20) => {
-                    Ok(Some(files0_iter_file(path).collect::<Result<Vec<_>, _>>()?))
-                }
+                Ok(meta) if meta.is_file() && meta.len() <= (10 << 20) => files0_iter_file(path)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Some)
+                    .map_err(|_| {
+                        WcError::CannotReadFileNames {
+                            input: escape_name(path.as_os_str(), WC_QS_QUOTE_ESCAPE).into(),
+                        }
+                        .into()
+                    }),
                 _ => Ok(None),
             },
             Self::Stdin(_) => {
@@ -2738,6 +2744,20 @@ mod tests {
 
         // Cleanup
         std::fs::remove_file(temp_file_path).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_preloaded_files0_read_error_uses_gnu_summary() {
+        let input = WcInput::Path(Cow::Borrowed(Path::new("/proc/self/mem")));
+        let error = input
+            .try_as_files0()
+            .expect_err("reading /proc/self/mem at offset zero should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "cannot read file names from '/proc/self/mem'"
+        );
     }
 
     #[test]

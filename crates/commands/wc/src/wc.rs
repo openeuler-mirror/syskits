@@ -633,6 +633,7 @@ pub fn ct_app() -> Command {
         .override_usage(t!("wc.usage"))
         .after_help(t!("wc.after_help"))
         .infer_long_args(true)
+        .args_override_self(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
@@ -1513,6 +1514,29 @@ mod tests {
         assert!(!settings.is_show_words);
         assert!(!settings.is_show_max_line_length);
         assert_eq!(settings.total_when, WcTotalWhen::Always);
+    }
+
+    #[test]
+    fn test_repeated_options_are_idempotent_and_use_the_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                "wc",
+                "-l",
+                "--lines",
+                "--total=never",
+                "--total=only",
+                "--files0-from=first",
+                "--files0-from=second",
+            ])
+            .expect("GNU wc accepts repeated options");
+        let settings = WcSettings::new(&matches);
+
+        assert!(settings.is_show_lines);
+        assert_eq!(settings.total_when, WcTotalWhen::Only);
+        assert_eq!(
+            settings.files0_from,
+            Some(WcInput::Path(Cow::Borrowed(Path::new("second"))))
+        );
     }
 
     #[test]

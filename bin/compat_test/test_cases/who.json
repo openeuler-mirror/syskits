@@ -456,6 +456,53 @@
         {
             "tstdin": "",
             "command": "who",
+            "description": "export LC_ALL='C'；执行who -a --all -b --boot -d --dead -H --heading -l --login --lookup --lookup -m -m -p --process -q --count -r --runlevel -s --short -t --time -u --users utmp；输入fixture：utmp为空文件；预期重复布尔状态选项幂等，-q覆盖其他输出，RC=0，stdout为\\n# users=0\\n，stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                ": > utmp"
+            ],
+            "args": [
+                "-a",
+                "--all",
+                "-b",
+                "--boot",
+                "-d",
+                "--dead",
+                "-H",
+                "--heading",
+                "-l",
+                "--login",
+                "--lookup",
+                "--lookup",
+                "-m",
+                "-m",
+                "-p",
+                "--process",
+                "-q",
+                "--count",
+                "-r",
+                "--runlevel",
+                "-s",
+                "--short",
+                "-t",
+                "--time",
+                "-u",
+                "--users",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n# users=0\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
             "description": "LC_TIME=POSIX locale 测试 - 英文月份格式",
             "setup_commands": [
                 "export LC_TIME=POSIX"

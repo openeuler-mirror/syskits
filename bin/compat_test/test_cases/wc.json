@@ -1053,6 +1053,31 @@
             },
             "cleanup_commands": ["rm -f wc-conflict-list"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；从普通文件stdin预读--files0-from=-列表且记录为/dev/stdin；GNU预读后关闭fd 0，后续打开该路径失败，预期RC=1且无计数输出",
+            "args": ["--files0-from=-"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf '/dev/stdin\\0' > wc-files0-stdin-list"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdinFile": "wc-files0-stdin-list"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: /dev/stdin: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": ["rm -f wc-files0-stdin-list"],
+            "tstdin": ""
         }
     ]
 }

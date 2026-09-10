@@ -367,13 +367,13 @@ impl<'a> WcInput<'a> {
             },
             Self::Stdin(_) => {
                 if is_stdin_small_file() {
-                    Ok(Some(
-                        files0_iter(
-                            ctcore::ct_io::stdin_reader_box(),
-                            OsString::from(WC_STDIN_REPR),
-                        )
-                        .collect::<Result<Vec<_>, _>>()?,
-                    ))
+                    let paths = files0_iter(
+                        ctcore::ct_io::stdin_reader_box(),
+                        OsString::from(WC_STDIN_REPR),
+                    )
+                    .collect::<Result<Vec<_>, _>>()?;
+                    close_preloaded_files0_stdin()?;
+                    Ok(Some(paths))
                 } else {
                     Ok(None)
                 }
@@ -394,6 +394,23 @@ fn stdin_metadata() -> io::Result<fs::Metadata> {
 
     let stdin = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(libc::STDIN_FILENO) });
     stdin.metadata()
+}
+
+#[cfg(unix)]
+fn close_preloaded_files0_stdin() -> CTResult<()> {
+    if unsafe { libc::close(libc::STDIN_FILENO) } == 0 {
+        Ok(())
+    } else {
+        Err(WcError::CannotReadFileNames {
+            input: escape_name(OsStr::new(WC_STDIN_REPR), WC_QS_QUOTE_ESCAPE).into(),
+        }
+        .into())
+    }
+}
+
+#[cfg(not(unix))]
+fn close_preloaded_files0_stdin() -> CTResult<()> {
+    Ok(())
 }
 
 #[cfg(not(unix))]
@@ -453,6 +470,8 @@ enum WcError {
     ZeroLengthFileName,
     #[error("{}", t!("wc.errors.zero_length_ctx", path = path, idx = idx))]
     ZeroLengthFileNameCtx { path: Cow<'static, str>, idx: usize },
+    #[error("cannot read file names from {input}")]
+    CannotReadFileNames { input: Cow<'static, str> },
 }
 
 impl WcError {
@@ -2700,6 +2719,25 @@ mod tests {
         let settings = WcSettings::new(&matches);
 
         assert_eq!(compute_number_width(&inputs, &settings), 1);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_preloaded_files0_stdin_closes_standard_input() {
+        let _lock = STDIN_TEST_LOCK.lock().unwrap();
+        let mut list_file = tempfile::tempfile().unwrap();
+        list_file.write_all(b"/dev/stdin\0").unwrap();
+        list_file.seek(SeekFrom::Start(0)).unwrap();
+        let _saved_stdin = SavedStdin::replace_with(&list_file);
+        let matches = get_matches_from_args(&["wc", "--files0-from=-"]);
+
+        let inputs = WcInputs::new(&matches).unwrap();
+
+        assert!(matches!(inputs, WcInputs::Files0FromStdin(_)));
+        assert_eq!(
+            unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) },
+            -1
+        );
     }
 
     #[test]

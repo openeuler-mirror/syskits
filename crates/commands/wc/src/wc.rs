@@ -174,6 +174,8 @@ enum WcInputs<'a> {
     Paths(Vec<WcInput<'a>>),
     /// --files0-from; "-" 是指 stdin.
     Files0From(WcInput<'a>),
+    /// 从普通文件stdin预读的--files0-from=-记录。
+    Files0FromStdin(Vec<WcInput<'a>>),
 }
 
 impl<'a> WcInputs<'a> {
@@ -189,6 +191,9 @@ impl<'a> WcInputs<'a> {
                 // 文件中的每个路径都将检查其长度，以 希望能更好地对齐输出列。
                 let input = WcInput::from(path);
                 match input.try_as_files0()? {
+                    Some(paths) if matches!(input, WcInput::Stdin(_)) => {
+                        Ok(Self::Files0FromStdin(paths))
+                    }
                     Some(paths) => Ok(Self::Paths(paths)),
                     None => Ok(Self::Files0From(input)),
                 }
@@ -212,6 +217,10 @@ impl<'a> WcInputs<'a> {
                 WcInput::Path(path) => Box::new(files0_iter_file(path)?),
                 WcInput::Stdin(_) => Box::new(files0_iter_stdin()),
             },
+            Self::Files0FromStdin(inputs) => Box::new(inputs.iter().map(|input| match input {
+                WcInput::Stdin(_) => Err(WcError::StdinReprNotAllowed.into()),
+                _ => Ok(input.as_borrowed()),
+            })),
         };
 
         // 必须跟踪每个生成项目的基于 1 的指数，以便报告错误。
@@ -310,7 +319,13 @@ impl<'a> WcInput<'a> {
             },
             Self::Stdin(_) => {
                 if is_stdin_small_file() {
-                    Ok(Some(files0_iter_stdin().collect::<Result<Vec<_>, _>>()?))
+                    Ok(Some(
+                        files0_iter(
+                            ctcore::ct_io::stdin_reader_box(),
+                            OsString::from(WC_STDIN_REPR),
+                        )
+                        .collect::<Result<Vec<_>, _>>()?,
+                    ))
                 } else {
                     Ok(None)
                 }
@@ -948,7 +963,9 @@ fn word_count_from_input(input: &WcInput<'_>, settings: &WcSettings) -> CountRes
 
 /// 计算在所有输入中表示所有计数所需的位数。
 /// 对于 [`WcInputs::Stdin`]，将返回 [`WC_MINIMUM_WIDTH`]，除非只有一个计数器数字需要打印，否则将返回 1。
-/// 对于 [`WcInputs::Files0From`]，将返回 [`WC_MINIMUM_WIDTH`]。
+/// 对于流式 [`WcInputs::Files0From`]，将返回 1。
+/// 预读的 [`WcInputs::Files0FromStdin`] 根据有效路径的文件大小计算宽度，
+/// 但不让其中禁止的 stdin 记录强制使用最小宽度。
 /// 一个[`WcInputs::Paths`]可能包含零个或多个"-"条目，每个"-"条目代表从 "stdin`"读取数据。
 /// 任何此类条目的存在都会导致此函数返回至少为 [`WC_MINIMUM_WIDTH`] 的宽度。
 /// 如果[`WcInputs::Paths`]只包含一个路径，并且只需要打印一个数字，那么此函数将被优化为返回 1，而无需调用任何函数来获取文件元数据。
@@ -959,38 +976,47 @@ fn compute_number_width(inputs: &WcInputs, settings: &WcSettings) -> usize {
         WcInputs::Stdin if settings.number_enabled() == 1 => 1,
         WcInputs::Stdin => WC_MINIMUM_WIDTH,
         WcInputs::Files0From(_) => 1,
-        WcInputs::Paths(inputs) => {
-            if settings.number_enabled() == 1 && inputs.len() == 1 {
-                return 1;
-            }
+        WcInputs::Files0FromStdin(inputs) => {
+            compute_number_width_from_paths(inputs, settings, false)
+        }
+        WcInputs::Paths(inputs) => compute_number_width_from_paths(inputs, settings, true),
+    }
+}
 
-            let mut minimum_width = 1;
-            let mut total: u64 = 0;
-            for input in inputs {
-                if let WcInput::Stdin(_) = input {
+fn compute_number_width_from_paths(
+    inputs: &[WcInput<'_>],
+    settings: &WcSettings<'_>,
+    stdin_requires_minimum_width: bool,
+) -> usize {
+    if settings.number_enabled() == 1 && inputs.len() == 1 {
+        return 1;
+    }
+
+    let mut minimum_width = 1;
+    let mut total: u64 = 0;
+    for input in inputs {
+        if matches!(input, WcInput::Stdin(_)) && stdin_requires_minimum_width {
+            minimum_width = WC_MINIMUM_WIDTH;
+        } else if let WcInput::Path(path) = input {
+            if let Ok(meta) = fs::metadata(path) {
+                if meta.is_file() {
+                    total = total.saturating_add(meta.len());
+                } else {
                     minimum_width = WC_MINIMUM_WIDTH;
-                } else if let WcInput::Path(path) = input {
-                    if let Ok(meta) = fs::metadata(path) {
-                        if meta.is_file() {
-                            total = total.saturating_add(meta.len());
-                        } else {
-                            minimum_width = WC_MINIMUM_WIDTH;
-                        }
-                    }
                 }
             }
-
-            if total == 0 {
-                minimum_width
-            } else {
-                let ilog = 1 + total.ilog10();
-                let total_width = match ilog.try_into() {
-                    Ok(width) => width,
-                    Err(_) => panic!("ilog of a u64 should fit into a usize"),
-                };
-                max(total_width, minimum_width)
-            }
         }
+    }
+
+    if total == 0 {
+        minimum_width
+    } else {
+        let ilog = 1 + total.ilog10();
+        let total_width = match ilog.try_into() {
+            Ok(width) => width,
+            Err(_) => panic!("ilog of a u64 should fit into a usize"),
+        };
+        max(total_width, minimum_width)
     }
 }
 
@@ -998,18 +1024,10 @@ type InputIterItem<'a> = Result<WcInput<'a>, Box<dyn CTError>>;
 
 /// 与 `--files0-from=-` 一起使用时，会对 files0_iter 的结果进行过滤，将"-"转换为相应的错误。
 fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
-    let files_iter = files0_iter(ctcore::ct_io::stdin_reader_box(), WC_STDIN_REPR.into());
-    let mut result: Vec<Result<WcInput<'a>, Box<dyn CTError>>> = vec![];
-
-    for i in files_iter {
-        let mapped = match i {
-            Ok(WcInput::Stdin(_)) => Err(WcError::StdinReprNotAllowed.into()),
-            _ => i,
-        };
-        result.push(mapped);
-    }
-
-    result.into_iter()
+    files0_iter(ctcore::ct_io::stdin_reader_box(), WC_STDIN_REPR.into()).map(|item| match item {
+        Ok(WcInput::Stdin(_)) => Err(WcError::StdinReprNotAllowed.into()),
+        _ => item,
+    })
 }
 
 fn files0_iter_file<'a>(path: &Path) -> CTResult<impl Iterator<Item = InputIterItem<'a>>> {
@@ -1654,6 +1672,43 @@ mod tests {
             Some(WcInput::Stdin(StdinKind::Explicit)),
             "files0-from should accept stdin as '-'"
         );
+    }
+
+    #[test]
+    fn test_cached_files0_from_stdin_preserves_entries_around_disallowed_dash() {
+        let inputs = WcInputs::Files0FromStdin(vec![
+            WcInput::Path(Cow::Borrowed(Path::new("first"))),
+            WcInput::Stdin(StdinKind::Explicit),
+            WcInput::Path(Cow::Borrowed(Path::new("last"))),
+        ]);
+        let matches = get_matches_from_args(&["wc", "--files0-from=-"]);
+        let settings = WcSettings::new(&matches);
+        let items = inputs
+            .try_iter(&settings)
+            .unwrap()
+            .collect::<Vec<InputIterItem<'_>>>();
+
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].as_ref().unwrap().to_title().unwrap(), "first");
+        assert!(items[1].is_err());
+        assert_eq!(items[2].as_ref().unwrap().to_title().unwrap(), "last");
+        assert_eq!(compute_number_width(&inputs, &settings), 1);
+    }
+
+    #[test]
+    fn test_cached_files0_from_stdin_uses_regular_file_sizes_for_width() {
+        let mut small = NamedTempFile::new().unwrap();
+        small.write_all(b"xx").unwrap();
+        let mut large = NamedTempFile::new().unwrap();
+        large.write_all(&[b'x'; 123]).unwrap();
+        let inputs = WcInputs::Files0FromStdin(vec![
+            WcInput::Path(Cow::Owned(small.path().to_path_buf())),
+            WcInput::Path(Cow::Owned(large.path().to_path_buf())),
+        ]);
+        let matches = get_matches_from_args(&["wc", "-c", "--files0-from=-"]);
+        let settings = WcSettings::new(&matches);
+
+        assert_eq!(compute_number_width(&inputs, &settings), 3);
     }
 
     #[test]

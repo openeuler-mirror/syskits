@@ -1169,6 +1169,30 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "wc",
+            "description": "原始字节用例：LC_ALL=C；--files0-from读取名称包含0xff的目录时失败；GNU quotef以八进制shell转义保留来源路径并报告read error，预期stderr完整十六进制为77633a20276c6973742d2724275c333737273a2072656164206572726f723a2049732061206469726563746f72790a",
+            "args": ["2d2d66696c6573302d66726f6d3d6c6973742dff"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf 'list-\\377'); mkdir \"$p\""
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77633a20276c6973742d2724275c333737273a2072656164206572726f723a2049732061206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": ["p=$(printf 'list-\\377'); rmdir \"$p\""],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

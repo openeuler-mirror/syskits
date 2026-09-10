@@ -1642,9 +1642,9 @@ fn files0_iter<'a>(
             }
         } else {
             let e = res.unwrap_err();
-            Err(WcInputIterError::Standard(e.map_err_context(|| {
-                format!("{}: read error", escape_name(&err_path, WC_QS_ESCAPE))
-            })))
+            Err(WcInputIterError::Diagnostic(render_files0_read_error(
+                &err_path, &e,
+            )))
         }
     }));
 
@@ -1828,6 +1828,16 @@ fn render_files0_open_error(source: &WcInput, error: &io::Error) -> Vec<u8> {
     diagnostic.extend_from_slice(b"cannot open ");
     diagnostic.extend_from_slice(&title);
     diagnostic.extend_from_slice(b" for reading: ");
+    diagnostic.extend_from_slice(message.as_bytes());
+    diagnostic
+}
+
+fn render_files0_read_error(source: &OsStr, error: &io::Error) -> Vec<u8> {
+    let source = quote_diagnostic_name(source);
+    let message = strip_errno(error);
+    let mut diagnostic = Vec::with_capacity(source.len() + message.len() + b": read error: ".len());
+    diagnostic.extend_from_slice(&source);
+    diagnostic.extend_from_slice(b": read error: ");
     diagnostic.extend_from_slice(message.as_bytes());
     diagnostic
 }
@@ -2653,6 +2663,20 @@ mod tests {
         assert_eq!(
             render_files0_open_error(&input, &error),
             b"cannot open 'missing-'$'\\377' for reading: No such file or directory"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_files0_read_error_preserves_non_utf8_source_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let source = OsString::from_vec(b"list-\xff".to_vec());
+        let error = io::Error::from_raw_os_error(libc::EISDIR);
+
+        assert_eq!(
+            render_files0_read_error(&source, &error),
+            b"'list-'$'\\377': read error: Is a directory"
         );
     }
 

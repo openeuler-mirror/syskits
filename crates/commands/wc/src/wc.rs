@@ -798,6 +798,7 @@ pub fn ct_app() -> Command {
         .about(t!("wc.about"))
         .override_usage(t!("wc.usage"))
         .after_help(t!("wc.after_help"))
+        .trailing_var_arg(std::env::var_os("POSIXLY_CORRECT").is_some())
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)
@@ -2966,6 +2967,46 @@ mod tests {
         }
 
         assert!(WcLocale::from_environment().is_c);
+    }
+
+    #[test]
+    fn test_posix_mode_stops_option_parsing_after_first_operand() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::posix_mode_stops_option_parsing_after_first_operand_child",
+            ])
+            .env("WC_POSIX_OPTION_ORDER_CHILD", "1")
+            .env("POSIXLY_CORRECT", "1")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn posix_mode_stops_option_parsing_after_first_operand_child() {
+        if std::env::var_os("WC_POSIX_OPTION_ORDER_CHILD").is_none() {
+            return;
+        }
+
+        let matches = ct_app()
+            .try_get_matches_from(["wc", "input", "-c"])
+            .expect("arguments should parse");
+        let settings = WcSettings::new(&matches);
+        let inputs = WcInputs::new(&matches).expect("inputs should parse");
+
+        assert_eq!(settings, WcSettings::default());
+        let WcInputs::Paths(inputs) = inputs else {
+            panic!("expected path operands");
+        };
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs[0].to_title().as_deref(), Some("input"));
+        assert_eq!(inputs[1].to_title().as_deref(), Some("-c"));
     }
 
     #[cfg(unix)]

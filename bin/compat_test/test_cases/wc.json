@@ -1239,6 +1239,29 @@
             "timeout": 3,
             "cleanup_commands": ["rm -f wc-c-sparse"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "POSIXLY_CORRECT=1；第一个文件操作数后的-c不再作为选项解析；GNU按默认三列统计首个文件，并将-c作为不存在的第二个文件报告",
+            "args": ["wc-posix-file", "-c"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT='1'",
+                "printf 'abc def\\n' > wc-posix-file"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "1 2 8 wc-posix-file\n1 2 8 total\n",
+                    "stderr": "wc: -c: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": ["rm -f wc-posix-file"],
+            "tstdin": ""
         }
     ]
 }

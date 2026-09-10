@@ -25,6 +25,7 @@ use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_error::{CTError, CTResult, FromIo, set_ct_exit_code};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
+use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_show;
 
 use crate::count_fast::{count_bytes_chars_lines_from_stream, count_bytes_handle};
@@ -695,7 +696,9 @@ pub fn ct_app() -> Command {
             Arg::new(wc_flags::WC_TOTAL)
                 .long("total")
                 .help(t!("wc.clap.total"))
-                .value_parser(["never", "auto", "always", "only"]),
+                .value_parser(CtShortcutValueParser::new([
+                    "never", "auto", "always", "only",
+                ])),
         )
         .arg(
             Arg::new(WC_ARG_FILES)
@@ -1594,6 +1597,23 @@ mod tests {
             settings.total_when.is_total_row_visible(2),
             "Auto total should be visible with multiple files"
         );
+    }
+
+    #[test]
+    fn test_total_accepts_unambiguous_prefixes() {
+        for (value, expected) in [
+            ("au", WcTotalWhen::Auto),
+            ("al", WcTotalWhen::Always),
+            ("o", WcTotalWhen::Only),
+            ("n", WcTotalWhen::Never),
+        ] {
+            let matches = ct_app()
+                .try_get_matches_from(["wc", &format!("--total={value}")])
+                .expect("GNU wc accepts an unambiguous --total prefix");
+            assert_eq!(WcSettings::new(&matches).total_when, expected);
+        }
+
+        assert!(ct_app().try_get_matches_from(["wc", "--total=a"]).is_err());
     }
 
     #[test]

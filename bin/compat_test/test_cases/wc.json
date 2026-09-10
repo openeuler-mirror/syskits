@@ -629,6 +629,27 @@
             },
             "cleanup_commands": ["rm -f wc-repeat-a wc-repeat-b wc-list-first wc-list-last"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；使用--total=o这一only的唯一前缀统计两个文件；GNU XARGMATCH接受无歧义枚举缩写，预期仅输出无标题的总计行",
+            "args": ["--total=o", "wc-prefix-a", "wc-prefix-b"],
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT",
+                "printf 'a\\n' > wc-prefix-a",
+                "printf 'bb\\n' > wc-prefix-b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2 2 5\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-prefix-a wc-prefix-b"],
+            "tstdin": ""
         }
     ]
 }

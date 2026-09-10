@@ -750,7 +750,11 @@ fn word_count_from_reader<T: WcWordCountable>(
         && !locale.is_c
         && (settings.is_show_chars || settings.is_show_words || settings.is_show_max_line_length)
     {
-        return word_count_from_locale_reader(reader, locale);
+        return word_count_from_locale_reader(
+            reader,
+            locale,
+            std::env::var_os("POSIXLY_CORRECT").is_none(),
+        );
     }
 
     let (mut total, error) = match (
@@ -1008,6 +1012,7 @@ fn word_count_from_c_locale_reader<R: io::Read>(mut reader: R) -> (WcWordCount, 
 fn word_count_from_locale_reader<R: io::Read>(
     mut reader: R,
     locale: &WcLocale,
+    separate_nonbreaking_spaces: bool,
 ) -> (WcWordCount, Option<io::Error>) {
     let _locale_guard = locale.activate();
     let mut total = WcWordCount::default();
@@ -1049,7 +1054,14 @@ fn word_count_from_locale_reader<R: io::Read>(
             }
 
             let length = if length == 0 { 1 } else { length };
-            process_locale_character(&mut total, wide, locale, &mut current_len, &mut in_word);
+            process_locale_character(
+                &mut total,
+                wide,
+                locale,
+                separate_nonbreaking_spaces,
+                &mut current_len,
+                &mut in_word,
+            );
             offset += length;
         }
         pending.drain(..offset);
@@ -1067,6 +1079,7 @@ fn process_locale_character(
     total: &mut WcWordCount,
     wide: libc::wchar_t,
     locale: &WcLocale,
+    separate_nonbreaking_spaces: bool,
     current_len: &mut usize,
     in_word: &mut bool,
 ) {
@@ -1100,7 +1113,10 @@ fn process_locale_character(
                 if width > 0 {
                     *current_len = current_len.saturating_add(width as usize);
                 }
-                if unsafe { iswspace_l(value, locale.raw) != 0 } {
+                if unsafe { iswspace_l(value, locale.raw) != 0 }
+                    || (separate_nonbreaking_spaces
+                        && matches!(value, 0x00a0 | 0x2007 | 0x202f | 0x2060))
+                {
                     true
                 } else {
                     if !*in_word {
@@ -2266,7 +2282,7 @@ mod tests {
             };
             let reader = std::io::Cursor::new(input);
 
-            let (count, error) = word_count_from_locale_reader(reader, &locale);
+            let (count, error) = word_count_from_locale_reader(reader, &locale, false);
 
             assert!(error.is_none(), "locale {locale_name}");
             assert_eq!(count.lines, 1, "locale {locale_name}");
@@ -2291,8 +2307,11 @@ mod tests {
             ("\u{00ad}\n", 1, 1),
             ("\u{2028}\n", 0, 0),
         ] {
-            let (count, error) =
-                word_count_from_locale_reader(std::io::Cursor::new(input.as_bytes()), &locale);
+            let (count, error) = word_count_from_locale_reader(
+                std::io::Cursor::new(input.as_bytes()),
+                &locale,
+                false,
+            );
 
             assert!(error.is_none(), "input {input:?}");
             assert_eq!(count.lines, 1, "input {input:?}");
@@ -2300,6 +2319,26 @@ mod tests {
             assert_eq!(count.chars, 2, "input {input:?}");
             assert_eq!(count.max_line_length, expected_width, "input {input:?}");
         }
+    }
+
+    #[test]
+    fn test_locale_scanner_honors_gnu_nbsp_and_posixly_correct_rules() {
+        let Some(locale) = WcLocale::from_name(std::ffi::OsStr::new("C.UTF-8")) else {
+            return;
+        };
+        let input = "=\u{00a0}=\n=\u{2007}=\n=\u{202f}=\n=\u{2060}=\n";
+
+        let (gnu_count, gnu_error) =
+            word_count_from_locale_reader(std::io::Cursor::new(input.as_bytes()), &locale, true);
+        let (posix_count, posix_error) =
+            word_count_from_locale_reader(std::io::Cursor::new(input.as_bytes()), &locale, false);
+
+        assert!(gnu_error.is_none());
+        assert!(posix_error.is_none());
+        assert_eq!(gnu_count.words, 8);
+        assert_eq!(posix_count.words, 4);
+        assert_eq!(gnu_count.chars, 16);
+        assert_eq!(gnu_count.max_line_length, 3);
     }
 
     #[test]

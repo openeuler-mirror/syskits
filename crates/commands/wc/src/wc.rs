@@ -15,6 +15,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::borrow::{Borrow, Cow};
 use std::cmp::max;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::ffi::{CStr, CString, OsStr};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::iter;
@@ -732,8 +734,23 @@ fn word_count_from_reader<T: WcWordCountable>(
     mut reader: T,
     settings: &WcSettings,
 ) -> (WcWordCount, Option<io::Error>) {
-    if current_ctype_is_c_locale() && (settings.is_show_words || settings.is_show_max_line_length) {
+    #[cfg(unix)]
+    let locale = WcLocale::from_environment();
+    #[cfg(unix)]
+    let is_c_locale = locale.as_ref().is_some_and(|locale| locale.is_c);
+    #[cfg(not(unix))]
+    let is_c_locale = current_ctype_is_c_locale();
+
+    if is_c_locale && (settings.is_show_words || settings.is_show_max_line_length) {
         return word_count_from_c_locale_reader(reader);
+    }
+
+    #[cfg(unix)]
+    if let Some(locale) = locale.as_ref()
+        && !locale.is_c
+        && (settings.is_show_chars || settings.is_show_words || settings.is_show_max_line_length)
+    {
+        return word_count_from_locale_reader(reader, locale);
     }
 
     let (mut total, error) = match (
@@ -834,13 +851,14 @@ fn word_count_from_reader<T: WcWordCountable>(
         }
     };
 
-    if settings.is_show_chars && current_ctype_is_c_locale() {
+    if settings.is_show_chars && is_c_locale {
         total.chars = total.bytes;
     }
 
     (total, error)
 }
 
+#[cfg(not(unix))]
 fn current_ctype_is_c_locale() -> bool {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
@@ -851,6 +869,78 @@ fn current_ctype_is_c_locale() -> bool {
         None => true,
         Some(value) => value == "C" || value == "POSIX",
     }
+}
+
+#[cfg(unix)]
+struct WcLocale {
+    raw: libc::locale_t,
+    is_c: bool,
+}
+
+#[cfg(unix)]
+impl WcLocale {
+    fn from_environment() -> Option<Self> {
+        let name = ["LC_ALL", "LC_CTYPE", "LANG"]
+            .into_iter()
+            .find_map(|variable| std::env::var_os(variable).filter(|value| !value.is_empty()))
+            .unwrap_or_else(|| OsString::from("C"));
+        Self::from_name(&name)
+    }
+
+    fn from_name(name: &OsStr) -> Option<Self> {
+        use std::os::unix::ffi::OsStrExt;
+
+        let name = CString::new(name.as_bytes()).ok()?;
+        let raw =
+            unsafe { libc::newlocale(libc::LC_CTYPE_MASK, name.as_ptr(), std::ptr::null_mut()) };
+        if raw.is_null() {
+            return None;
+        }
+        let codeset = unsafe { libc::nl_langinfo_l(libc::CODESET, raw) };
+        let is_c = !codeset.is_null()
+            && matches!(
+                unsafe { CStr::from_ptr(codeset) }.to_bytes(),
+                b"ANSI_X3.4-1968" | b"ASCII"
+            );
+        Some(Self { raw, is_c })
+    }
+
+    fn activate(&self) -> WcLocaleGuard {
+        WcLocaleGuard {
+            previous: unsafe { libc::uselocale(self.raw) },
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for WcLocale {
+    fn drop(&mut self) {
+        unsafe { libc::freelocale(self.raw) };
+    }
+}
+
+#[cfg(unix)]
+struct WcLocaleGuard {
+    previous: libc::locale_t,
+}
+
+#[cfg(unix)]
+impl Drop for WcLocaleGuard {
+    fn drop(&mut self) {
+        if !self.previous.is_null() {
+            unsafe { libc::uselocale(self.previous) };
+        }
+    }
+}
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut libc::wchar_t,
+        bytes: *const libc::c_char,
+        length: usize,
+        state: *mut libc::mbstate_t,
+    ) -> usize;
 }
 
 fn word_count_from_c_locale_reader<R: io::Read>(mut reader: R) -> (WcWordCount, Option<io::Error>) {
@@ -911,6 +1001,115 @@ fn word_count_from_c_locale_reader<R: io::Read>(mut reader: R) -> (WcWordCount, 
     (total, None)
 }
 
+#[cfg(unix)]
+fn word_count_from_locale_reader<R: io::Read>(
+    mut reader: R,
+    locale: &WcLocale,
+) -> (WcWordCount, Option<io::Error>) {
+    let _locale_guard = locale.activate();
+    let mut total = WcWordCount::default();
+    let mut buffer = [0_u8; 16 * 1024];
+    let mut pending = Vec::new();
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+    let mut current_len = 0_usize;
+    let mut in_word = false;
+
+    loop {
+        let bytes_read = match reader.read(&mut buffer) {
+            Ok(bytes_read) => bytes_read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return (total, Some(error)),
+        };
+        let eof = bytes_read == 0;
+        total.bytes = total.bytes.saturating_add(bytes_read);
+        pending.extend_from_slice(&buffer[..bytes_read]);
+
+        let mut offset = 0;
+        while offset < pending.len() {
+            let backup_state = state;
+            let mut wide = 0 as libc::wchar_t;
+            let length = unsafe {
+                mbrtowc(
+                    &mut wide,
+                    pending[offset..].as_ptr().cast(),
+                    pending.len() - offset,
+                    &mut state,
+                )
+            };
+            if length == usize::MAX - 1 {
+                state = backup_state;
+                break;
+            }
+            if length == usize::MAX {
+                offset += 1;
+                continue;
+            }
+
+            let length = if length == 0 { 1 } else { length };
+            if let Some(character) = char::from_u32(wide as u32) {
+                process_character::<true, true, true, true>(
+                    &mut total,
+                    character,
+                    &mut current_len,
+                    &mut in_word,
+                );
+            } else {
+                total.chars = total.chars.saturating_add(1);
+            }
+            offset += length;
+        }
+        pending.drain(..offset);
+        if eof {
+            break;
+        }
+    }
+
+    total.max_line_length = max(total.max_line_length, current_len);
+    (total, None)
+}
+
+fn process_character<
+    const SHOW_CHARS: bool,
+    const SHOW_LINES: bool,
+    const SHOW_MAX_LINE_LENGTH: bool,
+    const SHOW_WORDS: bool,
+>(
+    total: &mut WcWordCount,
+    ch: char,
+    current_len: &mut usize,
+    in_word: &mut bool,
+) {
+    if SHOW_WORDS {
+        if ch.is_whitespace() {
+            *in_word = false;
+        } else if !ch.is_control() && !(*in_word) {
+            *in_word = true;
+            total.words = total.words.saturating_add(1);
+        }
+    }
+    if SHOW_MAX_LINE_LENGTH {
+        match ch {
+            '\n' | '\r' | '\x0c' => {
+                total.max_line_length = max(*current_len, total.max_line_length);
+                *current_len = 0;
+            }
+            '\t' => {
+                *current_len -= *current_len % 8;
+                *current_len = (*current_len).saturating_add(8);
+            }
+            _ => {
+                *current_len = (*current_len).saturating_add(ch.width().unwrap_or(0));
+            }
+        }
+    }
+    if SHOW_LINES && ch == '\n' {
+        total.lines = total.lines.saturating_add(1);
+    }
+    if SHOW_CHARS {
+        total.chars = total.chars.saturating_add(1);
+    }
+}
+
 fn process_chunk<
     const SHOW_CHARS: bool,
     const SHOW_LINES: bool,
@@ -923,35 +1122,12 @@ fn process_chunk<
     in_word: &mut bool,
 ) {
     for ch in text.chars() {
-        if SHOW_WORDS {
-            if ch.is_whitespace() {
-                *in_word = false;
-            } else if !ch.is_control() && !(*in_word) {
-                *in_word = true;
-                total.words = total.words.saturating_add(1);
-            }
-        }
-        if SHOW_MAX_LINE_LENGTH {
-            match ch {
-                '\n' | '\r' | '\x0c' => {
-                    total.max_line_length = max(*current_len, total.max_line_length);
-                    *current_len = 0;
-                }
-                '\t' => {
-                    *current_len -= *current_len % 8;
-                    *current_len = (*current_len).saturating_add(8);
-                }
-                _ => {
-                    *current_len = (*current_len).saturating_add(ch.width().unwrap_or(0));
-                }
-            }
-        }
-        if SHOW_LINES && ch == '\n' {
-            total.lines = total.lines.saturating_add(1);
-        }
-        if SHOW_CHARS {
-            total.chars = total.chars.saturating_add(1);
-        }
+        process_character::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS>(
+            total,
+            ch,
+            current_len,
+            in_word,
+        );
     }
     total.bytes = total.bytes.saturating_add(text.len());
 
@@ -2027,6 +2203,31 @@ mod tests {
         assert_eq!(count.chars, 4);
         assert_eq!(count.bytes, 4);
         assert_eq!(count.max_line_length, 0);
+    }
+
+    #[test]
+    fn test_locale_decoder_handles_iso_8859_1_and_gbk() {
+        for (locale_name, input, expected_chars, expected_width) in [
+            ("en_US.iso88591", b"\xe9\n".as_slice(), 2, 1),
+            ("zh_CN.gbk", b"\xd6\xd0\n".as_slice(), 2, 2),
+        ] {
+            let Some(locale) = WcLocale::from_name(std::ffi::OsStr::new(locale_name)) else {
+                continue;
+            };
+            let reader = std::io::Cursor::new(input);
+
+            let (count, error) = word_count_from_locale_reader(reader, &locale);
+
+            assert!(error.is_none(), "locale {locale_name}");
+            assert_eq!(count.lines, 1, "locale {locale_name}");
+            assert_eq!(count.words, 1, "locale {locale_name}");
+            assert_eq!(count.chars, expected_chars, "locale {locale_name}");
+            assert_eq!(count.bytes, input.len(), "locale {locale_name}");
+            assert_eq!(
+                count.max_line_length, expected_width,
+                "locale {locale_name}"
+            );
+        }
     }
 
     #[test]

@@ -887,14 +887,18 @@ fn word_count_from_reader<T: WcWordCountable>(
     let locale = WcLocale::from_environment();
     #[cfg(unix)]
     let is_c_locale = locale.is_c;
+    #[cfg(unix)]
+    let is_single_byte_locale = locale.is_single_byte;
     #[cfg(not(unix))]
     let is_c_locale = current_ctype_is_c_locale();
+    #[cfg(not(unix))]
+    let is_single_byte_locale = is_c_locale;
 
     if is_c_locale && (settings.is_show_words || settings.is_show_max_line_length) {
         return word_count_from_c_locale_reader(reader);
     }
 
-    if is_c_locale
+    if is_single_byte_locale
         && settings.is_show_chars
         && !settings.is_show_lines
         && !settings.is_show_words
@@ -1044,6 +1048,7 @@ fn current_ctype_is_c_locale() -> bool {
 struct WcLocale {
     raw: libc::locale_t,
     is_c: bool,
+    is_single_byte: bool,
 }
 
 #[cfg(unix)]
@@ -1077,7 +1082,12 @@ impl WcLocale {
                 unsafe { CStr::from_ptr(codeset) }.to_bytes(),
                 b"ANSI_X3.4-1968" | b"ASCII"
             );
-        Some(Self { raw, is_c })
+        let is_single_byte = is_c || locale_is_single_byte(raw);
+        Some(Self {
+            raw,
+            is_c,
+            is_single_byte,
+        })
     }
 
     fn activate(&self) -> WcLocaleGuard {
@@ -1085,6 +1095,28 @@ impl WcLocale {
             previous: unsafe { libc::uselocale(self.raw) },
         }
     }
+}
+
+#[cfg(unix)]
+fn locale_is_single_byte(locale: libc::locale_t) -> bool {
+    let previous = unsafe { libc::uselocale(locale) };
+    if previous.is_null() {
+        return false;
+    }
+
+    let mut is_single_byte = true;
+    for byte in 1_u8..=u8::MAX {
+        let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+        let mut wide = 0 as libc::wchar_t;
+        let length = unsafe { mbrtowc(&mut wide, std::ptr::from_ref(&byte).cast(), 1, &mut state) };
+        if length == usize::MAX - 1 {
+            is_single_byte = false;
+            break;
+        }
+    }
+
+    unsafe { libc::uselocale(previous) };
+    is_single_byte
 }
 
 #[cfg(unix)]
@@ -3033,6 +3065,57 @@ mod tests {
     #[test]
     fn c_locale_character_only_count_uses_regular_file_size_child() {
         if std::env::var_os("WC_C_LOCALE_CHAR_FAST_CHILD").is_none() {
+            return;
+        }
+
+        let mut file = tempfile().expect("tempfile");
+        file.write_all(b"thirteen-byte").expect("write test file");
+        file.flush().expect("flush test file");
+        let settings = WcSettings {
+            is_show_bytes: false,
+            is_show_chars: true,
+            is_show_lines: false,
+            is_show_words: false,
+            is_show_max_line_length: false,
+            files0_from: None,
+            total_when: WcTotalWhen::Auto,
+        };
+
+        let (count, error) = word_count_from_reader(PanicOnReadFile(file), &settings);
+
+        assert!(error.is_none());
+        assert_eq!(count.chars, 13);
+        assert_eq!(count.bytes, 13);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_single_byte_locale_character_only_count_uses_regular_file_size() {
+        if WcLocale::from_name(OsStr::new("en_US.iso88591")).is_none() {
+            return;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::single_byte_locale_character_only_count_uses_regular_file_size_child",
+            ])
+            .env("WC_SINGLE_BYTE_CHAR_FAST_CHILD", "1")
+            .env("LC_ALL", "en_US.iso88591")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn single_byte_locale_character_only_count_uses_regular_file_size_child() {
+        if std::env::var_os("WC_SINGLE_BYTE_CHAR_FAST_CHILD").is_none() {
             return;
         }
 

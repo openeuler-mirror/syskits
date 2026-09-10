@@ -1262,6 +1262,30 @@
             },
             "cleanup_commands": ["rm -f wc-posix-file"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "Linux；LC_ALL=en_US.iso88591；对1TiB稀疏普通文件执行-m；GNU在任意单字节locale下将字符计数等价为字节计数并使用文件大小快速路径",
+            "args": ["-m", "wc-single-byte-sparse"],
+            "setup_commands": [
+                "export LC_ALL='en_US.iso88591'",
+                "export LANG='en_US.iso88591'",
+                "unset POSIXLY_CORRECT",
+                "truncate -s 1T wc-single-byte-sparse"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1099511627776 wc-single-byte-sparse\n",
+                    "stderr": ""
+                }
+            },
+            "timeout": 3,
+            "cleanup_commands": ["rm -f wc-single-byte-sparse"],
+            "tstdin": ""
         }
     ]
 }

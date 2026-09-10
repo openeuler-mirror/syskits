@@ -180,7 +180,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
             continue;
         }
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
-            validate_attached_long_option_value(bytes)?;
+            validate_long_option(bytes)?;
             continue;
         }
 
@@ -199,37 +199,102 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     Ok(args)
 }
 
-const WHO_LONG_OPTIONS: [&str; 17] = [
-    "all", "boot", "count", "dead", "heading", "help", "login", "lookup", "mesg", "message",
-    "process", "runlevel", "short", "time", "users", "version", "writable",
-];
-
-fn unique_long_option(name: &[u8]) -> Option<&'static str> {
-    if name.is_empty() {
-        return None;
-    }
-    let mut matches = WHO_LONG_OPTIONS
-        .iter()
-        .copied()
-        .filter(|option| option.as_bytes().starts_with(name));
-    let first = matches.next()?;
-    matches.next().is_none().then_some(first)
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum WhoLongOptionKind {
+    All,
+    Boot,
+    Count,
+    Dead,
+    Heading,
+    Help,
+    Login,
+    Lookup,
+    Mesg,
+    Process,
+    Runlevel,
+    Short,
+    Time,
+    Users,
+    Version,
 }
 
-fn validate_attached_long_option_value(argument: &[u8]) -> CTResult<()> {
+const WHO_LONG_OPTIONS: [(&str, WhoLongOptionKind); 17] = [
+    ("all", WhoLongOptionKind::All),
+    ("boot", WhoLongOptionKind::Boot),
+    ("count", WhoLongOptionKind::Count),
+    ("dead", WhoLongOptionKind::Dead),
+    ("heading", WhoLongOptionKind::Heading),
+    ("login", WhoLongOptionKind::Login),
+    ("lookup", WhoLongOptionKind::Lookup),
+    ("message", WhoLongOptionKind::Mesg),
+    ("mesg", WhoLongOptionKind::Mesg),
+    ("process", WhoLongOptionKind::Process),
+    ("runlevel", WhoLongOptionKind::Runlevel),
+    ("short", WhoLongOptionKind::Short),
+    ("time", WhoLongOptionKind::Time),
+    ("users", WhoLongOptionKind::Users),
+    ("writable", WhoLongOptionKind::Mesg),
+    ("help", WhoLongOptionKind::Help),
+    ("version", WhoLongOptionKind::Version),
+];
+
+enum LongOptionMatch {
+    None,
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn match_long_option(name: &[u8]) -> LongOptionMatch {
+    if name.is_empty() {
+        return LongOptionMatch::None;
+    }
+    if let Some((option, _)) = WHO_LONG_OPTIONS
+        .iter()
+        .find(|(option, _)| option.as_bytes() == name)
+    {
+        return LongOptionMatch::Recognized(option);
+    }
+
+    let matches = WHO_LONG_OPTIONS
+        .iter()
+        .filter(|(option, _)| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    let Some((first_name, first_kind)) = matches.first().copied() else {
+        return LongOptionMatch::None;
+    };
+    if matches.iter().all(|(_, kind)| kind == first_kind) {
+        LongOptionMatch::Recognized(first_name)
+    } else {
+        LongOptionMatch::Ambiguous(matches.into_iter().map(|(name, _)| *name).collect())
+    }
+}
+
+fn validate_long_option(argument: &[u8]) -> CTResult<()> {
     let Some(long) = argument.strip_prefix(b"--") else {
         return Ok(());
     };
-    let Some(separator) = long.iter().position(|byte| *byte == b'=') else {
-        return Ok(());
-    };
-    if let Some(canonical) = unique_long_option(&long[..separator]) {
-        return Err(CTsageError::new(
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match match_long_option(name) {
+        LongOptionMatch::Recognized(canonical) if separator.is_some() => Err(CTsageError::new(
             1,
             format!("option '--{canonical}' doesn't allow an argument"),
-        ));
+        )),
+        LongOptionMatch::Ambiguous(matches) => {
+            let argument = String::from_utf8_lossy(argument);
+            let possibilities = matches
+                .into_iter()
+                .map(|option| format!("'--{option}'"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            Err(CTsageError::new(
+                1,
+                format!("option '{argument}' is ambiguous; possibilities: {possibilities}"),
+            ))
+        }
+        LongOptionMatch::None | LongOptionMatch::Recognized(_) => Ok(()),
     }
-    Ok(())
 }
 
 #[derive(Default)]
@@ -306,6 +371,17 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "option '--boot' doesn't allow an argument"
+        );
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn ambiguous_long_option_reports_all_distinct_possibilities() {
+        let args = ["who", "--l"].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "option '--l' is ambiguous; possibilities: '--login' '--lookup'"
         );
         assert!(error.usage());
     }

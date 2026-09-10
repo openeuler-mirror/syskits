@@ -731,6 +731,46 @@
             },
             "cleanup_commands": ["rm -f wc-invalid-utf8"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=en_US.iso88591；输入为ISO-8859-1编码的e-acute及换行；GNU按当前单字节locale统计单词、字符和显示宽度",
+            "args": ["-w", "-m", "-L", "wc-latin1"],
+            "setup_commands": [
+                "export LC_ALL=en_US.iso88591",
+                "export LANG=en_US.iso88591",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '\\351\\012' > wc-latin1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 2 1 wc-latin1\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-latin1"],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=zh_CN.gbk；输入为GBK编码的中文字符及换行；GNU按当前多字节locale解码为一个双列宽字符",
+            "args": ["-w", "-m", "-L", "wc-gbk"],
+            "setup_commands": [
+                "export LC_ALL=zh_CN.gbk",
+                "export LANG=zh_CN.gbk",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '\\326\\320\\012' > wc-gbk"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 2 2 wc-gbk\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-gbk"],
+            "tstdin": ""
         }
     ]
 }

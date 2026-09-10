@@ -870,12 +870,23 @@ fn write_padded(
     let pad_len = width.saturating_sub(text.len());
     if align_left {
         writer_io.write_all(text)?;
-        write!(writer_io, "{: <pad_len$}", "", pad_len = pad_len)
+        write_space_padding(&mut writer_io, pad_len)
     } else {
-        write!(writer_io, "{: >pad_len$}", "", pad_len = pad_len)?;
+        write_space_padding(&mut writer_io, pad_len)?;
         writer_io.write_all(text)
     }
     .map_err(FormatError::IoError)
+}
+
+fn write_space_padding(writer: &mut impl Write, mut length: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 8 * 1024] = [b' '; 8 * 1024];
+
+    while length > 0 {
+        let chunk_len = length.min(SPACES.len());
+        writer.write_all(&SPACES[..chunk_len])?;
+        length -= chunk_len;
+    }
+    Ok(())
 }
 
 fn peek_number(rest: &[u8], index: usize) -> Option<(usize, usize)> {
@@ -1233,6 +1244,17 @@ mod tests {
             remove_ascii_digits_for_empty_outdigits(b"     +12.30e-04"),
             b"     +.e-"
         );
+    }
+
+    #[test]
+    fn string_padding_supports_width_above_rust_formatting_limit() {
+        let mut output = Vec::new();
+
+        write_padded(&mut output, b"x", 65_537, false).unwrap();
+
+        assert_eq!(output.len(), 65_537);
+        assert!(output[..65_536].iter().all(|byte| *byte == b' '));
+        assert_eq!(output[65_536], b'x');
     }
 
     #[test]

@@ -1363,6 +1363,30 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%65537s，参数x；预期RC=0、stderr为空，stdout为65536个空格后跟x，不得触发Rust格式宽度panic",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%65537s", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "null"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

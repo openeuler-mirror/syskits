@@ -162,6 +162,10 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+pub(crate) fn ct_app_for_parse(posixly_correct: bool) -> Command {
+    ct_app().trailing_var_arg(posixly_correct)
+}
+
 #[derive(Default)]
 pub struct Who;
 impl Tool for Who {
@@ -202,6 +206,22 @@ mod tests {
                 .get_one::<OsString>(who_flags::WHO_FILE)
                 .map(OsString::as_os_str),
             Some(path.as_os_str())
+        );
+    }
+
+    #[test]
+    fn posix_parsing_stops_at_the_first_operand() {
+        let matches = ct_app_for_parse(true)
+            .try_get_matches_from(["who", "utmp", "-q"])
+            .unwrap();
+        assert!(!matches.get_flag(who_flags::WHO_COUNT));
+        assert_eq!(
+            matches
+                .get_many::<OsString>(who_flags::WHO_FILE)
+                .unwrap()
+                .map(OsString::as_os_str)
+                .collect::<Vec<_>>(),
+            [std::ffi::OsStr::new("utmp"), std::ffi::OsStr::new("-q")]
         );
     }
 

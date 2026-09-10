@@ -686,6 +686,29 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C、POSIXLY_CORRECT=1；执行who utmp -q并提供空utmp文件；GNU在首个操作数后停止选项解析，将-q作为第二个ARG2并采用-m语义，非TTY环境预期RC=0且无输出",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export POSIXLY_CORRECT='1'",
+                ": > utmp"
+            ],
+            "args": [
+                "utmp",
+                "-q"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -172,19 +172,25 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
     let mut parse_options = true;
     let mut operand_count = 0;
+    let mut options = Vec::new();
+    let mut operands = Vec::new();
+    let mut saw_option_terminator = false;
 
     for argument in args.iter().skip(1) {
         let bytes = argument.as_encoded_bytes();
         if parse_options && bytes == b"--" {
             parse_options = false;
+            saw_option_terminator = true;
             continue;
         }
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
             validate_option(bytes)?;
+            options.push(argument.clone());
             continue;
         }
 
         operand_count += 1;
+        operands.push(argument.clone());
         if operand_count > 2 {
             return Err(CTsageError::new(
                 1,
@@ -196,7 +202,18 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
         }
     }
 
-    Ok(args)
+    if posixly_correct {
+        return Ok(args);
+    }
+
+    let mut prepared = Vec::with_capacity(args.len());
+    prepared.extend(args.first().cloned());
+    prepared.extend(options);
+    if saw_option_terminator {
+        prepared.push(OsString::from("--"));
+    }
+    prepared.extend(operands);
+    Ok(prepared)
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -378,6 +395,24 @@ mod tests {
                 .map(OsString::as_os_str)
                 .collect::<Vec<_>>(),
             [std::ffi::OsStr::new("utmp"), std::ffi::OsStr::new("-q")]
+        );
+    }
+
+    #[test]
+    fn default_parsing_permutes_options_before_operands() {
+        let args = ["who", "a", "-H", "b"].map(OsString::from);
+        let prepared = prepare_who_args(args.into_iter()).unwrap();
+        let matches = ct_app_for_parse(false)
+            .try_get_matches_from(prepared)
+            .unwrap();
+        assert!(matches.get_flag(who_flags::WHO_HEADING));
+        assert_eq!(
+            matches
+                .get_many::<OsString>(who_flags::WHO_FILE)
+                .unwrap()
+                .map(OsString::as_os_str)
+                .collect::<Vec<_>>(),
+            [std::ffi::OsStr::new("a"), std::ffi::OsStr::new("b")]
         );
     }
 

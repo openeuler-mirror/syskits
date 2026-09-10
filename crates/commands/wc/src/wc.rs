@@ -732,6 +732,10 @@ fn word_count_from_reader<T: WcWordCountable>(
     mut reader: T,
     settings: &WcSettings,
 ) -> (WcWordCount, Option<io::Error>) {
+    if current_ctype_is_c_locale() && (settings.is_show_words || settings.is_show_max_line_length) {
+        return word_count_from_c_locale_reader(reader);
+    }
+
     let (mut total, error) = match (
         settings.is_show_bytes,
         settings.is_show_chars,
@@ -847,6 +851,64 @@ fn current_ctype_is_c_locale() -> bool {
         None => true,
         Some(value) => value == "C" || value == "POSIX",
     }
+}
+
+fn word_count_from_c_locale_reader<R: io::Read>(mut reader: R) -> (WcWordCount, Option<io::Error>) {
+    let mut total = WcWordCount::default();
+    let mut buffer = [0_u8; 16 * 1024];
+    let mut current_len = 0_usize;
+    let mut in_word = false;
+
+    loop {
+        let bytes_read = match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(bytes_read) => bytes_read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return (total, Some(error)),
+        };
+        total.bytes = total.bytes.saturating_add(bytes_read);
+        total.chars = total.chars.saturating_add(bytes_read);
+
+        for &byte in &buffer[..bytes_read] {
+            let separator = match byte {
+                b'\n' => {
+                    total.lines = total.lines.saturating_add(1);
+                    total.max_line_length = max(total.max_line_length, current_len);
+                    current_len = 0;
+                    true
+                }
+                b'\r' | b'\x0c' => {
+                    total.max_line_length = max(total.max_line_length, current_len);
+                    current_len = 0;
+                    true
+                }
+                b'\t' => {
+                    current_len = current_len.saturating_add(8 - current_len % 8);
+                    true
+                }
+                b' ' => {
+                    current_len = current_len.saturating_add(1);
+                    true
+                }
+                b'\x0b' => true,
+                0x21..=0x7e => {
+                    current_len = current_len.saturating_add(1);
+                    if !in_word {
+                        total.words = total.words.saturating_add(1);
+                        in_word = true;
+                    }
+                    false
+                }
+                _ => false,
+            };
+            if separator {
+                in_word = false;
+            }
+        }
+    }
+
+    total.max_line_length = max(total.max_line_length, current_len);
+    (total, None)
 }
 
 fn process_chunk<
@@ -1950,6 +2012,21 @@ mod tests {
         assert_eq!(count.lines, 3);
         assert_eq!(count.words, 3);
         assert_eq!(count.bytes, 768);
+    }
+
+    #[test]
+    fn test_c_locale_treats_utf8_high_bytes_as_nonprinting_bytes() {
+        let input = b"\xe4\xb8\xad\n";
+        let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(input));
+
+        let (count, error) = word_count_from_c_locale_reader(reader);
+
+        assert!(error.is_none());
+        assert_eq!(count.lines, 1);
+        assert_eq!(count.words, 0);
+        assert_eq!(count.chars, 4);
+        assert_eq!(count.bytes, 4);
+        assert_eq!(count.max_line_length, 0);
     }
 
     #[test]

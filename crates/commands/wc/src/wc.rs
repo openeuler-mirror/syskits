@@ -1639,7 +1639,7 @@ mod tests {
         // Test English errors
         set_locale("en-US");
         let err = WcError::ZeroLengthFileName;
-        assert!(err.to_string().contains("Invalid zero-length file name"));
+        assert!(err.to_string().contains("invalid zero-length file name"));
 
         // Test Chinese errors
         set_locale("zh-CN");
@@ -2226,6 +2226,16 @@ mod tests {
 
         assert_eq!(input_path.path_display(), "/tmp/example.txt");
         assert_eq!(input_stdin.path_display(), "standard input");
+    }
+
+    #[test]
+    fn test_zero_length_file_name_error_uses_gnu_case() {
+        rust_i18n::set_locale("en-US");
+
+        assert_eq!(
+            WcError::zero_length(None).to_string(),
+            "invalid zero-length file name"
+        );
     }
 
     #[test]

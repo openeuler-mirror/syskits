@@ -872,6 +872,25 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；直接传入零长度文件名；GNU拒绝该参数并使用小写invalid诊断，预期RC=1、stdout为空、stderr为wc: invalid zero-length file name",
+            "args": [""],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: invalid zero-length file name\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

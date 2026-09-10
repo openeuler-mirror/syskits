@@ -317,6 +317,10 @@ fn time_string(utmpx: &CtUtmpx) -> String {
     utmpx.login_time().format(&time_fmt).unwrap()
 }
 
+fn time_format_width() -> usize {
+    if hard_locale_time() { 16 } else { 12 }
+}
+
 #[inline]
 fn cur_tty() -> String {
     unsafe {
@@ -650,18 +654,8 @@ impl Who {
         buffer.push(' ');
         buffer.push_str(&pad_right(&fields.line, 12));
 
-        // Dynamic time width based on locale (like coreutils)
-        let lc_time = std::env::var("LC_TIME").unwrap_or_else(|_| {
-            std::env::var("LC_ALL")
-                .unwrap_or_else(|_| std::env::var("LANG").unwrap_or_else(|_| "C".to_string()))
-        });
-        let time_size = if lc_time == "C" || lc_time == "POSIX" {
-            3 + 1 + 2 + 1 + 2 + 1 + 2
-        } else {
-            4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2
-        };
         buffer.push(' ');
-        buffer.push_str(&pad_right(&fields.time, time_size));
+        buffer.push_str(&pad_right(&fields.time, time_format_width()));
 
         if !self.is_short_output {
             if self.is_include_idle {
@@ -1182,6 +1176,30 @@ mod tests {
             tty_stat_path("label /tmp/terminal"),
             PathBuf::from("/tmp/terminal")
         );
+    }
+
+    #[test]
+    fn lc_all_overrides_lc_time_for_output_width() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lc_time = env::var("LC_TIME").ok();
+
+        unsafe {
+            env::set_var("LC_ALL", "C");
+            env::set_var("LC_TIME", "en_US.UTF-8");
+        }
+        assert_eq!(time_format_width(), 12);
+
+        unsafe {
+            env::remove_var("LC_ALL");
+            env::remove_var("LC_TIME");
+            if let Some(value) = original_lc_all {
+                env::set_var("LC_ALL", value);
+            }
+            if let Some(value) = original_lc_time {
+                env::set_var("LC_TIME", value);
+            }
+        }
     }
 
     #[test]
@@ -1898,78 +1916,6 @@ mod tests {
             16 // ISO format
         };
         assert_eq!(time_size, 12);
-
-        // 恢复原始环境变量
-        unsafe {
-            env::remove_var("LC_TIME");
-        }
-        unsafe {
-            env::remove_var("LC_ALL");
-        }
-        unsafe {
-            env::remove_var("LANG");
-        }
-
-        if let Some(val) = original_lc_time {
-            unsafe {
-                env::set_var("LC_TIME", val);
-            }
-        }
-        if let Some(val) = original_lc_all {
-            unsafe {
-                env::set_var("LC_ALL", val);
-            }
-        }
-        if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
-            }
-        }
-    }
-
-    #[test]
-    fn test_lc_time_overrides_all() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-
-        // 保存原始环境变量
-        let original_lc_time = env::var("LC_TIME").ok();
-        let original_lc_all = env::var("LC_ALL").ok();
-        let original_lang = env::var("LANG").ok();
-
-        // 清理并设置测试环境变量 - 测试LC_TIME优先级最高
-        unsafe {
-            env::remove_var("LC_TIME");
-        }
-        unsafe {
-            env::remove_var("LC_ALL");
-        }
-        unsafe {
-            env::remove_var("LANG");
-        }
-        unsafe {
-            env::set_var("LANG", "C");
-        }
-        unsafe {
-            env::set_var("LC_ALL", "en_US.UTF-8");
-        }
-        unsafe {
-            env::set_var("LC_TIME", "zh_CN.UTF-8");
-        }
-
-        let lc_time = env::var("LC_TIME").unwrap_or_else(|_| {
-            env::var("LC_ALL")
-                .unwrap_or_else(|_| env::var("LANG").unwrap_or_else(|_| "C".to_string()))
-        });
-
-        // LC_TIME should have highest priority
-        assert_eq!(lc_time, "zh_CN.UTF-8");
-
-        let time_size = if lc_time == "C" || lc_time == "POSIX" {
-            12 // C locale format
-        } else {
-            16 // ISO format
-        };
-        assert_eq!(time_size, 16);
 
         // 恢复原始环境变量
         unsafe {

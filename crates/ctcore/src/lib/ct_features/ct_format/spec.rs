@@ -19,13 +19,20 @@ use super::{
     parse_escape_only,
 };
 use crate::ct_format::long_double::GnuFloatFormat;
-use crate::ct_quoting_style::{
-    CtQuotingStyle, escape_name, escape_unibyte_shell_bytes, uses_unibyte_locale,
-};
+use crate::ct_quoting_style::{escape_shell_bytes_with_classifier, uses_unibyte_locale};
 use std::ffi::CStr;
-use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::{io::Write, ops::ControlFlow};
+
+unsafe extern "C" {
+    fn mbrtoc32(
+        character: *mut u32,
+        bytes: *const crate::libc::c_char,
+        length: usize,
+        state: *mut crate::libc::mbstate_t,
+    ) -> usize;
+    fn mbsinit(state: *const crate::libc::mbstate_t) -> crate::libc::c_int;
+    fn iswprint(character: crate::libc::c_uint) -> crate::libc::c_int;
+}
 
 /// 用于格式化值的已解析说明符
 /// 可能需要多个参数来解析以*给出的宽度或精度值
@@ -365,27 +372,9 @@ impl IndexedSpec {
                 let Some(bytes) = cursor.get_optional_bytes(self.arg_index) else {
                     return Ok(ControlFlow::Continue(()));
                 };
-                if bytes.is_empty() {
-                    writer.write_all(b"''").map_err(FormatError::IoError)
-                } else if uses_unibyte_locale() {
-                    writer
-                        .write_all(escape_unibyte_shell_bytes(bytes).as_bytes())
-                        .map_err(FormatError::IoError)
-                } else {
-                    writer
-                        .write_all(
-                            escape_name(
-                                OsStr::from_bytes(bytes),
-                                &CtQuotingStyle::Shell {
-                                    escape: true,
-                                    always_quote: false,
-                                    show_control: true,
-                                },
-                            )
-                            .as_bytes(),
-                        )
-                        .map_err(FormatError::IoError)
-                }
+                writer
+                    .write_all(&escape_printf_shell_bytes(bytes))
+                    .map_err(FormatError::IoError)
             }
             Spec::SignedInt {
                 width,
@@ -524,6 +513,49 @@ impl IndexedSpec {
             }
         }?;
         Ok(ControlFlow::Continue(()))
+    }
+}
+
+fn escape_printf_shell_bytes(bytes: &[u8]) -> Vec<u8> {
+    escape_shell_bytes_with_classifier(bytes, classify_printf_locale_sequence)
+}
+
+fn classify_printf_locale_sequence(bytes: &[u8]) -> (usize, bool) {
+    if uses_unibyte_locale() {
+        return (1, unsafe {
+            crate::libc::isprint(crate::libc::c_int::from(bytes[0])) != 0
+        });
+    }
+
+    unsafe {
+        let mut state: crate::libc::mbstate_t = std::mem::zeroed();
+        let mut consumed = 0;
+        let mut printable = true;
+
+        loop {
+            let mut character = 0_u32;
+            let length = mbrtoc32(
+                &mut character,
+                bytes[consumed..].as_ptr().cast(),
+                bytes.len() - consumed,
+                &mut state,
+            );
+            if length == usize::MAX {
+                return (consumed.max(1), false);
+            }
+            if length == usize::MAX - 1 {
+                return (bytes.len(), false);
+            }
+            if length == usize::MAX - 2 || length == 0 {
+                return (consumed.max(1), false);
+            }
+
+            printable &= iswprint(character) != 0;
+            consumed += length;
+            if mbsinit(&state) != 0 || consumed == bytes.len() {
+                return (consumed, printable);
+            }
+        }
     }
 }
 

@@ -13,7 +13,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
-use ctcore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use ctcore::libc::{ESRCH, S_IWGRP, STDIN_FILENO, kill, ttyname};
 use rust_i18n::t;
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -219,6 +219,15 @@ fn updated_boot_time(current: i64, record_type: i16, timestamp: i64) -> i64 {
     }
 }
 
+fn should_keep_user_pid(check_pids: bool, is_user_process: bool, pid: i32) -> bool {
+    if !check_pids || !is_user_process || pid <= 0 {
+        return true;
+    }
+
+    let status = unsafe { kill(pid, 0) };
+    status == 0 || std::io::Error::last_os_error().raw_os_error() != Some(ESRCH)
+}
+
 fn time_string(utmpx: &CtUtmpx) -> String {
     // Use ctcore's hard_locale_time() function (consistent with GNU coreutils)
     let time_fmt = if hard_locale_time() {
@@ -298,10 +307,13 @@ impl Who {
             1 => self.who_args[0].as_ref(),
             _ => ct_utmpx::DEFAULT_FILE,
         };
+        let check_pids = self.who_args.len() != 1;
 
         if self.is_short_list {
             let users = CtUtmpx::iter_all_records_from(f)
-                .filter(CtUtmpx::is_user_process)
+                .filter(|utmpx| {
+                    utmpx.is_user_process() && should_keep_user_pid(check_pids, true, utmpx.pid())
+                })
                 .map(|utmpx| utmpx.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
@@ -320,6 +332,9 @@ impl Who {
             };
 
             for utmpx in records {
+                if !should_keep_user_pid(check_pids, utmpx.is_user_process(), utmpx.pid()) {
+                    continue;
+                }
                 if !self.is_my_line_only || current_tty == utmpx.tty_device() {
                     if self.is_need_users && utmpx.is_user_process() {
                         self.print_user(&utmpx, boot_time)?;
@@ -607,6 +622,10 @@ impl Who {
         }
     }
 
+    fn checks_default_pids(&self) -> bool {
+        self.who_args.len() != 1
+    }
+
     fn view_kind(&self) -> String {
         if self.is_short_list {
             "count".to_string()
@@ -820,7 +839,10 @@ impl Who {
 
         if self.is_short_list {
             let users = CtUtmpx::iter_all_records_from(&source_file)
-                .filter(CtUtmpx::is_user_process)
+                .filter(|utmpx| {
+                    utmpx.is_user_process()
+                        && should_keep_user_pid(self.checks_default_pids(), true, utmpx.pid())
+                })
                 .map(|utmpx| utmpx.user())
                 .collect::<Vec<_>>();
             semantic.classic_text.push_str(&users.join(" "));
@@ -874,6 +896,13 @@ impl Who {
         };
 
         for utmpx in records {
+            if !should_keep_user_pid(
+                self.checks_default_pids(),
+                utmpx.is_user_process(),
+                utmpx.pid(),
+            ) {
+                continue;
+            }
             let next_boot_time =
                 updated_boot_time(boot_time, utmpx.record_type(), utmpx.timestamp_seconds());
             if self.is_my_line_only && current_tty != utmpx.tty_device() {
@@ -1019,6 +1048,16 @@ mod tests {
         assert_eq!(updated_boot_time(100, ct_utmpx::USER_PROCESS, 200), 100);
         assert_eq!(updated_boot_time(100, ct_utmpx::BOOT_TIME, 200), 200);
         assert_eq!(updated_boot_time(200, ct_utmpx::BOOT_TIME, 300), 300);
+    }
+
+    #[test]
+    fn default_source_filters_only_missing_positive_user_pids() {
+        let missing_pid = i32::MAX;
+        assert!(!should_keep_user_pid(true, true, missing_pid));
+        assert!(should_keep_user_pid(false, true, missing_pid));
+        assert!(should_keep_user_pid(true, false, missing_pid));
+        assert!(should_keep_user_pid(true, true, 0));
+        assert!(should_keep_user_pid(true, true, std::process::id() as i32));
     }
 
     #[test]

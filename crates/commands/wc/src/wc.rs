@@ -595,11 +595,11 @@ pub fn wc_native_semantic(args: impl ctcore::Args) -> CTResult<WcSemantic> {
 
 fn wc_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     let args = args.collect::<Vec<_>>();
-    validate_required_option_arguments(&args)?;
+    validate_gnu_option_arguments(&args)?;
     Ok(args)
 }
 
-fn validate_required_option_arguments(args: &[OsString]) -> CTResult<()> {
+fn validate_gnu_option_arguments(args: &[OsString]) -> CTResult<()> {
     let posix = std::env::var_os("POSIXLY_CORRECT").is_some();
     let mut index = 1;
     while index < args.len() {
@@ -619,19 +619,29 @@ fn validate_required_option_arguments(args: &[OsString]) -> CTResult<()> {
             index += 1;
             continue;
         };
-        if long.contains(&b'=') {
-            index += 1;
-            continue;
-        }
-        let Some(canonical) = canonical_value_option(long) else {
+        let (option, attached_value) = match long.iter().position(|byte| *byte == b'=') {
+            Some(separator) => (&long[..separator], Some(&long[separator + 1..])),
+            None => (long, None),
+        };
+        let Some(canonical) = canonical_value_option(option) else {
             index += 1;
             continue;
         };
+        if let Some(value) = attached_value {
+            if canonical == "total" {
+                validate_total_value(value)?;
+            }
+            index += 1;
+            continue;
+        }
         if index + 1 == args.len() {
             return Err(CTsageError::new(
                 1,
                 format!("option '--{canonical}' requires an argument"),
             ));
+        }
+        if canonical == "total" {
+            validate_total_value(args[index + 1].as_encoded_bytes())?;
         }
         index += 2;
     }
@@ -646,6 +656,50 @@ fn canonical_value_option(option: &[u8]) -> Option<&'static str> {
     });
     let canonical = matches.next()?;
     matches.next().is_none().then_some(canonical)
+}
+
+fn validate_total_value(value: &[u8]) -> CTResult<()> {
+    const VALUES: [&str; 4] = ["auto", "always", "only", "never"];
+
+    if VALUES.iter().any(|candidate| candidate.as_bytes() == value) {
+        return Ok(());
+    }
+
+    let matching_prefixes = VALUES
+        .iter()
+        .filter(|candidate| candidate.as_bytes().starts_with(value))
+        .count();
+    if matching_prefixes == 1 {
+        return Ok(());
+    }
+
+    let kind = if matching_prefixes > 1 {
+        "ambiguous"
+    } else {
+        "invalid"
+    };
+    let value = quote_total_value(value);
+    Err(CTsageError::new(
+        1,
+        format!(
+            "{kind} argument {value} for '--total'\nValid arguments are:\n  - 'auto'\n  - 'always'\n  - 'only'\n  - 'never'"
+        ),
+    ))
+}
+
+#[cfg(unix)]
+fn quote_total_value(value: &[u8]) -> String {
+    use std::os::unix::ffi::OsStringExt;
+
+    escape_name(&OsString::from_vec(value.to_vec()), WC_QS_QUOTE_ESCAPE)
+}
+
+#[cfg(not(unix))]
+fn quote_total_value(value: &[u8]) -> String {
+    escape_name(
+        OsString::from(String::from_utf8_lossy(value).into_owned()),
+        WC_QS_QUOTE_ESCAPE,
+    )
 }
 
 fn has_explicit_count_flags(matches: &ArgMatches) -> bool {
@@ -2181,6 +2235,30 @@ mod tests {
                 error.to_string(),
                 format!("option '{canonical}' requires an argument")
             );
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn test_total_rejects_ambiguous_and_invalid_values_with_gnu_diagnostic() {
+        for (argument, expected) in [
+            (
+                "--total=",
+                "ambiguous argument '' for '--total'\nValid arguments are:\n  - 'auto'\n  - 'always'\n  - 'only'\n  - 'never'",
+            ),
+            (
+                "--total=a",
+                "ambiguous argument 'a' for '--total'\nValid arguments are:\n  - 'auto'\n  - 'always'\n  - 'only'\n  - 'never'",
+            ),
+            (
+                "--total=x",
+                "invalid argument 'x' for '--total'\nValid arguments are:\n  - 'auto'\n  - 'always'\n  - 'only'\n  - 'never'",
+            ),
+        ] {
+            let error = wc_main([OsString::from("wc"), OsString::from(argument)].into_iter())
+                .expect_err("invalid total mode should fail");
+
+            assert_eq!(error.to_string(), expected);
             assert!(error.usage());
         }
     }

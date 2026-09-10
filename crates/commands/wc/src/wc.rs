@@ -1419,6 +1419,38 @@ fn compute_number_width_from_paths(
 
 type InputIterItem<'a> = Result<WcInput<'a>, Box<dyn CTError>>;
 
+struct WcOutput<W> {
+    writer: W,
+    failed: bool,
+}
+
+impl<W: Write> WcOutput<W> {
+    fn new(writer: W) -> Self {
+        Self {
+            writer,
+            failed: false,
+        }
+    }
+
+    fn print_stats(
+        &mut self,
+        settings: &WcSettings,
+        result: &WcWordCount,
+        title: Option<&[u8]>,
+        number_width: usize,
+    ) {
+        if !self.failed
+            && write_stats(&mut self.writer, settings, result, title, number_width).is_err()
+        {
+            self.failed = true;
+        }
+    }
+
+    fn failed(&self) -> bool {
+        self.failed
+    }
+}
+
 /// 与 `--files0-from=-` 一起使用时，会对 files0_iter 的结果进行过滤，将"-"转换为相应的错误。
 fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
     files0_iter(ctcore::ct_io::stdin_reader_box(), WC_STDIN_REPR.into()).map(|item| match item {
@@ -1490,6 +1522,7 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
     let mut chars_overflowed = false;
     let mut lines_overflowed = false;
     let mut words_overflowed = false;
+    let mut output = WcOutput::new(io::stdout().lock());
 
     let (number_width, are_stats_visible) = if settings.total_when == WcTotalWhen::Only {
         (1, false)
@@ -1547,12 +1580,7 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
         if are_stats_visible {
             let maybe_title = input.to_output_title();
             let maybe_title_bytes = maybe_title.as_deref();
-            let _ = print_stats(settings, &word_count, maybe_title_bytes, number_width).map_err(
-                |err| {
-                    let title = input.path_display();
-                    ct_show!(err.map_err_context(|| format!("failed to print result for {title}")))
-                },
-            );
+            output.print_stats(settings, &word_count, maybe_title_bytes, number_width);
         }
     }
 
@@ -1560,9 +1588,7 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
     if total_row_visible {
         let total_text = t!("wc.total_row");
         let title = are_stats_visible.then_some(total_text.as_bytes());
-        print_stats(settings, &total_word_count, title, number_width).unwrap_or_else(|err| {
-            ct_show!(err.map_err_context(|| "failed to print total".into()));
-        });
+        output.print_stats(settings, &total_word_count, title, number_width);
     }
 
     if total_row_visible {
@@ -1607,6 +1633,10 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
         }
     }
 
+    if output.failed() {
+        show_output_error();
+    }
+
     // 虽然这似乎是返回 `Ok` ，但退出代码可能已被设置为一个非零值(调用`record_error!()`)。
     Ok(())
 }
@@ -1638,14 +1668,17 @@ fn show_input_io_error(input: &WcInput, error: &io::Error) {
     let _ = io::stderr().lock().write_all(&diagnostic);
 }
 
-fn print_stats(
-    settings: &WcSettings,
-    result: &WcWordCount,
-    title: Option<&[u8]>,
-    number_width: usize,
-) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-    write_stats(&mut stdout, settings, result, title, number_width)
+fn render_output_error(utility_name: &str) -> Vec<u8> {
+    let mut diagnostic = Vec::with_capacity(utility_name.len() + b": write error\n".len());
+    diagnostic.extend_from_slice(utility_name.as_bytes());
+    diagnostic.extend_from_slice(b": write error\n");
+    diagnostic
+}
+
+fn show_output_error() {
+    set_ct_exit_code(1);
+    let diagnostic = render_output_error(ctcore::ct_util_name());
+    let _ = io::stderr().lock().write_all(&diagnostic);
 }
 
 fn render_stats_line(
@@ -1729,6 +1762,21 @@ mod tests {
 
     use super::*;
     use rust_i18n::set_locale;
+
+    struct FailingWriter {
+        attempts: usize,
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+            self.attempts += 1;
+            Err(io::Error::from_raw_os_error(libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[cfg(unix)]
     static STDIN_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -2638,6 +2686,24 @@ mod tests {
         let (sum, overflowed) = saturating_add_with_overflow(10, 20);
         assert!(!overflowed);
         assert_eq!(sum, 30);
+    }
+
+    #[test]
+    fn test_output_failure_is_reported_once_without_file_context() {
+        let matches = get_matches_from_args(&["wc", "-c"]);
+        let settings = WcSettings::new(&matches);
+        let count = WcWordCount {
+            bytes: 3,
+            ..WcWordCount::default()
+        };
+        let mut output = WcOutput::new(FailingWriter { attempts: 0 });
+
+        output.print_stats(&settings, &count, Some(b"first"), 1);
+        output.print_stats(&settings, &count, Some(b"second"), 1);
+
+        assert!(output.failed());
+        assert_eq!(output.writer.attempts, 1);
+        assert_eq!(render_output_error("wc"), b"wc: write error\n");
     }
 
     #[test]

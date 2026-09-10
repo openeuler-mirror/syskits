@@ -978,6 +978,32 @@
             },
             "cleanup_commands": ["rm -f wc-width-stdin wc-width-other"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；统计两个文件并将stdout连接到/dev/full；GNU在首次输出失败后最终只报告一次不带文件上下文和errno的write error，预期RC=1",
+            "args": ["wc-output-a", "wc-output-b"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf 'a\\n' > wc-output-a",
+                "printf 'b\\n' > wc-output-b"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: write error\n"
+                }
+            },
+            "cleanup_commands": ["rm -f wc-output-a wc-output-b"],
+            "tstdin": ""
         }
     ]
 }

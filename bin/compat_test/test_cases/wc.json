@@ -791,6 +791,46 @@
             },
             "cleanup_commands": ["rm -f wc-wide-properties"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C.UTF-8且未设置POSIXLY_CORRECT；四种GNU扩展不换行空格分别位于两个等号之间；每行被分成两个单词",
+            "args": ["-w", "wc-nbsp-default"],
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '=\\302\\240=\\n=\\342\\200\\207=\\n=\\342\\200\\257=\\n=\\342\\201\\240=\\n' > wc-nbsp-default"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "8 wc-nbsp-default\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-nbsp-default"],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C.UTF-8且设置POSIXLY_CORRECT；禁用GNU扩展不换行空格分隔规则；每行保持为一个单词",
+            "args": ["-w", "wc-nbsp-posix"],
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export POSIXLY_CORRECT=1",
+                "printf '%b' '=\\302\\240=\\n=\\342\\200\\207=\\n=\\342\\200\\257=\\n=\\342\\201\\240=\\n' > wc-nbsp-posix"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4 wc-nbsp-posix\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-nbsp-posix"],
+            "tstdin": ""
         }
     ]
 }

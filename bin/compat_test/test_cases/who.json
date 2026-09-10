@@ -642,6 +642,28 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who -q utmp；输入400字节Linux utmp fixture，USER_PROCESS用户名字段为alice后跟三个ASCII空格；GNU计数模式通过extract_trimmed_name删除尾随空格，预期stdout为alice换行及# users=1",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[8:13]=b\"pts/0\"; b[44:52]=b\"alice   \"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "-q",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "alice\n# users=1\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

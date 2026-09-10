@@ -180,7 +180,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
             continue;
         }
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
-            validate_long_option(bytes)?;
+            validate_option(bytes)?;
             continue;
         }
 
@@ -269,6 +269,24 @@ fn match_long_option(name: &[u8]) -> LongOptionMatch {
     }
 }
 
+const WHO_SHORT_OPTIONS: &[u8] = b"abdlmpqrstuwHThV";
+
+fn validate_option(argument: &[u8]) -> CTResult<()> {
+    if argument.starts_with(b"--") {
+        validate_long_option(argument)
+    } else if let Some(unknown) = argument[1..]
+        .iter()
+        .find(|option| !WHO_SHORT_OPTIONS.contains(option))
+    {
+        Err(CTsageError::new(
+            1,
+            format!("invalid option -- '{}'", char::from(*unknown)),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_long_option(argument: &[u8]) -> CTResult<()> {
     let Some(long) = argument.strip_prefix(b"--") else {
         return Ok(());
@@ -293,7 +311,14 @@ fn validate_long_option(argument: &[u8]) -> CTResult<()> {
                 format!("option '{argument}' is ambiguous; possibilities: {possibilities}"),
             ))
         }
-        LongOptionMatch::None | LongOptionMatch::Recognized(_) => Ok(()),
+        LongOptionMatch::None => Err(CTsageError::new(
+            1,
+            format!(
+                "unrecognized option '{}'",
+                String::from_utf8_lossy(argument)
+            ),
+        )),
+        LongOptionMatch::Recognized(_) => Ok(()),
     }
 }
 
@@ -383,6 +408,22 @@ mod tests {
             error.to_string(),
             "option '--l' is ambiguous; possibilities: '--login' '--lookup'"
         );
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn unknown_long_option_uses_the_gnu_diagnostic() {
+        let args = ["who", "--not-an-option"].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(error.to_string(), "unrecognized option '--not-an-option'");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn unknown_short_option_uses_the_gnu_diagnostic() {
+        let args = ["who", "-az"].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(error.to_string(), "invalid option -- 'z'");
         assert!(error.usage());
     }
 

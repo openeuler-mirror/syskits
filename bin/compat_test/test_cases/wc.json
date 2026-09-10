@@ -932,6 +932,26 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "wc",
+            "description": "原始字节用例：LC_ALL=C；统计不存在且文件名包含0xff的路径；GNU在stderr中以shell八进制引用原始文件名字节，预期RC=1、stdout为空",
+            "args": ["6d697373696e672dff"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77633a20276d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

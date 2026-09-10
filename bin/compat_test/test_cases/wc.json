@@ -1146,6 +1146,29 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "wc",
+            "description": "原始字节用例：LC_ALL=C；--files0-from指定包含0xff的不存在来源文件；GNU quoteaf保留原始字节并报告cannot open，预期stderr完整十六进制为77633a2063616e6e6f74206f70656e20276d697373696e672d2724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a",
+            "args": ["2d2d66696c6573302d66726f6d3d6d697373696e672dff"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77633a2063616e6e6f74206f70656e20276d697373696e672d2724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

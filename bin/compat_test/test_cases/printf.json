@@ -1325,6 +1325,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=<%q>|<%q>，参数为a=b和a^b；等号及脱字符属于GNU shell特殊字符，预期分别使用外层单引号",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["<%q>|<%q>", "a=b", "a^b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "<'a=b'>|<'a^b'>",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

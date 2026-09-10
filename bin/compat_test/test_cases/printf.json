@@ -1207,6 +1207,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=<%q>|<%q>，参数为]和a]；右方括号不是GNU shell-escape特殊字符，预期保持不加引号",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["<%q>|<%q>", "]", "a]"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "<]>|<a]>",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

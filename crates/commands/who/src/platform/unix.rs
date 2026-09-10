@@ -86,7 +86,8 @@ fn who_from_matches(matches: &clap::ArgMatches) -> Who {
     let is_need_users = si_all || matches.get_flag(who_flags::WHO_USERS) || is_use_defaults;
     let is_include_idle = is_need_deadprocs || is_need_login || is_need_runlevel || is_need_users;
     let is_include_exit = is_need_deadprocs;
-    let is_short_output = !is_include_exit && is_use_defaults;
+    let is_short_output =
+        !is_include_exit && (is_use_defaults || matches.get_flag(who_flags::WHO_SHORT));
     let is_my_line_only =
         matches.get_flag(who_flags::WHO_ONLY_HOSTNAME_USER) || ct_files.len() == 2;
 
@@ -972,6 +973,21 @@ mod tests {
 
     // 互斥锁确保环境变量测试的串行执行，避免并发测试时的干扰
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn explicit_short_option_suppresses_optional_user_fields() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-u", "-s", "utmp"])
+            .unwrap();
+        let who = who_from_matches(&matches);
+        assert!(who.is_short_output);
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-d", "-s", "utmp"])
+            .unwrap();
+        let who = who_from_matches(&matches);
+        assert!(!who.is_short_output);
+    }
 
     #[test]
     fn test_idle_string() {

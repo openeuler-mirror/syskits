@@ -664,6 +664,28 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节参数用例：LC_ALL=C；创建文件名为utmp-后跟0xff的空utmp文件，并以相同非UTF-8路径执行who；GNU按原始路径字节打开文件，预期RC=0且stdout、stderr均为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "p=$(printf '%b' '\\165\\164\\155\\160\\055\\377'); : > \"$p\""
+            ],
+            "args": [
+                "75746d702dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

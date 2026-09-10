@@ -520,7 +520,7 @@ fn escape_printf_shell_bytes(bytes: &[u8]) -> Vec<u8> {
     escape_shell_bytes_with_classifier(bytes, classify_printf_locale_sequence)
 }
 
-fn classify_printf_locale_sequence(bytes: &[u8]) -> (usize, bool) {
+pub(super) fn classify_printf_locale_sequence(bytes: &[u8]) -> (usize, bool) {
     if uses_unibyte_locale() {
         return (1, unsafe {
             crate::libc::isprint(crate::libc::c_int::from(bytes[0])) != 0

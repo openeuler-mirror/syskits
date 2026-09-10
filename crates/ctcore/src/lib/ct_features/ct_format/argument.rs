@@ -15,14 +15,13 @@ use super::long_double::{
 use crate::{
     ct_error::set_ct_exit_code,
     ct_features::ct_format::num_parser::{ParseError, ParsedNumber},
-    ct_quoting_style::{
-        CtQuotes, CtQuotingStyle, escape_name, escape_unibyte_c_bytes, uses_unibyte_locale,
-    },
-    ct_show_error, ct_show_warning,
+    ct_show_warning,
 };
 use std::ffi::{CStr, OsStr};
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
+
+use super::spec::classify_printf_locale_sequence;
 
 unsafe extern "C" {
     fn mbrtowc(
@@ -276,12 +275,12 @@ fn extract_long_double(
             match error {
                 LongDoubleParseError::OutOfRange(value) => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: Numerical result out of range", input_escaped);
+                    show_numeric_error(&input_escaped, b"Numerical result out of range");
                     value
                 }
                 LongDoubleParseError::NotNumeric => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: expected a numeric value", input_escaped);
+                    show_numeric_error(&input_escaped, b"expected a numeric value");
                     ExtendedBigDecimal::default()
                 }
                 LongDoubleParseError::PartialMatch(value, rest) => {
@@ -294,7 +293,7 @@ fn extract_long_double(
                         }
                     } else {
                         set_ct_exit_code(1);
-                        ct_show_error!("{}: value not completely converted", input_escaped);
+                        show_numeric_error(&input_escaped, b"value not completely converted");
                     }
                     value
                 }
@@ -343,98 +342,111 @@ fn character_constant_warning(utility_name: &str, trailing: &[u8]) -> Vec<u8> {
 fn invalid_numeric_bytes<T: Default>(bytes: &[u8]) -> T {
     set_ct_exit_code(1);
     let escaped = quote_numeric_argument(OsStr::from_bytes(bytes));
-    ct_show_error!("{}: expected a numeric value", escaped);
+    show_numeric_error(&escaped, b"expected a numeric value");
     T::default()
 }
 
-fn quote_numeric_argument(input: &OsStr) -> String {
-    quote_numeric_argument_for_locale(input, uses_unibyte_locale(), uses_utf8_codeset())
-}
-
-fn quote_numeric_argument_for_locale(
-    input: &OsStr,
-    unibyte_locale: bool,
-    utf8_codeset: bool,
-) -> String {
-    if unibyte_locale {
-        return escape_unibyte_c_bytes(input.as_bytes(), CtQuotes::Single);
-    }
-    if utf8_codeset {
-        return quote_utf8_numeric_bytes(input.as_bytes());
-    }
-    escape_name(
-        input,
-        &CtQuotingStyle::C {
-            quotes: CtQuotes::Single,
-        },
+fn quote_numeric_argument(input: &OsStr) -> Vec<u8> {
+    let (left_quote, right_quote) = numeric_locale_quote_marks();
+    quote_numeric_bytes_with_classifier(
+        input.as_bytes(),
+        left_quote,
+        right_quote,
+        classify_printf_locale_sequence,
     )
 }
 
-fn uses_utf8_codeset() -> bool {
+fn quote_numeric_bytes_with_classifier<F>(
+    input: &[u8],
+    left_quote: &[u8],
+    right_quote: &[u8],
+    mut classify: F,
+) -> Vec<u8>
+where
+    F: FnMut(&[u8]) -> (usize, bool),
+{
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        if !right_quote.is_empty() && input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        let byte = input[index];
+        if byte.is_ascii() {
+            match byte {
+                b'\x07' => quoted.extend_from_slice(b"\\a"),
+                b'\x08' => quoted.extend_from_slice(b"\\b"),
+                b'\t' => quoted.extend_from_slice(b"\\t"),
+                b'\n' => quoted.extend_from_slice(b"\\n"),
+                b'\x0b' => quoted.extend_from_slice(b"\\v"),
+                b'\x0c' => quoted.extend_from_slice(b"\\f"),
+                b'\r' => quoted.extend_from_slice(b"\\r"),
+                b'\\' => quoted.extend_from_slice(b"\\\\"),
+                0x00..=0x1f | 0x7f => push_octal_byte_to_vec(&mut quoted, byte),
+                _ => quoted.push(byte),
+            }
+            index += 1;
+            continue;
+        }
+
+        let (length, printable) = classify(&input[index..]);
+        let length = length.clamp(1, input.len() - index);
+        if printable {
+            quoted.extend_from_slice(&input[index..index + length]);
+        } else {
+            for byte in &input[index..index + length] {
+                push_octal_byte_to_vec(&mut quoted, *byte);
+            }
+        }
+        index += length;
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn numeric_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
     let codeset = unsafe { crate::libc::nl_langinfo(crate::libc::CODESET) };
     if codeset.is_null() {
-        return false;
+        return (b"'", b"'");
     }
-    matches!(
-        unsafe { CStr::from_ptr(codeset) }.to_bytes(),
-        b"UTF-8" | b"UTF8" | b"utf-8" | b"utf8"
-    )
+    numeric_locale_quote_marks_for_codeset(unsafe { CStr::from_ptr(codeset) }.to_bytes())
 }
 
-fn quote_utf8_numeric_bytes(mut bytes: &[u8]) -> String {
-    let mut escaped = String::from("‘");
-    while !bytes.is_empty() {
-        match std::str::from_utf8(bytes) {
-            Ok(valid) => {
-                for character in valid.chars() {
-                    push_locale_quoted_character(&mut escaped, character);
-                }
-                break;
-            }
-            Err(error) => {
-                let valid_length = error.valid_up_to();
-                let (valid, rest) = bytes.split_at(valid_length);
-                for character in unsafe { std::str::from_utf8_unchecked(valid) }.chars() {
-                    push_locale_quoted_character(&mut escaped, character);
-                }
-
-                let invalid_length = error.error_len().unwrap_or(rest.len());
-                for byte in &rest[..invalid_length] {
-                    push_octal_byte(&mut escaped, *byte);
-                }
-                bytes = &rest[invalid_length..];
-            }
-        }
-    }
-    escaped.push('’');
-    escaped
-}
-
-fn push_locale_quoted_character(escaped: &mut String, character: char) {
-    match character {
-        '\x07' => escaped.push_str("\\a"),
-        '\x08' => escaped.push_str("\\b"),
-        '\t' => escaped.push_str("\\t"),
-        '\n' => escaped.push_str("\\n"),
-        '\x0b' => escaped.push_str("\\v"),
-        '\x0c' => escaped.push_str("\\f"),
-        '\r' => escaped.push_str("\\r"),
-        '\\' => escaped.push_str("\\\\"),
-        control if control.is_control() => {
-            let mut buffer = [0u8; 4];
-            for byte in control.encode_utf8(&mut buffer).as_bytes() {
-                push_octal_byte(escaped, *byte);
-            }
-        }
-        printable => escaped.push(printable),
+fn numeric_locale_quote_marks_for_codeset(codeset: &[u8]) -> (&'static [u8], &'static [u8]) {
+    if codeset.eq_ignore_ascii_case(b"UTF-8") || codeset.eq_ignore_ascii_case(b"UTF8") {
+        (b"\xe2\x80\x98", b"\xe2\x80\x99")
+    } else if codeset.eq_ignore_ascii_case(b"GB18030") {
+        // Match the fallback byte strings emitted by GNU quotearg.c.
+        (b"\xa1\x07e", b"\xa1\xaf")
+    } else {
+        (b"'", b"'")
     }
 }
 
-fn push_octal_byte(escaped: &mut String, byte: u8) {
-    escaped.push('\\');
-    escaped.push(char::from(b'0' + (byte >> 6)));
-    escaped.push(char::from(b'0' + ((byte >> 3) & 7)));
-    escaped.push(char::from(b'0' + (byte & 7)));
+fn push_octal_byte_to_vec(escaped: &mut Vec<u8>, byte: u8) {
+    escaped.push(b'\\');
+    escaped.push(b'0' + (byte >> 6));
+    escaped.push(b'0' + ((byte >> 3) & 7));
+    escaped.push(b'0' + (byte & 7));
+}
+
+fn show_numeric_error(quoted: &[u8], message: &[u8]) {
+    let utility_name = crate::ct_util_name();
+    let mut diagnostic = Vec::with_capacity(utility_name.len() + quoted.len() + message.len() + 4);
+    diagnostic.extend_from_slice(utility_name.as_bytes());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(quoted);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message);
+    diagnostic.push(b'\n');
+    let _ = std::io::stderr().lock().write_all(&diagnostic);
 }
 
 // 该函数接收两个通用参数： T 和 ParseError<'_, T>。该函数用于从解析结果中提取值，并处理可能出现的解析错误。
@@ -456,12 +468,12 @@ fn extract_value_with_overflow<T: Default>(
             match e {
                 ParseError::CtOverflow => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: Numerical result out of range", input_escaped);
+                    show_numeric_error(&input_escaped, b"Numerical result out of range");
                     overflow_value
                 }
                 ParseError::CtNotNumeric => {
                     set_ct_exit_code(1);
-                    ct_show_error!("{}: expected a numeric value", input_escaped);
+                    show_numeric_error(&input_escaped, b"expected a numeric value");
                     Default::default()
                 }
                 ParseError::CtPartialMatch(v, rest) => {
@@ -474,7 +486,7 @@ fn extract_value_with_overflow<T: Default>(
                         }
                     } else {
                         set_ct_exit_code(1);
-                        ct_show_error!("{}: value not completely converted", input_escaped);
+                        show_numeric_error(&input_escaped, b"value not completely converted");
                     }
                     v
                 }
@@ -700,20 +712,41 @@ mod tests {
 
     #[test]
     fn numeric_diagnostic_quotes_keep_spaces_unescaped() {
-        assert_eq!(quote_numeric_argument(OsStr::new(" ")), "' '");
-        assert_eq!(quote_numeric_argument(OsStr::new("a b")), "'a b'");
-        assert_eq!(quote_numeric_argument(OsStr::new("'")), "'\\''");
+        assert_eq!(quote_numeric_argument(OsStr::new(" ")), b"' '");
+        assert_eq!(quote_numeric_argument(OsStr::new("a b")), b"'a b'");
     }
 
     #[test]
-    fn multibyte_locale_numeric_diagnostics_use_locale_quotes() {
+    fn numeric_diagnostic_preserves_printable_single_byte_locale_bytes() {
         assert_eq!(
-            quote_numeric_argument_for_locale(OsStr::new("a'b"), false, true),
-            "‘a'b’"
+            quote_numeric_bytes_with_classifier(b"\xa01", b"'", b"'", |_| (1, true)),
+            b"'\xa01'"
+        );
+    }
+
+    #[test]
+    fn numeric_diagnostic_classifies_multibyte_locale_sequences() {
+        assert_eq!(
+            quote_numeric_bytes_with_classifier(b"\xc2\x81\xff", b"'", b"'", |bytes| {
+                if bytes.starts_with(b"\xc2\x81") {
+                    (2, true)
+                } else {
+                    (1, false)
+                }
+            }),
+            b"'\xc2\x81\\377'"
+        );
+    }
+
+    #[test]
+    fn numeric_diagnostic_uses_codeset_specific_quote_marks() {
+        assert_eq!(
+            numeric_locale_quote_marks_for_codeset(b"UTF-8"),
+            (&b"\xe2\x80\x98"[..], &b"\xe2\x80\x99"[..])
         );
         assert_eq!(
-            quote_numeric_argument_for_locale(OsStr::from_bytes(b"\xff"), false, true),
-            "‘\\377’"
+            numeric_locale_quote_marks_for_codeset(b"ISO-8859-1"),
+            (&b"'"[..], &b"'"[..])
         );
     }
 

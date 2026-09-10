@@ -1153,6 +1153,31 @@
         },
         {
             "tstdin": "",
+            "byteMode": true,
+            "command": "printf",
+            "description": "LC_ALL=en_US.iso88591；格式参数字节=2564（%d），参数字节=a031（可打印ISO-8859-1字节后跟数字1）；预期输出0、RC=1，数值错误诊断在ASCII单引号内原样保留字节a0",
+            "setup_commands": [
+                "export LC_ALL=en_US.iso88591",
+                "export LANG=en_US.iso88591",
+                "export LANGUAGE=C"
+            ],
+            "args": ["2564", "a031"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "30",
+                    "stderr": "7072696e74663a2027a031273a2065787065637465642061206e756d657269632076616c75650a"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
             "command": "printf",
             "description": "LC_ALL=en_US.UTF-8；FORMAT=%'.12d|%'.12u，参数均为1234；整数精度补零不参与千位分组，预期在有效数字1,234左侧补8个零",
             "setup_commands": [

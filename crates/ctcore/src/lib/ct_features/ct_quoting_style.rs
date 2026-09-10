@@ -315,6 +315,7 @@ pub(crate) fn uses_unibyte_locale() -> bool {
     false
 }
 
+#[cfg(test)]
 pub(crate) fn escape_unibyte_c_bytes(name: &[u8], quotes: CtQuotes) -> String {
     let mut escaped = String::with_capacity(name.len());
     for byte in name {

@@ -1193,6 +1193,28 @@
             "cleanup_commands": ["p=$(printf 'list-\\377'); rmdir \"$p\""],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "wc",
+            "description": "Linux；--files0-from读取可打开且元数据为小型普通文件、但offset 0读取返回EIO的/proc/self/mem；GNU预读readtokens0失败后统一报告cannot read file names且不附加errno",
+            "args": ["--files0-from=/proc/self/mem"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: cannot read file names from '/proc/self/mem'\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

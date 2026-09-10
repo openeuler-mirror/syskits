@@ -216,7 +216,7 @@ impl<'a> WcInputs<'a> {
             Self::Stdin => Box::new(iter::once(Ok(WcInput::Stdin(StdinKind::Implicit)))),
             Self::Paths(inputs) => Box::new(inputs.iter().map(|i| Ok(i.as_borrowed()))),
             Self::Files0From(input) => match input {
-                WcInput::Path(path) => Box::new(files0_iter_file(path)?),
+                WcInput::Path(path) => files0_iter_file(path),
                 WcInput::Stdin(_) => Box::new(files0_iter_stdin()),
             },
             Self::Files0FromStdin(inputs) => Box::new(inputs.iter().map(|input| match input {
@@ -364,9 +364,9 @@ impl<'a> WcInput<'a> {
     fn try_as_files0(&self) -> CTResult<Option<Vec<WcInput<'static>>>> {
         match self {
             Self::Path(path) => match fs::metadata(path) {
-                Ok(meta) if meta.is_file() && meta.len() <= (10 << 20) => Ok(Some(
-                    files0_iter_file(path)?.collect::<Result<Vec<_>, _>>()?,
-                )),
+                Ok(meta) if meta.is_file() && meta.len() <= (10 << 20) => {
+                    Ok(Some(files0_iter_file(path).collect::<Result<Vec<_>, _>>()?))
+                }
                 _ => Ok(None),
             },
             Self::Stdin(_) => {
@@ -1129,9 +1129,29 @@ fn gnu_quotef_requires_outer_quotes(bytes: &[u8]) -> bool {
             .any(|byte| b"`$&*()|[;\\'\"<>=^?! ".contains(byte))
 }
 
+#[cfg(unix)]
+fn quote_always_diagnostic_name(name: &OsStr) -> Vec<u8> {
+    let bytes = name.as_encoded_bytes();
+    let quoted = quote_output_name(name);
+    if quoted.as_slice() != bytes {
+        return quoted;
+    }
+
+    let mut forced = Vec::with_capacity(bytes.len() + 2);
+    forced.push(b'\'');
+    forced.extend_from_slice(bytes);
+    forced.push(b'\'');
+    forced
+}
+
 #[cfg(not(unix))]
 fn quote_diagnostic_name(name: &OsStr) -> Vec<u8> {
     escape_name(name, WC_QS_ESCAPE).into_bytes()
+}
+
+#[cfg(not(unix))]
+fn quote_always_diagnostic_name(name: &OsStr) -> Vec<u8> {
+    escape_name(name, WC_QS_QUOTE_ESCAPE).into_bytes()
 }
 
 #[cfg(unix)]
@@ -1585,18 +1605,15 @@ fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
     })
 }
 
-fn files0_iter_file<'a>(path: &Path) -> CTResult<impl Iterator<Item = InputIterItem<'a>>> {
-    let f = File::open(path);
-    if let Ok(f) = f {
-        Ok(files0_iter(f, path.into()))
-    } else {
-        let e = f.unwrap_err();
-        Err(e.map_err_context(|| {
-            format!(
-                "cannot open {} for reading",
-                escape_name(path.as_os_str(), WC_QS_QUOTE_ESCAPE)
-            )
-        }))
+fn files0_iter_file<'a>(path: &Path) -> Box<dyn Iterator<Item = InputIterItem<'a>> + 'a> {
+    match File::open(path) {
+        Ok(file) => Box::new(files0_iter(file, path.into())),
+        Err(error) => {
+            let input = WcInput::from(path);
+            Box::new(iter::once(Err(WcInputIterError::Diagnostic(
+                render_files0_open_error(&input, &error),
+            ))))
+        }
     }
 }
 
@@ -1796,6 +1813,21 @@ fn render_files0_zero_length_error(source: &WcInput, index: usize) -> Vec<u8> {
     diagnostic.push(b':');
     diagnostic.extend_from_slice(index.as_bytes());
     diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message.as_bytes());
+    diagnostic
+}
+
+fn render_files0_open_error(source: &WcInput, error: &io::Error) -> Vec<u8> {
+    let title = match source {
+        WcInput::Path(path) => quote_always_diagnostic_name(path.as_os_str()),
+        WcInput::Stdin(_) => quote_always_diagnostic_name(OsStr::new(WC_STDIN_REPR)),
+    };
+    let message = strip_errno(error);
+    let mut diagnostic =
+        Vec::with_capacity(title.len() + message.len() + b"cannot open  for reading: ".len());
+    diagnostic.extend_from_slice(b"cannot open ");
+    diagnostic.extend_from_slice(&title);
+    diagnostic.extend_from_slice(b" for reading: ");
     diagnostic.extend_from_slice(message.as_bytes());
     diagnostic
 }
@@ -2608,6 +2640,22 @@ mod tests {
         assert_eq!(input.files0_source_display(), b"'list-'$'\\377'".as_slice());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_files0_open_error_preserves_non_utf8_source_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let input = WcInput::Path(Cow::Owned(PathBuf::from(OsString::from_vec(
+            b"missing-\xff".to_vec(),
+        ))));
+        let error = io::Error::from_raw_os_error(libc::ENOENT);
+
+        assert_eq!(
+            render_files0_open_error(&input, &error),
+            b"cannot open 'missing-'$'\\377' for reading: No such file or directory"
+        );
+    }
+
     #[test]
     fn test_path_display() {
         let input_path = WcInput::Path(Cow::Owned(PathBuf::from("/tmp/example.txt")));
@@ -2957,7 +3005,7 @@ mod tests {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(temp_file.as_file_mut(), "file1.txt\0file2.txt\0").unwrap();
 
-        let iter = files0_iter_file(temp_file.path()).unwrap();
+        let iter = files0_iter_file(temp_file.path());
         let inputs: Vec<_> = iter.collect();
 
         assert_eq!(inputs.len(), 2);
@@ -2993,7 +3041,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().unwrap();
         write!(temp_file.as_file_mut(), "file1.txt\0file2.txt\0").unwrap();
 
-        let iter = files0_iter_file(temp_file.path()).unwrap();
+        let iter = files0_iter_file(temp_file.path());
         let inputs: Vec<_> = iter.collect();
 
         assert_eq!(inputs.len(), 2);

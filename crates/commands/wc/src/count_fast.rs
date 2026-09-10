@@ -28,6 +28,7 @@ use nix::sys::stat;
 use ctcore::ct_pipes::{pipe, splice, splice_exact};
 
 // cSpell:ignore sysconf
+use crate::read_utf8::{ReadBufDecoder, ReadBufDecoderError};
 use crate::word_count::WcWordCount;
 
 use super::WcWordCountable;
@@ -172,12 +173,36 @@ pub(crate) fn count_bytes_chars_lines_from_stream<
 >(
     handle: &mut R,
 ) -> (WcWordCount, Option<io::Error>) {
-    /// Mask of the value bits of a continuation byte
-    const CONT_MASK: u8 = 0b0011_1111u8;
-    /// Value of the tag bits (tag mask is !CONT_MASK) of a continuation byte
-    const TAG_CONT_U8: u8 = 0b1000_0000u8;
-
     let mut total = WcWordCount::default();
+    if COUNT_CHARS {
+        let mut decoder = ReadBufDecoder::new(io::BufReader::new(handle));
+        while let Some(chunk) = decoder.next_strict() {
+            match chunk {
+                Ok(text) => {
+                    if COUNT_BYTES {
+                        total.bytes = total.bytes.saturating_add(text.len());
+                    }
+                    total.chars = total.chars.saturating_add(text.chars().count());
+                    if COUNT_LINES {
+                        total.lines = total
+                            .lines
+                            .saturating_add(bytecount::count(text.as_bytes(), b'\n'));
+                    }
+                }
+                Err(ReadBufDecoderError::InvalidByteSequence(bytes)) => {
+                    if COUNT_BYTES {
+                        total.bytes = total.bytes.saturating_add(bytes.len());
+                    }
+                    if COUNT_LINES {
+                        total.lines = total.lines.saturating_add(bytecount::count(bytes, b'\n'));
+                    }
+                }
+                Err(ReadBufDecoderError::Io(error)) => return (total, Some(error)),
+            }
+        }
+        return (total, None);
+    }
+
     let mut buf = [0; COUNT_FAST_BUF_SIZE];
     loop {
         let read_cnt = handle.read(&mut buf);
@@ -186,12 +211,6 @@ pub(crate) fn count_bytes_chars_lines_from_stream<
             Ok(n) => {
                 if COUNT_BYTES {
                     total.bytes += n;
-                }
-                if COUNT_CHARS {
-                    total.chars += buf[..n]
-                        .iter()
-                        .filter(|&&byte| (byte & !CONT_MASK) != TAG_CONT_U8)
-                        .count();
                 }
                 if COUNT_LINES {
                     total.lines += bytecount::count(&buf[..n], b'\n');
@@ -342,6 +361,19 @@ mod tests {
         assert_eq!(count.bytes, 32);
         assert_eq!(count.chars, 12);
         assert_eq!(count.lines, 2);
+    }
+
+    #[test]
+    fn test_count_chars_ignores_invalid_and_incomplete_utf8_sequences() {
+        let mut cursor = Cursor::new(b"\xff\xc2\n");
+
+        let (count, error) =
+            count_bytes_chars_lines_from_stream::<_, true, true, true>(&mut cursor);
+
+        assert!(error.is_none());
+        assert_eq!(count.bytes, 3);
+        assert_eq!(count.chars, 1);
+        assert_eq!(count.lines, 1);
     }
 
     // Test for counting bytes, characters, and lines with input containing a mixture of characters

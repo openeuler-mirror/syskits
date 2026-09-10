@@ -711,6 +711,26 @@
             },
             "cleanup_commands": ["rm -f wc-c-high-bytes"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C.UTF-8；输入包含无效0xff字节、EOF前残缺UTF-8起始字节及换行；GNU只将有效换行计为字符",
+            "args": ["-m", "wc-invalid-utf8"],
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '\\377\\302\\012' > wc-invalid-utf8"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 wc-invalid-utf8\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-invalid-utf8"],
+            "tstdin": ""
         }
     ]
 }

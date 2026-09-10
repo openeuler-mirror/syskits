@@ -1226,6 +1226,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C.UTF-8；FORMAT=%q，参数字节为61276209（a、单引号、b、制表符）；单引号扫描后以控制字符转义段结尾，预期输出GNU两遍quotearg状态对应的'''a'\\''b'$'\\t'",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%q", "a'b\t"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'''a'\\''b'$'\\t'",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

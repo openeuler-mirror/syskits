@@ -223,10 +223,13 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
     (escaped_str, must_quote)
 }
 
-fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
+fn shell_with_escape_pass(
+    name: &str,
+    quotes: CtQuotes,
+    mut in_dollar: bool,
+) -> (String, bool, bool) {
     // We need to keep track of whether we are in a dollar expression
     // because e.g. \b\n is escaped as $'\b\n' and not like $'b'$'n'
-    let mut in_dollar = false;
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
 
@@ -285,6 +288,19 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
             }
         }
     }
+    (escaped_str, must_quote, in_dollar)
+}
+
+fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
+    let (escaped_str, must_quote, in_dollar) = shell_with_escape_pass(name, quotes, false);
+    // GNU's apostrophe-minimization rescan retains an open trailing $'...' state.
+    let (escaped_str, mut must_quote) = if in_dollar && name.contains('\'') {
+        let (escaped_str, must_quote, _) = shell_with_escape_pass(name, quotes, true);
+        (escaped_str, must_quote)
+    } else {
+        (escaped_str, must_quote)
+    };
+
     must_quote = must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
@@ -324,7 +340,23 @@ pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
         }
     }
 
-    let mut in_dollar = false;
+    let (escaped_str, must_quote, in_dollar) = escape_unibyte_shell_bytes_pass(name, false);
+    let (escaped_str, mut must_quote) = if in_dollar && name.contains(&b'\'') {
+        let (escaped_str, must_quote, _) = escape_unibyte_shell_bytes_pass(name, true);
+        (escaped_str, must_quote)
+    } else {
+        (escaped_str, must_quote)
+    };
+
+    must_quote = must_quote || matches!(name.first(), Some(b'~' | b'#'));
+    if must_quote {
+        format!("'{escaped_str}'")
+    } else {
+        escaped_str
+    }
+}
+
+fn escape_unibyte_shell_bytes_pass(name: &[u8], mut in_dollar: bool) -> (String, bool, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
 
@@ -376,13 +408,7 @@ pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
             }
         }
     }
-
-    must_quote = must_quote || matches!(name.first(), Some(b'~' | b'#'));
-    if must_quote {
-        format!("'{escaped_str}'")
-    } else {
-        escaped_str
-    }
+    (escaped_str, must_quote, in_dollar)
 }
 
 pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
@@ -1079,6 +1105,37 @@ mod tests {
         assert_eq!(escape_name(OsStr::new("a]"), &style), "a]");
         assert_eq!(escape_unibyte_shell_bytes(b"["), "'['");
         assert_eq!(escape_name(OsStr::new("a["), &style), "'a['");
+    }
+
+    #[test]
+    fn shell_escape_quoting_preserves_apostrophe_scan_before_trailing_escape() {
+        let style = CtQuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control: true,
+        };
+
+        let expected = "'''a'\\''b'$'\\t'";
+        assert_eq!(escape_unibyte_shell_bytes(b"a'b\t"), expected);
+        assert_eq!(escape_name(OsStr::new("a'b\t"), &style), expected);
+
+        let control_before_apostrophe = "''$'\\t'\\''ab'";
+        assert_eq!(
+            escape_unibyte_shell_bytes(b"\t'ab"),
+            control_before_apostrophe
+        );
+        assert_eq!(
+            escape_name(OsStr::new("\t'ab"), &style),
+            control_before_apostrophe
+        );
+
+        let leading_apostrophe = "''\\'''$'\\t'";
+        assert_eq!(escape_unibyte_shell_bytes(b"'\t"), leading_apostrophe);
+        assert_eq!(escape_name(OsStr::new("'\t"), &style), leading_apostrophe);
+
+        let leading_control = "'\\t''a'\\''b'$'\\t'";
+        assert_eq!(escape_unibyte_shell_bytes(b"\ta'b\t"), leading_control);
+        assert_eq!(escape_name(OsStr::new("\ta'b\t"), &style), leading_control);
     }
 
     #[test]

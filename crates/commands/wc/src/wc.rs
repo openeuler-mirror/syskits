@@ -995,11 +995,8 @@ struct WcLocale {
 #[cfg(unix)]
 impl WcLocale {
     fn from_environment() -> Self {
-        let name = ["LC_ALL", "LC_CTYPE", "LANG"]
-            .into_iter()
-            .find_map(|variable| std::env::var_os(variable).filter(|value| !value.is_empty()))
-            .unwrap_or_else(|| OsString::from("C"));
-        Self::from_name_or_c(&name)
+        Self::from_name_with_mask(OsStr::new(""), libc::LC_ALL_MASK)
+            .unwrap_or_else(|| Self::from_name_or_c(OsStr::new("C")))
     }
 
     fn from_name_or_c(name: &OsStr) -> Self {
@@ -1009,11 +1006,14 @@ impl WcLocale {
     }
 
     fn from_name(name: &OsStr) -> Option<Self> {
+        Self::from_name_with_mask(name, libc::LC_CTYPE_MASK)
+    }
+
+    fn from_name_with_mask(name: &OsStr, mask: libc::c_int) -> Option<Self> {
         use std::os::unix::ffi::OsStrExt;
 
         let name = CString::new(name.as_bytes()).ok()?;
-        let raw =
-            unsafe { libc::newlocale(libc::LC_CTYPE_MASK, name.as_ptr(), std::ptr::null_mut()) };
+        let raw = unsafe { libc::newlocale(mask, name.as_ptr(), std::ptr::null_mut()) };
         if raw.is_null() {
             return None;
         }
@@ -2677,6 +2677,36 @@ mod tests {
         let locale = WcLocale::from_name_or_c(std::ffi::OsStr::new("does_NOT_exist"));
 
         assert!(locale.is_c);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_invalid_non_ctype_locale_category_falls_back_to_c_locale() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::invalid_non_ctype_locale_category_child"])
+            .env("WC_INVALID_LOCALE_CHILD", "1")
+            .env_remove("LC_ALL")
+            .env("LC_CTYPE", "C.UTF-8")
+            .env("LC_NUMERIC", "does_NOT_exist")
+            .env("LANG", "C")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn invalid_non_ctype_locale_category_child() {
+        if std::env::var_os("WC_INVALID_LOCALE_CHILD").is_none() {
+            return;
+        }
+
+        assert!(WcLocale::from_environment().is_c);
     }
 
     #[test]

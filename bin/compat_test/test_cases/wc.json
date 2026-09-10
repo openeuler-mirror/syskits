@@ -854,6 +854,28 @@
         },
         {
             "command": "wc",
+            "description": "LC_ALL未设置、LC_CTYPE=C.UTF-8但LC_NUMERIC无效；GNU的setlocale(LC_ALL)整体失败并保留C locale，UTF-8字节不构成单词、-m按3字节计数、-L为0",
+            "args": ["-w", "-m", "-L", "wc-invalid-non-ctype-locale"],
+            "setup_commands": [
+                "export LC_ALL=''",
+                "export LC_CTYPE='C.UTF-8'",
+                "export LC_NUMERIC='does_NOT_exist'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf '\\303\\251\\n' > wc-invalid-non-ctype-locale"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0 3 0 wc-invalid-non-ctype-locale\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-invalid-non-ctype-locale"],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
             "description": "原始字节用例：LC_ALL=C；统计文件名包含0xff且不含换行的普通文件；GNU成功输出时原样保留文件名字节，预期RC=0、stderr为空、stdout完整十六进制为3020312033206e6f6e7574662dff0a",
             "args": ["6e6f6e7574662dff"],
             "setup_commands": [

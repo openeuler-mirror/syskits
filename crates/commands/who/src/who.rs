@@ -12,7 +12,8 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CTsageError};
 
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -166,6 +167,37 @@ pub(crate) fn ct_app_for_parse(posixly_correct: bool) -> Command {
     ct_app().trailing_var_arg(posixly_correct)
 }
 
+pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+    let mut parse_options = true;
+    let mut operand_count = 0;
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if parse_options && bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            continue;
+        }
+
+        operand_count += 1;
+        if operand_count > 2 {
+            return Err(CTsageError::new(
+                1,
+                format!("extra operand {}", argument.as_os_str().quote()),
+            ));
+        }
+        if posixly_correct {
+            parse_options = false;
+        }
+    }
+
+    Ok(args)
+}
+
 #[derive(Default)]
 pub struct Who;
 impl Tool for Who {
@@ -223,6 +255,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             [std::ffi::OsStr::new("utmp"), std::ffi::OsStr::new("-q")]
         );
+    }
+
+    #[test]
+    fn third_operand_uses_the_gnu_extra_operand_diagnostic() {
+        let args = ["who", "a", "b", "c"].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(error.to_string(), "extra operand 'c'");
+        assert!(error.usage());
     }
 
     #[test]

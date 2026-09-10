@@ -27,8 +27,8 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use sys_locale::get_locale;
 
-use crate::ct_app_for_parse;
 use crate::who_flags;
+use crate::{ct_app_for_parse, prepare_who_args};
 
 fn get_long_usage() -> String {
     format!(
@@ -42,6 +42,7 @@ pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = prepare_who_args(args)?;
     let matches: clap::ArgMatches = ct_app_for_parse(std::env::var_os("POSIXLY_CORRECT").is_some())
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;
@@ -54,6 +55,7 @@ pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn who_native_semantic(args: impl ctcore::Args) -> CTResult<WhoSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = prepare_who_args(args)?;
     let matches: clap::ArgMatches = ct_app_for_parse(std::env::var_os("POSIXLY_CORRECT").is_some())
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;

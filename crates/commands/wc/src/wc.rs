@@ -25,7 +25,7 @@ use sys_locale::get_locale;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
-use ctcore::ct_error::{CTError, CTResult, FromIo, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_show;
@@ -541,7 +541,7 @@ pub fn wc_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = ct_app().try_get_matches_from(wc_args(args)?)?;
     let inputs = WcInputs::new(&matches)?;
     let settings = WcSettings::new(&matches);
     wc(&inputs, &settings)
@@ -584,13 +584,68 @@ pub fn wc_native_semantic(args: impl ctcore::Args) -> CTResult<WcSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = ct_app().try_get_matches_from(wc_args(args)?)?;
     let inputs = WcInputs::new(&matches)?;
     let classic_settings = WcSettings::new(&matches);
     let native_settings = wc_native_settings(&matches);
     let scan_settings = wc_scan_settings(&matches);
 
     build_wc_semantic(&inputs, &scan_settings, &native_settings, &classic_settings)
+}
+
+fn wc_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    validate_required_option_arguments(&args)?;
+    Ok(args)
+}
+
+fn validate_required_option_arguments(args: &[OsString]) -> CTResult<()> {
+    let posix = std::env::var_os("POSIXLY_CORRECT").is_some();
+    let mut index = 1;
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.is_empty() || bytes == b"-" || bytes[0] != b'-' {
+            if posix {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        let Some(long) = bytes.strip_prefix(b"--") else {
+            index += 1;
+            continue;
+        };
+        if long.contains(&b'=') {
+            index += 1;
+            continue;
+        }
+        let Some(canonical) = canonical_value_option(long) else {
+            index += 1;
+            continue;
+        };
+        if index + 1 == args.len() {
+            return Err(CTsageError::new(
+                1,
+                format!("option '--{canonical}' requires an argument"),
+            ));
+        }
+        index += 2;
+    }
+    Ok(())
+}
+
+fn canonical_value_option(option: &[u8]) -> Option<&'static str> {
+    let mut matches = ["files0-from", "total"].into_iter().filter(|candidate| {
+        !option.is_empty()
+            && option.len() <= candidate.len()
+            && candidate.as_bytes().starts_with(option)
+    });
+    let canonical = matches.next()?;
+    matches.next().is_none().then_some(canonical)
 }
 
 fn has_explicit_count_flags(matches: &ArgMatches) -> bool {
@@ -2107,6 +2162,25 @@ mod tests {
             WcError::disabled_files(&OsString::from("extra")).to_string(),
             "extra operand 'extra'\nfile operands cannot be combined with --files0-from"
         );
+    }
+
+    #[test]
+    fn test_required_long_options_report_gnu_missing_argument_diagnostic() {
+        for (option, canonical) in [
+            ("--total", "--total"),
+            ("--t", "--total"),
+            ("--files0-from", "--files0-from"),
+            ("--f", "--files0-from"),
+        ] {
+            let error = wc_main([OsString::from("wc"), OsString::from(option)].into_iter())
+                .expect_err("missing option value should fail");
+
+            assert_eq!(
+                error.to_string(),
+                format!("option '{canonical}' requires an argument")
+            );
+            assert!(error.usage());
+        }
     }
 
     #[test]

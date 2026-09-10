@@ -1286,6 +1286,50 @@
             "timeout": 3,
             "cleanup_commands": ["rm -f wc-single-byte-sparse"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；--total位于参数末尾且缺少必需值；GNU报告规范选项名及requires an argument并附加Try提示",
+            "args": ["--total"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: option '--total' requires an argument\nTry 'wc --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；--files0-from位于参数末尾且缺少必需值；GNU报告规范选项名及requires an argument并附加Try提示",
+            "args": ["--files0-from"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "wc: option '--files0-from' requires an argument\nTry 'wc --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

@@ -286,7 +286,7 @@ fn fallback_boot_time(source: &str, need_boot_time: bool, saw_boot_time: bool) -
         .flatten()
 }
 
-fn time_string_from_timestamp(timestamp: i64) -> String {
+fn time_string(timestamp: i64) -> String {
     let utc = time::OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
     let offset = time::UtcOffset::local_offset_at(utc).unwrap_or(time::UtcOffset::UTC);
     let local = utc.to_offset(offset);
@@ -298,23 +298,6 @@ fn time_string_from_timestamp(timestamp: i64) -> String {
     local
         .format(&time::format_description::parse(format).unwrap())
         .unwrap()
-}
-
-fn time_string(utmpx: &CtUtmpx) -> String {
-    // Use ctcore's hard_locale_time() function (consistent with GNU coreutils)
-    let time_fmt = if hard_locale_time() {
-        // "%Y-%m-%d %H:%M" - ISO format for hard locales
-        time::format_description::parse(
-            "[year]-[month padding:zero]-[day padding:zero] [hour]:[minute]",
-        )
-        .unwrap()
-    } else {
-        // "%b %e %H:%M" - English month abbreviation format for C/POSIX locale
-        time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap()
-    };
-
-    utmpx.login_time().format(&time_fmt).unwrap()
 }
 
 fn time_format_width() -> usize {
@@ -447,7 +430,7 @@ impl Who {
                     "",
                     ' ',
                     &t!("who.output.system_boot"),
-                    &time_string_from_timestamp(timestamp),
+                    &time_string(timestamp),
                     "",
                     "",
                     "",
@@ -473,7 +456,7 @@ impl Who {
             "",
             ' ',
             &runlevel_line,
-            &time_string(utmpx),
+            &time_string(utmpx.timestamp_seconds()),
             "",
             "",
             comment.as_deref().unwrap_or(""),
@@ -487,7 +470,7 @@ impl Who {
             "",
             ' ',
             &t!("who.output.clock_change"),
-            &time_string(utmpx),
+            &time_string(utmpx.timestamp_seconds()),
             "",
             "",
             "",
@@ -503,7 +486,7 @@ impl Who {
             &t!("who.output.login"),
             ' ',
             &utmpx.tty_device(),
-            &time_string(utmpx),
+            &time_string(utmpx.timestamp_seconds()),
             "",
             &pid_str,
             &comment,
@@ -527,7 +510,7 @@ impl Who {
             "",
             ' ',
             &utmpx.tty_device(),
-            &time_string(utmpx),
+            &time_string(utmpx.timestamp_seconds()),
             "",
             &pid_str,
             &comment,
@@ -543,7 +526,7 @@ impl Who {
             "",
             ' ',
             &utmpx.tty_device(),
-            &time_string(utmpx),
+            &time_string(utmpx.timestamp_seconds()),
             "",
             &pid_str,
             &comment,
@@ -557,7 +540,7 @@ impl Who {
             "",
             ' ',
             &t!("who.output.system_boot"),
-            &time_string(utmpx),
+            &time_string(utmpx.timestamp_seconds()),
             "",
             "",
             "",
@@ -608,7 +591,7 @@ impl Who {
             utmpx.user().as_ref(),
             mesg,
             utmpx.tty_device().as_ref(),
-            time_string(utmpx).as_str(),
+            time_string(utmpx.timestamp_seconds()).as_str(),
             idle.as_ref(),
             format!("{}", utmpx.pid()).as_str(),
             host_str.as_str(),
@@ -798,7 +781,7 @@ impl Who {
 
         let user = utmpx.user();
         let line = utmpx.tty_device();
-        let time = time_string(utmpx);
+        let time = time_string(utmpx.timestamp_seconds());
         let pid = utmpx.pid();
 
         Ok((
@@ -997,7 +980,7 @@ impl Who {
                         "runlevel",
                         "",
                         &runlevel_line,
-                        &time_string(&utmpx),
+                        &time_string(utmpx.timestamp_seconds()),
                         "",
                         comment.as_deref().unwrap_or(""),
                         "",
@@ -1009,7 +992,7 @@ impl Who {
                     "boot_time",
                     "",
                     &t!("who.output.system_boot"),
-                    &time_string(&utmpx),
+                    &time_string(utmpx.timestamp_seconds()),
                     "",
                     "",
                     "",
@@ -1020,7 +1003,7 @@ impl Who {
                     "clock_change",
                     "",
                     &t!("who.output.clock_change"),
-                    &time_string(&utmpx),
+                    &time_string(utmpx.timestamp_seconds()),
                     "",
                     "",
                     "",
@@ -1033,7 +1016,7 @@ impl Who {
                     "init_process",
                     "",
                     &utmpx.tty_device(),
-                    &time_string(&utmpx),
+                    &time_string(utmpx.timestamp_seconds()),
                     &pid,
                     &comment,
                     "",
@@ -1046,7 +1029,7 @@ impl Who {
                     "login",
                     &t!("who.output.login"),
                     &utmpx.tty_device(),
-                    &time_string(&utmpx),
+                    &time_string(utmpx.timestamp_seconds()),
                     &pid,
                     &comment,
                     "",
@@ -1067,7 +1050,7 @@ impl Who {
                     "dead_process",
                     "",
                     &utmpx.tty_device(),
-                    &time_string(&utmpx),
+                    &time_string(utmpx.timestamp_seconds()),
                     &pid,
                     &comment,
                     &exit_str,
@@ -1081,7 +1064,7 @@ impl Who {
         if let Some(timestamp) =
             fallback_boot_time(&source_file, self.is_need_boottime, saw_boot_time)
         {
-            let time = time_string_from_timestamp(timestamp);
+            let time = time_string(timestamp);
             let (row, display) = self.build_simple_row(
                 "boot_time",
                 "",
@@ -1199,6 +1182,36 @@ mod tests {
             if let Some(value) = original_lc_time {
                 env::set_var("LC_TIME", value);
             }
+        }
+    }
+
+    #[test]
+    fn historical_login_time_uses_the_offset_at_the_record_timestamp() {
+        unsafe extern "C" {
+            fn tzset();
+        }
+
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let original_tz = env::var("TZ").ok();
+        let original_lc_all = env::var("LC_ALL").ok();
+        unsafe {
+            env::set_var("TZ", "America/Los_Angeles");
+            env::set_var("LC_ALL", "C");
+            tzset();
+        }
+
+        assert_eq!(time_string(1_709_210_096), "Feb 29 04:34");
+
+        unsafe {
+            env::remove_var("TZ");
+            env::remove_var("LC_ALL");
+            if let Some(value) = original_tz {
+                env::set_var("TZ", value);
+            }
+            if let Some(value) = original_lc_all {
+                env::set_var("LC_ALL", value);
+            }
+            tzset();
         }
     }
 
@@ -1970,7 +1983,7 @@ mod tests {
 
         // 尝试获取一个真实的utmpx记录进行测试
         if let Some(utmpx) = CtUtmpx::iter_all_records().next() {
-            let time_str = time_string(&utmpx);
+            let time_str = time_string(utmpx.timestamp_seconds());
             // C locale时间格式应该是 "MMM DD HH:MM" (如 "Jul 24 22:08")
             // 检查格式是否正确 (月份简写 + 空格 + 日期 + 空格 + 时间)
             let parts: Vec<&str> = time_str.split_whitespace().collect();
@@ -2048,7 +2061,7 @@ mod tests {
 
         // 尝试获取一个真实的utmpx记录进行测试
         if let Some(utmpx) = CtUtmpx::iter_all_records().next() {
-            let time_str = time_string(&utmpx);
+            let time_str = time_string(utmpx.timestamp_seconds());
             // ISO格式应该是 "YYYY-MM-DD HH:MM" (如 "2025-07-24 22:08")
             let parts: Vec<&str> = time_str.split_whitespace().collect();
             assert_eq!(parts.len(), 2); // 日期部分、时间部分

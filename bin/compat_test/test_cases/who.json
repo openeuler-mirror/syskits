@@ -597,6 +597,28 @@
             "cleanup_commands": [
                 "unset LC_TIME"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='C'，export TZ='America/Los_Angeles'；执行who utmp；输入fixture：2024-02-29 12:34:56 UTC登录的alice用户；该历史日期处于PST，预期按当时UTC-08:00偏移输出Feb 29 04:34，而不是采用当前夏令时偏移",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='America/Los_Angeles'",
+                "printf '%s\\n' '[7] [12345] [p0  ] [alice   ] [pts/0       ] [                    ] [0.0.0.0        ] [2024-02-29T12:34:56,000000+00:00]' | /usr/bin/utmpdump -r > utmp"
+            ],
+            "args": [
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "alice    pts/0        Feb 29 04:34\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -133,6 +133,10 @@ impl CtUtmpx {
     pub fn terminal_suffix(&self) -> String {
         chars2string!(self.inner.ut_id)
     }
+    /// Return the native bytes of ut_id up to the first NUL.
+    pub fn terminal_suffix_bytes(&self) -> &[u8] {
+        chars_as_bytes(&self.inner.ut_id)
+    }
     /// A.K.A. ut.ut_user
     pub fn user(&self) -> String {
         chars2string!(self.inner.ut_user)

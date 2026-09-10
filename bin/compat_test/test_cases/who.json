@@ -619,6 +619,29 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节用例：LC_ALL=C、TZ=UTC0；执行who utmp；输入400字节Linux utmp fixture，用户名为原始字节0xff 0x41、终端为pts/0、时间为2024-02-29 12:34:56 UTC；预期用户名原样输出并按2个输入字节补齐8字节字段，stdout完整十六进制为ff41202020202020207074732f3020202020202020204665622032392031323a33340a",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[8:13]=b\"pts/0\"; b[40:42]=b\"p0\"; b[44:46]=bytes([255,65]); struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff41202020202020207074732f3020202020202020204665622032392031323a33340a",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

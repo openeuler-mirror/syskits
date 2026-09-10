@@ -233,10 +233,14 @@ impl<'a> WcInputs<'a> {
             let (idx, next) = with_idx.next()?;
             match next {
                 // filter zero length file names...
-                Ok(WcInput::Path(p)) if p.as_os_str().is_empty() => Some(Err({
-                    let maybe_ctx = files0_from_path.as_ref().map(|p| (p, idx));
-                    WcError::zero_length(maybe_ctx).into()
-                })),
+                Ok(WcInput::Path(p)) if p.as_os_str().is_empty() => {
+                    Some(Err(match files0_from_path.as_ref() {
+                        Some(source) => WcInputIterError::Diagnostic(
+                            render_files0_zero_length_error(source, idx),
+                        ),
+                        None => WcError::ZeroLengthFileName.into(),
+                    }))
+                }
                 _ => Some(next),
             }
         });
@@ -331,10 +335,10 @@ impl<'a> WcInput<'a> {
         }
     }
 
-    fn files0_source_display(&self) -> String {
+    fn files0_source_display(&self) -> Cow<'_, [u8]> {
         match self {
-            Self::Path(path) => escape_name(path.as_os_str(), WC_QS_ESCAPE),
-            Self::Stdin(_) => String::from(WC_STDIN_REPR),
+            Self::Path(path) => Cow::Owned(quote_diagnostic_name(path.as_os_str())),
+            Self::Stdin(_) => Cow::Borrowed(WC_STDIN_REPR.as_bytes()),
         }
     }
 
@@ -343,7 +347,7 @@ impl<'a> WcInput<'a> {
             Self::Path(path) => {
                 #[cfg(unix)]
                 {
-                    Cow::Owned(quote_output_name(path.as_os_str()))
+                    Cow::Owned(quote_diagnostic_name(path.as_os_str()))
                 }
                 #[cfg(not(unix))]
                 {
@@ -468,23 +472,11 @@ enum WcError {
     StdinReprNotAllowed,
     #[error("{}", t!("wc.errors.zero_length"))]
     ZeroLengthFileName,
-    #[error("{}", t!("wc.errors.zero_length_ctx", path = path, idx = idx))]
-    ZeroLengthFileNameCtx { path: Cow<'static, str>, idx: usize },
     #[error("cannot read file names from {input}")]
     CannotReadFileNames { input: Cow<'static, str> },
 }
 
 impl WcError {
-    fn zero_length(ctx: Option<(&WcInput, usize)>) -> Self {
-        match ctx {
-            Some((path, idx)) => Self::ZeroLengthFileNameCtx {
-                path: path.files0_source_display().into(),
-                idx,
-            },
-            None => Self::ZeroLengthFileName,
-        }
-    }
-
     fn disabled_files(first_extra: &OsString) -> Self {
         Self::FilesDisabled {
             extra: escape_name(first_extra, WC_QS_QUOTE_ESCAPE).into(),
@@ -495,6 +487,44 @@ impl WcError {
 impl CTError for WcError {
     fn usage(&self) -> bool {
         matches!(self, Self::FilesDisabled { .. })
+    }
+}
+
+#[derive(Debug)]
+enum WcInputIterError {
+    Standard(Box<dyn CTError>),
+    Diagnostic(Vec<u8>),
+}
+
+impl std::fmt::Display for WcInputIterError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Standard(error) => error.fmt(formatter),
+            Self::Diagnostic(message) => String::from_utf8_lossy(message).fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for WcInputIterError {}
+
+impl CTError for WcInputIterError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::Standard(error) => error.code(),
+            Self::Diagnostic(_) => 1,
+        }
+    }
+}
+
+impl From<WcError> for WcInputIterError {
+    fn from(error: WcError) -> Self {
+        Self::Standard(Box::new(error))
+    }
+}
+
+impl From<Box<dyn CTError>> for WcInputIterError {
+    fn from(error: Box<dyn CTError>) -> Self {
+        Self::Standard(error)
     }
 }
 
@@ -1063,6 +1093,48 @@ fn quote_output_name(name: &OsStr) -> Vec<u8> {
 }
 
 #[cfg(unix)]
+fn quote_diagnostic_name(name: &OsStr) -> Vec<u8> {
+    let bytes = name.as_encoded_bytes();
+    let quoted = quote_output_name(name);
+
+    if quoted.as_slice() == bytes {
+        if bytes.contains(&b':') {
+            let mut forced = Vec::with_capacity(bytes.len() + 2);
+            forced.push(b'\'');
+            forced.extend_from_slice(bytes);
+            forced.push(b'\'');
+            return forced;
+        }
+        return quoted;
+    }
+
+    if quoted.len() == bytes.len() + 2
+        && quoted.first() == Some(&b'\'')
+        && quoted.last() == Some(&b'\'')
+        && quoted[1..quoted.len() - 1] == *bytes
+        && !gnu_quotef_requires_outer_quotes(bytes)
+    {
+        return bytes.to_vec();
+    }
+
+    quoted
+}
+
+#[cfg(unix)]
+fn gnu_quotef_requires_outer_quotes(bytes: &[u8]) -> bool {
+    bytes.contains(&b':')
+        || matches!(bytes.first(), Some(b'~' | b'#'))
+        || bytes
+            .iter()
+            .any(|byte| b"`$&*()|[;\\'\"<>=^?! ".contains(byte))
+}
+
+#[cfg(not(unix))]
+fn quote_diagnostic_name(name: &OsStr) -> Vec<u8> {
+    escape_name(name, WC_QS_ESCAPE).into_bytes()
+}
+
+#[cfg(unix)]
 impl Drop for WcLocale {
     fn drop(&mut self) {
         unsafe { libc::freelocale(self.raw) };
@@ -1471,7 +1543,7 @@ fn compute_number_width_from_paths(
     }
 }
 
-type InputIterItem<'a> = Result<WcInput<'a>, Box<dyn CTError>>;
+type InputIterItem<'a> = Result<WcInput<'a>, WcInputIterError>;
 
 struct WcOutput<W> {
     writer: W,
@@ -1553,9 +1625,9 @@ fn files0_iter<'a>(
             }
         } else {
             let e = res.unwrap_err();
-            Err(e
-                .map_err_context(|| format!("{}: read error", escape_name(&err_path, WC_QS_ESCAPE)))
-                as Box<dyn CTError>)
+            Err(WcInputIterError::Standard(e.map_err_context(|| {
+                format!("{}: read error", escape_name(&err_path, WC_QS_ESCAPE))
+            })))
         }
     }));
 
@@ -1587,13 +1659,12 @@ fn wc(inputs: &WcInputs, settings: &WcSettings) -> CTResult<()> {
     for maybe_input in inputs.try_iter(settings)? {
         num_inputs += 1;
 
-        let input = if let Ok(val) = maybe_input {
-            val
-        } else {
-            if let Err(err) = maybe_input {
-                ct_show!(err);
+        let input = match maybe_input {
+            Ok(input) => input,
+            Err(error) => {
+                show_input_iter_error(error);
+                continue;
             }
-            continue;
         };
 
         let mut word_count = WcWordCount::default();
@@ -1714,6 +1785,33 @@ fn render_input_io_error(utility_name: &str, input: &WcInput, error: &io::Error)
     diagnostic.extend_from_slice(message.as_bytes());
     diagnostic.push(b'\n');
     diagnostic
+}
+
+fn render_files0_zero_length_error(source: &WcInput, index: usize) -> Vec<u8> {
+    let source = source.files0_source_display();
+    let index = index.to_string();
+    let message = t!("wc.errors.zero_length");
+    let mut diagnostic = Vec::with_capacity(source.len() + index.len() + message.len() + 2);
+    diagnostic.extend_from_slice(&source);
+    diagnostic.push(b':');
+    diagnostic.extend_from_slice(index.as_bytes());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message.as_bytes());
+    diagnostic
+}
+
+fn show_input_iter_error(error: WcInputIterError) {
+    match error {
+        WcInputIterError::Standard(error) => ct_show!(error),
+        WcInputIterError::Diagnostic(message) => {
+            set_ct_exit_code(1);
+            let mut stderr = io::stderr().lock();
+            let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+            let _ = stderr.write_all(b": ");
+            let _ = stderr.write_all(&message);
+            let _ = stderr.write_all(b"\n");
+        }
+    }
 }
 
 fn show_input_io_error(input: &WcInput, error: &io::Error) {
@@ -2485,6 +2583,31 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_diagnostic_title_uses_gnu_quotef_punctuation_rules() {
+        for (path, expected) in [
+            ("missing:part", b"'missing:part'".as_slice()),
+            ("missing{part}", b"missing{part}".as_slice()),
+            ("missing}part", b"missing}part".as_slice()),
+        ] {
+            let input = WcInput::Path(Cow::Owned(PathBuf::from(path)));
+            assert_eq!(input.diagnostic_title(), expected);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_files0_source_display_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let input = WcInput::Path(Cow::Owned(PathBuf::from(OsString::from_vec(
+            b"list-\xff".to_vec(),
+        ))));
+
+        assert_eq!(input.files0_source_display(), b"'list-'$'\\377'".as_slice());
+    }
+
     #[test]
     fn test_path_display() {
         let input_path = WcInput::Path(Cow::Owned(PathBuf::from("/tmp/example.txt")));
@@ -2499,7 +2622,7 @@ mod tests {
         rust_i18n::set_locale("en-US");
 
         assert_eq!(
-            WcError::zero_length(None).to_string(),
+            WcError::ZeroLengthFileName.to_string(),
             "invalid zero-length file name"
         );
     }
@@ -2510,8 +2633,8 @@ mod tests {
         let source = WcInput::Stdin(StdinKind::Explicit);
 
         assert_eq!(
-            WcError::zero_length(Some((&source, 2))).to_string(),
-            "-:2: invalid zero-length file name"
+            render_files0_zero_length_error(&source, 2),
+            b"-:2: invalid zero-length file name"
         );
     }
 

@@ -1100,6 +1100,52 @@
             },
             "cleanup_commands": ["rm -f wc-files0-stdin-list"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；两个不存在路径分别含冒号和花括号；GNU quotef为避免诊断分隔歧义而引用冒号路径，但不引用孤立花括号路径",
+            "args": ["missing:part", "missing{part}"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "0 0 0 total\n",
+                    "stderr": "wc: 'missing:part': No such file or directory\nwc: missing{part}: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "原始字节用例：LC_ALL=C；--files0-from来源文件名包含0xff且首条记录为空；GNU quotef以八进制shell转义保留来源名字节并附加记录号",
+            "args": ["2d2d66696c6573302d66726f6d3d6c6973742dff"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf 'list-\\377'); printf '\\0' > \"$p\""
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77633a20276c6973742d2724275c333737273a313a20696e76616c6964207a65726f2d6c656e6774682066696c65206e616d650a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

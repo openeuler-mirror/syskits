@@ -480,6 +480,8 @@ impl CTError for WcError {
 }
 
 pub fn wc_main(args: impl ctcore::Args) -> CTResult<()> {
+    configure_sigpipe();
+
     // Set locale based on system settings
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -488,6 +490,39 @@ pub fn wc_main(args: impl ctcore::Args) -> CTResult<()> {
     let inputs = WcInputs::new(&matches)?;
     let settings = WcSettings::new(&matches);
     wc(&inputs, &settings)
+}
+
+#[cfg(target_os = "linux")]
+fn configure_sigpipe() {
+    if !parent_ignores_sigpipe() {
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn parent_ignores_sigpipe() -> bool {
+    let parent = unsafe { libc::getppid() };
+    let Ok(status) = fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    sigpipe_is_ignored_in_status(&status)
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_is_ignored_in_status(status: &str) -> bool {
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (libc::SIGPIPE - 1)) != 0
 }
 
 pub fn wc_native_semantic(args: impl ctcore::Args) -> CTResult<WcSemantic> {
@@ -2704,6 +2739,17 @@ mod tests {
         assert!(output.failed());
         assert_eq!(output.writer.attempts, 1);
         assert_eq!(render_output_error("wc"), b"wc: write error\n");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_sigpipe_parent_status_detection() {
+        assert!(!sigpipe_is_ignored_in_status(
+            "Name:\tbash\nSigIgn:\t0000000000000000\n"
+        ));
+        assert!(sigpipe_is_ignored_in_status(
+            "Name:\tbash\nSigIgn:\t0000000000001000\n"
+        ));
     }
 
     #[test]

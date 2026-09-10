@@ -244,6 +244,13 @@ fn tty_is_writable(metadata: &std::fs::Metadata) -> bool {
     )
 }
 
+fn tty_stat_path(line: &str) -> PathBuf {
+    let device = line.split_once(' ').map_or(line, |(_, device)| device);
+    let mut path = PathBuf::from("/dev");
+    path.push(device);
+    path
+}
+
 fn linux_boot_time() -> Option<i64> {
     for path in [
         "/var/lib/systemd/random-seed",
@@ -555,8 +562,7 @@ impl Who {
     }
 
     fn print_user(&self, utmpx: &CtUtmpx, boot_time: i64) -> CTResult<()> {
-        let mut p = PathBuf::from("/dev");
-        p.push(utmpx.tty_device().as_str());
+        let p = tty_stat_path(&utmpx.tty_device());
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
@@ -758,8 +764,7 @@ impl Who {
         utmpx: &CtUtmpx,
         boot_time: i64,
     ) -> CTResult<(WhoRow, WhoDisplayLine)> {
-        let mut p = PathBuf::from("/dev");
-        p.push(utmpx.tty_device().as_str());
+        let p = tty_stat_path(&utmpx.tty_device());
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
@@ -1167,6 +1172,16 @@ mod tests {
         ));
         assert!(!tty_permissions_allow_messages(0, tty_gid, Some(tty_gid)));
         assert!(!tty_permissions_allow_messages(S_IWGRP, tty_gid, None));
+    }
+
+    #[test]
+    fn tty_stat_path_discards_the_prefix_before_the_first_space() {
+        assert_eq!(tty_stat_path("pts/0"), PathBuf::from("/dev/pts/0"));
+        assert_eq!(tty_stat_path("label pts/0"), PathBuf::from("/dev/pts/0"));
+        assert_eq!(
+            tty_stat_path("label /tmp/terminal"),
+            PathBuf::from("/tmp/terminal")
+        );
     }
 
     #[test]

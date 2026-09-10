@@ -88,6 +88,9 @@ pub enum SignalDisposition {
 /// 非交互测试的标准流拓扑。
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, Eq)]
 pub struct StandardStreams {
+    /// 将标准输入连接到测试沙箱中的普通文件；未设置时使用管道传入tstdin。
+    #[serde(default, rename = "stdinFile", alias = "stdin_file")]
+    pub stdin_file: Option<String>,
     #[serde(default)]
     pub stdout: OutputStream,
     #[serde(default)]
@@ -440,6 +443,7 @@ mod tests {
             },
             "environment": {
               "standardStreams": {
+                "stdinFile": "stdin.fixture",
                 "stdout": "closed_pipe",
                 "stderr": "tty",
                 "sigpipe": "ignore",
@@ -459,6 +463,7 @@ mod tests {
         assert_eq!(streams.stdout, OutputStream::ClosedPipe);
         assert_eq!(streams.stderr, OutputStream::Tty);
         assert_eq!(streams.sigpipe, SignalDisposition::Ignore);
+        assert_eq!(streams.stdin_file.as_deref(), Some("stdin.fixture"));
         assert!(streams.use_bash);
     }
     use tempfile::TempDir;

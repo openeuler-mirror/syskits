@@ -384,12 +384,24 @@ impl<'a> WcInput<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
-    // 安全性：我们将依靠 Rust 为 stdin 提供一个有效的 RawFd，我们可以尝试用它打开文件，但只是为了获取 .metadata()。
-    // 如果出现意外情况，ManuallyDrop 将确保我们不会对 FD 做任何其他操作。
-    let f = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdin().as_raw_fd()) });
-    matches!(f.metadata(),
+    matches!(stdin_metadata(),
      Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
+}
+
+#[cfg(unix)]
+fn stdin_metadata() -> io::Result<fs::Metadata> {
+    use std::os::fd::FromRawFd;
+
+    let stdin = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(libc::STDIN_FILENO) });
+    stdin.metadata()
+}
+
+#[cfg(not(unix))]
+fn stdin_metadata() -> io::Result<fs::Metadata> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "stdin metadata is unavailable",
+    ))
 }
 
 #[cfg(not(unix))]
@@ -1350,8 +1362,8 @@ fn word_count_from_input(input: &WcInput<'_>, settings: &WcSettings) -> CountRes
 /// 对于流式 [`WcInputs::Files0From`]，将返回 1。
 /// 预读的 [`WcInputs::Files0FromStdin`] 根据有效路径的文件大小计算宽度，
 /// 但不让其中禁止的 stdin 记录强制使用最小宽度。
-/// 一个[`WcInputs::Paths`]可能包含零个或多个"-"条目，每个"-"条目代表从 "stdin`"读取数据。
-/// 任何此类条目的存在都会导致此函数返回至少为 [`WC_MINIMUM_WIDTH`] 的宽度。
+/// 一个[`WcInputs::Paths`]可能包含零个或多个"-"条目，每个"-"条目代表从stdin读取数据。
+/// 对应的fd 0与普通路径一样按文件类型和大小参与宽度计算。
 /// 如果[`WcInputs::Paths`]只包含一个路径，并且只需要打印一个数字，那么此函数将被优化为返回 1，而无需调用任何函数来获取文件元数据。
 /// 如果无法从任何 [`WcInput::Path`] 输入中读取文件元数据，则该输入不会影响数字宽度的计算。
 /// 否则，将对文件元数据中的文件大小进行求和，并返回总大小的位数。
@@ -1370,7 +1382,7 @@ fn compute_number_width(inputs: &WcInputs, settings: &WcSettings) -> usize {
 fn compute_number_width_from_paths(
     inputs: &[WcInput<'_>],
     settings: &WcSettings<'_>,
-    stdin_requires_minimum_width: bool,
+    include_stdin_metadata: bool,
 ) -> usize {
     if settings.number_enabled() == 1 && inputs.len() == 1 {
         return 1;
@@ -1379,15 +1391,16 @@ fn compute_number_width_from_paths(
     let mut minimum_width = 1;
     let mut total: u64 = 0;
     for input in inputs {
-        if matches!(input, WcInput::Stdin(_)) && stdin_requires_minimum_width {
-            minimum_width = WC_MINIMUM_WIDTH;
-        } else if let WcInput::Path(path) = input {
-            if let Ok(meta) = fs::metadata(path) {
-                if meta.is_file() {
-                    total = total.saturating_add(meta.len());
-                } else {
-                    minimum_width = WC_MINIMUM_WIDTH;
-                }
+        let metadata = match input {
+            WcInput::Stdin(_) if include_stdin_metadata => stdin_metadata(),
+            WcInput::Stdin(_) => continue,
+            WcInput::Path(path) => fs::metadata(path),
+        };
+        if let Ok(meta) = metadata {
+            if meta.is_file() {
+                total = total.saturating_add(meta.len());
+            } else {
+                minimum_width = WC_MINIMUM_WIDTH;
             }
         }
     }
@@ -1703,8 +1716,12 @@ impl Tool for Wc {
 mod tests {
     use std::borrow::Cow;
     use std::ffi::OsString;
-    use std::io::Write;
+    use std::io::{Seek, SeekFrom, Write};
+    #[cfg(unix)]
+    use std::os::fd::AsRawFd;
     use std::path::PathBuf;
+    #[cfg(unix)]
+    use std::sync::Mutex;
 
     use clap::ArgMatches;
     use tempfile::NamedTempFile;
@@ -1712,6 +1729,36 @@ mod tests {
 
     use super::*;
     use rust_i18n::set_locale;
+
+    #[cfg(unix)]
+    static STDIN_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(unix)]
+    struct SavedStdin(libc::c_int);
+
+    #[cfg(unix)]
+    impl SavedStdin {
+        fn replace_with(file: &File) -> Self {
+            let saved = unsafe { libc::dup(libc::STDIN_FILENO) };
+            assert!(saved >= 0, "failed to duplicate stdin");
+            assert_eq!(
+                unsafe { libc::dup2(file.as_raw_fd(), libc::STDIN_FILENO) },
+                libc::STDIN_FILENO,
+                "failed to replace stdin"
+            );
+            Self(saved)
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for SavedStdin {
+        fn drop(&mut self) {
+            unsafe {
+                libc::dup2(self.0, libc::STDIN_FILENO);
+                libc::close(self.0);
+            }
+        }
+    }
 
     #[test]
     fn test_i18n_error_messages() {
@@ -2533,23 +2580,34 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_is_stdin_small_file() {
-        use std::os::unix::io::AsRawFd;
-
+        let _lock = STDIN_TEST_LOCK.lock().unwrap();
         let mut temp_file = tempfile::tempfile().unwrap();
         writeln!(temp_file, "Hello, world!").unwrap();
-        let fd = temp_file.as_raw_fd();
-
-        // Duplicate the fd to stdin
-        unsafe {
-            libc::dup2(fd, libc::STDIN_FILENO);
-        }
+        temp_file.seek(SeekFrom::Start(0)).unwrap();
+        let _saved_stdin = SavedStdin::replace_with(&temp_file);
 
         assert!(is_stdin_small_file(), "Should recognize small stdin file");
+    }
 
-        // Reset stdin to normal
-        unsafe {
-            libc::dup2(libc::STDIN_FILENO, fd);
-        }
+    #[test]
+    #[cfg(unix)]
+    fn test_compute_number_width_treats_regular_stdin_as_regular_file() {
+        let _lock = STDIN_TEST_LOCK.lock().unwrap();
+        let mut stdin_file = tempfile::tempfile().unwrap();
+        stdin_file.write_all(b"ab").unwrap();
+        stdin_file.seek(SeekFrom::Start(0)).unwrap();
+        let _saved_stdin = SavedStdin::replace_with(&stdin_file);
+
+        let mut other_file = NamedTempFile::new().unwrap();
+        other_file.as_file_mut().write_all(b"xyz").unwrap();
+        let inputs = WcInputs::Paths(vec![
+            WcInput::Stdin(StdinKind::Explicit),
+            WcInput::Path(Cow::Borrowed(other_file.path())),
+        ]);
+        let matches = get_matches_from_args(&["wc", "-c"]);
+        let settings = WcSettings::new(&matches);
+
+        assert_eq!(compute_number_width(&inputs, &settings), 1);
     }
 
     #[test]

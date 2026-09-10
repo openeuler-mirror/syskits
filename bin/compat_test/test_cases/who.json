@@ -771,6 +771,46 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who --not-an-option；GNU未知长选项应报告unrecognized option，预期RC=1、stdout为空并输出简洁诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--not-an-option"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: unrecognized option '--not-an-option'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who -z；GNU未知短选项应报告invalid option及选项字符，预期RC=1、stdout为空并输出简洁诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: invalid option -- 'z'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

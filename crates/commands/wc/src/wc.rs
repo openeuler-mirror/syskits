@@ -941,6 +941,9 @@ unsafe extern "C" {
         length: usize,
         state: *mut libc::mbstate_t,
     ) -> usize;
+    fn iswprint_l(character: libc::c_uint, locale: libc::locale_t) -> libc::c_int;
+    fn iswspace_l(character: libc::c_uint, locale: libc::locale_t) -> libc::c_int;
+    fn wcwidth(character: libc::wchar_t) -> libc::c_int;
 }
 
 fn word_count_from_c_locale_reader<R: io::Read>(mut reader: R) -> (WcWordCount, Option<io::Error>) {
@@ -1046,16 +1049,7 @@ fn word_count_from_locale_reader<R: io::Read>(
             }
 
             let length = if length == 0 { 1 } else { length };
-            if let Some(character) = char::from_u32(wide as u32) {
-                process_character::<true, true, true, true>(
-                    &mut total,
-                    character,
-                    &mut current_len,
-                    &mut in_word,
-                );
-            } else {
-                total.chars = total.chars.saturating_add(1);
-            }
+            process_locale_character(&mut total, wide, locale, &mut current_len, &mut in_word);
             offset += length;
         }
         pending.drain(..offset);
@@ -1066,6 +1060,62 @@ fn word_count_from_locale_reader<R: io::Read>(
 
     total.max_line_length = max(total.max_line_length, current_len);
     (total, None)
+}
+
+#[cfg(unix)]
+fn process_locale_character(
+    total: &mut WcWordCount,
+    wide: libc::wchar_t,
+    locale: &WcLocale,
+    current_len: &mut usize,
+    in_word: &mut bool,
+) {
+    let separator = match wide {
+        value if value == u32::from(b'\n') => {
+            total.lines = total.lines.saturating_add(1);
+            total.max_line_length = max(total.max_line_length, *current_len);
+            *current_len = 0;
+            true
+        }
+        value if value == u32::from(b'\r') || value == u32::from(b'\x0c') => {
+            total.max_line_length = max(total.max_line_length, *current_len);
+            *current_len = 0;
+            true
+        }
+        value if value == u32::from(b'\t') => {
+            *current_len = current_len.saturating_add(8 - *current_len % 8);
+            true
+        }
+        value if value == u32::from(b' ') => {
+            *current_len = current_len.saturating_add(1);
+            true
+        }
+        value if value == u32::from(b'\x0b') => true,
+        value => {
+            let printable = unsafe { iswprint_l(value, locale.raw) != 0 };
+            if !printable {
+                false
+            } else {
+                let width = unsafe { wcwidth(wide) };
+                if width > 0 {
+                    *current_len = current_len.saturating_add(width as usize);
+                }
+                if unsafe { iswspace_l(value, locale.raw) != 0 } {
+                    true
+                } else {
+                    if !*in_word {
+                        total.words = total.words.saturating_add(1);
+                        *in_word = true;
+                    }
+                    false
+                }
+            }
+        }
+    };
+    if separator {
+        *in_word = false;
+    }
+    total.chars = total.chars.saturating_add(1);
 }
 
 fn process_character<
@@ -2227,6 +2277,28 @@ mod tests {
                 count.max_line_length, expected_width,
                 "locale {locale_name}"
             );
+        }
+    }
+
+    #[test]
+    fn test_locale_scanner_uses_libc_printability_and_display_width() {
+        let Some(locale) = WcLocale::from_name(std::ffi::OsStr::new("C.UTF-8")) else {
+            return;
+        };
+        for (input, expected_words, expected_width) in [
+            ("\u{0378}\n", 0, 0),
+            ("\u{fdd0}\n", 0, 0),
+            ("\u{00ad}\n", 1, 1),
+            ("\u{2028}\n", 0, 0),
+        ] {
+            let (count, error) =
+                word_count_from_locale_reader(std::io::Cursor::new(input.as_bytes()), &locale);
+
+            assert!(error.is_none(), "input {input:?}");
+            assert_eq!(count.lines, 1, "input {input:?}");
+            assert_eq!(count.words, expected_words, "input {input:?}");
+            assert_eq!(count.chars, 2, "input {input:?}");
+            assert_eq!(count.max_line_length, expected_width, "input {input:?}");
         }
     }
 

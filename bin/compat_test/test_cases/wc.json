@@ -771,6 +771,26 @@
             },
             "cleanup_commands": ["rm -f wc-gbk"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C.UTF-8；依次输入未分配码点U+0378、非字符U+FDD0、软连字符U+00AD和行分隔符U+2028；GNU按libc可打印性与wcwidth统计",
+            "args": ["-w", "-m", "-L", "wc-wide-properties"],
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '\\315\\270\\012\\357\\267\\220\\012\\302\\255\\012\\342\\200\\250\\012' > wc-wide-properties"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1 8 1 wc-wide-properties\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-wide-properties"],
+            "tstdin": ""
         }
     ]
 }

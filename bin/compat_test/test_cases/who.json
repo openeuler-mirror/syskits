@@ -751,6 +751,26 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who --l；GNU长选项缩写同时匹配不同语义的--login与--lookup，应报告全部候选，预期RC=1、stdout为空并输出简洁诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--l"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: option '--l' is ambiguous; possibilities: '--login' '--lookup'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

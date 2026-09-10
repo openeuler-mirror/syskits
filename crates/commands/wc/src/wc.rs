@@ -26,7 +26,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_error::{CTError, CTResult, FromIo, set_ct_exit_code};
-use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_show;
 
@@ -306,7 +306,14 @@ impl<'a> WcInput<'a> {
             Self::Path(path) => {
                 let bytes = path.as_os_str().as_encoded_bytes();
                 Some(if bytes.contains(&b'\n') {
-                    Cow::Owned(escape_name(path.as_os_str(), WC_QS_ESCAPE).into_bytes())
+                    #[cfg(unix)]
+                    {
+                        Cow::Owned(quote_output_name(path.as_os_str()))
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        Cow::Owned(escape_name(path.as_os_str(), WC_QS_ESCAPE).into_bytes())
+                    }
                 } else {
                     Cow::Borrowed(bytes)
                 })
@@ -942,6 +949,35 @@ impl WcLocale {
             previous: unsafe { libc::uselocale(self.raw) },
         }
     }
+}
+
+#[cfg(unix)]
+fn quote_output_name(name: &OsStr) -> Vec<u8> {
+    let locale = WcLocale::from_environment();
+    let _locale_guard = locale.activate();
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    escape_shell_bytes_with_classifier(name.as_encoded_bytes(), |bytes| {
+        if locale.is_c {
+            return (1, false);
+        }
+
+        let backup_state = state;
+        let mut wide = 0 as libc::wchar_t;
+        let length = unsafe { mbrtowc(&mut wide, bytes.as_ptr().cast(), bytes.len(), &mut state) };
+        if length == usize::MAX - 1 {
+            state = backup_state;
+            return (bytes.len(), false);
+        }
+        if length == usize::MAX {
+            state = unsafe { std::mem::zeroed() };
+            return (1, false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let printable = unsafe { iswprint_l(wide as libc::c_uint, locale.raw) } != 0;
+        (length, printable)
+    })
 }
 
 #[cfg(unix)]
@@ -2223,6 +2259,20 @@ mod tests {
         assert_eq!(
             input.to_output_title().as_deref(),
             Some(&b"nonutf-\xff"[..])
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_output_title_quotes_non_utf8_and_newline_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = OsString::from_vec(b"a\xff\nb".to_vec());
+        let input = WcInput::Path(Cow::Owned(PathBuf::from(path)));
+
+        assert_eq!(
+            input.to_output_title().as_deref(),
+            Some(&b"'a'$'\\377\\n''b'"[..])
         );
     }
 

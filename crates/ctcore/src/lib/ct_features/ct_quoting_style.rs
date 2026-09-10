@@ -427,7 +427,8 @@ enum ShellByteSegment {
     },
 }
 
-pub(crate) fn escape_shell_bytes_with_classifier<F>(name: &[u8], mut classify: F) -> Vec<u8>
+/// Shell-quote bytes using the caller's locale sequence classifier.
+pub fn escape_shell_bytes_with_classifier<F>(name: &[u8], mut classify: F) -> Vec<u8>
 where
     F: FnMut(&[u8]) -> (usize, bool),
 {

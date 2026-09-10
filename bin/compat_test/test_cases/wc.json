@@ -911,6 +911,27 @@
             },
             "cleanup_commands": ["rm -f wc-files0-after-empty"],
             "tstdin": "\u0000wc-files0-after-empty\u0000"
+        },
+        {
+            "command": "wc",
+            "description": "原始字节用例：LC_ALL=C；--files0-from读取同时包含0xff和换行的文件名；GNU以shell转义保持非法字节和换行，预期stdout完整十六进制为30203020302027612724275c3337375c6e272762270a",
+            "args": ["2d2d66696c6573302d66726f6d3d77632d6e616d6573"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "p=$(printf '%b' '\\141\\377\\012\\142'); : > \"$p\"; printf '%s\\0' \"$p\" > wc-names"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "30203020302027612724275c3337375c6e272762270a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         }
     ]
 }

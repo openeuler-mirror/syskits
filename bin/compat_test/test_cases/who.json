@@ -811,6 +811,28 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who a -H b；GNU默认getopt_long会将夹在两个操作数之间的-H前移解析，两操作数启用-m语义并仍输出表头，预期RC=0、stdout为GNU表头且stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "a",
+                "-H",
+                "b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "NAME     LINE         TIME         COMMENT\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

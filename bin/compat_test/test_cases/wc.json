@@ -831,6 +831,26 @@
             },
             "cleanup_commands": ["rm -f wc-nbsp-posix"],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL为不存在的locale；GNU setlocale失败后保留启动C locale，UTF-8中文字节不可打印且-m按字节计数",
+            "args": ["-w", "-m", "-L", "wc-invalid-locale"],
+            "setup_commands": [
+                "export LC_ALL=does_NOT_exist",
+                "export LANG=does_NOT_exist",
+                "unset POSIXLY_CORRECT",
+                "printf '%b' '\\344\\270\\255\\012' > wc-invalid-locale"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0 4 0 wc-invalid-locale\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-invalid-locale"],
+            "tstdin": ""
         }
     ]
 }

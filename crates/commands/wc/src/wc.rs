@@ -737,7 +737,7 @@ fn word_count_from_reader<T: WcWordCountable>(
     #[cfg(unix)]
     let locale = WcLocale::from_environment();
     #[cfg(unix)]
-    let is_c_locale = locale.as_ref().is_some_and(|locale| locale.is_c);
+    let is_c_locale = locale.is_c;
     #[cfg(not(unix))]
     let is_c_locale = current_ctype_is_c_locale();
 
@@ -746,13 +746,12 @@ fn word_count_from_reader<T: WcWordCountable>(
     }
 
     #[cfg(unix)]
-    if let Some(locale) = locale.as_ref()
-        && !locale.is_c
+    if !locale.is_c
         && (settings.is_show_chars || settings.is_show_words || settings.is_show_max_line_length)
     {
         return word_count_from_locale_reader(
             reader,
-            locale,
+            &locale,
             std::env::var_os("POSIXLY_CORRECT").is_none(),
         );
     }
@@ -883,12 +882,18 @@ struct WcLocale {
 
 #[cfg(unix)]
 impl WcLocale {
-    fn from_environment() -> Option<Self> {
+    fn from_environment() -> Self {
         let name = ["LC_ALL", "LC_CTYPE", "LANG"]
             .into_iter()
             .find_map(|variable| std::env::var_os(variable).filter(|value| !value.is_empty()))
             .unwrap_or_else(|| OsString::from("C"));
-        Self::from_name(&name)
+        Self::from_name_or_c(&name)
+    }
+
+    fn from_name_or_c(name: &OsStr) -> Self {
+        Self::from_name(name).unwrap_or_else(|| {
+            Self::from_name(OsStr::new("C")).expect("the C locale must be available")
+        })
     }
 
     fn from_name(name: &OsStr) -> Option<Self> {
@@ -2339,6 +2344,13 @@ mod tests {
         assert_eq!(posix_count.words, 4);
         assert_eq!(gnu_count.chars, 16);
         assert_eq!(gnu_count.max_line_length, 3);
+    }
+
+    #[test]
+    fn test_invalid_locale_name_falls_back_to_c_locale() {
+        let locale = WcLocale::from_name_or_c(std::ffi::OsStr::new("does_NOT_exist"));
+
+        assert!(locale.is_c);
     }
 
     #[test]

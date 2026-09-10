@@ -503,6 +503,30 @@
         {
             "tstdin": "",
             "command": "who",
+            "description": "export LC_ALL='C'，export TZ='UTC0'；执行who -u -s utmp；输入fixture：USER_PROCESS用户alice、终端pts/0、PID=12345、登录时间2024-02-29 12:34:56 UTC；预期-s抑制idle和PID字段，RC=0，stdout为alice    pts/0        Feb 29 12:34\\n，stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "printf '%s\\n' '[7] [12345] [p0  ] [alice   ] [pts/0       ] [                    ] [0.0.0.0        ] [2024-02-29T12:34:56,000000+00:00]' | /usr/bin/utmpdump -r > utmp"
+            ],
+            "args": [
+                "-u",
+                "-s",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "alice    pts/0        Feb 29 12:34\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
             "description": "LC_TIME=POSIX locale 测试 - 英文月份格式",
             "setup_commands": [
                 "export LC_TIME=POSIX"

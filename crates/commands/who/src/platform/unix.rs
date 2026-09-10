@@ -21,7 +21,8 @@ use ctcore::libc::{
 use rust_i18n::t;
 use std::borrow::Cow;
 use std::ffi::CStr;
-use std::fmt::Write;
+use std::io::{self, Write as IoWrite};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use sys_locale::get_locale;
@@ -171,6 +172,17 @@ struct WhoDisplayLine {
     exit: String,
 }
 
+struct WhoDisplayBytes<'a> {
+    user: &'a [u8],
+    state: char,
+    line: &'a [u8],
+    time: &'a [u8],
+    idle: &'a [u8],
+    pid: &'a [u8],
+    comment: &'a [u8],
+    exit: &'a [u8],
+}
+
 fn idle_string<'a>(when: i64, boot_time: i64) -> Cow<'a, str> {
     thread_local! {
         static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap();
@@ -244,10 +256,13 @@ fn tty_is_writable(metadata: &std::fs::Metadata) -> bool {
     )
 }
 
-fn tty_stat_path(line: &str) -> PathBuf {
-    let device = line.split_once(' ').map_or(line, |(_, device)| device);
+fn tty_stat_path(line: &[u8]) -> PathBuf {
+    let device = line
+        .iter()
+        .position(|byte| *byte == b' ')
+        .map_or(line, |index| &line[index + 1..]);
     let mut path = PathBuf::from("/dev");
-    path.push(device);
+    path.push(std::ffi::OsStr::from_bytes(device));
     path
 }
 
@@ -319,39 +334,14 @@ fn cur_tty() -> String {
     }
 }
 
-/// Compute the display width of a string, counting CJK wide characters as 2 columns.
-fn display_width(s: &str) -> usize {
-    s.chars().map(|c| if is_wide_char(c) { 2 } else { 1 }).sum()
-}
-
-/// Check if a character is a CJK wide character (takes 2 display columns).
-fn is_wide_char(c: char) -> bool {
-    let cp = c as u32;
-    (0x4E00..=0x9FFF).contains(&cp)
-        || (0x3400..=0x4DBF).contains(&cp)
-        || (0xF900..=0xFAFF).contains(&cp)
-        || (0xFF01..=0xFF60).contains(&cp)
-        || (0xFFE0..=0xFFE6).contains(&cp)
-        || (0x20000..=0x2A6DF).contains(&cp)
-        || (0xAC00..=0xD7AF).contains(&cp)
-        || (0x2E80..=0x2EFF).contains(&cp)
-        || (0x2F00..=0x2FDF).contains(&cp)
-        || (0x3200..=0x32FF).contains(&cp)
-        || (0x3300..=0x33FF).contains(&cp)
-        || (0x3000..=0x303F).contains(&cp)
-        || (0x3040..=0x309F).contains(&cp)
-        || (0x30A0..=0x30FF).contains(&cp)
-        || (0x3100..=0x312F).contains(&cp)
-}
-
-/// Pad a string to a given display width using spaces.
-fn pad_right(s: &str, target_width: usize) -> String {
-    let w = display_width(s);
-    if w >= target_width {
-        s.to_string()
-    } else {
-        format!("{}{}", s, " ".repeat(target_width - w))
-    }
+fn pad_right_bytes(value: &[u8], target_width: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(value.len().max(target_width));
+    output.extend_from_slice(value);
+    output.resize(
+        output.len() + target_width.saturating_sub(value.len()),
+        b' ',
+    );
+    output
 }
 
 impl Who {
@@ -373,10 +363,21 @@ impl Who {
                 .filter(|utmpx| {
                     utmpx.is_user_process() && should_keep_user_pid(check_pids, true, utmpx.pid())
                 })
-                .map(|utmpx| utmpx.user())
+                .map(|utmpx| utmpx.user_bytes().to_vec())
                 .collect::<Vec<_>>();
-            println!("{}", users.join(" "));
-            println!("{}={}", t!("who.output.users_count"), users.len());
+            let mut output = Vec::new();
+            for (index, user) in users.iter().enumerate() {
+                if index != 0 {
+                    output.push(b' ');
+                }
+                output.extend_from_slice(user);
+            }
+            output.push(b'\n');
+            output.extend_from_slice(t!("who.output.users_count").as_bytes());
+            output.push(b'=');
+            output.extend_from_slice(users.len().to_string().as_bytes());
+            output.push(b'\n');
+            io::stdout().lock().write_all(&output)?;
         } else {
             let records = CtUtmpx::iter_all_records_from(f);
             let mut boot_time = i64::MIN;
@@ -410,13 +411,13 @@ impl Who {
                     } else if self.is_need_initspawn
                         && utmpx.record_type() == ct_utmpx::INIT_PROCESS
                     {
-                        self.print_initspawn(&utmpx);
+                        self.print_initspawn(&utmpx)?;
                     } else if self.is_need_login && utmpx.record_type() == ct_utmpx::LOGIN_PROCESS {
-                        self.print_login(&utmpx);
+                        self.print_login(&utmpx)?;
                     } else if self.is_need_deadprocs
                         && utmpx.record_type() == ct_utmpx::DEAD_PROCESS
                     {
-                        self.print_deadprocs(&utmpx);
+                        self.print_deadprocs(&utmpx)?;
                     }
                 }
 
@@ -479,59 +480,63 @@ impl Who {
     }
 
     #[inline]
-    fn print_login(&self, utmpx: &CtUtmpx) {
-        let comment = format!("id={}", utmpx.terminal_suffix());
-        let pid_str = format!("{}", utmpx.pid());
-        self.print_line(
-            &t!("who.output.login"),
-            ' ',
-            &utmpx.tty_device(),
-            &time_string(utmpx.timestamp_seconds()),
-            "",
-            &pid_str,
-            &comment,
-            "",
-        );
+    fn print_login(&self, utmpx: &CtUtmpx) -> CTResult<()> {
+        let user = t!("who.output.login");
+        let comment = [b"id=".as_slice(), utmpx.terminal_suffix_bytes()].concat();
+        let time = time_string(utmpx.timestamp_seconds());
+        let pid = utmpx.pid().to_string();
+        self.print_line_bytes(&WhoDisplayBytes {
+            user: user.as_bytes(),
+            state: ' ',
+            line: utmpx.tty_device_bytes(),
+            time: time.as_bytes(),
+            idle: b"",
+            pid: pid.as_bytes(),
+            comment: &comment,
+            exit: b"",
+        })
     }
 
     #[inline]
-    fn print_deadprocs(&self, utmpx: &CtUtmpx) {
-        let comment = format!("id={}", utmpx.terminal_suffix());
-        let pid_str = format!("{}", utmpx.pid());
+    fn print_deadprocs(&self, utmpx: &CtUtmpx) -> CTResult<()> {
+        let comment = [b"id=".as_slice(), utmpx.terminal_suffix_bytes()].concat();
+        let pid = utmpx.pid().to_string();
+        let time = time_string(utmpx.timestamp_seconds());
         let e = utmpx.exit_status();
-        let exit_str = format!(
+        let exit = format!(
             "{}={} {}={}",
             t!("who.output.term"),
             e.0,
             t!("who.output.exit"),
             e.1
         );
-        self.print_line(
-            "",
-            ' ',
-            &utmpx.tty_device(),
-            &time_string(utmpx.timestamp_seconds()),
-            "",
-            &pid_str,
-            &comment,
-            &exit_str,
-        );
+        self.print_line_bytes(&WhoDisplayBytes {
+            user: b"",
+            state: ' ',
+            line: utmpx.tty_device_bytes(),
+            time: time.as_bytes(),
+            idle: b"",
+            pid: pid.as_bytes(),
+            comment: &comment,
+            exit: exit.as_bytes(),
+        })
     }
 
     #[inline]
-    fn print_initspawn(&self, utmpx: &CtUtmpx) {
-        let comment = format!("id={}", utmpx.terminal_suffix());
-        let pid_str = format!("{}", utmpx.pid());
-        self.print_line(
-            "",
-            ' ',
-            &utmpx.tty_device(),
-            &time_string(utmpx.timestamp_seconds()),
-            "",
-            &pid_str,
-            &comment,
-            "",
-        );
+    fn print_initspawn(&self, utmpx: &CtUtmpx) -> CTResult<()> {
+        let comment = [b"id=".as_slice(), utmpx.terminal_suffix_bytes()].concat();
+        let time = time_string(utmpx.timestamp_seconds());
+        let pid = utmpx.pid().to_string();
+        self.print_line_bytes(&WhoDisplayBytes {
+            user: b"",
+            state: ' ',
+            line: utmpx.tty_device_bytes(),
+            time: time.as_bytes(),
+            idle: b"",
+            pid: pid.as_bytes(),
+            comment: &comment,
+            exit: b"",
+        })
     }
 
     #[inline]
@@ -549,7 +554,7 @@ impl Who {
     }
 
     fn print_user(&self, utmpx: &CtUtmpx, boot_time: i64) -> CTResult<()> {
-        let p = tty_stat_path(&utmpx.tty_device());
+        let p = tty_stat_path(utmpx.tty_device_bytes());
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
@@ -565,40 +570,42 @@ impl Who {
             _ => idle_string(last_change, boot_time),
         };
 
-        let s = match self.is_do_lookup {
-            true => utmpx.canon_host().map_err_context(|| {
-                let host_string = utmpx.host();
-                format!(
-                    "failed to canonicalize {}",
-                    host_string
-                        .split(':')
-                        .next()
-                        .unwrap_or(&host_string)
-                        .quote()
-                )
-            })?,
-            false => utmpx.host(),
+        let host = if self.is_do_lookup {
+            utmpx
+                .canon_host()
+                .map(|host| host.into_bytes())
+                .map_err_context(|| {
+                    let host_string = utmpx.host();
+                    format!(
+                        "failed to canonicalize {}",
+                        host_string
+                            .split(':')
+                            .next()
+                            .unwrap_or(&host_string)
+                            .quote()
+                    )
+                })?
+        } else {
+            utmpx.host_bytes().to_vec()
         };
 
-        let host_str = match s.is_empty() {
-            true => s,
-            false => {
-                format!("({s})")
-            }
+        let host_display = if host.is_empty() {
+            Vec::new()
+        } else {
+            [b"(".as_slice(), host.as_slice(), b")".as_slice()].concat()
         };
-
-        self.print_line(
-            utmpx.user().as_ref(),
-            mesg,
-            utmpx.tty_device().as_ref(),
-            time_string(utmpx.timestamp_seconds()).as_str(),
-            idle.as_ref(),
-            format!("{}", utmpx.pid()).as_str(),
-            host_str.as_str(),
-            "",
-        );
-
-        Ok(())
+        let time = time_string(utmpx.timestamp_seconds());
+        let pid = utmpx.pid().to_string();
+        self.print_line_bytes(&WhoDisplayBytes {
+            user: utmpx.user_bytes(),
+            state: mesg,
+            line: utmpx.tty_device_bytes(),
+            time: time.as_bytes(),
+            idle: idle.as_bytes(),
+            pid: pid.as_bytes(),
+            comment: &host_display,
+            exit: b"",
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -627,36 +634,61 @@ impl Who {
     }
 
     fn render_line(&self, fields: &WhoDisplayLine) -> String {
-        let mut buffer = String::with_capacity(64);
-        let msg = vec![' ', fields.state].into_iter().collect::<String>();
+        String::from_utf8(self.render_line_bytes(&WhoDisplayBytes {
+            user: fields.user.as_bytes(),
+            state: fields.state,
+            line: fields.line.as_bytes(),
+            time: fields.time.as_bytes(),
+            idle: fields.idle.as_bytes(),
+            pid: fields.pid.as_bytes(),
+            comment: fields.comment.as_bytes(),
+            exit: fields.exit.as_bytes(),
+        }))
+        .unwrap()
+    }
 
-        buffer.push_str(&pad_right(&fields.user, 8));
+    fn render_line_bytes(&self, fields: &WhoDisplayBytes<'_>) -> Vec<u8> {
+        let mut buffer = Vec::with_capacity(64);
+        buffer.extend(pad_right_bytes(fields.user, 8));
         if self.is_include_mesg {
-            buffer.push_str(&msg);
+            buffer.extend_from_slice(&[b' ', fields.state as u8]);
         }
-        buffer.push(' ');
-        buffer.push_str(&pad_right(&fields.line, 12));
-
-        buffer.push(' ');
-        buffer.push_str(&pad_right(&fields.time, time_format_width()));
+        buffer.push(b' ');
+        buffer.extend(pad_right_bytes(fields.line, 12));
+        buffer.push(b' ');
+        buffer.extend(pad_right_bytes(fields.time, time_format_width()));
 
         if !self.is_short_output {
             if self.is_include_idle {
-                buffer.push(' ');
-                buffer.push_str(&pad_right(&fields.idle, 6));
+                buffer.push(b' ');
+                buffer.extend(pad_right_bytes(fields.idle, 6));
             }
-            write!(buffer, " {:>10}", fields.pid).unwrap();
+            buffer.push(b' ');
+            buffer.extend(std::iter::repeat_n(
+                b' ',
+                10_usize.saturating_sub(fields.pid.len()),
+            ));
+            buffer.extend_from_slice(fields.pid);
         }
 
-        buffer.push(' ');
-        buffer.push_str(&pad_right(&fields.comment, 8));
-
+        buffer.push(b' ');
+        buffer.extend(pad_right_bytes(fields.comment, 8));
         if self.is_include_exit {
-            buffer.push(' ');
-            buffer.push_str(&pad_right(&fields.exit, 12));
+            buffer.push(b' ');
+            buffer.extend(pad_right_bytes(fields.exit, 12));
         }
 
-        buffer.trim_end().to_string()
+        while buffer.last() == Some(&b' ') {
+            buffer.pop();
+        }
+        buffer
+    }
+
+    fn print_line_bytes(&self, fields: &WhoDisplayBytes<'_>) -> CTResult<()> {
+        let mut rendered = self.render_line_bytes(fields);
+        rendered.push(b'\n');
+        io::stdout().lock().write_all(&rendered)?;
+        Ok(())
     }
 
     #[inline]
@@ -741,7 +773,7 @@ impl Who {
         utmpx: &CtUtmpx,
         boot_time: i64,
     ) -> CTResult<(WhoRow, WhoDisplayLine)> {
-        let p = tty_stat_path(&utmpx.tty_device());
+        let p = tty_stat_path(utmpx.tty_device_bytes());
 
         let (mesg, last_change) = match p.metadata() {
             Ok(meta) => {
@@ -1153,10 +1185,10 @@ mod tests {
 
     #[test]
     fn tty_stat_path_discards_the_prefix_before_the_first_space() {
-        assert_eq!(tty_stat_path("pts/0"), PathBuf::from("/dev/pts/0"));
-        assert_eq!(tty_stat_path("label pts/0"), PathBuf::from("/dev/pts/0"));
+        assert_eq!(tty_stat_path(b"pts/0"), PathBuf::from("/dev/pts/0"));
+        assert_eq!(tty_stat_path(b"label pts/0"), PathBuf::from("/dev/pts/0"));
         assert_eq!(
-            tty_stat_path("label /tmp/terminal"),
+            tty_stat_path(b"label /tmp/terminal"),
             PathBuf::from("/tmp/terminal")
         );
     }
@@ -1213,6 +1245,18 @@ mod tests {
             }
             tzset();
         }
+    }
+
+    #[test]
+    fn byte_padding_preserves_non_utf8_input_and_counts_bytes() {
+        assert_eq!(
+            pad_right_bytes(&[0xff, b'A'], 8),
+            [vec![0xff, b'A'], vec![b' '; 6]].concat()
+        );
+        assert_eq!(
+            pad_right_bytes("中".as_bytes(), 4),
+            ["中".as_bytes(), b" "].concat()
+        );
     }
 
     #[test]

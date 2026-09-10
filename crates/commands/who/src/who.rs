@@ -10,7 +10,7 @@
  */
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::CTResult;
 
@@ -133,6 +133,7 @@ pub fn ct_app() -> Command {
             .overrides_with(who_flags::WHO_MESG),
         Arg::new(who_flags::WHO_FILE)
             .num_args(1..=2)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath)
             .help(t!("who.clap.options.file")),
     ];
@@ -186,8 +187,23 @@ mod tests {
     use clap::error::ErrorKind;
     use ctcore::Tool;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     use super::*;
+
+    #[test]
+    fn file_operand_accepts_non_utf8_paths() {
+        let path = OsString::from_vec(vec![b'u', b't', b'm', b'p', b'-', 0xff]);
+        let matches = ct_app()
+            .try_get_matches_from([OsString::from(ctcore::ct_util_name()), path.clone()])
+            .unwrap();
+        assert_eq!(
+            matches
+                .get_one::<OsString>(who_flags::WHO_FILE)
+                .map(OsString::as_os_str),
+            Some(path.as_os_str())
+        );
+    }
 
     #[test]
     fn test_tool_implementation() {

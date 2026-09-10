@@ -20,7 +20,7 @@ use ctcore::libc::{
 };
 use rust_i18n::t;
 use std::borrow::Cow;
-use std::ffi::CStr;
+use std::ffi::{CStr, OsStr, OsString};
 use std::io::{self, Write as IoWrite};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
@@ -62,9 +62,9 @@ pub fn who_native_semantic(args: impl ctcore::Args) -> CTResult<WhoSemantic> {
 }
 
 fn who_from_matches(matches: &clap::ArgMatches) -> Who {
-    let ct_files: Vec<String> = matches
-        .get_many::<String>(who_flags::WHO_FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+    let ct_files: Vec<OsString> = matches
+        .get_many::<OsString>(who_flags::WHO_FILE)
+        .map(|values| values.cloned().collect())
         .unwrap_or_default();
 
     let is_do_lookup = matches.get_flag(who_flags::WHO_LOOKUP);
@@ -132,7 +132,7 @@ struct Who {
     is_need_runlevel: bool,
     is_need_users: bool,
     is_my_line_only: bool,
-    who_args: Vec<String>,
+    who_args: Vec<OsString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -295,8 +295,8 @@ fn linux_boot_time() -> Option<i64> {
     Some(now.tv_sec - uptime.tv_sec - i64::from(now.tv_nsec < uptime.tv_nsec))
 }
 
-fn fallback_boot_time(source: &str, need_boot_time: bool, saw_boot_time: bool) -> Option<i64> {
-    (need_boot_time && !saw_boot_time && source == ct_utmpx::DEFAULT_FILE)
+fn fallback_boot_time(source: &OsStr, need_boot_time: bool, saw_boot_time: bool) -> Option<i64> {
+    (need_boot_time && !saw_boot_time && source == OsStr::new(ct_utmpx::DEFAULT_FILE))
         .then(linux_boot_time)
         .flatten()
 }
@@ -361,8 +361,8 @@ impl Who {
         };
 
         let f = match self.who_args.len() {
-            1 => self.who_args[0].as_ref(),
-            _ => ct_utmpx::DEFAULT_FILE,
+            1 => self.who_args[0].as_os_str(),
+            _ => OsStr::new(ct_utmpx::DEFAULT_FILE),
         };
         let check_pids = self.who_args.len() != 1;
 
@@ -713,10 +713,10 @@ impl Who {
         );
     }
 
-    fn source_file(&self) -> &str {
+    fn source_file(&self) -> &OsStr {
         match self.who_args.len() {
-            1 => self.who_args[0].as_ref(),
-            _ => ct_utmpx::DEFAULT_FILE,
+            1 => self.who_args[0].as_os_str(),
+            _ => OsStr::new(ct_utmpx::DEFAULT_FILE),
         }
     }
 
@@ -921,10 +921,10 @@ impl Who {
             return _record == ct_utmpx::RUN_LVL;
         };
 
-        let source_file = self.source_file().to_string();
+        let source_file = self.source_file().to_os_string();
         let mut semantic = WhoSemantic {
             view_kind: self.view_kind(),
-            source_file: source_file.clone(),
+            source_file: source_file.to_string_lossy().into_owned(),
             rows: Vec::new(),
             classic_text: String::new(),
             stderr_text: String::new(),
@@ -1276,13 +1276,14 @@ mod tests {
 
     #[test]
     fn boot_fallback_is_limited_to_missing_default_records() {
-        assert!(fallback_boot_time(ct_utmpx::DEFAULT_FILE, true, false).is_some());
+        let default_file = OsStr::new(ct_utmpx::DEFAULT_FILE);
+        assert!(fallback_boot_time(default_file, true, false).is_some());
+        assert_eq!(fallback_boot_time(default_file, false, false), None);
+        assert_eq!(fallback_boot_time(default_file, true, true), None);
         assert_eq!(
-            fallback_boot_time(ct_utmpx::DEFAULT_FILE, false, false),
+            fallback_boot_time(OsStr::new("other-utmp"), true, false),
             None
         );
-        assert_eq!(fallback_boot_time(ct_utmpx::DEFAULT_FILE, true, true), None);
-        assert_eq!(fallback_boot_time("other-utmp", true, false), None);
     }
 
     #[test]
@@ -1346,7 +1347,7 @@ mod tests {
             is_need_runlevel: false,
             is_need_users: false,
             is_my_line_only: false,
-            who_args: vec!["/var/log/wtmp".to_string()],
+            who_args: vec![OsString::from("/var/log/wtmp")],
         };
 
         assert!(who.exec().is_ok());

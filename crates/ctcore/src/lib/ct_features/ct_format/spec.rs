@@ -34,6 +34,8 @@ unsafe extern "C" {
     fn iswprint(character: crate::libc::c_uint) -> crate::libc::c_int;
 }
 
+const GNU_PRINTF_MAX_FIELD_WIDTH: usize = i32::MAX as usize - 2;
+
 /// 用于格式化值的已解析说明符
 /// 可能需要多个参数来解析以*给出的宽度或精度值
 #[derive(Debug, PartialEq)]
@@ -826,7 +828,7 @@ fn resolve_width<'a>(
             if v < i64::from(i32::MIN) || v > i64::from(i32::MAX) {
                 return Err(FormatError::InvalidFieldWidth(source));
             }
-            if v == i64::from(i32::MIN) {
+            if v == i64::from(i32::MIN) || v.unsigned_abs() > GNU_PRINTF_MAX_FIELD_WIDTH as u64 {
                 return Err(FormatError::WriteError);
             }
             if v < 0 {
@@ -834,6 +836,9 @@ fn resolve_width<'a>(
             } else {
                 Ok((Some(v as usize), false))
             }
+        }
+        Some(CanAsterisk::Fixed(w)) if w > GNU_PRINTF_MAX_FIELD_WIDTH => {
+            Err(FormatError::WriteError)
         }
         Some(CanAsterisk::Fixed(w)) => Ok((Some(w), false)),
     }
@@ -857,6 +862,7 @@ fn resolve_precision<'a>(
                 Ok(Some(v as usize))
             }
         }
+        Some(CanAsterisk::Fixed(p)) if p > i32::MAX as usize => Err(FormatError::WriteError),
         Some(CanAsterisk::Fixed(p)) => Ok(Some(p)),
     }
 }
@@ -935,16 +941,12 @@ fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
         Some(0) | None => None,
         Some(i) => {
             let slice = &rest[*index..(*index + i)];
-            match std::str::from_utf8(slice) {
-                Ok(str_slice) => match str_slice.parse() {
-                    Ok(parsed) => {
-                        *index += i;
-                        Some(parsed)
-                    }
-                    Err(_) => None,
-                },
-                Err(_) => None,
-            }
+            let parsed = std::str::from_utf8(slice)
+                .expect("width and precision contain only ASCII digits")
+                .parse()
+                .unwrap_or(usize::MAX);
+            *index += i;
+            Some(parsed)
         }
     }
 }
@@ -1002,6 +1004,67 @@ mod tests {
             resolve_width(Some(CanAsterisk::Asterisk), None, &mut cursor),
             Err(FormatError::WriteError)
         ));
+    }
+
+    #[test]
+    fn field_width_above_gnu_output_limit_reports_write_error() {
+        let arguments = [FormatArgument::Unparsed("2147483646".to_string())];
+        let mut dynamic_cursor = ArgCursor::new(&arguments);
+        let mut fixed_cursor = ArgCursor::new(&[]);
+        let mut boundary_cursor = ArgCursor::new(&[]);
+
+        assert!(matches!(
+            resolve_width(Some(CanAsterisk::Asterisk), None, &mut dynamic_cursor),
+            Err(FormatError::WriteError)
+        ));
+        assert!(matches!(
+            resolve_width(
+                Some(CanAsterisk::Fixed(2_147_483_646)),
+                None,
+                &mut fixed_cursor
+            ),
+            Err(FormatError::WriteError)
+        ));
+        assert_eq!(
+            resolve_width(
+                Some(CanAsterisk::Fixed(2_147_483_645)),
+                None,
+                &mut boundary_cursor
+            )
+            .unwrap(),
+            (Some(2_147_483_645), false)
+        );
+    }
+
+    #[test]
+    fn oversized_static_width_is_consumed_before_reporting_write_error() {
+        let mut input: &[u8] = b"999999999999999999999999s";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let arguments = [FormatArgument::Bytes(b"x".to_vec())];
+        let mut cursor = ArgCursor::new(&arguments);
+        let mut output = Vec::new();
+
+        assert!(input.is_empty());
+        assert!(matches!(
+            spec.write(&mut output, &mut cursor),
+            Err(FormatError::WriteError)
+        ));
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn oversized_static_precision_reports_write_error_before_formatting() {
+        let mut input: &[u8] = b".999999999999999999999999s";
+        let spec = IndexedSpec::parse(&mut input).unwrap();
+        let arguments = [FormatArgument::Bytes(b"x".to_vec())];
+        let mut cursor = ArgCursor::new(&arguments);
+        let mut output = Vec::new();
+
+        assert!(matches!(
+            spec.write(&mut output, &mut cursor),
+            Err(FormatError::WriteError)
+        ));
+        assert!(output.is_empty());
     }
 
     #[test]

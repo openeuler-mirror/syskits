@@ -1412,6 +1412,106 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%2147483646s，参数x；静态宽度超过GNU单次格式化成功上限，预期不写stdout、RC=1并报告write error",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%2147483646s", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: write error\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "null"
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT中的静态字符串宽度为999999999999999999999999，超过Rust usize及GNU int范围；预期按GNU格式化溢出语义返回RC=1和write error，而非invalid conversion specification",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%999999999999999999999999s", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: write error\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "null"
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT=%*s，动态宽度2147483646超过GNU单次格式化成功上限；预期不写stdout、RC=1并报告write error",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%*s", "2147483646", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: write error\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "null"
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "command": "printf",
+            "description": "LC_ALL=C；FORMAT中的静态字符串精度为999999999999999999999999，超过Rust usize及GNU int范围；预期在格式化前返回RC=1并报告write error",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "export LANGUAGE=C"
+            ],
+            "args": ["%.999999999999999999999999s", "x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "printf: write error\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
         }
     ]
 }

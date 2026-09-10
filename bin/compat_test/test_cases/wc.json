@@ -952,6 +952,32 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "command": "wc",
+            "description": "LC_ALL=C；stdin重定向自2字节普通文件并与3字节路径共同执行wc -c；GNU通过fstat将普通文件stdin计入宽度估算，预期各计数及total均使用一列宽度",
+            "args": ["-c", "-", "wc-width-other"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf 'ab' > wc-width-stdin",
+                "printf 'xyz' > wc-width-other"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdinFile": "wc-width-stdin"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "2 -\n3 wc-width-other\n5 total\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f wc-width-stdin wc-width-other"],
+            "tstdin": ""
         }
     ]
 }

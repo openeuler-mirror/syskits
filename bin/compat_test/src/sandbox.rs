@@ -711,6 +711,18 @@ impl IsolatedSandbox {
         };
 
         let streams = options.streams;
+        let stdin = match streams.stdin_file.as_deref() {
+            Some(path) => {
+                let path = Path::new(path);
+                let path = if path.is_absolute() {
+                    path.to_path_buf()
+                } else {
+                    self.current_dir.join(path)
+                };
+                Stdio::from(File::open(path)?)
+            }
+            None => Stdio::piped(),
+        };
         let (stdout, stdout_tty) = configured_output(streams.stdout)?;
         let (stderr, stderr_tty) = configured_output(streams.stderr)?;
         let mut command = if streams.use_bash {
@@ -725,7 +737,7 @@ impl IsolatedSandbox {
             command
         };
         command
-            .stdin(Stdio::piped())
+            .stdin(stdin)
             .stdout(stdout)
             .stderr(stderr)
             .current_dir(&self.current_dir)
@@ -1282,6 +1294,29 @@ mod tests {
         let result = sandbox.execute_command("cat", &[], Some("test input"), true, None)?;
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "test input");
+        assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_regular_file_stdin() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        fs::write(sandbox.path().join("stdin.fixture"), b"regular input")?;
+        let streams = StandardStreams {
+            stdin_file: Some("stdin.fixture".to_string()),
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "cat",
+            &[],
+            Some("ignored pipe input"),
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "regular input");
         assert_eq!(result.stderr, "");
         Ok(())
     }

@@ -1215,6 +1215,30 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "wc",
+            "description": "Linux；LC_ALL=C；对1TiB稀疏普通文件执行-m；GNU在单字节locale下将字符计数等价为字节计数并使用文件大小快速路径，须在3秒内返回",
+            "args": ["-m", "wc-c-sparse"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "truncate -s 1T wc-c-sparse"
+            ],
+            "environment": {
+                "standardStreams": {}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1099511627776 wc-c-sparse\n",
+                    "stderr": ""
+                }
+            },
+            "timeout": 3,
+            "cleanup_commands": ["rm -f wc-c-sparse"],
+            "tstdin": ""
         }
     ]
 }

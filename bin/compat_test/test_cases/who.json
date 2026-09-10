@@ -731,6 +731,26 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who --all=value；GNU的--all为无参数选项，附加值应报告option '--all' doesn't allow an argument，预期RC=1、stdout为空并输出简洁诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--all=value"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: option '--all' doesn't allow an argument\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -180,6 +180,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
             continue;
         }
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            validate_attached_long_option_value(bytes)?;
             continue;
         }
 
@@ -196,6 +197,39 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     }
 
     Ok(args)
+}
+
+const WHO_LONG_OPTIONS: [&str; 17] = [
+    "all", "boot", "count", "dead", "heading", "help", "login", "lookup", "mesg", "message",
+    "process", "runlevel", "short", "time", "users", "version", "writable",
+];
+
+fn unique_long_option(name: &[u8]) -> Option<&'static str> {
+    if name.is_empty() {
+        return None;
+    }
+    let mut matches = WHO_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name));
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn validate_attached_long_option_value(argument: &[u8]) -> CTResult<()> {
+    let Some(long) = argument.strip_prefix(b"--") else {
+        return Ok(());
+    };
+    let Some(separator) = long.iter().position(|byte| *byte == b'=') else {
+        return Ok(());
+    };
+    if let Some(canonical) = unique_long_option(&long[..separator]) {
+        return Err(CTsageError::new(
+            1,
+            format!("option '--{canonical}' doesn't allow an argument"),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Default)]
@@ -262,6 +296,17 @@ mod tests {
         let args = ["who", "a", "b", "c"].map(OsString::from);
         let error = prepare_who_args(args.into_iter()).unwrap_err();
         assert_eq!(error.to_string(), "extra operand 'c'");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn attached_value_reports_the_canonical_no_argument_option() {
+        let args = ["who", "--bo=value"].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "option '--boot' doesn't allow an argument"
+        );
         assert!(error.usage());
     }
 

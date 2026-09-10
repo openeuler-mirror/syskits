@@ -211,6 +211,14 @@ fn runlevel_comment(previous: u8) -> Option<String> {
     Some(format!("last={previous}"))
 }
 
+fn updated_boot_time(current: i64, record_type: i16, timestamp: i64) -> i64 {
+    if record_type == ct_utmpx::BOOT_TIME {
+        timestamp
+    } else {
+        current
+    }
+}
+
 fn time_string(utmpx: &CtUtmpx) -> String {
     // Use ctcore's hard_locale_time() function (consistent with GNU coreutils)
     let time_fmt = if hard_locale_time() {
@@ -300,6 +308,7 @@ impl Who {
             println!("{}={}", t!("who.output.users_count"), users.len());
         } else {
             let records = CtUtmpx::iter_all_records_from(f);
+            let mut boot_time = i64::MIN;
 
             if self.is_include_heading {
                 self.print_head();
@@ -313,7 +322,7 @@ impl Who {
             for utmpx in records {
                 if !self.is_my_line_only || current_tty == utmpx.tty_device() {
                     if self.is_need_users && utmpx.is_user_process() {
-                        self.print_user(&utmpx)?;
+                        self.print_user(&utmpx, boot_time)?;
                     } else if self.is_need_runlevel && run_level_chk(utmpx.record_type()) {
                         if cfg!(target_os = "linux") {
                             self.print_runlevel(&utmpx);
@@ -336,7 +345,8 @@ impl Who {
                     }
                 }
 
-                if utmpx.record_type() == ct_utmpx::BOOT_TIME {}
+                boot_time =
+                    updated_boot_time(boot_time, utmpx.record_type(), utmpx.timestamp_seconds());
             }
         }
         Ok(())
@@ -449,7 +459,7 @@ impl Who {
         );
     }
 
-    fn print_user(&self, utmpx: &CtUtmpx) -> CTResult<()> {
+    fn print_user(&self, utmpx: &CtUtmpx, boot_time: i64) -> CTResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(utmpx.tty_device().as_str());
 
@@ -469,7 +479,7 @@ impl Who {
 
         let idle = match last_change {
             0 => "  ?".into(),
-            _ => idle_string(last_change, 0),
+            _ => idle_string(last_change, boot_time),
         };
 
         let s = match self.is_do_lookup {
@@ -649,7 +659,11 @@ impl Who {
         }
     }
 
-    fn build_user_row(&self, utmpx: &CtUtmpx) -> CTResult<(WhoRow, WhoDisplayLine)> {
+    fn build_user_row(
+        &self,
+        utmpx: &CtUtmpx,
+        boot_time: i64,
+    ) -> CTResult<(WhoRow, WhoDisplayLine)> {
         let mut p = PathBuf::from("/dev");
         p.push(utmpx.tty_device().as_str());
 
@@ -667,7 +681,7 @@ impl Who {
 
         let idle = match last_change {
             0 => "  ?".to_owned(),
-            _ => idle_string(last_change, 0).into_owned(),
+            _ => idle_string(last_change, boot_time).into_owned(),
         };
 
         let host = if self.is_do_lookup {
@@ -834,6 +848,7 @@ impl Who {
         }
 
         let records = CtUtmpx::iter_all_records_from(&source_file);
+        let mut boot_time = i64::MIN;
         if self.is_include_heading {
             let row = self.heading_row();
             self.push_row(
@@ -859,12 +874,15 @@ impl Who {
         };
 
         for utmpx in records {
+            let next_boot_time =
+                updated_boot_time(boot_time, utmpx.record_type(), utmpx.timestamp_seconds());
             if self.is_my_line_only && current_tty != utmpx.tty_device() {
+                boot_time = next_boot_time;
                 continue;
             }
 
             if self.is_need_users && utmpx.is_user_process() {
-                let (row, display) = self.build_user_row(&utmpx)?;
+                let (row, display) = self.build_user_row(&utmpx, boot_time)?;
                 self.push_row(&mut semantic, row, display);
             } else if self.is_need_runlevel && run_level_chk(utmpx.record_type()) {
                 if cfg!(target_os = "linux") {
@@ -954,6 +972,7 @@ impl Who {
                 );
                 self.push_row(&mut semantic, row, display);
             }
+            boot_time = next_boot_time;
         }
 
         Ok(semantic)
@@ -993,6 +1012,13 @@ mod tests {
         assert_eq!(runlevel_comment(b' ').as_deref(), Some("last= "));
         assert_eq!(runlevel_comment(0x1f), None);
         assert_eq!(runlevel_comment(0xa0), None);
+    }
+
+    #[test]
+    fn boot_time_tracking_updates_only_for_boot_records() {
+        assert_eq!(updated_boot_time(100, ct_utmpx::USER_PROCESS, 200), 100);
+        assert_eq!(updated_boot_time(100, ct_utmpx::BOOT_TIME, 200), 200);
+        assert_eq!(updated_boot_time(200, ct_utmpx::BOOT_TIME, 300), 300);
     }
 
     #[test]

@@ -26,7 +26,7 @@ use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::Write;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 pub mod uname_flags {
     pub static UNAME_ALL: &str = "all";
@@ -104,8 +104,8 @@ impl UNameOutput {
 
         let processor = (opts.is_processor || opts.is_all).then(|| uname.machine().to_os_string());
 
-        let hardware_platform =
-            (opts.is_hardware_platform || opts.is_all).then(|| uname.machine().to_os_string());
+        let hardware_platform = (opts.is_hardware_platform || opts.is_all)
+            .then(|| hardware_platform_from_machine(uname.machine()));
 
         let os = (opts.is_os || opts.is_all).then(|| uname.osname().to_os_string());
 
@@ -119,6 +119,17 @@ impl UNameOutput {
             hardware_platform,
             os,
         })
+    }
+}
+
+fn hardware_platform_from_machine(machine: &OsStr) -> OsString {
+    let bytes = machine.as_bytes();
+    if bytes.len() == 4 && bytes[0] == b'i' && bytes[2] == b'8' && bytes[3] == b'6' {
+        let mut normalized = bytes.to_vec();
+        normalized[1] = b'3';
+        OsString::from_vec(normalized)
+    } else {
+        machine.to_os_string()
     }
 }
 
@@ -728,6 +739,18 @@ mod tests {
             };
 
             assert_eq!(output.display_bytes(), b"Linux n\xff");
+        }
+
+        #[test]
+        fn i686_hardware_platform_is_normalized_to_i386() {
+            assert_eq!(
+                hardware_platform_from_machine(OsStr::new("i686")),
+                OsString::from("i386")
+            );
+            assert_eq!(
+                hardware_platform_from_machine(OsStr::new("x86_64")),
+                OsString::from("x86_64")
+            );
         }
     }
 

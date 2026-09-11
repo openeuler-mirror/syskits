@@ -875,6 +875,29 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C；执行who a b c -z；GNU默认模式先置换并解析全部选项，再检查第三操作数，因此后置未知选项诊断优先，预期RC=1、stdout为空并报告invalid option及帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c",
+                "-z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: invalid option -- 'z'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -78,8 +78,15 @@ impl UNameOutput {
     }
 
     pub fn new(opts: &UnameFlags) -> CTResult<Self> {
-        let uname =
-            PlatformInfo::new().map_err(|_e| CtSimpleError::new(1, "cannot get system name"))?;
+        Self::new_with_platform_provider(opts, || {
+            PlatformInfo::new().map_err(|_e| CtSimpleError::new(1, "cannot get system name"))
+        })
+    }
+
+    fn new_with_platform_provider(
+        opts: &UnameFlags,
+        platform_provider: impl FnOnce() -> CTResult<PlatformInfo>,
+    ) -> CTResult<Self> {
         let is_none = !(opts.is_all
             || opts.is_kernel_name
             || opts.is_node_name
@@ -89,26 +96,66 @@ impl UNameOutput {
             || opts.is_os
             || opts.is_processor
             || opts.is_hardware_platform);
+        let needs_platform_info = is_none
+            || opts.is_all
+            || opts.is_kernel_name
+            || opts.is_node_name
+            || opts.is_kernel_release
+            || opts.is_kernel_version
+            || opts.is_machine
+            || opts.is_processor
+            || opts.is_hardware_platform
+            || cfg!(not(target_os = "linux")) && opts.is_os;
+        let platform_info = needs_platform_info.then(platform_provider).transpose()?;
+        let uname = platform_info.as_ref();
 
-        let kernel_name =
-            (opts.is_kernel_name || opts.is_all || is_none).then(|| uname.sysname().to_os_string());
+        let kernel_name = (opts.is_kernel_name || opts.is_all || is_none).then(|| {
+            uname
+                .expect("platform info is required")
+                .sysname()
+                .to_os_string()
+        });
 
-        let node_name = (opts.is_node_name || opts.is_all).then(|| uname.nodename().to_os_string());
+        let node_name = (opts.is_node_name || opts.is_all).then(|| {
+            uname
+                .expect("platform info is required")
+                .nodename()
+                .to_os_string()
+        });
 
-        let kernel_release =
-            (opts.is_kernel_release || opts.is_all).then(|| uname.release().to_os_string());
+        let kernel_release = (opts.is_kernel_release || opts.is_all).then(|| {
+            uname
+                .expect("platform info is required")
+                .release()
+                .to_os_string()
+        });
 
-        let kernel_version =
-            (opts.is_kernel_version || opts.is_all).then(|| uname.version().to_os_string());
+        let kernel_version = (opts.is_kernel_version || opts.is_all).then(|| {
+            uname
+                .expect("platform info is required")
+                .version()
+                .to_os_string()
+        });
 
-        let machine = (opts.is_machine || opts.is_all).then(|| uname.machine().to_os_string());
+        let machine = (opts.is_machine || opts.is_all).then(|| {
+            uname
+                .expect("platform info is required")
+                .machine()
+                .to_os_string()
+        });
 
-        let processor = (opts.is_processor || opts.is_all).then(|| uname.machine().to_os_string());
+        let processor = (opts.is_processor || opts.is_all).then(|| {
+            uname
+                .expect("platform info is required")
+                .machine()
+                .to_os_string()
+        });
 
-        let hardware_platform = (opts.is_hardware_platform || opts.is_all)
-            .then(|| hardware_platform_from_machine(uname.machine()));
+        let hardware_platform = (opts.is_hardware_platform || opts.is_all).then(|| {
+            hardware_platform_from_machine(uname.expect("platform info is required").machine())
+        });
 
-        let os = (opts.is_os || opts.is_all).then(|| uname.osname().to_os_string());
+        let os = (opts.is_os || opts.is_all).then(|| operating_system_name(uname));
 
         Ok(Self {
             kernel_name,
@@ -121,6 +168,19 @@ impl UNameOutput {
             os,
         })
     }
+}
+
+#[cfg(target_os = "linux")]
+fn operating_system_name(_platform_info: Option<&PlatformInfo>) -> OsString {
+    OsString::from("GNU/Linux")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn operating_system_name(platform_info: Option<&PlatformInfo>) -> OsString {
+    platform_info
+        .expect("platform info is required")
+        .osname()
+        .to_os_string()
 }
 
 fn hardware_platform_from_machine(machine: &OsStr) -> OsString {
@@ -893,6 +953,7 @@ mod tests {
     #[cfg(test)]
     mod uname_output_tests {
         use super::*;
+        use std::cell::Cell;
 
         #[allow(clippy::too_many_arguments)]
         fn generate_uname_flags(
@@ -1034,6 +1095,23 @@ mod tests {
                 hardware_platform_from_machine(OsStr::new("x86_64")),
                 OsString::from("x86_64")
             );
+        }
+
+        #[test]
+        fn operating_system_only_does_not_query_platform_info() {
+            let flags =
+                generate_uname_flags(false, false, false, false, false, false, false, false, true);
+            let provider_called = Cell::new(false);
+
+            let output = UNameOutput::new_with_platform_provider(&flags, || {
+                provider_called.set(true);
+                PlatformInfo::new()
+                    .map_err(|_error| CtSimpleError::new(1, "cannot get system name"))
+            })
+            .unwrap();
+
+            assert!(!provider_called.get());
+            assert_eq!(output.os, Some(OsString::from("GNU/Linux")));
         }
     }
 

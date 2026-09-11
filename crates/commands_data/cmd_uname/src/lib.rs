@@ -190,28 +190,52 @@ fn uname_output_to_value(output: &ct_uname::UNameOutput) -> CtValue {
     let mut fields = Vec::new();
 
     if let Some(value) = &output.kernel_name {
-        fields.push(("kernel_name".into(), CtValue::String(value.clone())));
+        fields.push((
+            "kernel_name".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.node_name {
-        fields.push(("node_name".into(), CtValue::String(value.clone())));
+        fields.push((
+            "node_name".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.kernel_release {
-        fields.push(("kernel_release".into(), CtValue::String(value.clone())));
+        fields.push((
+            "kernel_release".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.kernel_version {
-        fields.push(("kernel_version".into(), CtValue::String(value.clone())));
+        fields.push((
+            "kernel_version".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.machine {
-        fields.push(("machine".into(), CtValue::String(value.clone())));
+        fields.push((
+            "machine".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.processor {
-        fields.push(("processor".into(), CtValue::String(value.clone())));
+        fields.push((
+            "processor".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.hardware_platform {
-        fields.push(("hardware_platform".into(), CtValue::String(value.clone())));
+        fields.push((
+            "hardware_platform".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
     if let Some(value) = &output.os {
-        fields.push(("os".into(), CtValue::String(value.clone())));
+        fields.push((
+            "os".into(),
+            CtValue::String(value.to_string_lossy().into_owned()),
+        ));
     }
 
     CtValue::Record(fields)
@@ -221,28 +245,28 @@ fn classic_text_from_output(output: &ct_uname::UNameOutput) -> String {
     let mut parts = Vec::new();
 
     if let Some(value) = &output.kernel_name {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.node_name {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.kernel_release {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.kernel_version {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.machine {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.processor {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.hardware_platform {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
     if let Some(value) = &output.os {
-        parts.push(value.clone());
+        parts.push(value.to_string_lossy().into_owned());
     }
 
     parts.join(" ")

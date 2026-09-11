@@ -1044,6 +1044,30 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='zh_CN.UTF-8'，export LANG='zh_CN.UTF-8'，export TZ='UTC0'；执行who -aH utmp；输入7条400字节Linux utmp记录，依次覆盖RUN_LVL、BOOT_TIME、NEW_TIME、INIT_PROCESS、LOGIN_PROCESS、USER_PROCESS、DEAD_PROCESS，USER终端为/dev/null且2030年BOOT_TIME使idle显示很久；预期GNU中文gettext标签、内置填充空格、上一个注释和完整列排版逐字节一致，RC=0、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export LANG='zh_CN.UTF-8'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; types=(1,2,3,5,6,7,8); b=bytearray(400*len(types)); [(struct.pack_into(\"h\",b,i*400,t), struct.pack_into(\"i\",b,i*400+4,12345), b.__setitem__(slice(i*400+8,i*400+12),b\"null\"), b.__setitem__(slice(i*400+40,i*400+42),b\"p0\"), b.__setitem__(slice(i*400+44,i*400+49),b\"alice\"), b.__setitem__(slice(i*400+76,i*400+82),b\"host:1\"), struct.pack_into(\"q\",b,i*400+344,1893456000 if t==2 else 1709210096)) for i,t in enumerate(types)]; open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "-aH",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "名称       线路         时间             空闲        PID 备注     退出\n           运行级别   9 2024-02-29 12:34                   上一个=0\n           系统引导     2030-01-01 00:00\n           时钟更改     2024-02-29 12:34\n           null         2024-02-29 12:34             12345 id=p0\n登录       null         2024-02-29 12:34             12345 id=p0\nalice    - null         2024-02-29 12:34 很久      12345 (host:1)\n           null         2024-02-29 12:34             12345 id=p0    终止=0 退出=0\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -10,3 +10,6 @@ uname:
   about: |-
     Print certain system information.
     With no OPTION, same as -s.
+  errors:
+    extra_operand: "extra operand"
+    try_help: "Try 'uname --help' for more information."

@@ -25,6 +25,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 
 pub mod uname_flags {
@@ -40,19 +41,19 @@ pub mod uname_flags {
 }
 
 pub struct UNameOutput {
-    pub kernel_name: Option<String>,
-    pub node_name: Option<String>,
-    pub kernel_release: Option<String>,
-    pub kernel_version: Option<String>,
-    pub machine: Option<String>,
-    pub os: Option<String>,
-    pub processor: Option<String>,
-    pub hardware_platform: Option<String>,
+    pub kernel_name: Option<OsString>,
+    pub node_name: Option<OsString>,
+    pub kernel_release: Option<OsString>,
+    pub kernel_version: Option<OsString>,
+    pub machine: Option<OsString>,
+    pub os: Option<OsString>,
+    pub processor: Option<OsString>,
+    pub hardware_platform: Option<OsString>,
 }
 
 impl UNameOutput {
-    fn display(&self) -> String {
-        let mut output = String::new();
+    fn display_bytes(&self) -> Vec<u8> {
+        let mut output = Vec::new();
         let mut names = [
             self.kernel_name.as_ref(),
             self.node_name.as_ref(),
@@ -66,11 +67,11 @@ impl UNameOutput {
         .into_iter()
         .flatten();
         if let Some(name) = names.next() {
-            output.push_str(name);
+            output.extend_from_slice(name.as_bytes());
         }
         for name in names {
-            output.push(' ');
-            output.push_str(name);
+            output.push(b' ');
+            output.extend_from_slice(name.as_bytes());
         }
         output
     }
@@ -88,28 +89,25 @@ impl UNameOutput {
             || opts.is_processor
             || opts.is_hardware_platform);
 
-        let kernel_name = (opts.is_kernel_name || opts.is_all || is_none)
-            .then(|| uname.sysname().to_string_lossy().to_string());
+        let kernel_name =
+            (opts.is_kernel_name || opts.is_all || is_none).then(|| uname.sysname().to_os_string());
 
-        let node_name = (opts.is_node_name || opts.is_all)
-            .then(|| uname.nodename().to_string_lossy().to_string());
+        let node_name = (opts.is_node_name || opts.is_all).then(|| uname.nodename().to_os_string());
 
-        let kernel_release = (opts.is_kernel_release || opts.is_all)
-            .then(|| uname.release().to_string_lossy().to_string());
+        let kernel_release =
+            (opts.is_kernel_release || opts.is_all).then(|| uname.release().to_os_string());
 
-        let kernel_version = (opts.is_kernel_version || opts.is_all)
-            .then(|| uname.version().to_string_lossy().to_string());
+        let kernel_version =
+            (opts.is_kernel_version || opts.is_all).then(|| uname.version().to_os_string());
 
-        let machine =
-            (opts.is_machine || opts.is_all).then(|| uname.machine().to_string_lossy().to_string());
+        let machine = (opts.is_machine || opts.is_all).then(|| uname.machine().to_os_string());
 
-        let processor = (opts.is_processor || opts.is_all)
-            .then(|| uname.machine().to_string_lossy().to_string());
+        let processor = (opts.is_processor || opts.is_all).then(|| uname.machine().to_os_string());
 
-        let hardware_platform = (opts.is_hardware_platform || opts.is_all)
-            .then(|| uname.machine().to_string_lossy().to_string());
+        let hardware_platform =
+            (opts.is_hardware_platform || opts.is_all).then(|| uname.machine().to_os_string());
 
-        let os = (opts.is_os || opts.is_all).then(|| uname.osname().to_string_lossy().to_string());
+        let os = (opts.is_os || opts.is_all).then(|| uname.osname().to_os_string());
 
         Ok(Self {
             kernel_name,
@@ -169,7 +167,9 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
         is_os: matches.get_flag(uname_flags::UNAME_OS),
     };
     let output = UNameOutput::new(&flags)?;
-    println!("{}", output.display());
+    let mut rendered = output.display_bytes();
+    rendered.push(b'\n');
+    std::io::stdout().lock().write_all(&rendered)?;
     Ok(())
 }
 
@@ -631,7 +631,7 @@ mod tests {
                 generate_uname_flags(true, false, false, false, false, false, false, false, false);
             let uname_output = UNameOutput::new(&flags).unwrap();
 
-            assert_eq!(uname_output.kernel_name, Some("Linux".to_string()));
+            assert_eq!(uname_output.kernel_name, Some(OsString::from("Linux")));
             assert!(uname_output.node_name.is_some());
             assert!(uname_output.kernel_release.is_some());
             assert!(uname_output.kernel_version.is_some());
@@ -639,7 +639,7 @@ mod tests {
             assert!(uname_output.os.is_some());
             assert!(uname_output.processor.is_some());
             assert!(uname_output.hardware_platform.is_some());
-            assert!(!uname_output.display().is_empty());
+            assert!(!uname_output.display_bytes().is_empty());
         }
 
         #[test]
@@ -655,7 +655,7 @@ mod tests {
             assert!(uname_output.os.is_some());
             assert!(uname_output.processor.is_some());
             assert!(uname_output.hardware_platform.is_some());
-            assert!(!uname_output.display().is_empty());
+            assert!(!uname_output.display_bytes().is_empty());
         }
 
         #[test]
@@ -676,8 +676,8 @@ mod tests {
 
             let expected_output = "Linux ";
             assert_eq!(
-                uname_output.display().trim_end(),
-                expected_output.trim_end()
+                uname_output.display_bytes(),
+                expected_output.trim().as_bytes()
             );
         }
 
@@ -695,14 +695,14 @@ mod tests {
             assert!(uname_output.os.is_none());
             assert!(uname_output.processor.is_none());
             assert!(uname_output.hardware_platform.is_some());
-            assert!(!uname_output.display().is_empty());
+            assert!(!uname_output.display_bytes().is_empty());
         }
 
         #[test]
         fn display_preserves_trailing_whitespace_inside_last_field() {
             let output = UNameOutput {
                 kernel_name: None,
-                node_name: Some("node ".to_string()),
+                node_name: Some(OsString::from("node ")),
                 kernel_release: None,
                 kernel_version: None,
                 machine: None,
@@ -711,7 +711,23 @@ mod tests {
                 hardware_platform: None,
             };
 
-            assert_eq!(output.display(), "node ");
+            assert_eq!(output.display_bytes(), b"node ");
+        }
+
+        #[test]
+        fn display_preserves_non_utf8_kernel_field_bytes() {
+            let output = UNameOutput {
+                kernel_name: Some(OsString::from("Linux")),
+                node_name: Some(OsString::from_vec(vec![b'n', 0xff])),
+                kernel_release: None,
+                kernel_version: None,
+                machine: None,
+                os: None,
+                processor: None,
+                hardware_platform: None,
+            };
+
+            assert_eq!(output.display_bytes(), b"Linux n\xff");
         }
     }
 

@@ -166,6 +166,9 @@ pub enum TacError {
 
     /// 写入（反转的）文件或标准输入内容时出错。参数是导致此错误的底层 [`std::io::Error`]。
     WriteError(std::io::Error),
+
+    /// 刷新标准输出时出错。
+    FlushError(std::io::Error),
 }
 
 impl CTError for TacError {
@@ -216,7 +219,8 @@ impl Display for TacError {
                 strip_errno(error)
             ),
             Self::ReadError(s, e) => write!(f, "failed to read from {s}: {e}"),
-            Self::WriteError(e) => write!(f, "failed to write to stdout: {e}"),
+            Self::WriteError(_) => write!(f, "write error"),
+            Self::FlushError(error) => write!(f, "write error: {}", strip_errno(error)),
         }
     }
 }
@@ -607,10 +611,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
     for filename in &settings.files {
         match tac_collect_file_segments_with_regex(filename, settings, pattern.as_mut()) {
             Ok(segments) => {
-                if let Err(error) = tac_write_segments(writer, &segments) {
-                    ctcore::ct_show_error!("{}", TacError::WriteError(error));
-                    has_error = true;
-                }
+                tac_write_segments(writer, &segments).map_err(TacError::WriteError)?;
             }
             Err(error) => {
                 ctcore::ct_show_error!("{}", error);
@@ -618,6 +619,8 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
             }
         }
     }
+
+    writer.flush().map_err(TacError::FlushError)?;
 
     if has_error {
         // 使用 CtSimpleError 返回一个通用的非零退出码
@@ -997,7 +1000,7 @@ mod tests {
         fn test_tac_error_write_error() {
             let io_error = std::io::Error::other("write error");
             let error = TacError::WriteError(io_error);
-            assert_eq!(error.to_string(), "failed to write to stdout: write error");
+            assert_eq!(error.to_string(), "write error");
             assert_eq!(error.code(), 1);
         }
     }
@@ -1436,8 +1439,43 @@ mod tests {
         use super::*;
         use std::ffi::OsString;
         use std::fs;
+        use std::io;
         use std::os::unix::ffi::OsStringExt;
         use tempfile::{NamedTempFile, tempdir};
+
+        #[derive(Default)]
+        struct FlushFailWriter {
+            output: Vec<u8>,
+            flush_count: usize,
+        }
+
+        impl Write for FlushFailWriter {
+            fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+                self.output.extend_from_slice(buffer);
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                self.flush_count += 1;
+                Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+            }
+        }
+
+        #[derive(Default)]
+        struct WriteFailWriter {
+            write_count: usize,
+        }
+
+        impl Write for WriteFailWriter {
+            fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+                self.write_count += 1;
+                Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
 
         #[test]
         fn test_tac_main_simple() {
@@ -1470,6 +1508,42 @@ mod tests {
             let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"2\n1\nb\na\n");
+        }
+
+        #[test]
+        fn test_tac_main_reports_final_flush_error() {
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(b"a").unwrap();
+            let args = [
+                OsString::from("tac"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = FlushFailWriter::default();
+
+            let error = tac_main(&mut output, args.into_iter()).unwrap_err();
+
+            assert_eq!(output.output, b"a");
+            assert_eq!(output.flush_count, 1);
+            assert_eq!(error.to_string(), "write error: No space left on device");
+        }
+
+        #[test]
+        fn test_tac_main_stops_after_first_write_error() {
+            let mut first = NamedTempFile::new().unwrap();
+            let mut second = NamedTempFile::new().unwrap();
+            first.write_all(b"first").unwrap();
+            second.write_all(b"second").unwrap();
+            let args = [
+                OsString::from("tac"),
+                first.path().as_os_str().to_os_string(),
+                second.path().as_os_str().to_os_string(),
+            ];
+            let mut output = WriteFailWriter::default();
+
+            let error = tac_main(&mut output, args.into_iter()).unwrap_err();
+
+            assert_eq!(output.write_count, 1);
+            assert_eq!(error.to_string(), "write error");
         }
 
         #[test]

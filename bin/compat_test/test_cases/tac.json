@@ -1144,6 +1144,66 @@
       },
       "cleanup_commands": [],
       "byteMode": true
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac flush-small并将stdout连接到/dev/full；fixture完整内容为单字节a，GNU在最终刷新缓冲输出时检测ENOSPC，预期RC=1、stdout为空、stderr为单条tac: write error: No space left on device",
+      "setup_commands": [
+        "printf a > flush-small"
+      ],
+      "args": [
+        "flush-small"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdout": "full"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: write error: No space left on device\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f flush-small"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac write-large-a write-large-b并将stdout连接到/dev/full；两个fixture均为16384字节x，GNU记录stdout失败并在退出时只报告一次，预期RC=1、stdout为空、stderr仅一条write error且不含Rust errno编号",
+      "setup_commands": [
+        "printf '%16384s' '' | tr ' ' x > write-large-a",
+        "printf '%16384s' '' | tr ' ' x > write-large-b"
+      ],
+      "args": [
+        "write-large-a",
+        "write-large-b"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdout": "full"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: write error\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f write-large-a write-large-b"
+      ]
     }
   ]
 }

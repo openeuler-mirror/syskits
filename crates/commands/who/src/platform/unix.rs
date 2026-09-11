@@ -246,6 +246,18 @@ fn should_keep_user_pid(check_pids: bool, is_user_process: bool, pid: i32) -> bo
     status == 0 || std::io::Error::last_os_error().raw_os_error() != Some(ESRCH)
 }
 
+fn canonicalize_host_bytes<F>(host: &[u8], lookup: F) -> io::Result<Vec<u8>>
+where
+    F: FnOnce(&str) -> io::Result<String>,
+{
+    if !host.is_ascii() {
+        return Ok(host.to_vec());
+    }
+
+    let host = std::str::from_utf8(host).expect("ASCII host names are valid UTF-8");
+    lookup(host).map(String::into_bytes)
+}
+
 fn tty_permissions_allow_messages(mode: u32, gid: u32, tty_group: Option<u32>) -> bool {
     tty_group == Some(gid) && mode & S_IWGRP != 0
 }
@@ -594,10 +606,8 @@ impl Who {
         };
 
         let host = if self.is_do_lookup {
-            utmpx
-                .canon_host()
-                .map(|host| host.into_bytes())
-                .map_err_context(|| {
+            canonicalize_host_bytes(utmpx.host_bytes(), |_| utmpx.canon_host()).map_err_context(
+                || {
                     let host_string = utmpx.host();
                     format!(
                         "failed to canonicalize {}",
@@ -607,7 +617,8 @@ impl Who {
                             .unwrap_or(&host_string)
                             .quote()
                     )
-                })?
+                },
+            )?
         } else {
             utmpx.host_bytes().to_vec()
         };
@@ -1284,6 +1295,20 @@ mod tests {
             pad_right_bytes("中".as_bytes(), 4),
             ["中".as_bytes(), b" "].concat()
         );
+    }
+
+    #[test]
+    fn lookup_preserves_non_utf8_host_bytes_without_calling_dns() {
+        let host = b"missing-\xff:7";
+        let mut lookup_called = false;
+        let canonical = canonicalize_host_bytes(host, |_| {
+            lookup_called = true;
+            Ok("unexpected.example:7".to_string())
+        })
+        .unwrap();
+
+        assert!(!lookup_called);
+        assert_eq!(canonical, host);
     }
 
     #[test]

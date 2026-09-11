@@ -650,11 +650,8 @@ fn locale_text_bytes(text: &str) -> Vec<u8> {
     text.as_bytes().to_vec()
 }
 
-fn locale_is_utf8() -> bool {
-    locale_codeset().is_some_and(|codeset| {
-        let normalized = codeset.to_string_lossy().to_ascii_uppercase();
-        normalized == "UTF-8" || normalized == "UTF8"
-    })
+fn normalized_locale_codeset() -> Option<String> {
+    locale_codeset().map(|codeset| codeset.to_string_lossy().to_ascii_uppercase())
 }
 
 struct LocaleCtype {
@@ -727,14 +724,9 @@ unsafe extern "C" {
 }
 
 fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
-    let (left_quote, right_quote, quote_to_escape): (&[u8], &[u8], Option<u8>) =
-        if message_locale() == MessageLocale::ZhCn {
-            (b"\"", b"\"", Some(b'\"'))
-        } else if locale_is_utf8() {
-            ("‘".as_bytes(), "’".as_bytes(), None)
-        } else {
-            (b"'", b"'", Some(b'\''))
-        };
+    let codeset = normalized_locale_codeset();
+    let (left_quote, right_quote, quote_to_escape) =
+        quote_marks_for_codeset(message_locale(), codeset.as_deref());
 
     LocaleCtype::from_environment().map_or_else(
         || quote_utf8_locale_operand(operand, left_quote, right_quote, quote_to_escape),
@@ -742,6 +734,22 @@ fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
             quote_encoded_locale_operand(operand, left_quote, right_quote, quote_to_escape, &locale)
         },
     )
+}
+
+fn quote_marks_for_codeset(
+    message_locale: MessageLocale,
+    codeset: Option<&str>,
+) -> (&'static [u8], &'static [u8], Option<u8>) {
+    if message_locale == MessageLocale::ZhCn {
+        return (b"\"", b"\"", Some(b'\"'));
+    }
+
+    let normalized = codeset.map(str::to_ascii_uppercase);
+    match normalized.as_deref() {
+        Some("UTF-8" | "UTF8") => ("‘".as_bytes(), "’".as_bytes(), None),
+        Some("GB18030") => (b"\xa1\x07e", b"\xa1\xaf", None),
+        _ => (b"'", b"'", Some(b'\'')),
+    }
 }
 
 fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
@@ -1178,6 +1186,16 @@ mod tests {
             message_locale_from_values(None, None, Some("en_US.UTF-8"), Some("missing:zh_CN:C")),
             MessageLocale::ZhCn
         );
+    }
+
+    #[test]
+    fn gb18030_english_locale_uses_gnu_fallback_quote_bytes() {
+        let (left, right, quote_to_escape) =
+            quote_marks_for_codeset(MessageLocale::EnUs, Some("GB18030"));
+
+        assert_eq!(left, b"\xa1\x07e");
+        assert_eq!(right, b"\xa1\xaf");
+        assert_eq!(quote_to_escape, None);
     }
 
     #[test]

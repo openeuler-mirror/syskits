@@ -30,10 +30,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::io::{Read, Write, stdin, stdout};
 use std::os::unix::ffi::OsStrExt;
-use std::{
-    fs::{File, read},
-    path::Path,
-};
+use std::{fs::File, path::Path};
 use sys_locale::get_locale;
 
 // 定义配置标志常量
@@ -344,40 +341,26 @@ fn read_from_stdin() -> CTResult<Vec<u8>> {
     Ok(buffer)
 }
 
-/// 从指定文件读取数据
-///
-/// # 参数
-/// * `path` - 文件路径
-///
-/// # 返回值
-/// 返回 `CTResult<Vec<u8>>`，包含读取的数据或错误信息
-fn read_from_file(path: &Path) -> CTResult<Vec<u8>> {
-    read(path).map_err(|e| {
-        let filename = path.to_string_lossy().to_string().quote().to_string();
-        TacError::ReadError(filename, e).into()
-    })
-}
-
-/// 验证文件路径的有效性
-///
-/// # 参数
-/// * `path` - 要验证的文件路径
-///
-/// # 返回值
-/// 返回 `CTResult<()>`，表示验证结果
-///
-/// # 错误
-/// - 如果路径指向目录，返回 InvalidArgument 错误
-/// - 如果文件不存在，返回 FileNotFound 错误
-fn validate_file_path(path: &Path) -> CTResult<()> {
-    if path.is_dir() {
+fn open_file(path: &Path) -> CTResult<File> {
+    let file = File::open(path)
+        .map_err(|error| TacError::OpenError(path.as_os_str().to_os_string(), error))?;
+    if file
+        .metadata()
+        .map_err(|error| TacError::ReadError(tac_quote_path(path.as_os_str(), false), error))?
+        .is_dir()
+    {
         return Err(TacError::InvalidArgument(path.as_os_str().to_os_string()).into());
     }
 
-    path.metadata()
-        .map_err(|error| TacError::OpenError(path.as_os_str().to_os_string(), error))?;
+    Ok(file)
+}
 
-    Ok(())
+fn read_from_file(mut file: File, path: &Path) -> CTResult<Vec<u8>> {
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|error| TacError::ReadError(tac_quote_path(path.as_os_str(), false), error))?;
+
+    Ok(buffer)
 }
 
 /// 文件数据的枚举类型，支持内存映射和缓冲区两种模式
@@ -420,12 +403,12 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
     } else {
         // 处理普通文件
         let path = Path::new(filename);
-        validate_file_path(path)?;
+        let file = open_file(path)?;
 
-        if let Some(mmap) = tac_try_mmap_path(path) {
+        if let Some(mmap) = tac_try_mmap_file(&file) {
             Ok(FileData::Mapped(mmap))
         } else {
-            let buffer = read_from_file(path)?;
+            let buffer = read_from_file(file, path)?;
             Ok(FileData::Buffer(buffer))
         }
     }
@@ -716,18 +699,10 @@ fn tac_try_mmap_stdin() -> Option<Mmap> {
     unsafe { Mmap::map(&stdin()).ok() }
 }
 
-/// 尝试对文件进行内存映射
-///
-/// # 参数
-/// * `path` - 要映射的文件路径
-///
-/// # 返回值
-/// 返回 `Option<Mmap>`，成功时返回内存映射对象，失败时返回 None
-fn tac_try_mmap_path(path: &Path) -> Option<Mmap> {
-    let file = File::open(path).ok()?;
-
+/// 尝试对已打开的文件进行内存映射。
+fn tac_try_mmap_file(file: &File) -> Option<Mmap> {
     // SAFETY: 如果在映射文件时文件被截断，将会引发 SIGBUS 信号并终止我们的进程，从而防止访问无效内存。
-    let mmap = unsafe { Mmap::map(&file).ok()? };
+    let mmap = unsafe { Mmap::map(file).ok()? };
 
     Some(mmap)
 }
@@ -1030,10 +1005,14 @@ mod tests {
     #[cfg(test)]
     mod file_operations_tests {
         use super::*;
+        use std::ffi::CString;
         use std::fs;
+        use std::fs::OpenOptions;
         use std::io::Write;
         use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::symlink;
+        use std::thread;
+        use std::time::Duration;
         use tempfile::NamedTempFile;
         use tempfile::tempdir;
 
@@ -1041,54 +1020,55 @@ mod tests {
         fn test_read_from_file_success() {
             let mut temp_file = NamedTempFile::new().unwrap();
             temp_file.write_all(b"test content").unwrap();
-            let result = read_from_file(temp_file.path());
+            let file = File::open(temp_file.path()).unwrap();
+            let result = read_from_file(file, temp_file.path());
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), b"test content");
         }
 
         #[test]
-        fn test_read_from_file_nonexistent() {
-            let result = read_from_file(Path::new("nonexistent.txt"));
+        fn test_open_file_nonexistent() {
+            let result = open_file(Path::new("nonexistent.txt"));
             assert!(result.is_err());
             let err = result.unwrap_err();
-            assert!(err.to_string().contains("failed to read from"));
+            assert!(err.to_string().contains("failed to open"));
         }
 
         #[test]
-        fn test_validate_file_path_directory() {
-            let result = validate_file_path(Path::new("."));
+        fn test_open_file_directory() {
+            let result = open_file(Path::new("."));
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert!(err.to_string().contains("Invalid argument"));
         }
 
         #[test]
-        fn test_validate_file_path_nonexistent() {
-            let result = validate_file_path(Path::new("nonexistent.txt"));
+        fn test_open_file_reports_nonexistent() {
+            let result = open_file(Path::new("nonexistent.txt"));
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert!(err.to_string().contains("No such file or directory"));
         }
 
         #[test]
-        fn test_validate_file_path_preserves_not_a_directory_error() {
+        fn test_open_file_preserves_not_a_directory_error() {
             let directory = tempdir().unwrap();
             let parent = directory.path().join("regular");
             fs::write(&parent, b"data").unwrap();
             let path = parent.join("child");
 
-            let error = validate_file_path(&path).unwrap_err();
+            let error = open_file(&path).unwrap_err();
 
             assert!(error.to_string().ends_with("Not a directory"));
         }
 
         #[test]
-        fn test_validate_file_path_preserves_symlink_loop_error() {
+        fn test_open_file_preserves_symlink_loop_error() {
             let directory = tempdir().unwrap();
             let path = directory.path().join("loop");
             symlink("loop", &path).unwrap();
 
-            let error = validate_file_path(&path).unwrap_err();
+            let error = open_file(&path).unwrap_err();
 
             assert!(
                 error
@@ -1098,11 +1078,11 @@ mod tests {
         }
 
         #[test]
-        fn test_validate_file_path_quotes_non_utf8_bytes() {
+        fn test_open_file_quotes_non_utf8_bytes() {
             let directory = tempdir().unwrap();
             let path = directory.path().join(OsString::from_vec(vec![0xff]));
 
-            let error = validate_file_path(&path).unwrap_err();
+            let error = open_file(&path).unwrap_err();
             let diagnostic = error.to_string();
 
             assert!(diagnostic.contains("\\377"), "{diagnostic}");
@@ -1110,9 +1090,9 @@ mod tests {
         }
 
         #[test]
-        fn test_validate_file_path_valid() {
+        fn test_open_file_valid() {
             let temp_file = NamedTempFile::new().unwrap();
-            let result = validate_file_path(temp_file.path());
+            let result = open_file(temp_file.path());
             assert!(result.is_ok());
         }
 
@@ -1141,6 +1121,68 @@ mod tests {
         fn test_get_file_data_nonexistent() {
             let result = get_file_data(OsStr::new("nonexistent.txt"));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_get_file_data_opens_fifo_once() {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("input.fifo");
+            let c_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+            assert_eq!(unsafe { ctcore::libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+
+            // Keep one writer present so both the broken double-open path and the
+            // corrected single-open path can finish without hanging the test.
+            let keepalive = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&path)
+                .unwrap();
+            let inotify_fd = unsafe {
+                ctcore::libc::inotify_init1(ctcore::libc::IN_NONBLOCK | ctcore::libc::IN_CLOEXEC)
+            };
+            assert!(inotify_fd >= 0);
+            assert!(
+                unsafe {
+                    ctcore::libc::inotify_add_watch(
+                        inotify_fd,
+                        c_path.as_ptr(),
+                        ctcore::libc::IN_OPEN | ctcore::libc::IN_CLOSE_NOWRITE,
+                    )
+                } >= 0
+            );
+
+            let closer = thread::spawn(move || {
+                thread::sleep(Duration::from_millis(100));
+                drop(keepalive);
+            });
+            let data = get_file_data(path.as_os_str()).unwrap();
+            closer.join().unwrap();
+            assert!(data.as_ref().is_empty());
+
+            let mut events = [0_u8; 4096];
+            let bytes_read =
+                unsafe { ctcore::libc::read(inotify_fd, events.as_mut_ptr().cast(), events.len()) };
+            unsafe {
+                ctcore::libc::close(inotify_fd);
+            }
+            assert!(bytes_read > 0);
+
+            let mut offset = 0_usize;
+            let mut open_count = 0_usize;
+            while offset < bytes_read as usize {
+                let event = unsafe {
+                    &*events
+                        .as_ptr()
+                        .add(offset)
+                        .cast::<ctcore::libc::inotify_event>()
+                };
+                if event.mask & ctcore::libc::IN_OPEN != 0 {
+                    open_count += 1;
+                }
+                offset += std::mem::size_of::<ctcore::libc::inotify_event>() + event.len as usize;
+            }
+
+            assert_eq!(open_count, 1, "a FIFO operand must be opened only once");
         }
     }
 

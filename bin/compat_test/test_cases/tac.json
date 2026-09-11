@@ -776,6 +776,34 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下执行tac -r -s空字符串 missing；GNU在打开操作数前拒绝空正则分隔符，预期RC=1、stdout为空、stderr为separator cannot be empty且不含文件打开错误",
+      "setup_commands": [
+        "export LC_ALL='C'"
+      ],
+      "args": [
+        "-r",
+        "-s",
+        "",
+        "missing"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: separator cannot be empty\n"
+        },
+        "verifications": []
+      },
+      "environment": {
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "tac: 使用错误的flag",
       "setup_commands": [
         "echo 'File1 line1' > file1.txt"

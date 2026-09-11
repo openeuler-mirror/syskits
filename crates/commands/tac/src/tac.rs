@@ -18,11 +18,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTError;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTError, CTResult, strip_errno};
 
 use ctcore::Tool;
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use memchr::memmem;
 use memmap2::Mmap;
 use std::error::Error;
@@ -159,10 +159,10 @@ pub enum TacError {
     EmptyRegexSeparator,
 
     /// tac 的参数无效。
-    InvalidArgument(String),
+    InvalidArgument(OsString),
 
-    /// 在文件系统中找不到指定的文件。
-    FileNotFound(String),
+    /// 无法打开指定的文件。
+    OpenError(OsString, std::io::Error),
 
     /// 读取文件或标准输入的内容时出错。参数是文件名和导致此错误的底层 [`std::io::Error`]。
     ReadError(String, std::io::Error),
@@ -179,6 +179,25 @@ impl CTError for TacError {
 
 impl Error for TacError {}
 
+fn tac_quote_path(path: &OsStr, always_quote: bool) -> String {
+    if path.to_str().is_some() {
+        return if always_quote {
+            path.quote().to_string()
+        } else {
+            path.maybe_quote().to_string()
+        };
+    }
+
+    String::from_utf8(escape_shell_bytes_with_classifier(
+        path.as_bytes(),
+        |bytes| {
+            let byte = bytes[0];
+            (1, byte.is_ascii_graphic() || byte == b' ')
+        },
+    ))
+    .expect("shell-escaped file names are valid UTF-8")
+}
+
 impl Display for TacError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -187,12 +206,17 @@ impl Display for TacError {
             Self::RecordTooLarge => write!(f, "record too large"),
             Self::EmptyRegexSeparator => write!(f, "separator cannot be empty"),
             Self::InvalidArgument(s) => {
-                write!(f, "{}: read error: Invalid argument", s.maybe_quote())
+                write!(
+                    f,
+                    "{}: read error: Invalid argument",
+                    tac_quote_path(s, false)
+                )
             }
-            Self::FileNotFound(s) => write!(
+            Self::OpenError(path, error) => write!(
                 f,
-                "failed to open {} for reading: No such file or directory",
-                s.quote()
+                "failed to open {} for reading: {}",
+                tac_quote_path(path, true),
+                strip_errno(error)
             ),
             Self::ReadError(s, e) => write!(f, "failed to read from {s}: {e}"),
             Self::WriteError(e) => write!(f, "failed to write to stdout: {e}"),
@@ -347,12 +371,11 @@ fn read_from_file(path: &Path) -> CTResult<Vec<u8>> {
 /// - 如果文件不存在，返回 FileNotFound 错误
 fn validate_file_path(path: &Path) -> CTResult<()> {
     if path.is_dir() {
-        return Err(TacError::InvalidArgument(path.to_string_lossy().to_string()).into());
+        return Err(TacError::InvalidArgument(path.as_os_str().to_os_string()).into());
     }
 
-    if path.metadata().is_err() {
-        return Err(TacError::FileNotFound(path.to_string_lossy().to_string()).into());
-    }
+    path.metadata()
+        .map_err(|error| TacError::OpenError(path.as_os_str().to_os_string(), error))?;
 
     Ok(())
 }
@@ -966,14 +989,17 @@ mod tests {
 
         #[test]
         fn test_tac_error_invalid_argument() {
-            let error = TacError::InvalidArgument("test.txt".to_string());
+            let error = TacError::InvalidArgument(OsString::from("test.txt"));
             assert_eq!(error.to_string(), "test.txt: read error: Invalid argument");
             assert_eq!(error.code(), 1);
         }
 
         #[test]
         fn test_tac_error_file_not_found() {
-            let error = TacError::FileNotFound("test.txt".to_string());
+            let error = TacError::OpenError(
+                OsString::from("test.txt"),
+                std::io::Error::from_raw_os_error(ctcore::libc::ENOENT),
+            );
             assert_eq!(
                 error.to_string(),
                 "failed to open 'test.txt' for reading: No such file or directory"
@@ -1004,8 +1030,12 @@ mod tests {
     #[cfg(test)]
     mod file_operations_tests {
         use super::*;
+        use std::fs;
         use std::io::Write;
+        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::fs::symlink;
         use tempfile::NamedTempFile;
+        use tempfile::tempdir;
 
         #[test]
         fn test_read_from_file_success() {
@@ -1038,6 +1068,45 @@ mod tests {
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert!(err.to_string().contains("No such file or directory"));
+        }
+
+        #[test]
+        fn test_validate_file_path_preserves_not_a_directory_error() {
+            let directory = tempdir().unwrap();
+            let parent = directory.path().join("regular");
+            fs::write(&parent, b"data").unwrap();
+            let path = parent.join("child");
+
+            let error = validate_file_path(&path).unwrap_err();
+
+            assert!(error.to_string().ends_with("Not a directory"));
+        }
+
+        #[test]
+        fn test_validate_file_path_preserves_symlink_loop_error() {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("loop");
+            symlink("loop", &path).unwrap();
+
+            let error = validate_file_path(&path).unwrap_err();
+
+            assert!(
+                error
+                    .to_string()
+                    .ends_with("Too many levels of symbolic links")
+            );
+        }
+
+        #[test]
+        fn test_validate_file_path_quotes_non_utf8_bytes() {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join(OsString::from_vec(vec![0xff]));
+
+            let error = validate_file_path(&path).unwrap_err();
+            let diagnostic = error.to_string();
+
+            assert!(diagnostic.contains("\\377"), "{diagnostic}");
+            assert!(!diagnostic.contains('\u{fffd}'), "{diagnostic}");
         }
 
         #[test]

@@ -688,6 +688,68 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下执行tac -s -- option-value-short；GNU getopt将看似选项的--作为-s必选参数，fixture完整内容为a--b--，预期按--分隔后输出b--a--、stderr为空且RC=0",
+      "setup_commands": [
+        "printf 'a--b--' > option-value-short"
+      ],
+      "args": [
+        "-s",
+        "--",
+        "option-value-short"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "b--a--",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f option-value-short"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --separator -b option-value-long；GNU getopt将-b作为--separator必选参数而非before选项，fixture完整内容为a-bc-b，预期按-b分隔后输出c-ba-b、stderr为空且RC=0",
+      "setup_commands": [
+        "printf 'a-bc-b' > option-value-long"
+      ],
+      "args": [
+        "--separator",
+        "-b",
+        "option-value-long"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "c-ba-b",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f option-value-long"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "POSIXLY_CORRECT=1时在首个操作数input后传入-b；GNU在首个操作数停止选项解析并将-b作为第二个文件，预期先倒序input再输出名为-b的文件内容",
       "setup_commands": [
         "printf 'a\\nb\\n' > input",

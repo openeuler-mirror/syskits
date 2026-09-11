@@ -9,11 +9,31 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use clap::Command;
 use std::env;
 
 pub const OBSOLETE: usize = 199209;
 pub const TRADITIONAL: usize = 200112;
 pub const MODERN: usize = 200809;
+
+pub fn posixly_correct() -> bool {
+    env::var_os("POSIXLY_CORRECT").is_some()
+}
+
+pub trait GnuGetoptCommandExt {
+    fn gnu_getopt(self) -> Self;
+    fn gnu_getopt_with_mode(self, posixly_correct: bool) -> Self;
+}
+
+impl GnuGetoptCommandExt for Command {
+    fn gnu_getopt(self) -> Self {
+        self.gnu_getopt_with_mode(posixly_correct())
+    }
+
+    fn gnu_getopt_with_mode(self, posixly_correct: bool) -> Self {
+        self.trailing_var_arg(posixly_correct)
+    }
+}
 
 pub fn ct_posix_version() -> Option<usize> {
     let ct_posix = "_POSIX2_VERSION";
@@ -26,7 +46,45 @@ pub fn ct_posix_version() -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use crate::ct_posix::*;
+    use clap::{Arg, ArgAction, Command};
     use std::env;
+
+    fn getopt_test_command() -> Command {
+        Command::new("test")
+            .arg(Arg::new("verbose").short('v').action(ArgAction::SetTrue))
+            .arg(Arg::new("files").action(ArgAction::Append))
+    }
+
+    #[test]
+    fn test_gnu_getopt_posix_mode_stops_at_first_operand() {
+        let normal = getopt_test_command()
+            .gnu_getopt_with_mode(false)
+            .try_get_matches_from(["test", "input", "-v"])
+            .unwrap();
+        assert!(normal.get_flag("verbose"));
+        assert_eq!(
+            normal
+                .get_many::<String>("files")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["input"]
+        );
+
+        let posix = getopt_test_command()
+            .gnu_getopt_with_mode(true)
+            .try_get_matches_from(["test", "input", "-v"])
+            .unwrap();
+        assert!(!posix.get_flag("verbose"));
+        assert_eq!(
+            posix
+                .get_many::<String>("files")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["input", "-v"]
+        );
+    }
 
     #[test]
     fn test_posix_version() {

@@ -776,6 +776,217 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下执行tac -r -s '\\(..\\)\\1' backref；输入完整内容为ababXcdcd；GNU Emacs正则中的转义括号创建捕获组、\\1引用该组，预期从后向前分隔并输出Xcdcdabab",
+      "setup_commands": [
+        "printf 'ababXcdcd' > backref"
+      ],
+      "args": [
+        "-r",
+        "-s",
+        "\\(..\\)\\1",
+        "backref"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Xcdcdabab",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f backref"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac -r -s '(xx)' parens；输入完整内容为aa(xx)bb(xx)；GNU Emacs正则把未转义括号视为字面字符，预期输出bb(xx)aa(xx)",
+      "setup_commands": [
+        "printf 'aa(xx)bb(xx)' > parens"
+      ],
+      "args": [
+        "-r",
+        "-s",
+        "(xx)",
+        "parens"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "bb(xx)aa(xx)",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f parens"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac -r -s '^' anchors；输入完整内容为ab\\ncd\\n；GNU反向re_search处理零长度行首匹配，预期输出cd\\nab\\n且不重复匹配同一位置",
+      "setup_commands": [
+        "printf 'ab\\ncd\\n' > anchors"
+      ],
+      "args": [
+        "-r",
+        "-s",
+        "^",
+        "anchors"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "cd\nab\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f anchors"
+      ]
+    },
+    {
+      "command": "tac",
+      "description": "原始字节用例：LC_ALL=C下执行tac -r -s . utf8；fixture utf8完整十六进制=41c3a942c3a943（A、UTF-8 é、B、UTF-8 é、C）；C locale中点号每次匹配1字节，预期stdout完整十六进制=43a9c342a9c341、stderr为空、RC=0",
+      "args": [
+        "2d72",
+        "2d73",
+        "2e",
+        "75746638"
+      ],
+      "setup_commands": [
+        "printf 'A\\303\\251B\\303\\251C' > utf8"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "43a9c342a9c341",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f utf8"
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "command": "tac",
+      "description": "原始字节用例：LC_ALL=en_US.UTF-8下执行tac -r -s . utf8；fixture utf8完整十六进制=41c3a942c3a943；UTF-8 locale中点号每次匹配完整字符，预期stdout完整十六进制=43c3a942c3a941（CéBéA）、stderr为空、RC=0",
+      "args": [
+        "2d72",
+        "2d73",
+        "2e",
+        "75746638"
+      ],
+      "setup_commands": [
+        "printf 'A\\303\\251B\\303\\251C' > utf8"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "en_US.UTF-8"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "43c3a942c3a941",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f utf8"
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "command": "tac",
+      "description": "原始字节用例：LC_ALL=C下执行tac -r -s 0xff raw；参数完整十六进制=2d72 2d73 ff 726177，fixture raw完整十六进制=78ff79ff；GNU接受非UTF-8正则分隔符，预期stdout完整十六进制=79ff78ff、stderr为空、RC=0",
+      "args": [
+        "2d72",
+        "2d73",
+        "ff",
+        "726177"
+      ],
+      "setup_commands": [
+        "printf 'x\\377y\\377' > raw"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "79ff78ff",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f raw"
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac -r -s '[' missing；GNU在打开操作数前编译并拒绝无效正则，预期RC=1、stdout为空、stderr仅为Invalid regular expression",
+      "setup_commands": [],
+      "args": [
+        "-r",
+        "-s",
+        "[",
+        "missing"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: Invalid regular expression\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "LC_ALL=C下执行tac -r -s空字符串 missing；GNU在打开操作数前拒绝空正则分隔符，预期RC=1、stdout为空、stderr为separator cannot be empty且不含文件打开错误",
       "setup_commands": [
         "export LC_ALL='C'"

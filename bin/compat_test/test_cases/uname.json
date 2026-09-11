@@ -200,6 +200,26 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname --kernel；该缩写同时匹配三个kernel长选项，GNU预期RC=1、stdout为空，并按选项表顺序列出全部可能项",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--kernel"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: option '--kernel' is ambiguous; possibilities: '--kernel-name' '--kernel-release' '--kernel-version'\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

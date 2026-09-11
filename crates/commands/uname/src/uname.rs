@@ -182,6 +182,7 @@ fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
         }
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
             validate_attached_value(bytes)?;
+            validate_ambiguous_long_option(bytes)?;
             if is_terminal_option(bytes) {
                 return Ok(args);
             }
@@ -236,6 +237,32 @@ fn match_long_option(name: &[u8]) -> LongOptionMatch {
         [option] => LongOptionMatch::Recognized(option),
         _ => LongOptionMatch::Ambiguous(matches),
     }
+}
+
+fn validate_ambiguous_long_option(argument: &[u8]) -> CTResult<()> {
+    let Some(long) = argument.strip_prefix(b"--") else {
+        return Ok(());
+    };
+    let name = &long[..long
+        .iter()
+        .position(|byte| *byte == b'=')
+        .unwrap_or(long.len())];
+
+    let LongOptionMatch::Ambiguous(matches) = match_long_option(name) else {
+        return Ok(());
+    };
+    let possibilities = matches
+        .into_iter()
+        .map(|option| format!("'--{option}'"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Err(UnameUsageError::boxed(
+        format!(
+            "option '{}' is ambiguous; possibilities: {possibilities}",
+            String::from_utf8_lossy(argument)
+        )
+        .into_bytes(),
+    ))
 }
 
 fn validate_attached_value(argument: &[u8]) -> CTResult<()> {
@@ -425,6 +452,17 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "option '--operating-system' doesn't allow an argument"
+        );
+    }
+
+    #[test]
+    fn ambiguous_long_option_lists_all_possibilities() {
+        let error =
+            prepare_uname_args(["uname", "--kernel"].map(OsString::from).into_iter()).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "option '--kernel' is ambiguous; possibilities: '--kernel-name' '--kernel-release' '--kernel-version'"
         );
     }
 

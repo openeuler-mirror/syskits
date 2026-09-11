@@ -657,14 +657,91 @@ fn locale_is_utf8() -> bool {
     })
 }
 
+struct LocaleCtype {
+    raw: ctcore::libc::locale_t,
+}
+
+impl LocaleCtype {
+    fn from_environment() -> Option<Self> {
+        let name = CString::new(locale_name()).ok()?;
+        Self::from_name(&name)
+    }
+
+    fn from_name(name: &CStr) -> Option<Self> {
+        let raw = unsafe {
+            ctcore::libc::newlocale(
+                ctcore::libc::LC_CTYPE_MASK,
+                name.as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        (!raw.is_null()).then_some(Self { raw })
+    }
+
+    fn activate(&self) -> Option<LocaleCtypeGuard> {
+        let previous = unsafe { ctcore::libc::uselocale(self.raw) };
+        (!previous.is_null()).then_some(LocaleCtypeGuard { previous })
+    }
+
+    fn classify_character(&self, bytes: &[u8]) -> (usize, bool) {
+        let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+        let mut wide: ctcore::libc::wchar_t = 0;
+        let length = unsafe { mbrtowc(&mut wide, bytes.as_ptr().cast(), bytes.len(), &mut state) };
+        if length == usize::MAX || length == usize::MAX - 1 {
+            return (1, false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let printable = unsafe { iswprint_l(wide as ctcore::libc::c_uint, self.raw) != 0 };
+        (length, printable)
+    }
+}
+
+impl Drop for LocaleCtype {
+    fn drop(&mut self) {
+        unsafe { ctcore::libc::freelocale(self.raw) };
+    }
+}
+
+struct LocaleCtypeGuard {
+    previous: ctcore::libc::locale_t,
+}
+
+impl Drop for LocaleCtypeGuard {
+    fn drop(&mut self) {
+        unsafe { ctcore::libc::uselocale(self.previous) };
+    }
+}
+
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint_l(
+        character: ctcore::libc::c_uint,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
+}
+
 fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
-    if message_locale() == MessageLocale::ZhCn {
-        return quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'\"'));
-    }
-    if !locale_is_utf8() {
-        return quote_c_locale_operand(operand);
-    }
-    quote_utf8_locale_operand(operand, "‘".as_bytes(), "’".as_bytes(), None)
+    let (left_quote, right_quote, quote_to_escape): (&[u8], &[u8], Option<u8>) =
+        if message_locale() == MessageLocale::ZhCn {
+            (b"\"", b"\"", Some(b'\"'))
+        } else if locale_is_utf8() {
+            ("‘".as_bytes(), "’".as_bytes(), None)
+        } else {
+            (b"'", b"'", Some(b'\''))
+        };
+
+    LocaleCtype::from_environment().map_or_else(
+        || quote_utf8_locale_operand(operand, left_quote, right_quote, quote_to_escape),
+        |locale| {
+            quote_encoded_locale_operand(operand, left_quote, right_quote, quote_to_escape, &locale)
+        },
+    )
 }
 
 fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
@@ -731,6 +808,45 @@ fn quote_utf8_locale_operand(
                 index += invalid_length;
             }
         }
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn quote_encoded_locale_operand(
+    operand: &OsStr,
+    left_quote: &[u8],
+    right_quote: &[u8],
+    quote_to_escape: Option<u8>,
+    locale: &LocaleCtype,
+) -> Vec<u8> {
+    let Some(_locale_guard) = locale.activate() else {
+        return quote_c_locale_operand(operand);
+    };
+    let input = operand.as_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        let byte = input[index];
+        if byte.is_ascii() {
+            push_quoted_ascii(&mut quoted, byte, quote_to_escape);
+            index += 1;
+            continue;
+        }
+
+        let (length, printable) = locale.classify_character(&input[index..]);
+        let end = index.saturating_add(length).min(input.len());
+        if printable {
+            quoted.extend_from_slice(&input[index..end]);
+        } else {
+            for byte in &input[index..end] {
+                push_octal_escape(&mut quoted, *byte);
+            }
+        }
+        index = end;
     }
 
     quoted.extend_from_slice(right_quote);
@@ -991,6 +1107,32 @@ mod tests {
         assert_eq!(
             quote_utf8_locale_operand(OsStr::new("x"), b"\"", b"\"", Some(b'\"')),
             b"\"x\""
+        );
+    }
+
+    #[test]
+    fn gbk_locale_operand_quoting_uses_gbk_character_boundaries() {
+        let locale = LocaleCtype::from_name(c"zh_CN.GBK").expect("zh_CN.GBK locale is available");
+
+        assert_eq!(
+            quote_encoded_locale_operand(
+                &OsString::from_vec(vec![0xd6, 0xd0]),
+                b"\"",
+                b"\"",
+                Some(b'\"'),
+                &locale
+            ),
+            b"\"\xd6\xd0\""
+        );
+        assert_eq!(
+            quote_encoded_locale_operand(
+                &OsString::from_vec(vec![0xe4, 0xb8, 0xad]),
+                b"\"",
+                b"\"",
+                Some(b'\"'),
+                &locale
+            ),
+            b"\"\xe4\xb8\\255\""
         );
     }
 

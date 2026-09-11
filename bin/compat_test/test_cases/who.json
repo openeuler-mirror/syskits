@@ -1021,6 +1021,29 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='C'，export LANG='C'，export TZ='UTC0'；执行who utmp；输入400字节Linux USER_PROCESS记录，user=alice、line=pts/0、tv_sec=9223372036854775807；GNU localtime失败后通过timetostr输出epoch秒，预期RC=0、stdout为alice    pts/0        9223372036854775807换行、stderr为空且不得触发Rust panic",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[8:13]=b\"pts/0\"; b[40:42]=b\"p0\"; b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,2**63-1); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "alice    pts/0        9223372036854775807\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

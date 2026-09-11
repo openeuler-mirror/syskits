@@ -20,6 +20,9 @@ ctcore = { workspace = true, features = ["utmpx"] }
 rust-i18n = { workspace = true }
 sys-locale = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [[bin]]
 name = "who"
 path = "src/main.rs"

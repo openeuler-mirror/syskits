@@ -234,6 +234,7 @@ impl Display for TacError {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示命令执行的结果
 pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    let _sigpipe_guard = SigpipeGuard::for_cli();
     unsafe {
         ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
     }
@@ -244,6 +245,57 @@ pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<(
 
     // 使用配置执行主要逻辑
     tac(writer, &settings)
+}
+
+struct SigpipeGuard {
+    previous: ctcore::libc::sighandler_t,
+}
+
+impl SigpipeGuard {
+    #[cfg(target_os = "linux")]
+    fn for_cli() -> Option<Self> {
+        if parent_ignores_sigpipe() {
+            return None;
+        }
+
+        let previous =
+            unsafe { ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL) };
+        (previous != ctcore::libc::SIG_ERR).then_some(Self { previous })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn for_cli() -> Option<Self> {
+        None
+    }
+}
+
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            ctcore::libc::signal(ctcore::libc::SIGPIPE, self.previous);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parent_ignores_sigpipe() -> bool {
+    let parent = unsafe { ctcore::libc::getppid() };
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    sigpipe_is_ignored_in_status(&status)
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_is_ignored_in_status(status: &str) -> bool {
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (ctcore::libc::SIGPIPE - 1)) != 0
 }
 
 /// 创建并配置命令行参数解析器
@@ -731,6 +783,29 @@ impl Tool for Tac {
 #[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    mod sigpipe_tests {
+        use super::*;
+
+        #[test]
+        fn test_sigpipe_is_ignored_in_status_detects_sigpipe_bit() {
+            assert!(sigpipe_is_ignored_in_status(
+                "Name:\ttest\nSigIgn:\t0000000000001000\n"
+            ));
+        }
+
+        #[test]
+        fn test_sigpipe_is_ignored_in_status_rejects_clear_or_invalid_mask() {
+            assert!(!sigpipe_is_ignored_in_status(
+                "Name:\ttest\nSigIgn:\t0000000000000000\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status(
+                "Name:\ttest\nSigIgn:\tinvalid\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status("Name:\ttest\n"));
+        }
+    }
 
     #[test]
     fn test_tool_implementation() {

@@ -1066,6 +1066,84 @@
       "cleanup_commands": [
         "rm -f file1.txt"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac parent-file/child；parent-file是普通文件而非目录，GNU保留open返回的ENOTDIR，预期RC=1、stdout为空、stderr为failed to open 'parent-file/child' for reading: Not a directory",
+      "setup_commands": [
+        "printf data > parent-file"
+      ],
+      "args": [
+        "parent-file/child"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: failed to open 'parent-file/child' for reading: Not a directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f parent-file"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac loop；fixture loop是指向自身的符号链接，GNU保留open返回的ELOOP，预期RC=1、stdout为空、stderr为failed to open 'loop' for reading: Too many levels of symbolic links",
+      "setup_commands": [
+        "ln -s loop loop"
+      ],
+      "args": [
+        "loop"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: failed to open 'loop' for reading: Too many levels of symbolic links\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f loop"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "原始字节错误用例：LC_ALL=C下执行tac 0xff且该相对路径不存在；参数完整十六进制=ff，GNU按原始文件名字节输出shell引用''$'\\377'，预期RC=1、stdout为空且stderr完整十六进制包含八进制转义而非UTF-8替换字符",
+      "setup_commands": [],
+      "args": [
+        "ff"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7461633a206661696c656420746f206f70656e20272724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": [],
+      "byteMode": true
     }
   ]
 }

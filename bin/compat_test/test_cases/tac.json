@@ -657,6 +657,37 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下重复指定-b/--before、-r/--regex和-s/--separator；GNU允许幂等布尔选项重复，并对带值的分隔符采用最后一个逗号，预期按before模式输出,,ca:b",
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "printf 'a:b,c,' > repeated-options.txt"
+      ],
+      "args": [
+        "-b",
+        "--before",
+        "-r",
+        "--regex",
+        "-s",
+        ":",
+        "--separator",
+        ",",
+        "repeated-options.txt"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": ",,ca:b",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "cleanup_commands": [
+        "rm -f repeated-options.txt"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "tac: 使用错误的flag",
       "setup_commands": [
         "echo 'File1 line1' > file1.txt"

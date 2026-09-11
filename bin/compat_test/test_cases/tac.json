@@ -1208,6 +1208,37 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下执行tac write-then-missing missing-after-write并将stdout连接到/dev/full；首个fixture为16384字节x，GNU记录stdout写失败后仍处理后续操作数，预期先报告缺失文件再统一报告一次write error，RC=1且stdout为空",
+      "setup_commands": [
+        "printf '%16384s' '' | tr ' ' x > write-then-missing"
+      ],
+      "args": [
+        "write-then-missing",
+        "missing-after-write"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdout": "full",
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: failed to open 'missing-after-write' for reading: No such file or directory\ntac: write error\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f write-then-missing"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "LC_ALL=C下执行tac sigpipe-input并将stdout连接到无读端管道；直接父进程使用默认SIGPIPE处置，fixture完整内容为单字节a，GNU在最终写入时被SIGPIPE终止，预期RC=141且stdout、stderr均为空",
       "setup_commands": [
         "printf a > sigpipe-input"

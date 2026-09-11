@@ -766,6 +766,7 @@ fn tac_process_file<W: Write>(
 /// 返回 `CTResult<()>`，表示执行结果
 fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
     let mut has_error = false;
+    let mut write_error = None;
     let mut read_stdin = false;
     let mut pattern = tac_compile_regex(settings)?;
 
@@ -773,7 +774,11 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
         read_stdin |= filename.as_bytes() == b"-";
         match tac_collect_file_segments_with_regex(filename, settings, pattern.as_mut()) {
             Ok(segments) => {
-                tac_write_segments(writer, &segments).map_err(TacError::WriteError)?;
+                if write_error.is_none()
+                    && let Err(error) = tac_write_segments(writer, &segments)
+                {
+                    write_error = Some(error);
+                }
             }
             Err(error) => {
                 ctcore::ct_show_error!("{}", error);
@@ -784,6 +789,11 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
 
     if read_stdin && ctcore::ct_stdin_was_closed() {
         ctcore::ct_show_error!("-: Bad file descriptor");
+    }
+
+    if let Some(error) = write_error {
+        let _ = writer.flush();
+        return Err(TacError::WriteError(error).into());
     }
 
     writer.flush().map_err(TacError::FlushError)?;
@@ -1713,7 +1723,7 @@ mod tests {
     #[cfg(test)]
     mod tac_main_tests {
         use super::*;
-        use std::ffi::OsString;
+        use std::ffi::{CString, OsString};
         use std::fs;
         use std::io;
         use std::os::unix::ffi::OsStringExt;
@@ -1804,11 +1814,25 @@ mod tests {
         }
 
         #[test]
-        fn test_tac_main_stops_after_first_write_error() {
+        fn test_tac_main_continues_reading_operands_after_write_error() {
             let mut first = NamedTempFile::new().unwrap();
             let mut second = NamedTempFile::new().unwrap();
             first.write_all(b"first").unwrap();
             second.write_all(b"second").unwrap();
+            let second_path = CString::new(second.path().as_os_str().as_bytes()).unwrap();
+            let inotify_fd = unsafe {
+                ctcore::libc::inotify_init1(ctcore::libc::IN_NONBLOCK | ctcore::libc::IN_CLOEXEC)
+            };
+            assert!(inotify_fd >= 0);
+            assert!(
+                unsafe {
+                    ctcore::libc::inotify_add_watch(
+                        inotify_fd,
+                        second_path.as_ptr(),
+                        ctcore::libc::IN_OPEN,
+                    )
+                } >= 0
+            );
             let args = [
                 OsString::from("tac"),
                 first.path().as_os_str().to_os_string(),
@@ -1820,6 +1844,17 @@ mod tests {
 
             assert_eq!(output.write_count, 1);
             assert_eq!(error.to_string(), "write error");
+
+            let mut events = [0_u8; 4096];
+            let bytes_read =
+                unsafe { ctcore::libc::read(inotify_fd, events.as_mut_ptr().cast(), events.len()) };
+            unsafe {
+                ctcore::libc::close(inotify_fd);
+            }
+            assert!(
+                bytes_read > 0,
+                "operands after a stdout error must still be opened"
+            );
         }
 
         #[test]

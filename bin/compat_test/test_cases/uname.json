@@ -622,6 +622,34 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "GB18030英文外层引号用例：设置LC_ALL=zh_CN.GB18030且LANGUAGE=C；执行uname并传入ASCII操作数x，参数完整十六进制=78；GNU按GB18030 fallback输出左引号字节a10765和右引号字节a1af，预期RC=1，stdout完整十六进制=空，stderr完整十六进制=756e616d653a206578747261206f706572616e6420a1076578a1af0a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [],
+            "args": [
+                "78"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a206578747261206f706572616e6420a1076578a1af0a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.GB18030",
+                    "LANGUAGE": "C"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

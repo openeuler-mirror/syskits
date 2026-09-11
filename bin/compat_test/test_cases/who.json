@@ -1073,6 +1073,31 @@
             "tstdin": "",
             "byteMode": true,
             "command": "who",
+            "description": "原始字节输出用例：LC_ALL=zh_CN.gbk、TZ=UTC0；执行who -aH utmp，参数完整十六进制=2d6148 75746d70；输入7条400字节Linux utmp记录覆盖全部本地化标签；GNU gettext按GBK codeset输出标题、运行级别、系统引导、时钟更改、登录、空闲、终止和退出文本，同时保留ASCII及utmp字段原始字节，预期RC=0、stderr为空且stdout完整十六进制逐字节一致",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.gbk'",
+                "export LANG='zh_CN.gbk'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; types=(1,2,3,5,6,7,8); b=bytearray(400*len(types)); [(struct.pack_into(\"h\",b,i*400,t), struct.pack_into(\"i\",b,i*400+4,12345), b.__setitem__(slice(i*400+8,i*400+12),b\"null\"), b.__setitem__(slice(i*400+40,i*400+42),b\"p0\"), b.__setitem__(slice(i*400+44,i*400+49),b\"alice\"), b.__setitem__(slice(i*400+76,i*400+82),b\"host:1\"), struct.pack_into(\"q\",b,i*400+344,1893456000 if t==2 else 1709210096)) for i,t in enumerate(types)]; open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "2d6148",
+                "75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c3fbb3c620202020202020cfdfc2b7202020202020202020cab1bce420202020202020202020202020bfd5cfd02020202020202020202050494420b1b8d7a22020202020cdcbb3f60a2020202020202020202020d4cbd0d0bcb6b1f02020203920323032342d30322d32392031323a333420202020202020202020202020202020202020c9cfd2bbb8f63d300a2020202020202020202020cfb5cdb3d2fdb5bc2020202020323033302d30312d30312030303a30300a2020202020202020202020cab1d6d3b8fcb8c42020202020323032342d30322d32392031323a33340a20202020202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d70300ab5c7c2bc202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d70300a616c696365202020202d206e756c6c202020202020202020323032342d30322d32392031323a333420badcbec3202020202020202031323334352028686f73743a31290a20202020202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d703020202020d6d5d6b93d3020cdcbb3f63d300a",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
             "description": "原始字节参数诊断用例：export LC_ALL='C'；执行who加短选项原始字节0xff；参数完整十六进制=2dff；GNU getopt保留无效短选项的原始单字节，预期RC=1，stdout为0字节、完整十六进制=空，stderr完整十六进制=77686f3a20696e76616c6964206f7074696f6e202d2d2027ff270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
             "setup_commands": [
                 "export LC_ALL='C'"
@@ -1297,6 +1322,55 @@
                     "exit_code": 1,
                     "stdout": "",
                     "stderr": "who: write error: Broken pipe\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节输出用例：LC_ALL=zh_CN.gbk、TZ=UTC0；执行who -q utmp，参数完整十六进制=2d71 75746d70；输入400字节Linux USER_PROCESS记录alice；GNU gettext将“用户数”按GBK codeset输出，预期RC=0、stderr为空，stdout完整十六进制=616c6963650ad3c3bba7cafd3d310a",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.gbk'",
+                "export LANG='zh_CN.gbk'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "2d71",
+                "75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "616c6963650ad3c3bba7cafd3d310a",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.gbk；执行who a b c，参数完整十六进制=61 62 63；GNU gettext将extra operand及try-help按GBK codeset输出并使用中文locale双引号，预期RC=1、stdout为空，stderr完整十六进制=77686f3a20b6e0d3e0b5c4b2d9d7f7b6d4cff3202263220ac7ebb3a2cad4d6b4d0d0202277686f202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.gbk'",
+                "export LANG='zh_CN.gbk'"
+            ],
+            "args": [
+                "61",
+                "62",
+                "63"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f3a20b6e0d3e0b5c4b2d9d7f7b6d4cff3202263220ac7ebb3a2cad4d6b4d0d0202277686f202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
                 },
                 "verifications": []
             },

@@ -28,7 +28,7 @@ use std::path::PathBuf;
 use sys_locale::get_locale;
 
 use crate::who_flags;
-use crate::{ct_app_for_parse, prepare_who_args};
+use crate::{ct_app_for_parse, locale_text_bytes, prepare_who_args};
 
 fn get_long_usage() -> String {
     format!(
@@ -281,8 +281,8 @@ fn runlevel_comment(previous: u8) -> Option<String> {
     Some(format!("{}={previous}", t!("who.output.last")))
 }
 
-fn runlevel_line_bytes(label: &str, current: u8) -> Vec<u8> {
-    let mut line = [label.as_bytes(), b" "].concat();
+fn runlevel_line_bytes(label: &[u8], current: u8) -> Vec<u8> {
+    let mut line = [label, b" "].concat();
     if current != 0 {
         line.push(current);
     }
@@ -471,7 +471,7 @@ impl Who {
                 output.extend_from_slice(user);
             }
             output.push(b'\n');
-            output.extend_from_slice(t!("who.output.users_count").as_bytes());
+            output.extend_from_slice(&locale_text_bytes(&t!("who.output.users_count")));
             output.push(b'=');
             output.extend_from_slice(users.len().to_string().as_bytes());
             output.push(b'\n');
@@ -555,10 +555,12 @@ impl Who {
     fn print_runlevel(&self, utmpx: &CtUtmpx) -> CTResult<()> {
         let last_runlevel = (utmpx.pid() / 256) as u8;
         let current_runlevel = (utmpx.pid() % 256) as u8;
-        let label = t!("who.output.run_level");
+        let label = locale_text_bytes(&t!("who.output.run_level"));
         let runlevel_line = runlevel_line_bytes(&label, current_runlevel);
 
-        let comment = runlevel_comment(last_runlevel);
+        let comment = runlevel_comment(last_runlevel)
+            .map(|comment| locale_text_bytes(&comment))
+            .unwrap_or_default();
         let time = time_string(utmpx.timestamp_seconds());
         self.print_line_bytes(&WhoDisplayBytes {
             user: b"",
@@ -567,7 +569,7 @@ impl Who {
             time: time.as_bytes(),
             idle: b"",
             pid: b"",
-            comment: comment.as_deref().unwrap_or("").as_bytes(),
+            comment: &comment,
             exit: b"",
         })
     }
@@ -588,12 +590,12 @@ impl Who {
 
     #[inline]
     fn print_login(&self, utmpx: &CtUtmpx) -> CTResult<()> {
-        let user = t!("who.output.login");
+        let user = locale_text_bytes(&t!("who.output.login"));
         let comment = [b"id=".as_slice(), utmpx.terminal_suffix_bytes()].concat();
         let time = time_string(utmpx.timestamp_seconds());
         let pid = utmpx.pid().to_string();
         self.print_line_bytes(&WhoDisplayBytes {
-            user: user.as_bytes(),
+            user: &user,
             state: ' ',
             line: utmpx.tty_device_bytes(),
             time: time.as_bytes(),
@@ -610,13 +612,14 @@ impl Who {
         let pid = utmpx.pid().to_string();
         let time = time_string(utmpx.timestamp_seconds());
         let e = utmpx.exit_status();
-        let exit = format!(
-            "{}={} {}={}",
-            t!("who.output.term"),
-            e.0,
-            t!("who.output.exit"),
-            e.1
-        );
+        let exit = [
+            locale_text_bytes(&t!("who.output.term")),
+            format!("={}", e.0).into_bytes(),
+            b" ".to_vec(),
+            locale_text_bytes(&t!("who.output.exit")),
+            format!("={}", e.1).into_bytes(),
+        ]
+        .concat();
         self.print_line_bytes(&WhoDisplayBytes {
             user: b"",
             state: ' ',
@@ -625,7 +628,7 @@ impl Who {
             idle: b"",
             pid: pid.as_bytes(),
             comment: &comment,
-            exit: exit.as_bytes(),
+            exit: &exit,
         })
     }
 
@@ -676,6 +679,7 @@ impl Who {
             0 => "  ?".into(),
             _ => idle_string(last_change, boot_time),
         };
+        let idle = locale_text_bytes(&idle);
 
         let host = if self.is_do_lookup {
             canonicalize_host_bytes(utmpx.host_bytes(), |_| utmpx.canon_host()).map_err_context(
@@ -707,7 +711,7 @@ impl Who {
             state: mesg,
             line: utmpx.tty_device_bytes(),
             time: time.as_bytes(),
-            idle: idle.as_bytes(),
+            idle: &idle,
             pid: pid.as_bytes(),
             comment: &host_display,
             exit: b"",
@@ -726,17 +730,23 @@ impl Who {
         comment: &str,
         exit: &str,
     ) -> CTResult<()> {
-        let rendered = self.render_line(&WhoDisplayLine {
-            user: user.to_string(),
+        let user = locale_text_bytes(user);
+        let line = locale_text_bytes(line);
+        let time = locale_text_bytes(time);
+        let idle = locale_text_bytes(idle);
+        let pid = locale_text_bytes(pid);
+        let comment = locale_text_bytes(comment);
+        let exit = locale_text_bytes(exit);
+        let mut output = self.render_line_bytes(&WhoDisplayBytes {
+            user: &user,
             state,
-            line: line.to_string(),
-            time: time.to_string(),
-            idle: idle.to_string(),
-            pid: pid.to_string(),
-            comment: comment.to_string(),
-            exit: exit.to_string(),
+            line: &line,
+            time: &time,
+            idle: &idle,
+            pid: &pid,
+            comment: &comment,
+            exit: &exit,
         });
-        let mut output = rendered.into_bytes();
         output.push(b'\n');
         io::stdout()
             .lock()
@@ -1347,12 +1357,12 @@ mod tests {
 
     #[test]
     fn runlevel_line_preserves_the_current_level_byte() {
-        assert_eq!(runlevel_line_bytes("run-level", 0xff), b"run-level \xff");
+        assert_eq!(runlevel_line_bytes(b"run-level", 0xff), b"run-level \xff");
     }
 
     #[test]
     fn runlevel_line_treats_nul_as_the_c_string_terminator() {
-        assert_eq!(runlevel_line_bytes("run-level", 0), b"run-level ");
+        assert_eq!(runlevel_line_bytes(b"run-level", 0), b"run-level ");
     }
 
     #[test]

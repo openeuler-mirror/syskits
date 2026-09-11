@@ -217,11 +217,48 @@ impl GnuRegex {
         start: usize,
         range: isize,
     ) -> Result<Option<GnuRegexMatch>, GnuRegexError> {
+        self.search_with_anchor_options(data, start, range, false, false)
+    }
+
+    /// Search while preventing `^` and the GNU beginning-of-buffer anchor
+    /// from matching at the start of this data slice.
+    pub fn search_not_bol(
+        &mut self,
+        data: &[u8],
+        start: usize,
+        range: isize,
+    ) -> Result<Option<GnuRegexMatch>, GnuRegexError> {
+        self.search_with_anchor_options(data, start, range, true, false)
+    }
+
+    /// Search with explicit control over whether the supplied slice starts
+    /// or ends at a real line boundary.
+    pub fn search_with_anchor_options(
+        &mut self,
+        data: &[u8],
+        start: usize,
+        range: isize,
+        not_bol: bool,
+        not_eol: bool,
+    ) -> Result<Option<GnuRegexMatch>, GnuRegexError> {
         let length =
             libc::regoff_t::try_from(data.len()).map_err(|_| GnuRegexError::RecordTooLarge)?;
         let start = libc::regoff_t::try_from(start).map_err(|_| GnuRegexError::RecordTooLarge)?;
         let range = libc::regoff_t::try_from(range).map_err(|_| GnuRegexError::RecordTooLarge)?;
         let mut registers = GnuRegexRegisters::default();
+        const NOT_BOL_BIT: u8 = 1 << 5;
+        const NOT_EOL_BIT: u8 = 1 << 6;
+        let previous_bitfield = self.compiled.bitfield;
+        if not_bol {
+            self.compiled.bitfield |= NOT_BOL_BIT;
+        } else {
+            self.compiled.bitfield &= !NOT_BOL_BIT;
+        }
+        if not_eol {
+            self.compiled.bitfield |= NOT_EOL_BIT;
+        } else {
+            self.compiled.bitfield &= !NOT_EOL_BIT;
+        }
         let found = unsafe {
             re_search(
                 &mut self.compiled,
@@ -232,6 +269,7 @@ impl GnuRegex {
                 &mut registers,
             )
         };
+        self.compiled.bitfield = previous_bitfield;
         match found {
             -1 => Ok(None),
             -2 => Err(GnuRegexError::Search),
@@ -354,6 +392,29 @@ mod tests {
             error
                 .compile_message()
                 .is_some_and(|message| !message.is_empty())
+        );
+    }
+
+    #[test]
+    fn search_can_suppress_beginning_of_line_at_a_split_boundary() {
+        let mut anchored = GnuRegex::compile(b"^a", GnuRegexCompileOptions::emacs()).unwrap();
+        let mut unanchored = GnuRegex::compile(b"a", GnuRegexCompileOptions::emacs()).unwrap();
+        let mut end_anchored = GnuRegex::compile(b"a$", GnuRegexCompileOptions::emacs()).unwrap();
+
+        assert_eq!(
+            anchored.search(b"abc", 0, 3).unwrap(),
+            Some(GnuRegexMatch { start: 0, end: 1 })
+        );
+        assert_eq!(anchored.search_not_bol(b"abc", 0, 3).unwrap(), None);
+        assert_eq!(
+            unanchored.search_not_bol(b"abc", 0, 3).unwrap(),
+            Some(GnuRegexMatch { start: 0, end: 1 })
+        );
+        assert_eq!(
+            end_anchored
+                .search_with_anchor_options(b"a", 0, 1, false, true)
+                .unwrap(),
+            None
         );
     }
 }

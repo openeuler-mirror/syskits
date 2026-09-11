@@ -275,6 +275,10 @@ fn tty_stat_path(line: &[u8]) -> PathBuf {
         .iter()
         .position(|byte| *byte == b' ')
         .map_or(line, |index| &line[index + 1..]);
+    if device.is_empty() {
+        return PathBuf::new();
+    }
+
     let mut path = PathBuf::from("/dev");
     path.push(std::ffi::OsStr::from_bytes(device));
     path
@@ -1229,6 +1233,7 @@ mod tests {
             tty_stat_path(b"label /tmp/terminal"),
             PathBuf::from("/tmp/terminal")
         );
+        assert_eq!(tty_stat_path(b"label "), PathBuf::new());
     }
 
     #[test]

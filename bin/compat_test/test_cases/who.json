@@ -923,6 +923,30 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='C'，export LANG='C'，export TZ='UTC0'；执行who -a utmp；输入400字节Linux USER_PROCESS记录，user=alice、ut_line为label后跟一个ASCII空格、PID=12345、时间=2024-02-29 12:34:56 UTC；GNU将首个空格后的空设备名视为stat失败，消息状态和idle均输出问号，预期RC=0、stdout为alice    ? label        Feb 29 12:34   ?         12345换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[8:14]=b\"label \"; b[40:42]=b\"p0\"; b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "-a",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "alice    ? label        Feb 29 12:34   ?         12345\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -28,7 +28,7 @@ use memmap2::Mmap;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
-use std::io::{Read, Write, stdin, stdout};
+use std::io::{Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::{fs::File, path::Path};
 use sys_locale::get_locale;
@@ -440,17 +440,8 @@ fn tac_stdin_read_error(error: std::io::Error) -> TacError {
 }
 
 fn open_file(path: &Path) -> CTResult<File> {
-    let file = File::open(path)
-        .map_err(|error| TacError::OpenError(path.as_os_str().to_os_string(), error))?;
-    if file
-        .metadata()
-        .map_err(|error| TacError::ReadError(tac_quote_path(path.as_os_str(), false), error))?
-        .is_dir()
-    {
-        return Err(TacError::InvalidArgument(path.as_os_str().to_os_string()).into());
-    }
-
-    Ok(file)
+    File::open(path)
+        .map_err(|error| TacError::OpenError(path.as_os_str().to_os_string(), error).into())
 }
 
 fn read_from_file(mut file: File, path: &Path) -> CTResult<Vec<u8>> {
@@ -458,6 +449,24 @@ fn read_from_file(mut file: File, path: &Path) -> CTResult<Vec<u8>> {
     file.read_to_end(&mut buffer)
         .map_err(|error| TacError::ReadError(tac_quote_path(path.as_os_str(), false), error))?;
 
+    Ok(buffer)
+}
+
+fn read_from_directory(mut file: File, path: &Path) -> CTResult<Vec<u8>> {
+    const GNU_TAC_READ_SIZE: u64 = 8192;
+
+    if let Ok(end) = file.seek(SeekFrom::End(0)) {
+        let aligned = end - end % GNU_TAC_READ_SIZE;
+        if aligned != end {
+            let _ = file.seek(SeekFrom::Start(aligned));
+        }
+    }
+
+    let mut buffer = vec![0; GNU_TAC_READ_SIZE as usize];
+    let count = file
+        .read(&mut buffer)
+        .map_err(|error| TacError::ReadError(tac_quote_path(path.as_os_str(), false), error))?;
+    buffer.truncate(count);
     Ok(buffer)
 }
 
@@ -502,6 +511,10 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
         // 处理普通文件
         let path = Path::new(filename);
         let file = open_file(path)?;
+
+        if file.metadata().is_ok_and(|metadata| metadata.is_dir()) {
+            return read_from_directory(file, path).map(FileData::Buffer);
+        }
 
         if let Some(mmap) = tac_try_mmap_file(&file) {
             Ok(FileData::Mapped(mmap))
@@ -1220,11 +1233,17 @@ mod tests {
         }
 
         #[test]
-        fn test_open_file_directory() {
-            let result = open_file(Path::new("."));
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(err.to_string().contains("Invalid argument"));
+        fn test_get_file_data_seekable_directory_preserves_read_error() {
+            let error = get_file_data(OsStr::new(".")).unwrap_err();
+
+            assert_eq!(error.to_string(), ".: read error: Invalid argument");
+        }
+
+        #[test]
+        fn test_get_file_data_nonseekable_directory_preserves_read_error() {
+            let error = get_file_data(OsStr::new("/tmp")).unwrap_err();
+
+            assert_eq!(error.to_string(), "/tmp: read error: Is a directory");
         }
 
         #[test]

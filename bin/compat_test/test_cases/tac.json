@@ -1414,6 +1414,60 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac operand-directory；fixture是普通目录，GNU对SEEK_END返回的极大偏移按读取块对齐后读取并保留EINVAL，预期RC=1、stdout为空、stderr为read error: Invalid argument",
+      "setup_commands": [
+        "mkdir operand-directory"
+      ],
+      "args": [
+        "operand-directory"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: operand-directory: read error: Invalid argument\n"
+        }
+      },
+      "cleanup_commands": [
+        "rmdir operand-directory"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac /tmp；该Linux目录的SEEK_END返回EINVAL，GNU转入非seekable复制路径并保留后续read返回的EISDIR，预期RC=1、stdout为空、stderr为read error: Is a directory",
+      "setup_commands": [],
+      "args": [
+        "/tmp"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: /tmp: read error: Is a directory\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

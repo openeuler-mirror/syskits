@@ -175,6 +175,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     let mut options = Vec::new();
     let mut operands = Vec::new();
     let mut saw_option_terminator = false;
+    let mut terminal_option = false;
 
     for argument in args.iter().skip(1) {
         let bytes = argument.as_encoded_bytes();
@@ -186,6 +187,10 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
             validate_option(bytes)?;
             options.push(argument.clone());
+            if is_terminal_option(bytes) {
+                terminal_option = true;
+                break;
+            }
             continue;
         }
 
@@ -196,7 +201,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
         }
     }
 
-    if operand_count > 2 {
+    if operand_count > 2 && !terminal_option {
         return Err(CTsageError::new(
             1,
             format!("extra operand {}", operands[2].as_os_str().quote()),
@@ -285,6 +290,23 @@ fn match_long_option(name: &[u8]) -> LongOptionMatch {
 }
 
 const WHO_SHORT_OPTIONS: &[u8] = b"abdlmpqrstuwHThV";
+
+fn is_terminal_option(argument: &[u8]) -> bool {
+    if let Some(long) = argument.strip_prefix(b"--") {
+        let name = &long[..long
+            .iter()
+            .position(|byte| *byte == b'=')
+            .unwrap_or(long.len())];
+        return matches!(
+            match_long_option(name),
+            LongOptionMatch::Recognized("help" | "version")
+        );
+    }
+
+    argument[1..]
+        .iter()
+        .any(|option| matches!(option, b'h' | b'V'))
+}
 
 fn validate_option(argument: &[u8]) -> CTResult<()> {
     if argument.starts_with(b"--") {
@@ -428,6 +450,13 @@ mod tests {
         let error = prepare_who_args(args.into_iter()).unwrap_err();
         assert_eq!(error.to_string(), "invalid option -- 'z'");
         assert!(error.usage());
+    }
+
+    #[test]
+    fn terminal_option_after_operands_takes_precedence() {
+        let args = ["who", "a", "b", "c", "--version"].map(OsString::from);
+        let prepared = prepare_who_args(args.into_iter()).unwrap();
+        assert_eq!(prepared[1], OsString::from("--version"));
     }
 
     #[test]

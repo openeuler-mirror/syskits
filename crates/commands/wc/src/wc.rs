@@ -26,6 +26,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo, set_ct_exit_code, strip_errno};
+use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_show;
@@ -600,7 +601,7 @@ fn wc_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
 }
 
 fn validate_gnu_option_arguments(args: &[OsString]) -> CTResult<()> {
-    let posix = std::env::var_os("POSIXLY_CORRECT").is_some();
+    let posix = posixly_correct();
     let mut index = 1;
     while index < args.len() {
         let bytes = args[index].as_encoded_bytes();
@@ -934,7 +935,7 @@ pub fn ct_app() -> Command {
         .about(t!("wc.about"))
         .override_usage(t!("wc.usage"))
         .after_help(t!("wc.after_help"))
-        .trailing_var_arg(std::env::var_os("POSIXLY_CORRECT").is_some())
+        .gnu_getopt()
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)
@@ -1055,11 +1056,7 @@ fn word_count_from_reader<T: WcWordCountable>(
     if !locale.is_c
         && (settings.is_show_chars || settings.is_show_words || settings.is_show_max_line_length)
     {
-        return word_count_from_locale_reader(
-            reader,
-            &locale,
-            std::env::var_os("POSIXLY_CORRECT").is_none(),
-        );
+        return word_count_from_locale_reader(reader, &locale, !posixly_correct());
     }
 
     let (mut total, error) = match (

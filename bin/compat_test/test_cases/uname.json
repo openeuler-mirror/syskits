@@ -461,6 +461,27 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "原始字节模糊长选项诊断用例：export LC_ALL='C'；执行uname并传入参数完整十六进制=2d2d6b65726e656c3dff，即--kernel=后跟0xff；GNU仍按--kernel报告三个候选项并原样保留0xff，预期RC=1、stdout完整十六进制=空，stderr完整十六进制=756e616d653a206f7074696f6e20272d2d6b65726e656c3dff2720697320616d626967756f75733b20706f73736962696c69746965733a20272d2d6b65726e656c2d6e616d652720272d2d6b65726e656c2d72656c656173652720272d2d6b65726e656c2d76657273696f6e270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2d2d6b65726e656c3dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a206f7074696f6e20272d2d6b65726e656c3dff2720697320616d626967756f75733b20706f73736962696c69746965733a20272d2d6b65726e656c2d6e616d652720272d2d6b65726e656c2d72656c656173652720272d2d6b65726e656c2d76657273696f6e270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

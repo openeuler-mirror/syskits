@@ -1627,6 +1627,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "未设置LC_ALL、LC_CTYPE和LC_MESSAGES，LANG=zh_CN.UTF-8且LANGUAGE=does_NOT_exist下执行tac missing-language-catalog；GNU gettext在非空LANGUAGE列表没有可用翻译目录时使用英文msgid而非基础locale翻译，预期英文诊断且RC=1",
+      "setup_commands": [],
+      "args": [
+        "missing-language-catalog"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "",
+          "LC_CTYPE": "",
+          "LC_MESSAGES": "",
+          "LANG": "zh_CN.UTF-8",
+          "LANGUAGE": "does_NOT_exist"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: failed to open 'missing-language-catalog' for reading: No such file or directory\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

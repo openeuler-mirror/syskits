@@ -301,11 +301,11 @@ fn tac_message_locale_from_values(
         return "en-US";
     }
 
-    if let Some(locale) = language
-        .filter(|value| !value.is_empty())
-        .and_then(|value| value.split(':').find_map(known_tac_message_locale))
-    {
-        return locale;
+    if let Some(language) = language.filter(|value| !value.is_empty()) {
+        return language
+            .split(':')
+            .find_map(known_tac_message_locale)
+            .unwrap_or("en-US");
     }
 
     known_tac_message_locale(base).unwrap_or("en-US")
@@ -1151,6 +1151,15 @@ mod tests {
             );
             assert_eq!(
                 tac_message_locale_from_values(None, None, Some("zh_CN.UTF-8"), Some("C")),
+                "en-US"
+            );
+            assert_eq!(
+                tac_message_locale_from_values(
+                    None,
+                    None,
+                    Some("zh_CN.UTF-8"),
+                    Some("does_NOT_exist")
+                ),
                 "en-US"
             );
             assert_eq!(

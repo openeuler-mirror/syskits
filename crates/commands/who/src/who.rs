@@ -16,7 +16,7 @@ use ctcore::ct_error::{CTError, CTResult};
 
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
@@ -205,7 +205,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     }
 
     if operand_count > 2 && !terminal_option {
-        let mut message = t!("who.errors.extra_operand").as_bytes().to_vec();
+        let mut message = locale_text_bytes(&t!("who.errors.extra_operand"));
         message.push(b' ');
         message.extend(quote_locale_operand(operands[2].as_os_str()));
         return Err(WhoUsageError::boxed(message));
@@ -313,18 +313,97 @@ fn locale_name() -> String {
     "C".to_string()
 }
 
+#[cfg(target_os = "linux")]
+fn locale_codeset() -> Option<CString> {
+    let locale_name = CString::new(locale_name()).ok()?;
+    let locale = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
+    }
+
+    unsafe {
+        let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale);
+        let result = (!codeset.is_null())
+            .then(|| CStr::from_ptr(codeset).to_bytes())
+            .and_then(|bytes| CString::new(bytes).ok());
+        ctcore::libc::freelocale(locale);
+        result
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn transcode_utf8(text: &str, codeset: &CStr) -> Option<Vec<u8>> {
+    let descriptor = unsafe { ctcore::libc::iconv_open(codeset.as_ptr(), c"UTF-8".as_ptr()) };
+    if descriptor as usize == usize::MAX {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(32)];
+    let mut output_used = 0;
+    let converted = loop {
+        let mut output_pointer = unsafe { output.as_mut_ptr().add(output_used) }.cast();
+        let mut output_left = output.len() - output_used;
+        let result = unsafe {
+            ctcore::libc::iconv(
+                descriptor,
+                &mut input,
+                &mut input_left,
+                &mut output_pointer,
+                &mut output_left,
+            )
+        };
+        output_used = output.len() - output_left;
+        if result != usize::MAX {
+            output.truncate(output_used);
+            break Some(output);
+        }
+        if std::io::Error::last_os_error().raw_os_error() != Some(ctcore::libc::E2BIG) {
+            break None;
+        }
+        output.resize(output.len().saturating_mul(2), 0);
+    };
+
+    unsafe { ctcore::libc::iconv_close(descriptor) };
+    converted
+}
+
+pub(crate) fn locale_text_bytes(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(codeset) = locale_codeset() {
+            let normalized = codeset.to_string_lossy().to_ascii_uppercase();
+            if normalized == "UTF-8" || normalized == "UTF8" {
+                return text.as_bytes().to_vec();
+            }
+            if let Some(converted) = transcode_utf8(text, &codeset) {
+                return converted;
+            }
+        }
+    }
+
+    text.as_bytes().to_vec()
+}
+
 fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
     let locale = locale_name().to_ascii_uppercase();
+    if locale.starts_with("ZH_") || locale.starts_with("ZH-") {
+        return quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'\"'));
+    }
+
     let is_utf8 = locale.contains("UTF-8") || locale.contains("UTF8");
     if !is_utf8 {
         return quote_c_locale_operand(operand);
     }
 
-    if locale.starts_with("ZH_") || locale.starts_with("ZH-") {
-        quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'"'))
-    } else {
-        quote_utf8_locale_operand(operand, "‘".as_bytes(), "’".as_bytes(), None)
-    }
+    quote_utf8_locale_operand(operand, "‘".as_bytes(), "’".as_bytes(), None)
 }
 
 fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
@@ -427,7 +506,7 @@ impl WhoUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
         Box::new(Self {
             message,
-            usage_hint: t!("who.errors.try_help").as_bytes().to_vec(),
+            usage_hint: locale_text_bytes(&t!("who.errors.try_help")),
         })
     }
 }
@@ -690,6 +769,28 @@ mod tests {
     }
 
     #[test]
+    fn localized_text_uses_the_locale_codeset() {
+        with_lc_all("zh_CN.gbk", || {
+            assert_eq!(
+                locale_text_bytes("用户数"),
+                [0xd3, 0xc3, 0xbb, 0xa7, 0xca, 0xfd]
+            );
+            assert_eq!(quote_locale_operand(OsStr::new("c")), b"\"c\"");
+        });
+
+        with_lc_all("C.UTF-8", || {
+            assert_eq!(locale_text_bytes("用户数"), "用户数".as_bytes());
+        });
+    }
+
+    #[test]
+    fn invalid_locale_falls_back_to_utf8_text() {
+        with_lc_all("who_INVALID_LOCALE", || {
+            assert_eq!(locale_text_bytes("用户数"), "用户数".as_bytes());
+        });
+    }
+
+    #[test]
     fn chinese_usage_errors_match_gnu_diagnostics() {
         with_lc_all("zh_CN.UTF-8", || {
             with_i18n_locale("zh-CN", || {
@@ -710,6 +811,31 @@ mod tests {
                 assert_eq!(
                     option_error.usage_hint_bytes().as_deref(),
                     Some("请尝试执行 \"who --help\" 来获取更多信息。".as_bytes())
+                );
+            });
+        });
+
+        with_lc_all("zh_CN.gbk", || {
+            with_i18n_locale("zh-CN", || {
+                let args = ["who", "a", "b", "c"].map(OsString::from);
+                let error = prepare_who_args(args.into_iter()).unwrap_err();
+                assert_eq!(
+                    error.diagnostic_bytes().as_ref(),
+                    [
+                        0xb6, 0xe0, 0xd3, 0xe0, 0xb5, 0xc4, 0xb2, 0xd9, 0xd7, 0xf7, 0xb6, 0xd4,
+                        0xcf, 0xf3, b' ', b'"', b'c', b'"',
+                    ]
+                );
+                assert_eq!(
+                    error.usage_hint_bytes().as_deref(),
+                    Some(
+                        &[
+                            0xc7, 0xeb, 0xb3, 0xa2, 0xca, 0xd4, 0xd6, 0xb4, 0xd0, 0xd0, b' ', b'"',
+                            b'w', b'h', b'o', b' ', b'-', b'-', b'h', b'e', b'l', b'p', b'"', b' ',
+                            0xc0, 0xb4, 0xbb, 0xf1, 0xc8, 0xa1, 0xb8, 0xfc, 0xb6, 0xe0, 0xd0, 0xc5,
+                            0xcf, 0xa2, 0xa1, 0xa3,
+                        ][..]
+                    )
                 );
             });
         });

@@ -268,7 +268,7 @@ impl CtUtmpx {
 
 fn format_canonical_host(host: &str, canonical: Option<&str>, display: &str) -> String {
     match canonical {
-        Some(canonical) if !display.is_empty() => format!("{canonical}:{display}"),
+        Some(canonical) if host.contains(':') => format!("{canonical}:{display}"),
         Some(canonical) => canonical.to_string(),
         None => host.to_string(),
     }
@@ -339,6 +339,14 @@ mod tests {
         assert_eq!(
             format_canonical_host("alias:7", Some("canonical"), "7"),
             "canonical:7"
+        );
+    }
+
+    #[test]
+    fn canonical_host_preserves_an_empty_display_suffix() {
+        assert_eq!(
+            format_canonical_host("localhost:", Some("localhost"), ""),
+            "localhost:"
         );
     }
 

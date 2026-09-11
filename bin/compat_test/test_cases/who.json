@@ -997,6 +997,30 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='C'，export LANG='C'，export TZ='UTC0'；执行who --lookup utmp；输入400字节Linux USER_PROCESS记录，user=alice、line=pts/0、host=localhost:且display为空、时间=2024-02-29 12:34:56 UTC；GNU DNS规范化成功后仍根据原始冒号保留空display后缀，预期RC=0、stdout为alice    pts/0        Feb 29 12:34 (localhost:)换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[8:13]=b\"pts/0\"; b[40:42]=b\"p0\"; b[44:49]=b\"alice\"; h=b\"localhost:\"; b[76:76+len(h)]=h; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "--lookup",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "alice    pts/0        Feb 29 12:34 (localhost:)\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

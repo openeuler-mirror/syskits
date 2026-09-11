@@ -12,7 +12,7 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CTsageError};
+use ctcore::ct_error::{CTError, CTResult};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -205,7 +205,8 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     }
 
     if operand_count > 2 && !terminal_option {
-        let mut message = b"extra operand ".to_vec();
+        let mut message = t!("who.errors.extra_operand").as_bytes().to_vec();
+        message.push(b' ');
         message.extend(quote_locale_operand(operands[2].as_os_str()));
         return Err(WhoUsageError::boxed(message));
     }
@@ -296,6 +297,7 @@ const WHO_SHORT_OPTIONS: &[u8] = b"abdlmpqrstuwHThV";
 #[derive(Debug)]
 struct WhoUsageError {
     message: Vec<u8>,
+    usage_hint: Vec<u8>,
 }
 
 fn locale_name() -> String {
@@ -423,7 +425,10 @@ fn push_octal_escape(output: &mut Vec<u8>, byte: u8) {
 
 impl WhoUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
-        Box::new(Self { message })
+        Box::new(Self {
+            message,
+            usage_hint: t!("who.errors.try_help").as_bytes().to_vec(),
+        })
     }
 }
 
@@ -438,6 +443,10 @@ impl Error for WhoUsageError {}
 impl CTError for WhoUsageError {
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
     }
 
     fn usage(&self) -> bool {
@@ -486,9 +495,8 @@ fn validate_long_option(argument: &[u8]) -> CTResult<()> {
     let name = &long[..separator.unwrap_or(long.len())];
 
     match match_long_option(name) {
-        LongOptionMatch::Recognized(canonical) if separator.is_some() => Err(CTsageError::new(
-            1,
-            format!("option '--{canonical}' doesn't allow an argument"),
+        LongOptionMatch::Recognized(canonical) if separator.is_some() => Err(WhoUsageError::boxed(
+            format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
         )),
         LongOptionMatch::Ambiguous(matches) => {
             let argument = String::from_utf8_lossy(argument);
@@ -497,9 +505,9 @@ fn validate_long_option(argument: &[u8]) -> CTResult<()> {
                 .map(|option| format!("'--{option}'"))
                 .collect::<Vec<_>>()
                 .join(" ");
-            Err(CTsageError::new(
-                1,
-                format!("option '{argument}' is ambiguous; possibilities: {possibilities}"),
+            Err(WhoUsageError::boxed(
+                format!("option '{argument}' is ambiguous; possibilities: {possibilities}")
+                    .into_bytes(),
             ))
         }
         LongOptionMatch::None => {
@@ -545,6 +553,8 @@ mod tests {
 
     struct LocaleRestore(Option<OsString>);
 
+    struct I18nRestore(String);
+
     impl Drop for LocaleRestore {
         fn drop(&mut self) {
             // SAFETY: LOCALE_ENV_LOCK remains held while this guard restores LC_ALL.
@@ -557,11 +567,25 @@ mod tests {
         }
     }
 
+    impl Drop for I18nRestore {
+        fn drop(&mut self) {
+            rust_i18n::set_locale(&self.0);
+        }
+    }
+
     fn with_lc_all<T>(locale: &str, test: impl FnOnce() -> T) -> T {
         let _lock = LOCALE_ENV_LOCK.lock().unwrap();
         let restore = LocaleRestore(std::env::var_os("LC_ALL"));
         // SAFETY: LOCALE_ENV_LOCK serializes test mutations and LocaleRestore restores LC_ALL.
         unsafe { std::env::set_var("LC_ALL", locale) };
+        let result = test();
+        drop(restore);
+        result
+    }
+
+    fn with_i18n_locale<T>(locale: &str, test: impl FnOnce() -> T) -> T {
+        let restore = I18nRestore(rust_i18n::locale().to_string());
+        rust_i18n::set_locale(locale);
         let result = test();
         drop(restore);
         result
@@ -618,10 +642,12 @@ mod tests {
     #[test]
     fn third_operand_uses_the_gnu_extra_operand_diagnostic() {
         with_lc_all("C", || {
-            let args = ["who", "a", "b", "c"].map(OsString::from);
-            let error = prepare_who_args(args.into_iter()).unwrap_err();
-            assert_eq!(error.to_string(), "extra operand 'c'");
-            assert!(error.usage());
+            with_i18n_locale("en-US", || {
+                let args = ["who", "a", "b", "c"].map(OsString::from);
+                let error = prepare_who_args(args.into_iter()).unwrap_err();
+                assert_eq!(error.to_string(), "extra operand 'c'");
+                assert!(error.usage());
+            });
         });
     }
 
@@ -660,6 +686,32 @@ mod tests {
 
         with_lc_all("zh_CN.UTF-8", || {
             assert_eq!(quote_locale_operand(OsStr::new("c")), b"\"c\"");
+        });
+    }
+
+    #[test]
+    fn chinese_usage_errors_match_gnu_diagnostics() {
+        with_lc_all("zh_CN.UTF-8", || {
+            with_i18n_locale("zh-CN", || {
+                let extra_args = ["who", "a", "b", "c"].map(OsString::from);
+                let extra_error = prepare_who_args(extra_args.into_iter()).unwrap_err();
+                assert_eq!(
+                    extra_error.diagnostic_bytes().as_ref(),
+                    "多余的操作对象 \"c\"".as_bytes()
+                );
+                assert_eq!(
+                    extra_error.usage_hint_bytes().as_deref(),
+                    Some("请尝试执行 \"who --help\" 来获取更多信息。".as_bytes())
+                );
+
+                let option_args = ["who", "-z"].map(OsString::from);
+                let option_error = prepare_who_args(option_args.into_iter()).unwrap_err();
+                assert_eq!(option_error.to_string(), "invalid option -- 'z'");
+                assert_eq!(
+                    option_error.usage_hint_bytes().as_deref(),
+                    Some("请尝试执行 \"who --help\" 来获取更多信息。".as_bytes())
+                );
+            });
         });
     }
 

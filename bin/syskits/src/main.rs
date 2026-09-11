@@ -525,10 +525,15 @@ fn execute_tool(tool: Box<dyn Tool>, args: &[OsString]) -> i32 {
                 return 0;
             }
             if err.usage() {
-                eprintln!(
-                    "Try '{} --help' for more information.",
-                    ctcore::ct_help_utility_name()
-                );
+                if matches!(
+                    ctcore::ct_error::write_error_usage_hint(err.as_ref()),
+                    Ok(None)
+                ) {
+                    eprintln!(
+                        "Try '{} --help' for more information.",
+                        ctcore::ct_help_utility_name()
+                    );
+                }
                 return map_tool_error_exit_code(code, true);
             }
             map_tool_error_exit_code(code, false)

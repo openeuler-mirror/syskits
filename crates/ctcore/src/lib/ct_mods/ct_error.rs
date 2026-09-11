@@ -165,6 +165,11 @@ pub trait CTError: Error + Send {
         std::borrow::Cow::Owned(self.to_string().into_bytes())
     }
 
+    /// Return a utility-specific usage hint, or `None` for the default hint.
+    fn usage_hint_bytes(&self) -> Option<std::borrow::Cow<'_, [u8]>> {
+        None
+    }
+
     /// 自定义错误的错误码。
     ///
     ///
@@ -284,6 +289,18 @@ pub fn write_error_diagnostic(error: &dyn CTError) -> io::Result<()> {
     stderr.write_all(b": ")?;
     stderr.write_all(diagnostic.as_ref())?;
     stderr.write_all(b"\n")
+}
+
+/// Write an error-specific usage hint, returning `None` when the default hint applies.
+pub fn write_error_usage_hint(error: &dyn CTError) -> io::Result<Option<()>> {
+    let Some(hint) = error.usage_hint_bytes() else {
+        return Ok(None);
+    };
+
+    let mut stderr = io::stderr().lock();
+    stderr.write_all(hint.as_ref())?;
+    stderr.write_all(b"\n")?;
+    Ok(Some(()))
 }
 
 impl<T> From<T> for Box<dyn CTError>

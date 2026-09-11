@@ -24,6 +24,8 @@ who:
   errors:
     system: "System error"
     unknown: "Unknown error"
+    extra_operand: "extra operand"
+    try_help: "Try 'who --help' for more information."
   output:
     system_boot: "system boot"
     run_level: "run-level"

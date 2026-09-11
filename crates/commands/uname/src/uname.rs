@@ -19,7 +19,6 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::libc::{SIG_DFL, SIG_ERR, SIGPIPE, getppid, sighandler_t, signal};
 use platform_info::*;
-use sys_locale::get_locale;
 
 use ctcore::Tool;
 use std::borrow::Cow;
@@ -225,8 +224,7 @@ impl Tool for Uname {
 pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
     let _sigpipe_guard = SigpipeGuard::for_cli();
 
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    rust_i18n::set_locale(message_locale().rust_i18n_name());
     let matches = ct_app().try_get_matches_from(prepare_uname_args(args)?)?;
 
     let flags = UnameFlags {
@@ -507,6 +505,77 @@ fn locale_name() -> String {
     "C".to_string()
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MessageLocale {
+    EnUs,
+    ZhCn,
+}
+
+impl MessageLocale {
+    fn rust_i18n_name(self) -> &'static str {
+        match self {
+            Self::EnUs => "en-US",
+            Self::ZhCn => "zh-CN",
+        }
+    }
+}
+
+fn message_locale() -> MessageLocale {
+    message_locale_from_values(
+        std::env::var("LC_ALL").ok().as_deref(),
+        std::env::var("LC_MESSAGES").ok().as_deref(),
+        std::env::var("LANG").ok().as_deref(),
+        std::env::var("LANGUAGE").ok().as_deref(),
+    )
+}
+
+fn message_locale_from_values(
+    lc_all: Option<&str>,
+    lc_messages: Option<&str>,
+    lang: Option<&str>,
+    language: Option<&str>,
+) -> MessageLocale {
+    let base = [lc_all, lc_messages, lang]
+        .into_iter()
+        .flatten()
+        .find(|locale| !locale.is_empty())
+        .unwrap_or("C");
+
+    if base.eq_ignore_ascii_case("C") || base.eq_ignore_ascii_case("POSIX") {
+        return MessageLocale::EnUs;
+    }
+
+    if let Some(locale) = language
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.split(':').find_map(known_message_locale))
+    {
+        return locale;
+    }
+
+    known_message_locale(base).unwrap_or(MessageLocale::EnUs)
+}
+
+fn known_message_locale(locale: &str) -> Option<MessageLocale> {
+    let language = locale
+        .split(['.', '@'])
+        .next()
+        .unwrap_or(locale)
+        .replace('-', "_");
+    if language.eq_ignore_ascii_case("C")
+        || language.eq_ignore_ascii_case("POSIX")
+        || language.eq_ignore_ascii_case("en")
+        || language.to_ascii_lowercase().starts_with("en_")
+    {
+        Some(MessageLocale::EnUs)
+    } else if language.eq_ignore_ascii_case("zh")
+        || language.to_ascii_lowercase().starts_with("zh_cn")
+    {
+        Some(MessageLocale::ZhCn)
+    } else {
+        None
+    }
+}
+
 fn locale_codeset() -> Option<CString> {
     let locale_name = CString::new(locale_name()).ok()?;
     let locale = unsafe {
@@ -589,8 +658,7 @@ fn locale_is_utf8() -> bool {
 }
 
 fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
-    let locale = locale_name().to_ascii_uppercase();
-    if locale.starts_with("ZH_CN") || locale.starts_with("ZH-CN") {
+    if message_locale() == MessageLocale::ZhCn {
         return quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'\"'));
     }
     if !locale_is_utf8() {
@@ -931,6 +999,26 @@ mod tests {
         assert_eq!(
             transcode_utf8("多余的操作对象", c"GBK").as_deref(),
             Some(&b"\xb6\xe0\xd3\xe0\xb5\xc4\xb2\xd9\xd7\xf7\xb6\xd4\xcf\xf3"[..])
+        );
+    }
+
+    #[test]
+    fn message_locale_respects_gnu_category_and_language_priority() {
+        assert_eq!(
+            message_locale_from_values(None, Some("zh_CN.UTF-8"), Some("en_US.UTF-8"), None),
+            MessageLocale::ZhCn
+        );
+        assert_eq!(
+            message_locale_from_values(None, None, Some("zh_CN.UTF-8"), Some("C")),
+            MessageLocale::EnUs
+        );
+        assert_eq!(
+            message_locale_from_values(Some("C"), None, Some("zh_CN.UTF-8"), Some("zh_CN")),
+            MessageLocale::EnUs
+        );
+        assert_eq!(
+            message_locale_from_values(None, None, Some("en_US.UTF-8"), Some("missing:zh_CN:C")),
+            MessageLocale::ZhCn
         );
     }
 

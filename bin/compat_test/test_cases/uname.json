@@ -482,6 +482,66 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "消息类别优先级用例：unset LC_ALL和LANGUAGE，设置LANG=en_US.UTF-8、LC_CTYPE=C.UTF-8、LC_MESSAGES=zh_CN.UTF-8；执行uname extra；GNU按LC_MESSAGES选择简体中文诊断和双引号，同时按LC_CTYPE输出UTF-8，预期RC=1、stdout为空",
+            "setup_commands": [],
+            "args": [
+                "extra"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: 多余的操作对象 \"extra\"\n请尝试执行 \"uname --help\" 来获取更多信息。\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "",
+                    "LANGUAGE": "",
+                    "LANG": "en_US.UTF-8",
+                    "LC_CTYPE": "C.UTF-8",
+                    "LC_MESSAGES": "zh_CN.UTF-8"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LANGUAGE覆盖用例：unset LC_ALL、LC_CTYPE和LC_MESSAGES，设置LANG=zh_CN.UTF-8、LANGUAGE=C；执行uname extra；GNU以LANG建立UTF-8字符类别但由LANGUAGE=C选择英文诊断和弯引号，预期RC=1、stdout为空",
+            "setup_commands": [],
+            "args": [
+                "extra"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: extra operand ‘extra’\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "",
+                    "LC_CTYPE": "",
+                    "LC_MESSAGES": "",
+                    "LANG": "zh_CN.UTF-8",
+                    "LANGUAGE": "C"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

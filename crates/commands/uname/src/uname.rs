@@ -183,6 +183,7 @@ fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
             validate_attached_value(bytes)?;
             validate_ambiguous_long_option(bytes)?;
+            validate_unknown_option(bytes)?;
             if is_terminal_option(bytes) {
                 return Ok(args);
             }
@@ -237,6 +238,35 @@ fn match_long_option(name: &[u8]) -> LongOptionMatch {
         [option] => LongOptionMatch::Recognized(option),
         _ => LongOptionMatch::Ambiguous(matches),
     }
+}
+
+const UNAME_SHORT_OPTIONS: &[u8] = b"asnrvmpiohV";
+
+fn validate_unknown_option(argument: &[u8]) -> CTResult<()> {
+    if let Some(long) = argument.strip_prefix(b"--") {
+        let name = &long[..long
+            .iter()
+            .position(|byte| *byte == b'=')
+            .unwrap_or(long.len())];
+        if matches!(match_long_option(name), LongOptionMatch::None) {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            return Err(UnameUsageError::boxed(message));
+        }
+        return Ok(());
+    }
+
+    if let Some(unknown) = argument[1..]
+        .iter()
+        .find(|option| !UNAME_SHORT_OPTIONS.contains(option))
+    {
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(*unknown);
+        message.push(b'\'');
+        return Err(UnameUsageError::boxed(message));
+    }
+    Ok(())
 }
 
 fn validate_ambiguous_long_option(argument: &[u8]) -> CTResult<()> {
@@ -463,6 +493,38 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "option '--kernel' is ambiguous; possibilities: '--kernel-name' '--kernel-release' '--kernel-version'"
+        );
+    }
+
+    #[test]
+    fn unknown_options_use_gnu_diagnostics() {
+        let short =
+            prepare_uname_args(["uname", "-z"].map(OsString::from).into_iter()).unwrap_err();
+        assert_eq!(short.to_string(), "invalid option -- 'z'");
+
+        let long = prepare_uname_args(
+            ["uname", "--does-not-exist"]
+                .map(OsString::from)
+                .into_iter(),
+        )
+        .unwrap_err();
+        assert_eq!(long.to_string(), "unrecognized option '--does-not-exist'");
+    }
+
+    #[test]
+    fn non_utf8_short_option_preserves_original_byte() {
+        let error = prepare_uname_args(
+            [
+                OsString::from("uname"),
+                OsString::from_vec(vec![b'-', 0xff]),
+            ]
+            .into_iter(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"invalid option -- '\xff'"
         );
     }
 

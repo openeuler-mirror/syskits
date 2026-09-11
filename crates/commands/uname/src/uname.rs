@@ -369,13 +369,11 @@ fn validate_ambiguous_long_option(argument: &[u8]) -> CTResult<()> {
         .map(|option| format!("'--{option}'"))
         .collect::<Vec<_>>()
         .join(" ");
-    Err(UnameUsageError::boxed(
-        format!(
-            "option '{}' is ambiguous; possibilities: {possibilities}",
-            String::from_utf8_lossy(argument)
-        )
-        .into_bytes(),
-    ))
+    let mut message = b"option '".to_vec();
+    message.extend_from_slice(argument);
+    message.extend_from_slice(b"' is ambiguous; possibilities: ");
+    message.extend_from_slice(possibilities.as_bytes());
+    Err(UnameUsageError::boxed(message))
 }
 
 fn validate_attached_value(argument: &[u8]) -> CTResult<()> {
@@ -756,6 +754,23 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "option '--kernel' is ambiguous; possibilities: '--kernel-name' '--kernel-release' '--kernel-version'"
+        );
+    }
+
+    #[test]
+    fn ambiguous_long_option_preserves_non_utf8_bytes() {
+        let error = prepare_uname_args(
+            [
+                OsString::from("uname"),
+                OsString::from_vec(b"--kernel=\xff".to_vec()),
+            ]
+            .into_iter(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"option '--kernel=\xff' is ambiguous; possibilities: '--kernel-name' '--kernel-release' '--kernel-version'"
         );
     }
 

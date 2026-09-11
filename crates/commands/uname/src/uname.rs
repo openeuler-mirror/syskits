@@ -16,7 +16,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::libc::{SIG_DFL, SIG_ERR, SIGPIPE, getppid, sighandler_t, signal};
 use platform_info::*;
 
@@ -77,9 +77,7 @@ impl UNameOutput {
     }
 
     pub fn new(opts: &UnameFlags) -> CTResult<Self> {
-        Self::new_with_platform_provider(opts, || {
-            PlatformInfo::new().map_err(|_e| CtSimpleError::new(1, "cannot get system name"))
-        })
+        Self::new_with_platform_provider(opts, || PlatformInfo::new().map_err(platform_info_error))
     }
 
     fn new_with_platform_provider(
@@ -175,6 +173,16 @@ impl UNameOutput {
             hardware_platform,
             os,
         })
+    }
+}
+
+fn platform_info_error(error: PlatformInfoError) -> Box<dyn CTError> {
+    match error.downcast::<std::io::Error>() {
+        Ok(error) => CtSimpleError::new(
+            1,
+            format!("cannot get system name: {}", strip_errno(&error)),
+        ),
+        Err(error) => CtSimpleError::new(1, format!("cannot get system name: {error}")),
     }
 }
 
@@ -1426,6 +1434,20 @@ mod tests {
             assert_eq!(output.processor, Some(OsString::new()));
             assert_eq!(output.hardware_platform, Some(OsString::new()));
             assert_eq!(output.display_bytes(), b" ");
+        }
+
+        #[test]
+        fn platform_query_error_preserves_errno_message() {
+            let source: PlatformInfoError =
+                Box::new(std::io::Error::from_raw_os_error(ctcore::libc::EPERM));
+
+            let error = platform_info_error(source);
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.to_string(),
+                "cannot get system name: Operation not permitted"
+            );
         }
     }
 

@@ -16,12 +16,16 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use platform_info::*;
 use sys_locale::get_locale;
 
 use ctcore::Tool;
-use std::ffi::OsString;
+use std::borrow::Cow;
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
+use std::os::unix::ffi::OsStrExt;
 
 pub mod uname_flags {
     pub static UNAME_ALL: &str = "all";
@@ -183,13 +187,68 @@ fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
             continue;
         }
 
-        return Err(CTsageError::new(
-            1,
-            format!("extra operand '{}'", String::from_utf8_lossy(bytes)),
-        ));
+        let mut message = b"extra operand ".to_vec();
+        message.extend(quote_c_locale_operand(argument));
+        return Err(UnameUsageError::boxed(message));
     }
 
     Ok(args)
+}
+
+#[derive(Debug)]
+struct UnameUsageError {
+    message: Vec<u8>,
+}
+
+impl UnameUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for UnameUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for UnameUsageError {}
+
+impl CTError for UnameUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(operand.as_bytes().len() + 2);
+    quoted.push(b'\'');
+    for byte in operand.as_bytes() {
+        match *byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'\'' => quoted.extend_from_slice(b"\\'"),
+            b' '..=b'~' => quoted.push(*byte),
+            _ => {
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 7));
+                quoted.push(b'0' + (byte & 7));
+            }
+        }
+    }
+    quoted.push(b'\'');
+    quoted
 }
 
 fn is_terminal_option(argument: &[u8]) -> bool {
@@ -273,6 +332,7 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn extra_operand_uses_gnu_diagnostic() {
@@ -281,6 +341,16 @@ mod tests {
 
         assert_eq!(error.to_string(), "extra operand 'extra'");
         assert!(error.usage());
+    }
+
+    #[test]
+    fn non_utf8_extra_operand_preserves_original_bytes() {
+        let error = prepare_uname_args(
+            [OsString::from("uname"), OsString::from_vec(vec![0xff])].into_iter(),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.diagnostic_bytes().as_ref(), b"extra operand '\\377'");
     }
 
     #[test]

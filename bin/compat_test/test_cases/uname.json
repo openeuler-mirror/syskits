@@ -220,6 +220,67 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname -z；z不在GNU短选项集合asnrvmpio内，预期RC=1、stdout为空，并报告invalid option -- 'z'",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: invalid option -- 'z'\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname --does-not-exist；长选项无精确或前缀匹配，GNU预期RC=1、stdout为空，并报告unrecognized option",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--does-not-exist"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: unrecognized option '--does-not-exist'\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "原始字节短选项诊断用例：export LC_ALL='C'；执行uname并传入参数原始字节2dff，即短选项前缀'-'后跟0xff；参数完整十六进制=2dff；GNU预期RC=1、stdout完整十六进制=空，stderr中未知选项字节保持0xff，完整十六进制=756e616d653a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -1243,6 +1243,64 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C、TZ=UTC0下执行who utmp，并将stdout连接到已关闭读端的管道；输入400字节Linux USER_PROCESS记录alice/pts/0；父进程使用默认SIGPIPE处置，GNU在写输出时被SIGPIPE终止，预期RC=141且stdout、stderr均为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); b[8:13]=b\"pts/0\"; b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "utmp"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=C、TZ=UTC0下执行who utmp，并将stdout连接到已关闭读端的管道；输入400字节Linux USER_PROCESS记录alice/pts/0；父进程显式忽略SIGPIPE时GNU保留该处置并报告写失败，预期RC=1、stdout为空、stderr为who: write error: Broken pipe",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); b[8:13]=b\"pts/0\"; b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "utmp"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: write error: Broken pipe\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

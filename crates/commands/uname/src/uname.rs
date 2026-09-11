@@ -783,6 +783,12 @@ fn quote_utf8_locale_operand(
 
     let mut index = 0;
     while index < input.len() {
+        if !right_quote.is_empty() && input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
         let byte = input[index];
         if byte.is_ascii() {
             push_quoted_ascii(&mut quoted, byte, quote_to_escape);
@@ -830,6 +836,12 @@ fn quote_encoded_locale_operand(
 
     let mut index = 0;
     while index < input.len() {
+        if !right_quote.is_empty() && input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
         let byte = input[index];
         if byte.is_ascii() {
             push_quoted_ascii(&mut quoted, byte, quote_to_escape);
@@ -1107,6 +1119,10 @@ mod tests {
         assert_eq!(
             quote_utf8_locale_operand(OsStr::new("x"), b"\"", b"\"", Some(b'\"')),
             b"\"x\""
+        );
+        assert_eq!(
+            quote_utf8_locale_operand(OsStr::new("x’y"), "‘".as_bytes(), "’".as_bytes(), None),
+            "‘x\\’y’".as_bytes()
         );
     }
 

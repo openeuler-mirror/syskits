@@ -596,6 +596,32 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "UTF-8 locale内嵌右引号用例：设置LC_ALL=C.UTF-8；执行uname并传入操作数x’y，其中中间字符是locale外层右引号U+2019；GNU在内嵌右引号前输出反斜杠以避免与外层结束引号混淆，预期RC=1、stdout为空，stderr为extra operand ‘x\\’y’及英文Try help",
+            "setup_commands": [],
+            "args": [
+                "x’y"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: extra operand ‘x\\’y’\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

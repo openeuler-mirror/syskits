@@ -100,7 +100,7 @@ impl UNameOutput {
 
     fn new_with_platform_provider(
         opts: &UnameFlags,
-        platform_provider: impl FnOnce() -> CTResult<PlatformInfo>,
+        mut platform_provider: impl FnMut() -> CTResult<PlatformInfo>,
     ) -> CTResult<Self> {
         let is_none = !(opts.is_all
             || opts.is_kernel_name
@@ -119,14 +119,8 @@ impl UNameOutput {
             || opts.is_kernel_version
             || opts.is_machine
             || cfg!(not(target_os = "linux")) && opts.is_os;
-        let queries_platform_info =
-            requires_platform_info || opts.is_processor || opts.is_hardware_platform;
-        let platform_info = if queries_platform_info {
-            match platform_provider() {
-                Ok(platform_info) => Some(platform_info),
-                Err(error) if requires_platform_info => return Err(error),
-                Err(_) => None,
-            }
+        let platform_info = if requires_platform_info {
+            Some(platform_provider()?)
         } else {
             None
         };
@@ -167,17 +161,25 @@ impl UNameOutput {
                 .to_os_string()
         });
 
-        let processor = (opts.is_processor || opts.is_all).then(|| {
-            uname
-                .map(|uname| uname.machine().to_os_string())
-                .unwrap_or_default()
-        });
+        let processor = if opts.is_processor || opts.is_all {
+            Some(
+                platform_provider()
+                    .map(|uname| uname.machine().to_os_string())
+                    .unwrap_or_default(),
+            )
+        } else {
+            None
+        };
 
-        let hardware_platform = (opts.is_hardware_platform || opts.is_all).then(|| {
-            uname
-                .map(|uname| hardware_platform_from_machine(uname.machine()))
-                .unwrap_or_default()
-        });
+        let hardware_platform = if opts.is_hardware_platform || opts.is_all {
+            Some(
+                platform_provider()
+                    .map(|uname| hardware_platform_from_machine(uname.machine()))
+                    .unwrap_or_default(),
+            )
+        } else {
+            None
+        };
 
         let os = (opts.is_os || opts.is_all).then(|| operating_system_name(uname));
 
@@ -1523,6 +1525,36 @@ mod tests {
             assert_eq!(output.processor, Some(OsString::new()));
             assert_eq!(output.hardware_platform, Some(OsString::new()));
             assert_eq!(output.display_bytes(), b" ");
+        }
+
+        #[test]
+        fn processor_and_hardware_use_independent_platform_queries() {
+            let flags =
+                generate_uname_flags(false, false, false, false, false, false, true, true, false);
+            let calls = Cell::new(0);
+
+            let output = UNameOutput::new_with_platform_provider(&flags, || {
+                let call = calls.get() + 1;
+                calls.set(call);
+                if call == 2 {
+                    Err(ctcore::ct_error::CtSimpleError::new(
+                        1,
+                        "cannot get system name",
+                    ))
+                } else {
+                    PlatformInfo::new().map_err(platform_info_error)
+                }
+            })
+            .unwrap();
+
+            assert_eq!(calls.get(), 2);
+            assert!(
+                output
+                    .processor
+                    .as_ref()
+                    .is_some_and(|value| !value.is_empty())
+            );
+            assert_eq!(output.hardware_platform, Some(OsString::new()));
         }
 
         #[test]

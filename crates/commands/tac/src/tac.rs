@@ -119,7 +119,11 @@ impl TacFlags {
             .get_one::<OsString>(tac_flags::TAC_SEPARATOR)
             .map_or_else(|| b"\n".to_vec(), |value| value.as_bytes().to_vec());
 
-        // 处理空分隔符的特殊情况
+        if regex && separator.is_empty() {
+            return Err(TacError::EmptyRegexSeparator.into());
+        }
+
+        // 固定空分隔符表示 NUL 字节。
         let separator = if separator.is_empty() {
             vec![0]
         } else {
@@ -144,6 +148,9 @@ impl TacFlags {
 pub enum TacError {
     /// 用户给定的正则表达式无效。
     InvalidRegex(regex::Error),
+
+    /// 正则模式不允许空分隔符。
+    EmptyRegexSeparator,
 
     /// tac 的参数无效。
     InvalidArgument(String),
@@ -170,6 +177,7 @@ impl Display for TacError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidRegex(e) => write!(f, "invalid regular expression: {e}"),
+            Self::EmptyRegexSeparator => write!(f, "separator cannot be empty"),
             Self::InvalidArgument(s) => {
                 write!(f, "{}: read error: Invalid argument", s.maybe_quote())
             }
@@ -800,6 +808,17 @@ mod tests {
         }
 
         #[test]
+        fn test_tac_flags_reject_empty_regex_separator() {
+            let matches = ct_app()
+                .try_get_matches_from(["tac", "--regex", "--separator", ""])
+                .unwrap();
+
+            let error = TacFlags::new(&matches).unwrap_err();
+
+            assert_eq!(error.to_string(), "separator cannot be empty");
+        }
+
+        #[test]
         fn test_tac_flags_new_with_files() {
             let app = ct_app();
             let matches = app
@@ -1423,6 +1442,19 @@ mod tests {
             let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"abc");
+        }
+
+        #[test]
+        fn test_tac_main_rejects_empty_regex_separator_before_opening_files() {
+            let args = ["tac", "-r", "-s", "", "missing"]
+                .into_iter()
+                .map(OsString::from);
+            let mut output = Vec::new();
+
+            let error = tac_main(&mut output, args).unwrap_err();
+
+            assert_eq!(error.to_string(), "separator cannot be empty");
+            assert!(output.is_empty());
         }
     }
 

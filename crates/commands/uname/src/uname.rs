@@ -181,6 +181,7 @@ fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
             continue;
         }
         if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            validate_attached_value(bytes)?;
             if is_terminal_option(bytes) {
                 return Ok(args);
             }
@@ -193,6 +194,69 @@ fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     }
 
     Ok(args)
+}
+
+const UNAME_LONG_OPTIONS: &[&str] = &[
+    "all",
+    "kernel-name",
+    "sysname",
+    "nodename",
+    "kernel-release",
+    "release",
+    "kernel-version",
+    "machine",
+    "processor",
+    "hardware-platform",
+    "operating-system",
+    "help",
+    "version",
+];
+
+enum LongOptionMatch {
+    None,
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn match_long_option(name: &[u8]) -> LongOptionMatch {
+    if let Some(option) = UNAME_LONG_OPTIONS
+        .iter()
+        .find(|option| option.as_bytes() == name)
+    {
+        return LongOptionMatch::Recognized(option);
+    }
+
+    let matches = UNAME_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => LongOptionMatch::None,
+        [option] => LongOptionMatch::Recognized(option),
+        _ => LongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn validate_attached_value(argument: &[u8]) -> CTResult<()> {
+    let Some(long) = argument.strip_prefix(b"--") else {
+        return Ok(());
+    };
+    let Some(separator) = long.iter().position(|byte| *byte == b'=') else {
+        return Ok(());
+    };
+    let name = &long[..separator];
+
+    match match_long_option(name) {
+        LongOptionMatch::Recognized(canonical) => Err(UnameUsageError::boxed(
+            format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+        )),
+        LongOptionMatch::Ambiguous(matches) => {
+            let _ = matches.len();
+            Ok(())
+        }
+        LongOptionMatch::None => Ok(()),
+    }
 }
 
 #[derive(Debug)]
@@ -351,6 +415,17 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.diagnostic_bytes().as_ref(), b"extra operand '\\377'");
+    }
+
+    #[test]
+    fn attached_value_reports_canonical_long_option() {
+        let error = prepare_uname_args(["uname", "--oper=value"].map(OsString::from).into_iter())
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "option '--operating-system' doesn't allow an argument"
+        );
     }
 
     #[test]

@@ -542,6 +542,60 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "GBK可打印操作数字节用例：设置LC_ALL=zh_CN.GBK；执行uname并传入单个操作数原始字节d6d0，即GBK编码的“中”；GNU按GBK字符边界识别为可打印字符并原样放入双引号，预期RC=1，stdout完整十六进制=空，stderr完整十六进制=756e616d653a20b6e0d3e0b5c4b2d9d7f7b6d4cff32022d6d0220ac7ebb3a2cad4d6b4d0d02022756e616d65202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a",
+            "setup_commands": [],
+            "args": [
+                "d6d0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a20b6e0d3e0b5c4b2d9d7f7b6d4cff32022d6d0220ac7ebb3a2cad4d6b4d0d02022756e616d65202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.GBK"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "GBK混合有效与无效操作数字节用例：设置LC_ALL=zh_CN.GBK；执行uname并传入原始字节e4b8ad；GNU将e4b8识别为一个可打印GBK字符并原样保留，仅把末尾无效字节ad转义为\\255，预期RC=1，stdout完整十六进制=空，stderr完整十六进制=756e616d653a20b6e0d3e0b5c4b2d9d7f7b6d4cff32022e4b85c323535220ac7ebb3a2cad4d6b4d0d02022756e616d65202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a",
+            "setup_commands": [],
+            "args": [
+                "e4b8ad"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a20b6e0d3e0b5c4b2d9d7f7b6d4cff32022e4b85c323535220ac7ebb3a2cad4d6b4d0d02022756e616d65202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.GBK"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

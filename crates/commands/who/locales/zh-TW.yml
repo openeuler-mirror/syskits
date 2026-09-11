@@ -1,0 +1,21 @@
+who:
+  errors:
+    extra_operand: "額外的運算元"
+    try_help: "請嘗試執行「who --help」取得更多訊息。"
+  output:
+    system_boot: "系統引導"
+    run_level: "執行級別"
+    clock_change: "時鐘變更"
+    login: "登入"
+    last: "最近"
+    old: " 舊的 "
+    term: "終端"
+    exit: "退出"
+    users_count: "# users"
+    heading_name: "名稱"
+    heading_line: "線路"
+    heading_time: "時間"
+    heading_idle: "閒置"
+    heading_pid: "PID"
+    heading_comment: "備註"
+    heading_exit: "退出"

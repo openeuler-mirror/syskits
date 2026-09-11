@@ -394,6 +394,11 @@ pub(crate) fn locale_text_bytes(text: &str) -> Vec<u8> {
 
 fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
     let locale = locale_name().to_ascii_uppercase();
+    if locale.starts_with("ZH_TW") || locale.starts_with("ZH-TW") {
+        let left_quote = locale_text_bytes("「");
+        let right_quote = locale_text_bytes("」");
+        return quote_utf8_locale_operand(operand, &left_quote, &right_quote, None);
+    }
     if locale.starts_with("ZH_") || locale.starts_with("ZH-") {
         return quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'\"'));
     }
@@ -780,6 +785,17 @@ mod tests {
 
         with_lc_all("C.UTF-8", || {
             assert_eq!(locale_text_bytes("用户数"), "用户数".as_bytes());
+        });
+
+        with_lc_all("zh_TW.utf8", || {
+            with_i18n_locale("zh-TW", || {
+                assert_eq!(quote_locale_operand(OsStr::new("c")), "「c」".as_bytes());
+                assert_eq!(t!("who.errors.extra_operand"), "額外的運算元");
+                assert_eq!(
+                    t!("who.errors.try_help"),
+                    "請嘗試執行「who --help」取得更多訊息。"
+                );
+            });
         });
     }
 

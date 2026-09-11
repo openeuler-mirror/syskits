@@ -237,6 +237,13 @@ struct WhoDisplayBytes<'a> {
     exit: &'a [u8],
 }
 
+const IDLESTR_LEN: usize = 6;
+
+fn truncate_idle_bytes(mut idle: Vec<u8>) -> Vec<u8> {
+    idle.truncate(IDLESTR_LEN);
+    idle
+}
+
 fn idle_string<'a>(when: i64, boot_time: i64) -> Cow<'a, str> {
     thread_local! {
         static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap();
@@ -679,7 +686,7 @@ impl Who {
             0 => "  ?".into(),
             _ => idle_string(last_change, boot_time),
         };
-        let idle = locale_text_bytes(&idle);
+        let idle = truncate_idle_bytes(locale_text_bytes(&idle));
 
         let host = if self.is_do_lookup {
             canonicalize_host_bytes(utmpx.host_bytes(), |_| utmpx.canon_host()).map_err_context(
@@ -1353,6 +1360,35 @@ mod tests {
         );
         assert_eq!(t!("who.output.login", locale = "zh-CN"), "登录    ");
         assert_eq!(t!("who.output.old", locale = "zh-CN"), "很久");
+    }
+
+    #[test]
+    fn traditional_chinese_output_catalog_matches_gnu_who() {
+        assert_eq!(t!("who.output.heading_name", locale = "zh-TW"), "名稱");
+        assert_eq!(t!("who.output.heading_line", locale = "zh-TW"), "線路");
+        assert_eq!(t!("who.output.heading_time", locale = "zh-TW"), "時間");
+        assert_eq!(t!("who.output.heading_idle", locale = "zh-TW"), "閒置");
+        assert_eq!(t!("who.output.heading_pid", locale = "zh-TW"), "PID");
+        assert_eq!(t!("who.output.heading_comment", locale = "zh-TW"), "備註");
+        assert_eq!(t!("who.output.heading_exit", locale = "zh-TW"), "退出");
+        assert_eq!(t!("who.output.run_level", locale = "zh-TW"), "執行級別");
+        assert_eq!(t!("who.output.last", locale = "zh-TW"), "最近");
+        assert_eq!(t!("who.output.system_boot", locale = "zh-TW"), "系統引導");
+        assert_eq!(t!("who.output.clock_change", locale = "zh-TW"), "時鐘變更");
+        assert_eq!(t!("who.output.login", locale = "zh-TW"), "登入");
+        assert_eq!(t!("who.output.old", locale = "zh-TW"), " 舊的 ");
+        assert_eq!(t!("who.output.term", locale = "zh-TW"), "終端");
+        assert_eq!(t!("who.output.exit", locale = "zh-TW"), "退出");
+        assert_eq!(t!("who.output.users_count", locale = "zh-TW"), "# users");
+    }
+
+    #[test]
+    fn localized_idle_text_is_limited_to_six_bytes() {
+        assert_eq!(
+            truncate_idle_bytes(" 舊的 ".as_bytes().to_vec()),
+            [b' ', 0xe8, 0x88, 0x8a, 0xe7, 0x9a]
+        );
+        assert_eq!(truncate_idle_bytes(b"01:23".to_vec()), b"01:23");
     }
 
     #[test]

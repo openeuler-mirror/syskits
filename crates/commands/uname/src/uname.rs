@@ -95,17 +95,25 @@ impl UNameOutput {
             || opts.is_os
             || opts.is_processor
             || opts.is_hardware_platform);
-        let needs_platform_info = is_none
+        let requires_platform_info = is_none
             || opts.is_all
             || opts.is_kernel_name
             || opts.is_node_name
             || opts.is_kernel_release
             || opts.is_kernel_version
             || opts.is_machine
-            || opts.is_processor
-            || opts.is_hardware_platform
             || cfg!(not(target_os = "linux")) && opts.is_os;
-        let platform_info = needs_platform_info.then(platform_provider).transpose()?;
+        let queries_platform_info =
+            requires_platform_info || opts.is_processor || opts.is_hardware_platform;
+        let platform_info = if queries_platform_info {
+            match platform_provider() {
+                Ok(platform_info) => Some(platform_info),
+                Err(error) if requires_platform_info => return Err(error),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
         let uname = platform_info.as_ref();
 
         let kernel_name = (opts.is_kernel_name || opts.is_all || is_none).then(|| {
@@ -145,13 +153,14 @@ impl UNameOutput {
 
         let processor = (opts.is_processor || opts.is_all).then(|| {
             uname
-                .expect("platform info is required")
-                .machine()
-                .to_os_string()
+                .map(|uname| uname.machine().to_os_string())
+                .unwrap_or_default()
         });
 
         let hardware_platform = (opts.is_hardware_platform || opts.is_all).then(|| {
-            hardware_platform_from_machine(uname.expect("platform info is required").machine())
+            uname
+                .map(|uname| hardware_platform_from_machine(uname.machine()))
+                .unwrap_or_default()
         });
 
         let os = (opts.is_os || opts.is_all).then(|| operating_system_name(uname));
@@ -1402,6 +1411,21 @@ mod tests {
 
             assert!(!provider_called.get());
             assert_eq!(output.os, Some(OsString::from("GNU/Linux")));
+        }
+
+        #[test]
+        fn processor_and_hardware_only_ignore_platform_query_failure() {
+            let flags =
+                generate_uname_flags(false, false, false, false, false, false, true, true, false);
+
+            let output = UNameOutput::new_with_platform_provider(&flags, || {
+                Err(CtSimpleError::new(1, "cannot get system name"))
+            })
+            .unwrap();
+
+            assert_eq!(output.processor, Some(OsString::new()));
+            assert_eq!(output.hardware_platform, Some(OsString::new()));
+            assert_eq!(output.display_bytes(), b" ");
         }
     }
 

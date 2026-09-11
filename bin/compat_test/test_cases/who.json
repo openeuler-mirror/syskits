@@ -1155,6 +1155,48 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='zh_CN.UTF-8'；执行who a b c；GNU who本地化自身的extra operand诊断并使用中文locale双引号，同时本地化帮助提示，预期RC=1、stdout为空，stderr为多余操作对象诊断及中文帮助提示",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: 多余的操作对象 \"c\"\n请尝试执行 \"who --help\" 来获取更多信息。\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='zh_CN.UTF-8'；执行who -z；GNU getopt的invalid option首行保持英文，但emit_try_help使用中文翻译，预期RC=1、stdout为空，stderr为英文无效选项诊断及中文帮助提示",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'"
+            ],
+            "args": [
+                "-z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: invalid option -- 'z'\n请尝试执行 \"who --help\" 来获取更多信息。\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

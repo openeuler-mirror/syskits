@@ -139,10 +139,15 @@ macro_rules! ct_bin {
                 Err(err) => {
                     let _ = ctcore::ct_error::write_error_diagnostic(err.as_ref());
                     if err.usage() {
-                        eprintln!(
-                            "Try '{} --help' for more information.",
-                            ctcore::ct_help_utility_name()
-                        );
+                        if matches!(
+                            ctcore::ct_error::write_error_usage_hint(err.as_ref()),
+                            Ok(None)
+                        ) {
+                            eprintln!(
+                                "Try '{} --help' for more information.",
+                                ctcore::ct_help_utility_name()
+                            );
+                        }
                     }
                     err.code()
                 }

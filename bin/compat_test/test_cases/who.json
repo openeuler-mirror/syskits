@@ -1449,6 +1449,75 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=en_AG；执行who a b c；该locale名称没有UTF-8后缀但实际CODESET为UTF-8，GNU quote根据codeset使用弯单引号包围多余操作数，预期RC=1、stdout为空并输出UTF-8弯引号诊断",
+            "setup_commands": [
+                "export LC_ALL='en_AG'",
+                "export LANG='en_AG'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: extra operand ‘c’\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=zh_HK.utf8；执行who a b c；GNU没有zh_HK专用翻译目录并使用UTF-8默认弯单引号，syskits不得因zh_前缀误用简体中文双引号，预期RC=1、stdout为空且英文诊断逐字节一致",
+            "setup_commands": [
+                "export LC_ALL='zh_HK.utf8'",
+                "export LANG='zh_HK.utf8'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: extra operand ‘c’\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "LC_ALL=zh_HK.big5hkscs；执行who a b c；GNU没有zh_HK专用翻译目录且非UTF-8 CODESET使用ASCII直单引号，syskits不得因zh_前缀误用简体中文双引号，预期RC=1、stdout为空且英文诊断逐字节一致",
+            "setup_commands": [
+                "export LC_ALL='zh_HK.big5hkscs'",
+                "export LANG='zh_HK.big5hkscs'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: extra operand 'c'\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

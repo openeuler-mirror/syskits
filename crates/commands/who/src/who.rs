@@ -392,6 +392,22 @@ pub(crate) fn locale_text_bytes(text: &str) -> Vec<u8> {
     text.as_bytes().to_vec()
 }
 
+fn locale_is_utf8() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        locale_codeset().is_some_and(|codeset| {
+            let normalized = codeset.to_string_lossy().to_ascii_uppercase();
+            normalized == "UTF-8" || normalized == "UTF8"
+        })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let locale = locale_name().to_ascii_uppercase();
+        locale.contains("UTF-8") || locale.contains("UTF8")
+    }
+}
+
 fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
     let locale = locale_name().to_ascii_uppercase();
     if locale.starts_with("ZH_TW") || locale.starts_with("ZH-TW") {
@@ -399,12 +415,11 @@ fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
         let right_quote = locale_text_bytes("」");
         return quote_utf8_locale_operand(operand, &left_quote, &right_quote, None);
     }
-    if locale.starts_with("ZH_") || locale.starts_with("ZH-") {
+    if locale.starts_with("ZH_CN") || locale.starts_with("ZH-CN") {
         return quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'\"'));
     }
 
-    let is_utf8 = locale.contains("UTF-8") || locale.contains("UTF8");
-    if !is_utf8 {
+    if !locale_is_utf8() {
         return quote_c_locale_operand(operand);
     }
 
@@ -770,6 +785,25 @@ mod tests {
 
         with_lc_all("zh_CN.UTF-8", || {
             assert_eq!(quote_locale_operand(OsStr::new("c")), b"\"c\"");
+        });
+    }
+
+    #[test]
+    fn operand_quoting_uses_the_actual_codeset_and_locale_catalog() {
+        with_lc_all("en_AG", || {
+            assert_eq!(quote_locale_operand(OsStr::new("c")), "‘c’".as_bytes());
+        });
+        with_lc_all("zh_HK.utf8", || {
+            assert_eq!(quote_locale_operand(OsStr::new("c")), "‘c’".as_bytes());
+        });
+        with_lc_all("zh_HK.big5hkscs", || {
+            assert_eq!(quote_locale_operand(OsStr::new("c")), b"'c'");
+        });
+        with_lc_all("zh_SG.utf8", || {
+            assert_eq!(quote_locale_operand(OsStr::new("c")), "‘c’".as_bytes());
+        });
+        with_lc_all("zh_SG.gbk", || {
+            assert_eq!(quote_locale_operand(OsStr::new("c")), b"'c'");
         });
     }
 

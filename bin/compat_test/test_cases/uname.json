@@ -180,6 +180,26 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname --oper=value；--oper唯一匹配--operating-system且该选项不接受值，GNU预期RC=1、stdout为空，并用规范长选项名报告doesn't allow an argument",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--oper=value"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: option '--operating-system' doesn't allow an argument\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

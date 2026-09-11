@@ -30,9 +30,9 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
-use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Region, SearchOptions, Syntax};
-use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::Write as FmtWrite;
@@ -40,89 +40,15 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::process::{Command as ProcessCommand, Stdio};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use sys_locale::get_locale;
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 const GNU_DEFAULT_CONTEXT_PATTERN: &[u8] = b"[.?!][]\"')}]*\\($\\|\t\\|  \\)[ \t\n]*";
-const GNU_DEFAULT_CONTEXT_REGEX: &str = r#"(?m)[.?!][\]\"')}]*($|\t|  )[ \t\n]*"#;
-const NEVER_MATCH_REGEX: &str = r"[^\s\S]";
-
-type GlibcReCompilePattern = unsafe extern "C" fn(
-    *const ctcore::libc::c_char,
-    usize,
-    *mut GlibcRegexPattern,
-) -> *const ctcore::libc::c_char;
-type GlibcReMatch = unsafe extern "C" fn(
-    *mut GlibcRegexPattern,
-    *const ctcore::libc::c_char,
-    ctcore::libc::regoff_t,
-    ctcore::libc::regoff_t,
-    *mut ctcore::libc::c_void,
-) -> ctcore::libc::regoff_t;
-
-#[repr(C)]
-struct GlibcRegexPattern {
-    buffer: *mut ctcore::libc::c_void,
-    allocated: usize,
-    used: usize,
-    syntax: ctcore::libc::c_ulong,
-    fastmap: *mut ctcore::libc::c_char,
-    translate: *mut ctcore::libc::c_char,
-    re_nsub: usize,
-    bitfield: u8,
-}
-
-const _: () = {
-    assert!(
-        std::mem::size_of::<GlibcRegexPattern>() == std::mem::size_of::<ctcore::libc::regex_t>()
-    );
-    assert!(
-        std::mem::align_of::<GlibcRegexPattern>() == std::mem::align_of::<ctcore::libc::regex_t>()
-    );
-};
-
-struct GlibcRegexApi {
-    compile_pattern: GlibcReCompilePattern,
-    is_match: GlibcReMatch,
-}
-
-fn glibc_regex_api() -> Option<&'static GlibcRegexApi> {
-    static API: OnceLock<Option<GlibcRegexApi>> = OnceLock::new();
-
-    API.get_or_init(|| unsafe {
-        // Oniguruma exports ABI-incompatible GNU regex compatibility symbols.
-        // Resolve the glibc implementation from its own handle explicitly.
-        let handle = ctcore::libc::dlopen(
-            c"libc.so.6".as_ptr(),
-            ctcore::libc::RTLD_LAZY | ctcore::libc::RTLD_LOCAL,
-        );
-        if handle.is_null() {
-            return None;
-        }
-        let compile_pattern = ctcore::libc::dlsym(handle, c"re_compile_pattern".as_ptr());
-        let is_match = ctcore::libc::dlsym(handle, c"re_match".as_ptr());
-        if compile_pattern.is_null() || is_match.is_null() {
-            ctcore::libc::dlclose(handle);
-            return None;
-        }
-        Some(GlibcRegexApi {
-            compile_pattern: std::mem::transmute::<
-                *mut ctcore::libc::c_void,
-                GlibcReCompilePattern,
-            >(compile_pattern),
-            is_match: std::mem::transmute::<*mut ctcore::libc::c_void, GlibcReMatch>(is_match),
-        })
-    })
-    .as_ref()
-}
+const GNU_DEFAULT_CONTEXT_REGEX: &str = "[.?!][]\"')}]*\\($\\|\t\\|  \\)[ \t\n]*";
+const NEVER_MATCH_REGEX: &str = "a^";
 
 unsafe extern "C" {
-    fn fnmatch(
-        pattern: *const ctcore::libc::c_char,
-        string: *const ctcore::libc::c_char,
-        flags: ctcore::libc::c_int,
-    ) -> ctcore::libc::c_int;
     fn mbrtowc(
         wide: *mut ctcore::libc::wchar_t,
         bytes: *const ctcore::libc::c_char,
@@ -260,25 +186,6 @@ impl LocaleMultibyteValidator {
     fn valid_character_len(&self, bytes: &[u8]) -> Option<usize> {
         self.decode_character(bytes).map(|(length, _)| length)
     }
-
-    fn is_word_character(&self, codepoint: u32) -> bool {
-        codepoint == u32::from(b'_')
-            || unsafe {
-                iswalnum_l(
-                    codepoint as ctcore::libc::c_uint,
-                    self.locale as ctcore::libc::locale_t,
-                ) != 0
-            }
-    }
-
-    fn is_space_character(&self, codepoint: u32) -> bool {
-        unsafe {
-            iswspace_l(
-                codepoint as ctcore::libc::c_uint,
-                self.locale as ctcore::libc::locale_t,
-            ) != 0
-        }
-    }
 }
 
 impl Drop for LocaleMultibyteValidator {
@@ -290,6 +197,22 @@ impl Drop for LocaleMultibyteValidator {
 #[derive(Debug)]
 struct LocaleCollation {
     locale: usize,
+}
+
+struct ThreadLocaleGuard(ctcore::libc::locale_t);
+
+impl ThreadLocaleGuard {
+    fn activate(locale: ctcore::libc::locale_t) -> Self {
+        Self(unsafe { ctcore::libc::uselocale(locale) })
+    }
+}
+
+impl Drop for ThreadLocaleGuard {
+    fn drop(&mut self) {
+        unsafe {
+            ctcore::libc::uselocale(self.0);
+        }
+    }
 }
 
 impl LocaleCollation {
@@ -325,88 +248,17 @@ impl LocaleCollation {
         })
     }
 
-    fn range_members(&self, start: u8, end: u8) -> Option<[bool; 256]> {
-        let pattern = [b'[', start, b'-', end, b']', 0];
-        let mut members = [false; 256];
-        let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
-        for value in 1u16..=255 {
-            let candidate = [value as u8, 0];
-            members[usize::from(value)] =
-                unsafe { fnmatch(pattern.as_ptr().cast(), candidate.as_ptr().cast(), 0) == 0 };
-        }
-        unsafe { ctcore::libc::uselocale(previous) };
-        members.iter().any(|&member| member).then_some(members)
-    }
-
-    fn matching_candidates(
-        &self,
-        pattern: &[u8],
-        candidates: &[Vec<u8>],
-        fold_upper: Option<&[u8; 256]>,
-    ) -> Option<Vec<Vec<u8>>> {
-        let regex_api = glibc_regex_api()?;
-        let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
-        let mut regex: GlibcRegexPattern = unsafe { std::mem::zeroed() };
-        regex.translate = fold_upper.map_or(std::ptr::null_mut(), |upper| {
-            upper.as_ptr().cast_mut().cast()
-        });
-        let compile_error = unsafe {
-            (regex_api.compile_pattern)(pattern.as_ptr().cast(), pattern.len(), &mut regex)
-        };
-        if !compile_error.is_null() {
-            unsafe { ctcore::libc::uselocale(previous) };
-            return None;
-        }
-        let mut matches = Vec::new();
-        for candidate in candidates
-            .iter()
-            .filter(|candidate| !candidate.contains(&0))
-        {
-            let Ok(length) = ctcore::libc::regoff_t::try_from(candidate.len()) else {
-                continue;
-            };
-            if unsafe {
-                (regex_api.is_match)(
-                    &mut regex,
-                    candidate.as_ptr().cast(),
-                    length,
-                    0,
-                    std::ptr::null_mut(),
-                ) >= 0
-            } {
-                let mut matching = candidate.clone();
-                if let Some(upper) = fold_upper {
-                    for byte in &mut matching {
-                        *byte = upper[usize::from(*byte)];
-                    }
-                }
-                matches.push(matching);
-            }
-        }
-        matches.sort_unstable();
-        matches.dedup();
-        regex.translate = std::ptr::null_mut();
-        unsafe { ctcore::libc::regfree((&raw mut regex).cast()) };
-        unsafe { ctcore::libc::uselocale(previous) };
-        Some(matches)
-    }
-
     fn compile_error(&self, pattern: &[u8], fold_upper: Option<&[u8; 256]>) -> Option<Vec<u8>> {
-        let regex_api = glibc_regex_api()?;
-        let previous = unsafe { ctcore::libc::uselocale(self.locale as ctcore::libc::locale_t) };
-        let mut regex: GlibcRegexPattern = unsafe { std::mem::zeroed() };
-        regex.translate = fold_upper.map_or(std::ptr::null_mut(), |upper| {
-            upper.as_ptr().cast_mut().cast()
-        });
-        let compile_error = unsafe {
-            (regex_api.compile_pattern)(pattern.as_ptr().cast(), pattern.len(), &mut regex)
-        };
-        let message = (!compile_error.is_null())
-            .then(|| unsafe { CStr::from_ptr(compile_error) }.to_bytes().to_vec());
-        regex.translate = std::ptr::null_mut();
-        unsafe { ctcore::libc::regfree((&raw mut regex).cast()) };
-        unsafe { ctcore::libc::uselocale(previous) };
-        message
+        let _locale = ThreadLocaleGuard::activate(self.locale as ctcore::libc::locale_t);
+        let mut options = GnuRegexCompileOptions::emacs();
+        if let Some(table) = fold_upper {
+            options = options.translate(table);
+        }
+        match GnuRegex::compile(pattern, options) {
+            Err(GnuRegexError::Compile(message)) => Some(message),
+            Err(_) => Some(b"Invalid regular expression".to_vec()),
+            Ok(_) => None,
+        }
     }
 }
 
@@ -438,30 +290,6 @@ impl LocaleRegexEncoding {
         }
     }
 
-    fn encoded(self, bytes: &[u8]) -> EncodedBytes<'_> {
-        let Some(encoding) = self.onig_encoding() else {
-            return EncodedBytes::ascii(bytes);
-        };
-        EncodedBytes::from_parts(bytes, encoding)
-    }
-
-    fn onig_encoding(self) -> Option<onig_sys::OnigEncoding> {
-        let encoding = match self {
-            Self::Ascii => return None,
-            Self::Utf8 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingUTF8),
-            Self::SingleByte => std::ptr::addr_of_mut!(onig_sys::OnigEncodingISO_8859_1),
-            Self::EucCn => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_CN),
-            Self::EucTw => std::ptr::addr_of_mut!(onig_sys::OnigEncodingEUC_TW),
-            Self::Big5 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingBIG5),
-            // HKSCS retains Big5's two-byte structure but extends its lead-byte range.
-            // GB18030 accepts that superset; LocaleMultibyteValidator still enforces
-            // the actual glibc Big5-HKSCS character repertoire before a match is used.
-            Self::Big5Hkscs => std::ptr::addr_of_mut!(onig_sys::OnigEncodingGB18030),
-            Self::Gb18030 => std::ptr::addr_of_mut!(onig_sys::OnigEncodingGB18030),
-        };
-        Some(encoding)
-    }
-
     fn is_non_utf8_multibyte(self) -> bool {
         !matches!(self, Self::Ascii | Self::Utf8 | Self::SingleByte)
     }
@@ -471,62 +299,29 @@ impl LocaleRegexEncoding {
         if first.is_ascii() || matches!(self, Self::Ascii | Self::SingleByte) {
             return Some(1);
         }
-        let encoding = self.onig_encoding()?;
-        let mut probe = [0u8; 4];
-        let available = bytes.len().min(probe.len());
-        probe[..available].copy_from_slice(&bytes[..available]);
-        unsafe {
-            let encoding = &*encoding;
-            let encoded_length = encoding
-                .mbc_enc_len
-                .expect("Oniguruma encoding must provide character lengths");
-            let is_valid = encoding
-                .is_valid_mbc_string
-                .expect("Oniguruma encoding must validate byte strings");
-            let length = usize::try_from(encoded_length(probe.as_ptr())).ok()?;
-            if length <= 1 || length > bytes.len() || length > probe.len() {
-                return None;
-            }
-            (is_valid(probe.as_ptr(), probe.as_ptr().add(length)) != 0).then_some(length)
+        if self == Self::Utf8 {
+            return std::str::from_utf8(bytes)
+                .ok()
+                .and_then(|text| text.chars().next().map(char::len_utf8));
         }
+        LocaleMultibyteValidator::from_environment()?.valid_character_len(bytes)
     }
 
     fn mark_valid_multibyte_sequences(self, bytes: &[u8], printable: &mut [bool]) {
-        let Some(encoding) = self.onig_encoding() else {
+        let Some(validator) = LocaleMultibyteValidator::from_environment() else {
             return;
         };
-        let mut padded = bytes.to_vec();
-        padded.extend_from_slice(&[0; 4]);
         let mut index = 0usize;
-        unsafe {
-            let encoding = &*encoding;
-            let encoded_length = encoding
-                .mbc_enc_len
-                .expect("Oniguruma encoding must provide character lengths");
-            let is_valid = encoding
-                .is_valid_mbc_string
-                .expect("Oniguruma encoding must validate byte strings");
-            while index < bytes.len() {
-                if bytes[index].is_ascii() {
-                    index += 1;
-                    continue;
-                }
-                let length = encoded_length(padded.as_ptr().add(index));
-                let Ok(length) = usize::try_from(length) else {
-                    index += 1;
-                    continue;
-                };
-                if length <= 1 || index + length > bytes.len() {
-                    index += 1;
-                    continue;
-                }
-                let start = padded.as_ptr().add(index);
-                if is_valid(start, start.add(length)) != 0 {
-                    printable[index..index + length].fill(true);
-                    index += length;
-                } else {
-                    index += 1;
-                }
+        while index < bytes.len() {
+            if bytes[index].is_ascii() {
+                index += 1;
+                continue;
+            }
+            if let Some(length) = validator.valid_character_len(&bytes[index..]) {
+                printable[index..index + length].fill(true);
+                index += length;
+            } else {
+                index += 1;
             }
         }
     }
@@ -536,7 +331,6 @@ impl LocaleRegexEncoding {
 struct LocaleByteCtype {
     alpha: [bool; 256],
     print: [bool; 256],
-    space: [bool; 256],
     upper: [u8; 256],
 }
 
@@ -545,7 +339,6 @@ impl LocaleByteCtype {
         let mut table = Self {
             alpha: std::array::from_fn(|index| (index as u8).is_ascii_alphabetic()),
             print: std::array::from_fn(|index| (index as u8).is_ascii_graphic() || index == 32),
-            space: std::array::from_fn(|index| ptx_is_space_byte(index as u8)),
             upper: std::array::from_fn(|index| (index as u8).to_ascii_uppercase()),
         };
         let Ok(locale_name) = CString::new(ptx_locale_name().as_encoded_bytes()) else {
@@ -564,7 +357,6 @@ impl LocaleByteCtype {
             for byte in 0u16..=255 {
                 table.alpha[usize::from(byte)] = isalpha_l(i32::from(byte), locale) != 0;
                 table.print[usize::from(byte)] = isprint_l(i32::from(byte), locale) != 0;
-                table.space[usize::from(byte)] = isspace_l(i32::from(byte), locale) != 0;
                 table.upper[usize::from(byte)] = toupper_l(i32::from(byte), locale) as u8;
             }
             ctcore::libc::freelocale(locale);
@@ -578,10 +370,6 @@ impl LocaleByteCtype {
 
     fn is_print(&self, byte: u8) -> bool {
         self.print[usize::from(byte)]
-    }
-
-    fn is_space(&self, byte: u8) -> bool {
-        self.space[usize::from(byte)]
     }
 
     fn uppercase(&self, bytes: &mut [u8]) {
@@ -600,198 +388,53 @@ unsafe extern "C" {
         character: ctcore::libc::c_int,
         locale: ctcore::libc::locale_t,
     ) -> ctcore::libc::c_int;
-    fn isspace_l(
-        character: ctcore::libc::c_int,
-        locale: ctcore::libc::locale_t,
-    ) -> ctcore::libc::c_int;
     fn toupper_l(
         character: ctcore::libc::c_int,
         locale: ctcore::libc::locale_t,
     ) -> ctcore::libc::c_int;
-    fn iswalnum_l(
-        character: ctcore::libc::c_uint,
-        locale: ctcore::libc::locale_t,
-    ) -> ctcore::libc::c_int;
-    fn iswspace_l(
-        character: ctcore::libc::c_uint,
-        locale: ctcore::libc::locale_t,
-    ) -> ctcore::libc::c_int;
 }
 
-fn ptx_push_unicode_range(class: &mut String, start: u32, end: u32) {
-    write!(class, r"\x{{{start:X}}}").expect("writing to a String cannot fail");
-    if end != start {
-        write!(class, r"-\x{{{end:X}}}").expect("writing to a String cannot fail");
-    }
-}
-
-fn ptx_class_pair(positive: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
-    let mut negative = Vec::with_capacity(positive.len() + 1);
-    negative.extend_from_slice(b"[^");
-    negative.extend_from_slice(&positive[1..]);
-    (positive, negative)
-}
-
-fn ptx_single_byte_classes(
-    mut is_member: impl FnMut(u8) -> bool,
-    escape_members: bool,
-) -> (Vec<u8>, Vec<u8>) {
-    let mut class = vec![b'['];
-    if escape_members {
-        for value in 0u16..=255 {
-            if is_member(value as u8) {
-                write!(class, r"\x{value:02X}").expect("writing to a Vec cannot fail");
-            }
-        }
-        class.push(b']');
-        return ptx_class_pair(class);
-    }
-    let mut range_start = None;
-    for value in 0u16..=256 {
-        let member = value < 256 && is_member(value as u8);
-        match (range_start, member) {
-            (None, true) => range_start = Some(value),
-            (Some(start), false) => {
-                class.push(start as u8);
-                if value - 1 != start {
-                    class.push(b'-');
-                    class.push((value - 1) as u8);
-                }
-                range_start = None;
-            }
-            _ => {}
-        }
-    }
-    class.push(b']');
-    ptx_class_pair(class)
-}
-
-fn ptx_unicode_classes(mut is_member: impl FnMut(u32) -> bool) -> (Vec<u8>, Vec<u8>) {
-    let mut class = String::from("[");
-    let mut range_start = None;
-    for codepoint in 0..=0x11_0000 {
-        let member =
-            char::from_u32(codepoint).is_some() && codepoint <= 0x10_ffff && is_member(codepoint);
-        match (range_start, member) {
-            (None, true) => range_start = Some(codepoint),
-            (Some(start), false) => {
-                ptx_push_unicode_range(&mut class, start, codepoint - 1);
-                range_start = None;
-            }
-            _ => {}
-        }
-    }
-    class.push(']');
-    ptx_class_pair(class.into_bytes())
-}
-
-fn ptx_locale_word_classes(
-    single_byte_locale: bool,
-    ignore_case: bool,
-    encoding: LocaleRegexEncoding,
-    byte_ctype: &LocaleByteCtype,
-    locale_validator: Option<&LocaleMultibyteValidator>,
-) -> (Vec<u8>, Vec<u8>) {
-    if single_byte_locale {
-        return ptx_single_byte_classes(
-            |byte| byte_ctype.is_alpha(byte) || byte.is_ascii_digit() || byte == b'_',
-            ignore_case,
-        );
-    }
-    if matches!(
-        encoding,
-        LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
-    ) || encoding.is_non_utf8_multibyte()
-    {
-        let Some(validator) = locale_validator else {
-            return (b"[[:alnum:]_]".to_vec(), b"[^[:alnum:]_]".to_vec());
-        };
-        return ptx_unicode_classes(|codepoint| validator.is_word_character(codepoint));
-    }
-    (b"[[:alnum:]_]".to_vec(), b"[^[:alnum:]_]".to_vec())
-}
-
-fn ptx_locale_space_classes(
-    single_byte_locale: bool,
-    ignore_case: bool,
-    encoding: LocaleRegexEncoding,
-    byte_ctype: &LocaleByteCtype,
-    locale_validator: Option<&LocaleMultibyteValidator>,
-) -> (Vec<u8>, Vec<u8>) {
-    if single_byte_locale {
-        return ptx_single_byte_classes(|byte| byte_ctype.is_space(byte), ignore_case);
-    }
-    if matches!(
-        encoding,
-        LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
-    ) || encoding.is_non_utf8_multibyte()
-    {
-        let Some(validator) = locale_validator else {
-            return (b"[[:space:]]".to_vec(), b"[^[:space:]]".to_vec());
-        };
-        return ptx_unicode_classes(|codepoint| validator.is_space_character(codepoint));
-    }
-    (b"[[:space:]]".to_vec(), b"[^[:space:]]".to_vec())
-}
-
-#[derive(Debug)]
 struct Regex {
-    search: OnigRegex,
-    longest: OnigRegex,
+    compiled: RefCell<GnuRegex>,
+    locale: Arc<LocaleCollation>,
+}
+
+impl std::fmt::Debug for Regex {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("Regex").finish_non_exhaustive()
+    }
 }
 
 impl Regex {
     #[cfg(test)]
-    fn new(pattern: &str) -> Result<Self, onig::Error> {
+    fn new(pattern: &str) -> Result<Self, GnuRegexError> {
         compile_regex(pattern, false)
     }
 
     fn find(&self, text: &str) -> Option<(usize, usize)> {
-        self.find_with_options(text, SearchOptions::SEARCH_OPTION_NONE)
+        self.find_with_options(text, false, false)
     }
 
     fn find_with_options(
         &self,
         text: &str,
-        search_options: SearchOptions,
+        not_bol: bool,
+        not_eol: bool,
     ) -> Option<(usize, usize)> {
-        let mut region = Region::new();
-        let start = self.search.search_with_options(
-            text,
-            0,
-            text.len(),
-            search_options,
-            Some(&mut region),
-        )?;
-        let mut longest_region = Region::new();
-        self.longest.search_with_options(
-            text,
-            start,
-            text.len(),
-            search_options,
-            Some(&mut longest_region),
-        )?;
-        longest_region.pos(0)
+        let range = isize::try_from(text.len()).ok()?;
+        let _locale = ThreadLocaleGuard::activate(self.locale.locale as ctcore::libc::locale_t);
+        self.compiled
+            .borrow_mut()
+            .search_with_anchor_options(text.as_bytes(), 0, range, not_bol, not_eol)
+            .ok()
+            .flatten()
+            .map(|found| (found.start, found.end))
     }
 
     fn find_at(&self, text: &str, from: usize) -> Option<(usize, usize)> {
-        let mut region = Region::new();
-        let start = self.search.search_with_options(
-            text,
-            from,
-            text.len(),
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut region),
-        )?;
-        let mut longest_region = Region::new();
-        self.longest.search_with_options(
-            text,
-            start,
-            text.len(),
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut longest_region),
-        )?;
-        longest_region.pos(0)
+        let text = text.get(from..)?;
+        self.find(text)
+            .map(|(start, end)| (from + start, from + end))
     }
 
     fn find_iter<'r, 't>(&'r self, text: &'t str) -> RegexFindIter<'r, 't> {
@@ -819,9 +462,7 @@ impl Iterator for RegexFindIter<'_, '_> {
             if self.next_start > self.text.len() {
                 return None;
             }
-            let base = self.next_start;
-            let (start, end) = self.regex.find(&self.text[base..])?;
-            let (start, end) = (base + start, base + end);
+            let (start, end) = self.regex.find_at(self.text, self.next_start)?;
             if start == end && self.previous_end == Some(end) {
                 let next = self.text[end..]
                     .chars()
@@ -837,75 +478,17 @@ impl Iterator for RegexFindIter<'_, '_> {
     }
 }
 
-#[derive(Debug)]
 struct ByteRegex {
-    search: OnigRegex,
-    longest: OnigRegex,
-    fold_upper: Option<[u8; 256]>,
+    compiled: RefCell<GnuRegex>,
+    locale: Arc<LocaleCollation>,
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
-    transcode_locale: bool,
     single_byte_locale: bool,
 }
 
-struct LocaleUtf8Text {
-    text: String,
-    boundaries: Vec<(usize, usize)>,
-    invalid_raw_offsets: Vec<usize>,
-}
-
-impl LocaleUtf8Text {
-    fn from_bytes(bytes: &[u8], validator: &LocaleMultibyteValidator) -> Self {
-        let mut text = String::with_capacity(bytes.len());
-        let mut boundaries = Vec::with_capacity(bytes.len() + 1);
-        let mut invalid_raw_offsets = Vec::new();
-        let mut raw_offset = 0usize;
-        boundaries.push((0, 0));
-        while raw_offset < bytes.len() {
-            let (length, character) = validator
-                .decode_character(&bytes[raw_offset..])
-                .unwrap_or_else(|| {
-                    invalid_raw_offsets.push(raw_offset);
-                    (
-                        1,
-                        char::from_u32(0xe000 + u32::from(bytes[raw_offset])).unwrap(),
-                    )
-                });
-            text.push(character);
-            raw_offset += length;
-            boundaries.push((raw_offset, text.len()));
-        }
-        Self {
-            text,
-            boundaries,
-            invalid_raw_offsets,
-        }
-    }
-
-    fn utf8_offset_at_or_after(&self, raw_offset: usize) -> Option<usize> {
-        let index = self
-            .boundaries
-            .partition_point(|&(raw, _)| raw < raw_offset);
-        self.boundaries.get(index).map(|&(_, utf8)| utf8)
-    }
-
-    fn raw_offset(&self, utf8_offset: usize) -> Option<usize> {
-        self.boundaries
-            .binary_search_by_key(&utf8_offset, |&(_, utf8)| utf8)
-            .ok()
-            .map(|index| self.boundaries[index].0)
-    }
-
-    fn first_invalid_at_or_after(&self, raw_offset: usize) -> Option<usize> {
-        let index = self
-            .invalid_raw_offsets
-            .partition_point(|&invalid| invalid < raw_offset);
-        self.invalid_raw_offsets.get(index).copied()
-    }
-
-    fn contains_invalid(&self, start: usize, end: usize) -> bool {
-        self.first_invalid_at_or_after(start)
-            .is_some_and(|invalid| invalid < end)
+impl std::fmt::Debug for ByteRegex {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("ByteRegex").finish_non_exhaustive()
     }
 }
 
@@ -969,156 +552,46 @@ impl ByteRegex {
         None
     }
 
-    fn folded_bytes<'a>(&self, bytes: &'a [u8]) -> Cow<'a, [u8]> {
-        let Some(upper) = &self.fold_upper else {
-            return Cow::Borrowed(bytes);
-        };
-        let mut folded = bytes.to_vec();
-        for byte in &mut folded {
-            if !byte.is_ascii() {
-                *byte = upper[usize::from(*byte)];
-            }
-        }
-        Cow::Owned(folded)
-    }
-
-    fn find(&self, bytes: &[u8]) -> Option<(usize, usize)> {
-        self.find_at(bytes, 0)
-    }
-
     fn find_at(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
-        let folded = self.folded_bytes(bytes);
-        let bytes = folded.as_ref();
-        if self.transcode_locale {
-            return self.find_at_transcoded(bytes, from);
-        }
         let mut search_from = from;
+        let mut not_bol = false;
         while search_from <= bytes.len() {
-            let mut region = Region::new();
-            let search_options = if search_from == from {
-                SearchOptions::SEARCH_OPTION_NONE
+            let invalid = self.first_invalid_byte_at_or_after(bytes, search_from);
+            let search_end = invalid.unwrap_or(bytes.len());
+            if search_from == search_end {
+                search_from = invalid? + 1;
+                not_bol = true;
+                continue;
+            }
+            let segment = &bytes[search_from..search_end];
+            let range = isize::try_from(segment.len()).ok()?;
+            let _locale = ThreadLocaleGuard::activate(self.locale.locale as ctcore::libc::locale_t);
+            let found = self
+                .compiled
+                .borrow_mut()
+                .search_with_anchor_options(segment, 0, range, not_bol, invalid.is_some())
+                .ok()
+                .flatten();
+            if let Some(found) = found {
+                let (start, end) = (search_from + found.start, search_from + found.end);
+                if self.is_valid_match_range(bytes, start, end) {
+                    return Some((start, end));
+                }
+                search_from = start + 1;
             } else {
-                SearchOptions::SEARCH_OPTION_NOTBOL
-            };
-            let start = self.search.search_with_encoding(
-                self.encoding.encoded(bytes),
-                search_from,
-                bytes.len(),
-                search_options,
-                Some(&mut region),
-            );
-            let Some(start) = start else {
-                let invalid = self.first_invalid_byte_at_or_after(bytes, search_from)?;
-                search_from = invalid + 1;
-                continue;
-            };
-            if let Some(invalid) = self.first_invalid_byte_at_or_after(bytes, search_from)
-                && invalid < start
-            {
-                search_from = invalid + 1;
-                continue;
+                search_from = invalid? + 1;
+                not_bol = true;
             }
-            let match_limit = self
-                .first_invalid_byte_at_or_after(bytes, start)
-                .unwrap_or(bytes.len());
-            let mut longest_region = Region::new();
-            self.longest.search_with_encoding(
-                self.encoding.encoded(bytes),
-                start,
-                match_limit,
-                SearchOptions::SEARCH_OPTION_NONE,
-                Some(&mut longest_region),
-            )?;
-            let (_, end) = longest_region.pos(0)?;
-            if self.is_valid_match_range(bytes, start, end) {
-                return Some((start, end));
-            }
-            search_from = start + 1;
-        }
-        None
-    }
-
-    fn find_at_transcoded(&self, bytes: &[u8], from: usize) -> Option<(usize, usize)> {
-        let validator = self.locale_validator.as_ref()?;
-        let transcoded = LocaleUtf8Text::from_bytes(bytes, validator);
-        self.find_at_transcoded_text(bytes, 0, from, &transcoded)
-    }
-
-    fn find_at_transcoded_text(
-        &self,
-        bytes: &[u8],
-        raw_base: usize,
-        from: usize,
-        transcoded: &LocaleUtf8Text,
-    ) -> Option<(usize, usize)> {
-        let utf8_base = transcoded.utf8_offset_at_or_after(raw_base)?;
-        let text = &transcoded.text[utf8_base..];
-        let mut search_from = from;
-        while search_from <= bytes.len() {
-            let utf8_from = transcoded
-                .utf8_offset_at_or_after(search_from)?
-                .saturating_sub(utf8_base);
-            let mut region = Region::new();
-            let search_options = if search_from == from {
-                SearchOptions::SEARCH_OPTION_NONE
-            } else {
-                SearchOptions::SEARCH_OPTION_NOTBOL
-            };
-            let utf8_start = self.search.search_with_options(
-                text,
-                utf8_from,
-                text.len(),
-                search_options,
-                Some(&mut region),
-            )?;
-            let utf8_start = utf8_base + utf8_start;
-            let start = transcoded.raw_offset(utf8_start)?;
-            if let Some(invalid) = transcoded.first_invalid_at_or_after(search_from)
-                && invalid < start
-            {
-                search_from = invalid + 1;
-                continue;
-            }
-            let raw_match_limit = transcoded
-                .first_invalid_at_or_after(start)
-                .unwrap_or(bytes.len());
-            let match_limit = transcoded
-                .utf8_offset_at_or_after(raw_match_limit)?
-                .saturating_sub(utf8_base);
-            let mut longest_region = Region::new();
-            let relative_start = utf8_start - utf8_base;
-            self.longest.search_with_options(
-                text,
-                relative_start,
-                match_limit,
-                SearchOptions::SEARCH_OPTION_NONE,
-                Some(&mut longest_region),
-            )?;
-            let (_, relative_end) = longest_region.pos(0)?;
-            let end = transcoded.raw_offset(utf8_base + relative_end)?;
-            if !transcoded.contains_invalid(start, end) {
-                return Some((start, end));
-            }
-            search_from = start + 1;
         }
         None
     }
 
     fn find_iter<'r, 't>(&'r self, bytes: &'t [u8]) -> ByteRegexFindIter<'r, 't> {
-        let transcoded = self
-            .transcode_locale
-            .then(|| {
-                self.locale_validator
-                    .as_ref()
-                    .map(|validator| LocaleUtf8Text::from_bytes(bytes, validator))
-            })
-            .flatten();
         ByteRegexFindIter {
             regex: self,
             bytes,
             next_start: 0,
             previous_end: None,
-            transcoded,
         }
     }
 }
@@ -1128,7 +601,6 @@ struct ByteRegexFindIter<'r, 't> {
     bytes: &'t [u8],
     next_start: usize,
     previous_end: Option<usize>,
-    transcoded: Option<LocaleUtf8Text>,
 }
 
 impl Iterator for ByteRegexFindIter<'_, '_> {
@@ -1139,16 +611,12 @@ impl Iterator for ByteRegexFindIter<'_, '_> {
             if self.next_start > self.bytes.len() {
                 return None;
             }
-            let base = self.next_start;
-            let (start, end) = if let Some(transcoded) = &self.transcoded {
-                self.regex
-                    .find_at_transcoded_text(self.bytes, base, base, transcoded)?
-            } else {
-                let (start, end) = self.regex.find(&self.bytes[base..])?;
-                (base + start, base + end)
-            };
+            let (start, end) = self.regex.find_at(self.bytes, self.next_start)?;
             if start == end && self.previous_end == Some(end) {
-                self.next_start = end + 1;
+                self.next_start = self
+                    .regex
+                    .valid_character_len(&self.bytes[end..])
+                    .map_or(end + 1, |length| end + length);
                 continue;
             }
             self.previous_end = Some(end);
@@ -1240,17 +708,12 @@ struct PtxConfig {
     single_byte_locale: bool,
     /// GNU ptx按当前LC_CTYPE对每个原始字节执行isalpha和toupper。
     byte_ctype: LocaleByteCtype,
-    /// 非UTF-8多字节locale使用的Oniguruma编码。
+    /// 当前locale的字符编码，用于校验GNU正则匹配边界。
     locale_regex_encoding: LocaleRegexEncoding,
-    /// Linux locale转换器用于验证Oniguruma候选的实际字符边界。
+    /// Linux locale转换器，用于验证多字节字符边界。
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
-    /// glibc locale排序规则，用于展开单字节正则范围。
+    /// glibc locale环境，供GNU正则编译和匹配使用。
     locale_collation: Option<Arc<LocaleCollation>>,
-    /// GNU libc当前locale下的正则word和non-word字符类。
-    regex_word_class: Vec<u8>,
-    regex_non_word_class: Vec<u8>,
-    regex_space_class: Vec<u8>,
-    regex_non_space_class: Vec<u8>,
 }
 
 impl Default for PtxConfig {
@@ -1279,10 +742,6 @@ impl Default for PtxConfig {
             locale_regex_encoding: LocaleRegexEncoding::default(),
             locale_validator: None,
             locale_collation: None,
-            regex_word_class: b"[[:alnum:]_]".to_vec(),
-            regex_non_word_class: b"[^[:alnum:]_]".to_vec(),
-            regex_space_class: b"[[:space:]]".to_vec(),
-            regex_non_space_class: b"[^[:space:]]".to_vec(),
             line_width: 72,
             gap_size: 3,
         }
@@ -1321,80 +780,6 @@ fn read_char_filter_file(matches: &clap::ArgMatches, option: &str) -> CTResult<H
     Ok(bytes.into_iter().collect())
 }
 
-fn gnu_emacs_regex_to_rust(pattern: &str, config: &PtxConfig) -> String {
-    gnu_emacs_regex_to_rust_with_candidates(pattern, config, None)
-}
-
-fn gnu_emacs_regex_to_rust_with_candidates(
-    pattern: &str,
-    config: &PtxConfig,
-    locale_candidates: Option<&[Vec<u8>]>,
-) -> String {
-    let (word_class, non_word_class) = if std::str::from_utf8(&config.regex_word_class).is_ok() {
-        (
-            config.regex_word_class.as_slice(),
-            config.regex_non_word_class.as_slice(),
-        )
-    } else {
-        (b"[[:alnum:]_]".as_slice(), b"[^[:alnum:]_]".as_slice())
-    };
-    let (space_class, non_space_class) = if std::str::from_utf8(&config.regex_space_class).is_ok() {
-        (
-            config.regex_space_class.as_slice(),
-            config.regex_non_space_class.as_slice(),
-        )
-    } else {
-        (b"[[:space:]]".as_slice(), b"[^[:space:]]".as_slice())
-    };
-    let context = RegexTranslationContext {
-        word_class,
-        non_word_class,
-        space_class,
-        non_space_class,
-        locale_collation: config.locale_collation.as_deref(),
-        expand_locale_ranges: false,
-        defer_locale_ranges: locale_candidates.is_none()
-            && !config.single_byte_locale
-            && matches!(
-                config.locale_regex_encoding,
-                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
-            ),
-        locale_candidates,
-        range_fold_upper: config.is_ignore_case.then_some(&config.byte_ctype.upper),
-    };
-    let translated =
-        gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(pattern.as_bytes(), &context);
-    String::from_utf8(translated).expect("UTF-8 pattern translation must remain UTF-8")
-}
-
-fn gnu_emacs_regex_to_onig_bytes(pattern: &[u8], config: &PtxConfig) -> Vec<u8> {
-    gnu_emacs_regex_to_onig_bytes_with_candidates(pattern, config, None)
-}
-
-fn gnu_emacs_regex_to_onig_bytes_with_candidates(
-    pattern: &[u8],
-    config: &PtxConfig,
-    locale_candidates: Option<&[Vec<u8>]>,
-) -> Vec<u8> {
-    let context = RegexTranslationContext {
-        word_class: &config.regex_word_class,
-        non_word_class: &config.regex_non_word_class,
-        space_class: &config.regex_space_class,
-        non_space_class: &config.regex_non_space_class,
-        locale_collation: config.locale_collation.as_deref(),
-        expand_locale_ranges: config.single_byte_locale,
-        defer_locale_ranges: locale_candidates.is_none()
-            && !config.single_byte_locale
-            && matches!(
-                config.locale_regex_encoding,
-                LocaleRegexEncoding::Ascii | LocaleRegexEncoding::Utf8
-            ),
-        locale_candidates,
-        range_fold_upper: config.is_ignore_case.then_some(&config.byte_ctype.upper),
-    };
-    gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(pattern, &context)
-}
-
 fn ptx_bracket_symbol_end(pattern: &[u8], start: usize) -> Option<(u8, usize)> {
     if pattern.get(start) != Some(&b'[') {
         return None;
@@ -1427,102 +812,6 @@ fn ptx_character_class_end(pattern: &[u8], start: usize) -> Option<usize> {
         index += 1;
     }
     None
-}
-
-fn ptx_character_class_has_range(class: &[u8]) -> bool {
-    if class.len() < 4 {
-        return false;
-    }
-    let content = &class[1..class.len() - 1];
-    let mut index = usize::from(content.first() == Some(&b'^'));
-    if content.get(index) == Some(&b']') {
-        index += 1;
-    }
-    while index < content.len() {
-        let symbol = ptx_bracket_symbol_end(content, index);
-        let start_end = symbol.map_or(index + 1, |(_, end)| end);
-        let valid_start = symbol.is_some_and(|(delimiter, _)| delimiter == b'.')
-            || !matches!(content[index], b'[' | b']' | b'\\' | b'-' | b'^');
-        let end_start = start_end + 1;
-        let valid_end = ptx_bracket_symbol_end(content, end_start)
-            .is_some_and(|(delimiter, _)| delimiter == b'.')
-            || content
-                .get(end_start)
-                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'^'));
-        if valid_start && content.get(start_end) == Some(&b'-') && valid_end {
-            return true;
-        }
-        index = start_end;
-    }
-    false
-}
-
-fn ptx_character_class_has_bracket_symbol(class: &[u8]) -> bool {
-    if class.len() < 4 {
-        return false;
-    }
-    let content = &class[1..class.len() - 1];
-    let mut index = usize::from(content.first() == Some(&b'^'));
-    if content.get(index) == Some(&b']') {
-        index += 1;
-    }
-    while index < content.len() {
-        if ptx_bracket_symbol_end(content, index).is_some() {
-            return true;
-        }
-        index += 1;
-    }
-    false
-}
-
-fn ptx_character_class_needs_locale_matching(class: &[u8]) -> bool {
-    ptx_character_class_has_range(class) || ptx_character_class_has_bracket_symbol(class)
-}
-
-fn ptx_pattern_needs_locale_class_matching(pattern: &[u8]) -> bool {
-    let mut index = 0usize;
-    let mut escaped = false;
-    while index < pattern.len() {
-        let byte = pattern[index];
-        if escaped {
-            escaped = false;
-            index += 1;
-            continue;
-        }
-        if byte == b'\\' {
-            escaped = true;
-            index += 1;
-            continue;
-        }
-        if byte == b'['
-            && let Some(end) = ptx_character_class_end(pattern, index)
-        {
-            if ptx_character_class_needs_locale_matching(&pattern[index..=end]) {
-                return true;
-            }
-            index = end + 1;
-            continue;
-        }
-        index += 1;
-    }
-    false
-}
-
-fn ptx_pattern_has_bracket_symbol(pattern: &[u8]) -> bool {
-    let mut index = 0usize;
-    while index < pattern.len() {
-        if pattern[index] == b'['
-            && let Some(end) = ptx_character_class_end(pattern, index)
-        {
-            if ptx_character_class_has_bracket_symbol(&pattern[index..=end]) {
-                return true;
-            }
-            index = end + 1;
-        } else {
-            index += 1;
-        }
-    }
-    false
 }
 
 fn ptx_character_class_has_equivalence_range_endpoint(class: &[u8]) -> bool {
@@ -1578,219 +867,6 @@ fn ptx_pattern_has_equivalence_range_endpoint(pattern: &[u8]) -> bool {
         index += 1;
     }
     false
-}
-
-fn ptx_push_onig_candidate_alternation(output: &mut Vec<u8>, candidates: &[Vec<u8>]) {
-    if candidates.is_empty() {
-        output.extend_from_slice(b"(?:(?!)\\x00)");
-        return;
-    }
-    output.extend_from_slice(b"(?:");
-    for (index, candidate) in candidates.iter().enumerate() {
-        if index > 0 {
-            output.push(b'|');
-        }
-        if candidate.len() == 1 {
-            write!(output, r"\x{:02X}", candidate[0]).expect("writing to a Vec cannot fail");
-        } else {
-            output.extend_from_slice(candidate);
-        }
-    }
-    output.push(b')');
-}
-
-struct RegexTranslationContext<'a> {
-    word_class: &'a [u8],
-    non_word_class: &'a [u8],
-    space_class: &'a [u8],
-    non_space_class: &'a [u8],
-    locale_collation: Option<&'a LocaleCollation>,
-    expand_locale_ranges: bool,
-    defer_locale_ranges: bool,
-    locale_candidates: Option<&'a [Vec<u8>]>,
-    range_fold_upper: Option<&'a [u8; 256]>,
-}
-
-fn gnu_emacs_regex_to_onig_bytes_with_classes_and_collation(
-    pattern: &[u8],
-    context: &RegexTranslationContext<'_>,
-) -> Vec<u8> {
-    let mut translated = Vec::with_capacity(pattern.len());
-    let mut escaped = false;
-    let mut in_bracket = false;
-    let mut skip_before = 0usize;
-    let mut bracket_output_start = 0usize;
-    let mut bracket_at_start = false;
-    let mut bracket_negated = false;
-    let mut bracket_has_member = false;
-    let mut bracket_removed_empty_range = false;
-
-    for (index, &byte) in pattern.iter().enumerate() {
-        if index < skip_before {
-            continue;
-        }
-        if !in_bracket
-            && byte == b'['
-            && let Some(end) = ptx_character_class_end(pattern, index)
-            && ptx_character_class_needs_locale_matching(&pattern[index..=end])
-            && let Some(locale_collation) = context.locale_collation
-        {
-            let class = &pattern[index..=end];
-            if let Some(candidates) = context.locale_candidates {
-                if let Some(matching) = locale_collation.matching_candidates(
-                    class,
-                    candidates,
-                    context.range_fold_upper,
-                ) {
-                    ptx_push_onig_candidate_alternation(&mut translated, &matching);
-                    skip_before = end + 1;
-                    continue;
-                }
-            }
-            if context.defer_locale_ranges {
-                translated.extend_from_slice(b"(?:(?!)\\x00)");
-                skip_before = end + 1;
-                continue;
-            }
-        }
-        if in_bracket && !escaped && byte == b'\\' {
-            translated.extend_from_slice(b"\\\\");
-            bracket_at_start = false;
-            bracket_has_member = true;
-            continue;
-        }
-        if escaped {
-            if !in_bracket && matches!(byte, b'(' | b')' | b'|') {
-                translated.pop();
-                translated.push(byte);
-            } else if !in_bracket && matches!(byte, b'<' | b'>' | b'`' | b'\'') {
-                translated.pop();
-                match byte {
-                    b'<' => {
-                        translated.extend_from_slice(b"(?<!");
-                        translated.extend_from_slice(context.word_class);
-                        translated.extend_from_slice(b")(?=");
-                        translated.extend_from_slice(context.word_class);
-                        translated.push(b')');
-                    }
-                    b'>' => {
-                        translated.extend_from_slice(b"(?<=");
-                        translated.extend_from_slice(context.word_class);
-                        translated.extend_from_slice(b")(?!");
-                        translated.extend_from_slice(context.word_class);
-                        translated.push(b')');
-                    }
-                    b'`' => translated.extend_from_slice(b"\\A"),
-                    b'\'' => translated.extend_from_slice(b"\\z"),
-                    _ => unreachable!(),
-                }
-            } else if !in_bracket && matches!(byte, b'w' | b'W') {
-                translated.pop();
-                translated.extend_from_slice(if byte == b'w' {
-                    context.word_class
-                } else {
-                    context.non_word_class
-                });
-            } else if !in_bracket && byte == b'B' {
-                translated.pop();
-                translated.extend_from_slice(b"(?:(?<=");
-                translated.extend_from_slice(context.word_class);
-                translated.extend_from_slice(b")(?=");
-                translated.extend_from_slice(context.word_class);
-                translated.extend_from_slice(b")|(?<!");
-                translated.extend_from_slice(context.word_class);
-                translated.extend_from_slice(b")(?!");
-                translated.extend_from_slice(context.word_class);
-                translated.extend_from_slice(b"))");
-            } else if !in_bracket && matches!(byte, b's' | b'S') {
-                translated.pop();
-                translated.extend_from_slice(if byte == b's' {
-                    context.space_class
-                } else {
-                    context.non_space_class
-                });
-            } else if !in_bracket && byte.is_ascii_alphabetic() {
-                // GNU's Emacs syntax treats other alphabetic escapes literally.
-                translated.pop();
-                translated.push(byte);
-            } else {
-                translated.push(byte);
-            }
-            escaped = false;
-            continue;
-        }
-
-        if in_bracket && bracket_at_start && byte == b'^' {
-            translated.push(byte);
-            bracket_at_start = false;
-            bracket_negated = true;
-            continue;
-        }
-
-        if in_bracket
-            && !matches!(byte, b'[' | b']' | b'\\' | b'-' | b'^')
-            && pattern.get(index + 1) == Some(&b'-')
-            && pattern
-                .get(index + 2)
-                .is_some_and(|end| !matches!(end, b'[' | b']' | b'\\' | b'^'))
-            && let Some(locale_collation) = context.locale_collation
-        {
-            if let Some(members) = locale_collation.range_members(byte, pattern[index + 2]) {
-                if context.expand_locale_ranges {
-                    for (value, member) in members.into_iter().enumerate() {
-                        if member {
-                            write!(translated, r"\x{value:02X}")
-                                .expect("writing to a Vec cannot fail");
-                        }
-                    }
-                } else {
-                    translated.extend_from_slice(&pattern[index..index + 3]);
-                }
-                bracket_has_member = true;
-            } else {
-                bracket_removed_empty_range = true;
-            }
-            bracket_at_start = false;
-            skip_before = index + 3;
-            continue;
-        }
-
-        // Emacs syntax treats a nested '[' literally; Oniguruma otherwise
-        // recognizes constructs such as [:alpha:] anywhere in the class.
-        if in_bracket && byte == b'[' && pattern.get(index + 1) == Some(&b':') {
-            translated.extend_from_slice(b"\\[");
-            bracket_at_start = false;
-            bracket_has_member = true;
-        } else {
-            if !in_bracket && matches!(byte, b'(' | b')' | b'|' | b'{' | b'}') {
-                translated.push(b'\\');
-            }
-            translated.push(byte);
-            if in_bracket && byte != b']' {
-                bracket_at_start = false;
-                bracket_has_member = true;
-            }
-        }
-
-        if byte == b'\\' {
-            escaped = true;
-        } else if byte == b'[' && !in_bracket {
-            in_bracket = true;
-            bracket_output_start = translated.len() - 1;
-            bracket_at_start = true;
-            bracket_negated = false;
-            bracket_has_member = false;
-            bracket_removed_empty_range = false;
-        } else if byte == b']' && in_bracket {
-            in_bracket = false;
-            if bracket_removed_empty_range && !bracket_has_member {
-                translated.truncate(bracket_output_start);
-                translated.extend_from_slice(if bracket_negated { b"(?m:.)" } else { b"(?!)" });
-            }
-        }
-    }
-
-    translated
 }
 
 fn ptx_has_chained_character_class_range(pattern: &[u8]) -> bool {
@@ -1858,8 +934,6 @@ struct WordFilter {
     word_regex: String,
     /// 非UTF-8自定义单词正则的原始字节模式。
     word_byte_pattern: Option<Vec<u8>>,
-    /// 用户指定并完成GNU反转义的原始单词正则。
-    word_pattern_bytes: Option<Vec<u8>>,
     /// break-file中的边界字符。
     break_set: Option<HashSet<u8>>,
     /// 是否使用用户指定的word regexp。
@@ -1940,17 +1014,17 @@ impl WordFilter {
                     || config.locale_regex_encoding.is_non_utf8_multibyte()
                     || std::str::from_utf8(pattern).is_err()
             })
-            .map(|pattern| gnu_emacs_regex_to_onig_bytes(pattern, config));
+            .cloned();
         let arg_reg = arg_reg_bytes.as_ref().map(|bytes| {
             let byte_mode = std::str::from_utf8(bytes).is_err();
             ptx_internal_text(bytes, byte_mode)
         });
         let reg = match arg_reg {
-            Some(arg_reg) => gnu_emacs_regex_to_rust(&arg_reg, config),
+            Some(arg_reg) => arg_reg,
             None => {
                 if let Some(break_set) = &break_set {
                     format!(
-                        "[^{}]+",
+                        "[^{}]\\+",
                         break_set
                             .iter()
                             .copied()
@@ -1963,9 +1037,9 @@ impl WordFilter {
                             .collect::<String>()
                     )
                 } else if config.is_gnu_ext {
-                    "[A-Za-z]+".to_owned()
+                    "[A-Za-z]\\+".to_owned()
                 } else {
-                    "[^ \t\n]+".to_owned()
+                    "[^ \t\n]\\+".to_owned()
                 }
             }
         };
@@ -1976,7 +1050,6 @@ impl WordFilter {
             ignore_set: iset,
             word_regex: reg,
             word_byte_pattern,
-            word_pattern_bytes: arg_reg_bytes,
             break_set,
             uses_custom_regex,
         })
@@ -1990,9 +1063,8 @@ impl Default for WordFilter {
             is_ignore_specified: false,
             only_set: HashSet::new(),
             ignore_set: HashSet::new(),
-            word_regex: "[A-Za-z]+".to_string(),
+            word_regex: "[A-Za-z]\\+".to_string(),
             word_byte_pattern: None,
-            word_pattern_bytes: None,
             break_set: None,
             uses_custom_regex: false,
         }
@@ -2163,20 +1235,6 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
         locale_collation: LocaleCollation::from_environment().map(Arc::new),
         ..Default::default()
     };
-    (config.regex_word_class, config.regex_non_word_class) = ptx_locale_word_classes(
-        config.single_byte_locale,
-        config.is_ignore_case,
-        config.locale_regex_encoding,
-        &config.byte_ctype,
-        config.locale_validator.as_deref(),
-    );
-    (config.regex_space_class, config.regex_non_space_class) = ptx_locale_space_classes(
-        config.single_byte_locale,
-        config.is_ignore_case,
-        config.locale_regex_encoding,
-        &config.byte_ctype,
-        config.locale_validator.as_deref(),
-    );
     let err_msg = "parsing options failed";
     if matches.get_flag(ptx_options::PTX_TRADITIONAL) {
         config.is_gnu_ext = false;
@@ -2192,14 +1250,14 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
             || config.single_byte_locale
             || config.locale_regex_encoding.is_non_utf8_multibyte()
         {
-            config.context_byte_pattern = Some(gnu_emacs_regex_to_onig_bytes(&bytes, &config));
+            config.context_byte_pattern = Some(bytes.clone());
             config.force_byte_mode = true;
         }
         let internal = ptx_internal_text(&bytes, byte_mode);
         config.context_regex = if internal.is_empty() {
             NEVER_MATCH_REGEX.to_string()
         } else {
-            gnu_emacs_regex_to_rust(&internal, &config)
+            internal
         };
         // Note: Zero-length regex check is deferred to actual usage time
         // to match GNU ptx behavior (only errors when processing non-empty content)
@@ -2215,7 +1273,7 @@ fn get_config(matches: &clap::ArgMatches) -> CTResult<PtxConfig> {
     {
         config.context_byte_regex = Some(
             compile_byte_regex(
-                GNU_DEFAULT_CONTEXT_REGEX.as_bytes(),
+                GNU_DEFAULT_CONTEXT_PATTERN,
                 config.is_ignore_case,
                 &config.byte_ctype,
                 config.locale_regex_encoding,
@@ -2307,19 +1365,19 @@ fn compile_user_regex(pattern: &str, ignore_case: bool) -> CTResult<Regex> {
     compile_regex(pattern, ignore_case).map_err(|_| ptx_invalid_regex_error(pattern.as_bytes()))
 }
 
-fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, onig::Error> {
-    let mut options = RegexOptions::REGEX_OPTION_NONE;
+fn compile_regex(pattern: &str, ignore_case: bool) -> Result<Regex, GnuRegexError> {
+    let locale = Arc::new(LocaleCollation::from_environment().ok_or(GnuRegexError::Search)?);
+    let byte_ctype = LocaleByteCtype::from_environment();
+    let mut options = GnuRegexCompileOptions::emacs();
     if ignore_case {
-        options |= RegexOptions::REGEX_OPTION_IGNORECASE;
+        options = options.translate(&byte_ctype.upper);
     }
-    let search = OnigRegex::with_options(pattern, options, Syntax::default())?;
-    let longest_pattern = format!(r"\G(?:{pattern})");
-    let longest = OnigRegex::with_options(
-        &longest_pattern,
-        options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
-        Syntax::default(),
-    )?;
-    Ok(Regex { search, longest })
+    let _locale_guard = ThreadLocaleGuard::activate(locale.locale as ctcore::libc::locale_t);
+    let compiled = GnuRegex::compile(pattern.as_bytes(), options)?;
+    Ok(Regex {
+        compiled: RefCell::new(compiled),
+        locale,
+    })
 }
 
 fn compile_user_byte_regex(
@@ -2348,83 +1406,19 @@ fn compile_byte_regex(
     encoding: LocaleRegexEncoding,
     locale_validator: Option<Arc<LocaleMultibyteValidator>>,
     single_byte_locale: bool,
-) -> Result<ByteRegex, onig::Error> {
-    let transcode_locale = encoding.is_non_utf8_multibyte() && locale_validator.is_some();
-    let mut options = RegexOptions::REGEX_OPTION_NONE;
+) -> Result<ByteRegex, GnuRegexError> {
+    let locale = Arc::new(LocaleCollation::from_environment().ok_or(GnuRegexError::Search)?);
+    let mut options = GnuRegexCompileOptions::emacs();
     if ignore_case {
-        options |= RegexOptions::REGEX_OPTION_IGNORECASE;
-        if transcode_locale
-            || matches!(
-                encoding,
-                LocaleRegexEncoding::Ascii
-                    | LocaleRegexEncoding::Utf8
-                    | LocaleRegexEncoding::SingleByte
-            )
-        {
-            // onig exposes this option in onig_sys but omits it from RegexOptions.
-            options |= unsafe {
-                RegexOptions::from_bits_unchecked(onig_sys::ONIG_OPTION_IGNORECASE_IS_ASCII)
-            };
-        }
+        options = options.translate(&byte_ctype.upper);
     }
-    let mut folded_pattern = pattern.to_vec();
-    if ignore_case
-        && matches!(
-            encoding,
-            LocaleRegexEncoding::Ascii
-                | LocaleRegexEncoding::Utf8
-                | LocaleRegexEncoding::SingleByte
-        )
-    {
-        for byte in &mut folded_pattern {
-            if !byte.is_ascii() {
-                *byte = byte_ctype.upper[usize::from(*byte)];
-            }
-        }
-    }
-    let (search, longest) = if transcode_locale {
-        let validator = locale_validator
-            .as_ref()
-            .expect("locale transcoding requires a locale validator");
-        let pattern = LocaleUtf8Text::from_bytes(&folded_pattern, validator).text;
-        let search = OnigRegex::with_options(&pattern, options, Syntax::default())?;
-        let longest_pattern = format!(r"\G(?:{pattern})");
-        let longest = OnigRegex::with_options(
-            &longest_pattern,
-            options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
-            Syntax::default(),
-        )?;
-        (search, longest)
-    } else {
-        let search = OnigRegex::with_options_and_encoding(
-            encoding.encoded(&folded_pattern),
-            options,
-            Syntax::default(),
-        )?;
-        let mut longest_pattern = b"\\G(?:".to_vec();
-        longest_pattern.extend_from_slice(&folded_pattern);
-        longest_pattern.push(b')');
-        let longest = OnigRegex::with_options_and_encoding(
-            encoding.encoded(&longest_pattern),
-            options | RegexOptions::REGEX_OPTION_FIND_LONGEST,
-            Syntax::default(),
-        )?;
-        (search, longest)
-    };
+    let _locale_guard = ThreadLocaleGuard::activate(locale.locale as ctcore::libc::locale_t);
+    let compiled = GnuRegex::compile(pattern, options)?;
     Ok(ByteRegex {
-        search,
-        longest,
-        fold_upper: (ignore_case
-            && matches!(
-                encoding,
-                LocaleRegexEncoding::Ascii
-                    | LocaleRegexEncoding::Utf8
-                    | LocaleRegexEncoding::SingleByte
-            ))
-        .then_some(byte_ctype.upper),
+        compiled: RefCell::new(compiled),
+        locale,
         encoding,
         locale_validator,
-        transcode_locale,
         single_byte_locale,
     })
 }
@@ -2459,181 +1453,6 @@ struct FileContent {
 }
 
 type FileMap = Vec<FileContent>;
-
-fn ptx_collect_locale_regex_candidates(file_map: &FileMap, config: &PtxConfig) -> Vec<Vec<u8>> {
-    let mut candidates = BTreeSet::new();
-    for file in file_map {
-        ptx_add_locale_regex_candidates(&file.raw_text, config, &mut candidates);
-    }
-    candidates.into_iter().collect()
-}
-
-fn ptx_add_locale_regex_candidates(
-    bytes: &[u8],
-    config: &PtxConfig,
-    candidates: &mut BTreeSet<Vec<u8>>,
-) {
-    if config.single_byte_locale {
-        candidates.extend(
-            bytes
-                .iter()
-                .copied()
-                .filter(|&byte| byte != 0)
-                .map(|byte| vec![byte]),
-        );
-        return;
-    }
-    let Some(validator) = config.locale_validator.as_deref() else {
-        return;
-    };
-    let mut index = 0usize;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if byte == 0 {
-            index += 1;
-            continue;
-        }
-        let length = if byte.is_ascii() {
-            Some(1)
-        } else {
-            validator.valid_character_len(&bytes[index..])
-        };
-        if let Some(length) = length {
-            candidates.insert(bytes[index..index + length].to_vec());
-            index += length;
-        } else {
-            index += 1;
-        }
-    }
-}
-
-fn ptx_locale_context_matches_at_boundary(
-    config: &PtxConfig,
-    content: &FileContent,
-) -> CTResult<bool> {
-    if config.locale_regex_encoding.is_non_utf8_multibyte() {
-        return Ok(false);
-    }
-    let Some(pattern) = config.context_pattern_bytes.as_deref() else {
-        return Ok(false);
-    };
-    if !ptx_pattern_needs_locale_class_matching(pattern) {
-        return Ok(false);
-    }
-    let mut candidates = BTreeSet::new();
-    ptx_add_locale_regex_candidates(&content.raw_text, config, &mut candidates);
-    let candidates: Vec<Vec<u8>> = candidates.into_iter().collect();
-    if candidates.is_empty() {
-        return Ok(false);
-    }
-    let byte_mode = std::str::from_utf8(pattern).is_err();
-    if config.is_ignore_case
-        || byte_mode
-        || content.invalid_utf8_bytes.iter().any(|&invalid| invalid)
-    {
-        let translated =
-            gnu_emacs_regex_to_onig_bytes_with_candidates(pattern, config, Some(&candidates));
-        let regex = compile_user_byte_regex(
-            &translated,
-            config.is_ignore_case,
-            &config.byte_ctype,
-            config.locale_regex_encoding,
-            config.locale_validator.clone(),
-            config.single_byte_locale,
-        )?;
-        Ok(context_regexp_matches_at_boundary_bytes(
-            &regex,
-            &content.raw_text,
-        ))
-    } else {
-        let pattern = std::str::from_utf8(pattern).expect("validated UTF-8 context regexp");
-        let translated =
-            gnu_emacs_regex_to_rust_with_candidates(pattern, config, Some(&candidates));
-        let regex = compile_user_regex(&translated, config.is_ignore_case)?;
-        Ok(context_regexp_matches_at_boundary(&regex, &content.text))
-    }
-}
-
-fn ptx_recompile_locale_range_regexps(
-    config: &mut PtxConfig,
-    word_filter: &mut WordFilter,
-    file_map: &FileMap,
-) -> CTResult<()> {
-    if config.locale_regex_encoding.is_non_utf8_multibyte() {
-        return Ok(());
-    }
-    let candidates = ptx_collect_locale_regex_candidates(file_map, config);
-    if candidates.is_empty() {
-        return Ok(());
-    }
-    let has_invalid_input = file_map
-        .iter()
-        .any(|file| file.invalid_utf8_bytes.iter().any(|&invalid| invalid));
-
-    if let Some(pattern) = config.context_pattern_bytes.clone()
-        && !pattern.is_empty()
-        && ptx_pattern_needs_locale_class_matching(&pattern)
-        && (!config.single_byte_locale
-            || config.is_ignore_case
-            || std::str::from_utf8(&pattern).is_err()
-            || ptx_pattern_has_bracket_symbol(&pattern))
-    {
-        let byte_mode = std::str::from_utf8(&pattern).is_err();
-        if config.is_ignore_case || byte_mode || has_invalid_input {
-            let translated =
-                gnu_emacs_regex_to_onig_bytes_with_candidates(&pattern, config, Some(&candidates));
-            config.context_byte_regex = Some(compile_user_byte_regex(
-                &translated,
-                config.is_ignore_case,
-                &config.byte_ctype,
-                config.locale_regex_encoding,
-                config.locale_validator.clone(),
-                config.single_byte_locale,
-            )?);
-            config.context_byte_pattern = Some(translated);
-            config.force_byte_mode = true;
-        } else {
-            let pattern = std::str::from_utf8(&pattern).expect("validated UTF-8 context regexp");
-            let translated =
-                gnu_emacs_regex_to_rust_with_candidates(pattern, config, Some(&candidates));
-            config.context_regex = translated.clone();
-            config.context_byte_pattern = None;
-            config.context_byte_regex = None;
-            compile_user_regex(&translated, config.is_ignore_case)?;
-        }
-    }
-
-    if let Some(pattern) = word_filter.word_pattern_bytes.as_deref()
-        && ptx_pattern_needs_locale_class_matching(pattern)
-        && (!config.single_byte_locale
-            || config.is_ignore_case
-            || std::str::from_utf8(pattern).is_err()
-            || ptx_pattern_has_bracket_symbol(pattern))
-    {
-        let byte_mode = std::str::from_utf8(pattern).is_err();
-        if config.is_ignore_case || byte_mode || has_invalid_input {
-            let translated =
-                gnu_emacs_regex_to_onig_bytes_with_candidates(pattern, config, Some(&candidates));
-            config.word_byte_regex = Some(compile_user_byte_regex(
-                &translated,
-                config.is_ignore_case,
-                &config.byte_ctype,
-                config.locale_regex_encoding,
-                config.locale_validator.clone(),
-                config.single_byte_locale,
-            )?);
-            config.force_byte_mode = true;
-        } else {
-            let pattern = std::str::from_utf8(pattern).expect("validated UTF-8 word regexp");
-            let translated =
-                gnu_emacs_regex_to_rust_with_candidates(pattern, config, Some(&candidates));
-            word_filter.word_regex.clone_from(&translated);
-            config.word_regex = Some(compile_user_regex(&translated, config.is_ignore_case)?);
-            config.word_byte_regex = None;
-        }
-    }
-    Ok(())
-}
 
 fn build_byte_to_char_map(text: &str) -> Vec<usize> {
     let mut map = vec![0; text.len() + 1];
@@ -2722,27 +1541,31 @@ fn ptx_regex_find_at_valid_utf8(
     from: usize,
 ) -> Option<(usize, usize)> {
     debug_assert_eq!(text.len(), invalid_bytes.len());
-    let mut cursor = from;
-    while cursor < text.len() {
-        while cursor < text.len() && invalid_bytes[cursor] {
-            cursor += 1;
+    let mut search_from = from;
+    let mut not_bol = false;
+    while search_from <= text.len() {
+        while search_from < text.len() && invalid_bytes[search_from] {
+            search_from += 1;
+            not_bol = true;
         }
-        let segment_start = cursor;
-        while cursor < text.len() && !invalid_bytes[cursor] {
-            cursor += 1;
+        let segment_end = invalid_bytes[search_from..]
+            .iter()
+            .position(|&invalid| invalid)
+            .map_or(text.len(), |offset| search_from + offset);
+        if search_from < segment_end
+            && let Some((start, end)) = regex.find_with_options(
+                &text[search_from..segment_end],
+                not_bol,
+                segment_end < text.len(),
+            )
+        {
+            return Some((search_from + start, search_from + end));
         }
-        if segment_start < cursor {
-            let search_options = if segment_start == from {
-                SearchOptions::SEARCH_OPTION_NONE
-            } else {
-                SearchOptions::SEARCH_OPTION_NOTBOL
-            };
-            if let Some((start, end)) =
-                regex.find_with_options(&text[segment_start..cursor], search_options)
-            {
-                return Some((segment_start + start, segment_start + end));
-            }
+        if segment_end == text.len() {
+            return None;
         }
+        search_from = segment_end + 1;
+        not_bol = true;
     }
     None
 }
@@ -2754,45 +1577,24 @@ fn ptx_regex_find_iter_valid_utf8(
 ) -> Vec<(usize, usize)> {
     debug_assert_eq!(text.len(), invalid_bytes.len());
     let mut matches = Vec::new();
-    let mut cursor = 0usize;
-    while cursor < text.len() {
-        while cursor < text.len() && invalid_bytes[cursor] {
-            cursor += 1;
+    let mut next_start = 0usize;
+    let mut previous_end = None;
+    while next_start <= text.len() {
+        let Some((start, end)) =
+            ptx_regex_find_at_valid_utf8(regex, text, invalid_bytes, next_start)
+        else {
+            break;
+        };
+        if start == end && previous_end == Some(end) {
+            next_start = text[end..]
+                .chars()
+                .next()
+                .map_or(text.len() + 1, |character| end + character.len_utf8());
+            continue;
         }
-        let segment_start = cursor;
-        while cursor < text.len() && !invalid_bytes[cursor] {
-            cursor += 1;
-        }
-        if segment_start < cursor {
-            let segment_end = cursor;
-            let mut next_start = segment_start;
-            let mut previous_end = None;
-            let mut first_search = true;
-            while next_start <= segment_end {
-                let search_options = if first_search && segment_start > 0 {
-                    SearchOptions::SEARCH_OPTION_NOTBOL
-                } else {
-                    SearchOptions::SEARCH_OPTION_NONE
-                };
-                let Some((start, end)) =
-                    regex.find_with_options(&text[next_start..segment_end], search_options)
-                else {
-                    break;
-                };
-                first_search = false;
-                let (start, end) = (next_start + start, next_start + end);
-                if start == end && previous_end == Some(end) {
-                    next_start = text[end..segment_end]
-                        .chars()
-                        .next()
-                        .map_or(segment_end + 1, |ch| end + ch.len_utf8());
-                    continue;
-                }
-                matches.push((start, end));
-                previous_end = Some(end);
-                next_start = end;
-            }
-        }
+        matches.push((start, end));
+        previous_end = Some(end);
+        next_start = end;
     }
     matches
 }
@@ -2807,20 +1609,6 @@ fn next_context_end_valid_utf8(
         Some((_, end)) if end > start => end,
         _ => text.len(),
     }
-}
-
-fn context_regexp_matches_at_boundary(context_reg: &Regex, text: &str) -> bool {
-    let mut context_start = 0usize;
-    while context_start < text.len() {
-        let Some((start, end)) = context_reg.find_at(text, context_start) else {
-            break;
-        };
-        if start == context_start {
-            return true;
-        }
-        context_start = end;
-    }
-    false
 }
 
 fn context_regexp_matches_at_boundary_valid_utf8(
@@ -3038,7 +1826,7 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
                 )
             },
             |regex| context_regexp_matches_at_boundary_bytes(regex, &content.raw_text),
-        ) || ptx_locale_context_matches_at_boundary(config, &content)?;
+        );
         if has_boundary_match {
             let default_pattern = if config.is_gnu_ext && !config.is_input_ref {
                 GNU_DEFAULT_CONTEXT_PATTERN
@@ -5538,9 +4326,6 @@ fn ptx_regex_error(message: &[u8], pattern: &[u8]) -> Box<dyn CTError> {
 }
 
 fn validate_ptx_locale_regexp(pattern: &[u8], config: &PtxConfig) -> CTResult<()> {
-    if !ptx_pattern_needs_locale_class_matching(pattern) {
-        return Ok(());
-    }
     let Some(locale_collation) = config.locale_collation.as_deref() else {
         return Ok(());
     };
@@ -5720,7 +4505,7 @@ impl PtxSettings {
         validate_ptx_word_regexp(&matches, &config)?;
 
         // 创建单词过滤器
-        let mut word_filter = WordFilter::new(&matches, &config)?;
+        let word_filter = WordFilter::new(&matches, &config)?;
         config.word_break_bytes = word_filter.break_set.clone();
         if word_filter.uses_custom_regex {
             if let Some(pattern) = &word_filter.word_byte_pattern {
@@ -5743,7 +4528,6 @@ impl PtxSettings {
 
         // 读取输入文件
         let file_map = ptx_read_input(&input_files, &config)?;
-        ptx_recompile_locale_range_regexps(&mut config, &mut word_filter, &file_map)?;
         // 创建单词集合
         let word_set = ptx_create_word_set(&config, &word_filter, &file_map);
 
@@ -5779,9 +4563,8 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
         || config.locale_regex_encoding.is_non_utf8_multibyte()
         || std::str::from_utf8(&bytes).is_err()
     {
-        let pattern = gnu_emacs_regex_to_onig_bytes(&bytes, config);
         compile_user_byte_regex(
-            &pattern,
+            &bytes,
             config.is_ignore_case,
             &config.byte_ctype,
             config.locale_regex_encoding,
@@ -5789,11 +4572,8 @@ fn validate_ptx_word_regexp(matches: &clap::ArgMatches, config: &PtxConfig) -> C
             config.single_byte_locale,
         )?;
     } else {
-        let pattern = gnu_emacs_regex_to_rust(
-            std::str::from_utf8(&bytes).expect("validated UTF-8 word regexp"),
-            config,
-        );
-        compile_user_regex(&pattern, config.is_ignore_case)?;
+        let pattern = std::str::from_utf8(&bytes).expect("validated UTF-8 word regexp");
+        compile_user_regex(pattern, config.is_ignore_case)?;
     }
     Ok(())
 }
@@ -6116,7 +4896,7 @@ mod tests {
                 config.context_pattern_bytes.as_deref(),
                 Some(b"[A-Z].*".as_slice())
             );
-            assert_eq!(config.context_regex, "(?:(?!)\\x00).*");
+            assert_eq!(config.context_regex, "[A-Z].*");
         }
 
         #[test]
@@ -6200,7 +4980,7 @@ mod tests {
             let filter = WordFilter::new(&matches, &config).unwrap();
             assert!(!filter.is_only_specified);
             assert!(!filter.is_ignore_specified);
-            assert_eq!(filter.word_regex, "[A-Za-z]+");
+            assert_eq!(filter.word_regex, "[A-Za-z]\\+");
         }
 
         #[test]
@@ -6211,7 +4991,7 @@ mod tests {
                 .unwrap();
             let config = PtxConfig::default();
             let filter = WordFilter::new(&matches, &config).unwrap();
-            assert_eq!(filter.word_regex, "[^/]+");
+            assert_eq!(filter.word_regex, "[^/]\\+");
         }
 
         #[test]
@@ -6233,7 +5013,21 @@ mod tests {
 
             let filter = WordFilter::new(&matches, &config).unwrap();
 
-            assert_eq!(filter.word_regex, r"[\[:alpha:]]+");
+            assert_eq!(filter.word_regex, "[[:alpha:]]+");
+        }
+
+        #[test]
+        fn test_word_regex_anchor_respects_invalid_byte_boundaries() {
+            let regex = Regex::new("^a").unwrap();
+
+            assert_eq!(
+                ptx_regex_find_iter_valid_utf8(&regex, "\x01abc", &[true, false, false, false],),
+                Vec::<(usize, usize)>::new()
+            );
+            assert_eq!(
+                ptx_regex_find_iter_valid_utf8(&regex, "aa ab", &[false; 5]),
+                vec![(0, 1), (1, 2)]
+            );
         }
     }
 
@@ -6579,7 +5373,6 @@ mod tests {
                 ignore_set: HashSet::new(),
                 word_regex: r"\w+".to_string(),
                 word_byte_pattern: None,
-                word_pattern_bytes: None,
                 break_set: None,
                 uses_custom_regex: false,
             };

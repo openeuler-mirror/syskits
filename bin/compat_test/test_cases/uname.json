@@ -650,6 +650,33 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "无效locale整体回退用例：设置LC_ALL=not_A_locale；执行uname并传入单个操作数原始字节e4b8ad；GNU的setlocale失败后保持C locale，将三个高字节分别转义为\\344\\270\\255且正常返回RC=1，stdout完整十六进制=空，stderr完整十六进制=756e616d653a206578747261206f706572616e6420275c3334345c3237305c323535270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [],
+            "args": [
+                "e4b8ad"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a206578747261206f706572616e6420275c3334345c3237305c323535270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "not_A_locale"
+                },
+                "standardStreams": {
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

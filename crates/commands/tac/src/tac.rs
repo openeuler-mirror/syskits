@@ -387,8 +387,40 @@ fn get_file_data(filename: &str) -> CTResult<FileData> {
 }
 
 fn tac_parse_invocation(args: impl ctcore::Args) -> CTResult<TacFlags> {
+    let args = prepare_tac_args_with_mode(args, std::env::var_os("POSIXLY_CORRECT").is_some());
     let matches = ct_app().try_get_matches_from(args)?;
     TacFlags::new(&matches)
+}
+
+fn prepare_tac_args_with_mode(args: impl ctcore::Args, posixly_correct: bool) -> Vec<OsString> {
+    let mut args = args.collect::<Vec<_>>();
+    if !posixly_correct {
+        return args;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes == b"-" || !bytes.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            break;
+        }
+
+        let consumes_next = if let Some(long) = bytes.strip_prefix(b"--") {
+            !long.contains(&b'=') && b"separator".starts_with(long)
+        } else {
+            bytes[1..]
+                .iter()
+                .position(|option| *option == b's')
+                .is_some_and(|position| position + 2 == bytes.len())
+        };
+        index += if consumes_next { 2 } else { 1 };
+    }
+
+    args
 }
 
 fn tac_separator_kind(settings: &TacFlags) -> &'static str {
@@ -768,6 +800,42 @@ mod tests {
                 .unwrap();
             let flags = TacFlags::new(&matches).unwrap();
             assert_eq!(flags.files, vec!["file1.txt", "file2.txt"]);
+        }
+
+        #[test]
+        fn test_posixly_correct_stops_option_parsing_at_first_operand() {
+            let prepared = prepare_tac_args_with_mode(
+                ["tac", "-s", ":", "input", "-b"]
+                    .into_iter()
+                    .map(OsString::from),
+                true,
+            );
+
+            assert_eq!(
+                prepared,
+                ["tac", "-s", ":", "--", "input", "-b"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        #[test]
+        fn test_posixly_correct_recognizes_attached_separator_value() {
+            let prepared = prepare_tac_args_with_mode(
+                ["tac", "-brs:", "input", "--regex"]
+                    .into_iter()
+                    .map(OsString::from),
+                true,
+            );
+
+            assert_eq!(
+                prepared,
+                ["tac", "-brs:", "--", "input", "--regex"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 

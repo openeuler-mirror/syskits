@@ -688,6 +688,36 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "POSIXLY_CORRECT=1时在首个操作数input后传入-b；GNU在首个操作数停止选项解析并将-b作为第二个文件，预期先倒序input再输出名为-b的文件内容",
+      "setup_commands": [
+        "printf 'a\\nb\\n' > input",
+        "printf 'dash\\n' > ./-b"
+      ],
+      "args": [
+        "input",
+        "-b"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "POSIXLY_CORRECT": "1"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "b\\na\\ndash\\n",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "cleanup_commands": [
+        "rm -f input ./-b"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "tac: 使用错误的flag",
       "setup_commands": [
         "echo 'File1 line1' > file1.txt"

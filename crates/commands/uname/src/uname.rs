@@ -171,8 +171,17 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    prepare_uname_args_with_mode(args, std::env::var_os("POSIXLY_CORRECT").is_some())
+}
+
+fn prepare_uname_args_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<Vec<OsString>> {
     let args = args.collect::<Vec<_>>();
     let mut parse_options = true;
+    let mut options = Vec::new();
+    let mut operands = Vec::new();
 
     for argument in args.iter().skip(1) {
         let bytes = argument.as_encoded_bytes();
@@ -184,14 +193,26 @@ fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
             validate_attached_value(bytes)?;
             validate_ambiguous_long_option(bytes)?;
             validate_unknown_option(bytes)?;
+            options.push(argument.clone());
             if is_terminal_option(bytes) {
-                return Ok(args);
+                let mut prepared = Vec::with_capacity(args.len());
+                prepared.extend(args.first().cloned());
+                prepared.extend(options);
+                prepared.extend(operands);
+                return Ok(prepared);
             }
             continue;
         }
 
+        operands.push(argument.clone());
+        if posixly_correct {
+            parse_options = false;
+        }
+    }
+
+    if let Some(operand) = operands.first() {
         let mut message = b"extra operand ".to_vec();
-        message.extend(quote_c_locale_operand(argument));
+        message.extend(quote_c_locale_operand(operand));
         return Err(UnameUsageError::boxed(message));
     }
 
@@ -526,6 +547,34 @@ mod tests {
             error.diagnostic_bytes().as_ref(),
             b"invalid option -- '\xff'"
         );
+    }
+
+    #[test]
+    fn default_mode_parses_options_after_operands() {
+        let error = prepare_uname_args_with_mode(
+            ["uname", "extra", "-z"].map(OsString::from).into_iter(),
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "invalid option -- 'z'");
+
+        let prepared = prepare_uname_args_with_mode(
+            ["uname", "extra", "--help"].map(OsString::from).into_iter(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(prepared, ["uname", "--help", "extra"].map(OsString::from));
+    }
+
+    #[test]
+    fn posix_mode_stops_option_parsing_at_first_operand() {
+        let error = prepare_uname_args_with_mode(
+            ["uname", "extra", "-z"].map(OsString::from).into_iter(),
+            true,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "extra operand 'extra'");
     }
 
     #[test]

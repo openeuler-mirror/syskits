@@ -281,6 +281,50 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C且未设置POSIXLY_CORRECT时执行uname extra -z；GNU getopt置换后继续解析-z，预期RC=1、stdout为空，并优先报告invalid option -- 'z'而非extra operand",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": [
+                "extra",
+                "-z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: invalid option -- 'z'\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C且POSIXLY_CORRECT=1时执行uname extra -z；GNU getopt在首个操作数停止选项解析，预期RC=1、stdout为空，并报告首个extra operand而不解析后置-z",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export POSIXLY_CORRECT='1'"
+            ],
+            "args": [
+                "extra",
+                "-z"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: extra operand 'extra'\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

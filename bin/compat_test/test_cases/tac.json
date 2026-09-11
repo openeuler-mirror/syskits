@@ -1204,6 +1204,68 @@
       "cleanup_commands": [
         "rm -f write-large-a write-large-b"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac sigpipe-input并将stdout连接到无读端管道；直接父进程使用默认SIGPIPE处置，fixture完整内容为单字节a，GNU在最终写入时被SIGPIPE终止，预期RC=141且stdout、stderr均为空",
+      "setup_commands": [
+        "printf a > sigpipe-input"
+      ],
+      "args": [
+        "sigpipe-input"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdout": "closed_pipe",
+          "sigpipe": "default",
+          "useBash": true
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 141,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f sigpipe-input"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac sigpipe-ignored-input并将stdout连接到无读端管道；直接父进程显式忽略SIGPIPE，fixture完整内容为单字节a，GNU继承忽略处置并报告EPIPE，预期RC=1、stdout为空、stderr为tac: write error: Broken pipe",
+      "setup_commands": [
+        "printf a > sigpipe-ignored-input"
+      ],
+      "args": [
+        "sigpipe-ignored-input"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdout": "closed_pipe",
+          "sigpipe": "ignore",
+          "useBash": true
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: write error: Broken pipe\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f sigpipe-ignored-input"
+      ]
     }
   ]
 }

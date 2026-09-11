@@ -493,6 +493,9 @@ impl CTError for UnameUsageError {
 }
 
 fn locale_name() -> String {
+    if !environment_locale_is_valid() {
+        return "C".to_string();
+    }
     for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
         let Some(locale) = std::env::var_os(variable) else {
             continue;
@@ -521,12 +524,30 @@ impl MessageLocale {
 }
 
 fn message_locale() -> MessageLocale {
+    if !environment_locale_is_valid() {
+        return MessageLocale::EnUs;
+    }
     message_locale_from_values(
         std::env::var("LC_ALL").ok().as_deref(),
         std::env::var("LC_MESSAGES").ok().as_deref(),
         std::env::var("LANG").ok().as_deref(),
         std::env::var("LANGUAGE").ok().as_deref(),
     )
+}
+
+fn environment_locale_is_valid() -> bool {
+    let locale = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_ALL_MASK,
+            c"".as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return false;
+    }
+    unsafe { ctcore::libc::freelocale(locale) };
+    true
 }
 
 fn message_locale_from_values(
@@ -672,7 +693,7 @@ impl LocaleCtype {
                 std::ptr::null_mut(),
             )
         };
-        (!raw.is_null()).then_some(Self { raw })
+        (!raw.is_null()).then(|| Self { raw })
     }
 
     fn activate(&self) -> Option<LocaleCtypeGuard> {
@@ -1196,6 +1217,11 @@ mod tests {
         assert_eq!(left, b"\xa1\x07e");
         assert_eq!(right, b"\xa1\xaf");
         assert_eq!(quote_to_escape, None);
+    }
+
+    #[test]
+    fn invalid_locale_name_is_rejected_without_freeing_null_locale() {
+        assert!(LocaleCtype::from_name(c"not_A_locale").is_none());
     }
 
     #[test]

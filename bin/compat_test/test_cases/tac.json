@@ -1316,6 +1316,104 @@
       "cleanup_commands": [
         "rmdir stdin-directory"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=zh_CN.UTF-8下执行tac missing-zh；文件不存在且无其他fixture，GNU本地化文件打开上下文但保留libc错误文本，预期RC=1、stdout为空、stderr为简体中文打开失败诊断",
+      "setup_commands": [],
+      "args": [
+        "missing-zh"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "zh_CN.UTF-8"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 以读模式打开 'missing-zh' 时失败: No such file or directory\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=zh_CN.UTF-8下执行tac -r -s空字符串；GNU在处理输入前本地化空正则分隔符诊断，预期RC=1、stdout为空、stderr为简体中文分隔符错误",
+      "setup_commands": [],
+      "args": [
+        "-r",
+        "-s",
+        ""
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "zh_CN.UTF-8"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 分隔符不能为空\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=zh_CN.UTF-8下执行tac flush-zh并将stdout连接到/dev/full；fixture完整内容为单字节a，GNU本地化最终刷新错误上下文并保留libc错误文本，预期RC=1、stdout为空、stderr为简体中文写入错误",
+      "setup_commands": [
+        "printf a > flush-zh"
+      ],
+      "args": [
+        "flush-zh"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "zh_CN.UTF-8"
+        },
+        "standardStreams": {
+          "stdout": "full"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 写入错误: No space left on device\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f flush-zh"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=zh_CN.UTF-8下无文件操作数执行tac，并在进程启动前关闭fd 0；GNU本地化standard input与read error，翻译后的中文来源不需要引号，退出清理仍报告-关闭EBADF，预期RC=1、stdout为空且stderr为两行诊断",
+      "setup_commands": [],
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "zh_CN.UTF-8"
+        },
+        "standardStreams": {
+          "stdin": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 标准输入: 读取错误: Bad file descriptor\ntac: -: Bad file descriptor\n"
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

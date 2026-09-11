@@ -164,6 +164,9 @@ pub enum TacError {
     /// 读取文件或标准输入的内容时出错。参数是文件名和导致此错误的底层 [`std::io::Error`]。
     ReadError(String, std::io::Error),
 
+    /// 读取标准输入时出错。
+    StdinReadError(std::io::Error),
+
     /// 写入（反转的）文件或标准输入内容时出错。参数是导致此错误的底层 [`std::io::Error`]。
     WriteError(std::io::Error),
 
@@ -200,30 +203,52 @@ fn tac_quote_path(path: &OsStr, always_quote: bool) -> String {
 
 impl Display for TacError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidRegex(message) => f.write_str(message),
-            Self::RegexSearch => write!(f, "error in regular expression search"),
-            Self::RecordTooLarge => write!(f, "record too large"),
-            Self::EmptyRegexSeparator => write!(f, "separator cannot be empty"),
-            Self::InvalidArgument(s) => {
-                write!(
-                    f,
-                    "{}: read error: Invalid argument",
-                    tac_quote_path(s, false)
-                )
-            }
-            Self::OpenError(path, error) => write!(
-                f,
-                "failed to open {} for reading: {}",
-                tac_quote_path(path, true),
-                strip_errno(error)
-            ),
-            Self::ReadError(source, error) => {
-                write!(f, "{source}: read error: {}", strip_errno(error))
-            }
-            Self::WriteError(_) => write!(f, "write error"),
-            Self::FlushError(error) => write!(f, "write error: {}", strip_errno(error)),
+        f.write_str(&tac_error_message(self, &rust_i18n::locale()))
+    }
+}
+
+fn tac_error_message(error: &TacError, locale: &str) -> String {
+    match error {
+        TacError::InvalidRegex(message) => message.clone(),
+        TacError::RegexSearch => t!("tac.errors.regex_search", locale = locale).to_string(),
+        TacError::RecordTooLarge => t!("tac.errors.record_too_large", locale = locale).to_string(),
+        TacError::EmptyRegexSeparator => {
+            t!("tac.errors.empty_separator", locale = locale).to_string()
         }
+        TacError::InvalidArgument(path) => format!(
+            "{}: {}: Invalid argument",
+            tac_quote_path(path, false),
+            t!("tac.errors.read_error", locale = locale)
+        ),
+        TacError::OpenError(path, source) => format!(
+            "{}: {}",
+            t!(
+                "tac.errors.failed_open",
+                locale = locale,
+                path = tac_quote_path(path, true)
+            ),
+            strip_errno(source)
+        ),
+        TacError::ReadError(source, error) => format!(
+            "{source}: {}: {}",
+            t!("tac.errors.read_error", locale = locale),
+            strip_errno(error)
+        ),
+        TacError::StdinReadError(error) => {
+            let source = t!("tac.errors.standard_input", locale = locale);
+            format!(
+                "{}: {}: {}",
+                tac_quote_path(OsStr::new(source.as_str()), false),
+                t!("tac.errors.read_error", locale = locale),
+                strip_errno(error)
+            )
+        }
+        TacError::WriteError(_) => t!("tac.errors.write_error", locale = locale).to_string(),
+        TacError::FlushError(error) => format!(
+            "{}: {}",
+            t!("tac.errors.write_error", locale = locale),
+            strip_errno(error)
+        ),
     }
 }
 
@@ -411,7 +436,7 @@ fn tac_stdin_read_error(error: std::io::Error) -> TacError {
     } else {
         error
     };
-    TacError::ReadError("'standard input'".to_string(), error)
+    TacError::StdinReadError(error)
 }
 
 fn open_file(path: &Path) -> CTResult<File> {
@@ -1055,6 +1080,46 @@ mod tests {
     #[cfg(test)]
     mod tac_error_tests {
         use super::*;
+
+        #[test]
+        fn test_tac_error_uses_simplified_chinese_runtime_messages() {
+            let open_error = TacError::OpenError(
+                OsString::from("missing"),
+                std::io::Error::from_raw_os_error(ctcore::libc::ENOENT),
+            );
+            let read_error = TacError::ReadError(
+                "input".to_string(),
+                std::io::Error::from_raw_os_error(ctcore::libc::EIO),
+            );
+            let flush_error =
+                TacError::FlushError(std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC));
+
+            assert_eq!(
+                tac_error_message(&open_error, "zh-CN"),
+                "以读模式打开 'missing' 时失败: No such file or directory"
+            );
+            assert_eq!(
+                tac_error_message(&read_error, "zh-CN"),
+                "input: 读取错误: Input/output error"
+            );
+            assert_eq!(
+                tac_error_message(&flush_error, "zh-CN"),
+                "写入错误: No space left on device"
+            );
+            assert_eq!(
+                tac_error_message(&TacError::EmptyRegexSeparator, "zh-CN"),
+                "分隔符不能为空"
+            );
+            assert_eq!(
+                tac_error_message(
+                    &TacError::StdinReadError(std::io::Error::from_raw_os_error(
+                        ctcore::libc::EBADF,
+                    )),
+                    "zh-CN"
+                ),
+                "标准输入: 读取错误: Bad file descriptor"
+            );
+        }
 
         #[test]
         fn test_tac_error_invalid_regex() {

@@ -325,6 +325,60 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname -a并将stdout连接到已关闭读端的管道；父进程使用默认SIGPIPE处置，GNU在写输出时被SIGPIPE终止，预期RC=141且stdout、stderr完整长度均为0字节",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-a"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname -a并将stdout连接到已关闭读端的管道；父进程显式忽略SIGPIPE，GNU保留该处置并将EPIPE报告为write error，预期RC=1、stdout完整长度为0字节、stderr为uname: write error: Broken pipe",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-a"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: write error: Broken pipe\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

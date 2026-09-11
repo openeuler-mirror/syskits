@@ -336,7 +336,9 @@ fn fallback_boot_time(
 }
 
 fn time_string(timestamp: i64) -> String {
-    let utc = time::OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
+    let Ok(utc) = time::OffsetDateTime::from_unix_timestamp(timestamp) else {
+        return timestamp.to_string();
+    };
     let offset = time::UtcOffset::local_offset_at(utc).unwrap_or(time::UtcOffset::UTC);
     let local = utc.to_offset(offset);
     let format = if hard_locale_time() {
@@ -1304,6 +1306,12 @@ mod tests {
             }
             tzset();
         }
+    }
+
+    #[test]
+    fn out_of_range_time_falls_back_to_epoch_seconds() {
+        assert_eq!(time_string(i64::MAX), i64::MAX.to_string());
+        assert_eq!(time_string(i64::MIN), i64::MIN.to_string());
     }
 
     #[test]

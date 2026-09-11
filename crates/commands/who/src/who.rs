@@ -191,15 +191,16 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
 
         operand_count += 1;
         operands.push(argument.clone());
-        if operand_count > 2 {
-            return Err(CTsageError::new(
-                1,
-                format!("extra operand {}", argument.as_os_str().quote()),
-            ));
-        }
         if posixly_correct {
             parse_options = false;
         }
+    }
+
+    if operand_count > 2 {
+        return Err(CTsageError::new(
+            1,
+            format!("extra operand {}", operands[2].as_os_str().quote()),
+        ));
     }
 
     if posixly_correct {
@@ -418,6 +419,14 @@ mod tests {
         let args = ["who", "a", "b", "c"].map(OsString::from);
         let error = prepare_who_args(args.into_iter()).unwrap_err();
         assert_eq!(error.to_string(), "extra operand 'c'");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn option_error_after_third_operand_takes_precedence() {
+        let args = ["who", "a", "b", "c", "-z"].map(OsString::from);
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(error.to_string(), "invalid option -- 'z'");
         assert!(error.usage());
     }
 

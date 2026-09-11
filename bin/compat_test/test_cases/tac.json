@@ -1328,6 +1328,9 @@
       "environment": {
         "env_vars": {
           "LC_ALL": "zh_CN.UTF-8"
+        },
+        "standardStreams": {
+          "stderr": "capture"
         }
       },
       "expectation": {
@@ -1352,6 +1355,9 @@
       "environment": {
         "env_vars": {
           "LC_ALL": "zh_CN.UTF-8"
+        },
+        "standardStreams": {
+          "stderr": "capture"
         }
       },
       "expectation": {
@@ -1378,7 +1384,8 @@
           "LC_ALL": "zh_CN.UTF-8"
         },
         "standardStreams": {
-          "stdout": "full"
+          "stdout": "full",
+          "stderr": "capture"
         }
       },
       "expectation": {
@@ -1403,7 +1410,8 @@
           "LC_ALL": "zh_CN.UTF-8"
         },
         "standardStreams": {
-          "stdin": "closed"
+          "stdin": "closed",
+          "stderr": "capture"
         }
       },
       "expectation": {
@@ -1465,6 +1473,64 @@
           "exit_code": 1,
           "stdout": "",
           "stderr": "tac: /tmp: read error: Is a directory\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "未设置LC_ALL和LANGUAGE，LANG=en_US.UTF-8、LC_CTYPE=C.UTF-8、LC_MESSAGES=zh_CN.UTF-8下执行tac missing-messages；GNU按LC_MESSAGES而非LC_CTYPE选择简体中文诊断，预期RC=1、stdout为空",
+      "setup_commands": [],
+      "args": [
+        "missing-messages"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "",
+          "LANGUAGE": "",
+          "LANG": "en_US.UTF-8",
+          "LC_CTYPE": "C.UTF-8",
+          "LC_MESSAGES": "zh_CN.UTF-8"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 以读模式打开 'missing-messages' 时失败: No such file or directory\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "未设置LC_ALL、LC_CTYPE和LC_MESSAGES，LANG=zh_CN.UTF-8且LANGUAGE=C下执行tac missing-language；GNU在非C基础locale中允许LANGUAGE覆盖消息语言，预期使用英文诊断并返回RC=1",
+      "setup_commands": [],
+      "args": [
+        "missing-language"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "",
+          "LC_CTYPE": "",
+          "LC_MESSAGES": "",
+          "LANG": "zh_CN.UTF-8",
+          "LANGUAGE": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: failed to open 'missing-language' for reading: No such file or directory\n"
         }
       },
       "cleanup_commands": []

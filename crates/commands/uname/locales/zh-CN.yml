@@ -10,3 +10,6 @@ uname:
   about: |-
     打印特定的系统信息。
     没有选项时，与-s相同。
+  errors:
+    extra_operand: "多余的操作对象"
+    try_help: '请尝试执行 "uname --help" 来获取更多信息。'

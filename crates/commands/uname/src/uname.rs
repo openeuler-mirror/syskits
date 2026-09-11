@@ -24,7 +24,7 @@ use sys_locale::get_locale;
 use ctcore::Tool;
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -272,8 +272,9 @@ fn prepare_uname_args_with_mode(
     }
 
     if let Some(operand) = operands.first() {
-        let mut message = b"extra operand ".to_vec();
-        message.extend(quote_c_locale_operand(operand));
+        let mut message = locale_text_bytes(&t!("uname.errors.extra_operand"));
+        message.push(b' ');
+        message.extend(quote_locale_operand(operand));
         return Err(UnameUsageError::boxed(message));
     }
 
@@ -401,11 +402,15 @@ fn validate_attached_value(argument: &[u8]) -> CTResult<()> {
 #[derive(Debug)]
 struct UnameUsageError {
     message: Vec<u8>,
+    usage_hint: Vec<u8>,
 }
 
 impl UnameUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
-        Box::new(Self { message })
+        Box::new(Self {
+            message,
+            usage_hint: locale_text_bytes(&t!("uname.errors.try_help")),
+        })
     }
 }
 
@@ -422,9 +427,118 @@ impl CTError for UnameUsageError {
         Cow::Borrowed(&self.message)
     }
 
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
+    }
+
     fn usage(&self) -> bool {
         true
     }
+}
+
+fn locale_name() -> String {
+    for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        let Some(locale) = std::env::var_os(variable) else {
+            continue;
+        };
+        if locale.is_empty() {
+            continue;
+        }
+        return locale.to_string_lossy().into_owned();
+    }
+    "C".to_string()
+}
+
+fn locale_codeset() -> Option<CString> {
+    let locale_name = CString::new(locale_name()).ok()?;
+    let locale = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
+    }
+
+    unsafe {
+        let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale);
+        let result = (!codeset.is_null())
+            .then(|| CStr::from_ptr(codeset).to_bytes())
+            .and_then(|bytes| CString::new(bytes).ok());
+        ctcore::libc::freelocale(locale);
+        result
+    }
+}
+
+fn transcode_utf8(text: &str, codeset: &CStr) -> Option<Vec<u8>> {
+    let descriptor = unsafe { ctcore::libc::iconv_open(codeset.as_ptr(), c"UTF-8".as_ptr()) };
+    if descriptor as usize == usize::MAX {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(32)];
+    let mut output_used = 0;
+    let converted = loop {
+        let mut output_pointer = unsafe { output.as_mut_ptr().add(output_used) }.cast();
+        let mut output_left = output.len() - output_used;
+        let result = unsafe {
+            ctcore::libc::iconv(
+                descriptor,
+                &mut input,
+                &mut input_left,
+                &mut output_pointer,
+                &mut output_left,
+            )
+        };
+        output_used = output.len() - output_left;
+        if result != usize::MAX {
+            output.truncate(output_used);
+            break Some(output);
+        }
+        if std::io::Error::last_os_error().raw_os_error() != Some(ctcore::libc::E2BIG) {
+            break None;
+        }
+        output.resize(output.len().saturating_mul(2), 0);
+    };
+
+    unsafe { ctcore::libc::iconv_close(descriptor) };
+    converted
+}
+
+fn locale_text_bytes(text: &str) -> Vec<u8> {
+    if let Some(codeset) = locale_codeset() {
+        let normalized = codeset.to_string_lossy().to_ascii_uppercase();
+        if normalized == "UTF-8" || normalized == "UTF8" {
+            return text.as_bytes().to_vec();
+        }
+        if let Some(converted) = transcode_utf8(text, &codeset) {
+            return converted;
+        }
+    }
+
+    text.as_bytes().to_vec()
+}
+
+fn locale_is_utf8() -> bool {
+    locale_codeset().is_some_and(|codeset| {
+        let normalized = codeset.to_string_lossy().to_ascii_uppercase();
+        normalized == "UTF-8" || normalized == "UTF8"
+    })
+}
+
+fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
+    let locale = locale_name().to_ascii_uppercase();
+    if locale.starts_with("ZH_CN") || locale.starts_with("ZH-CN") {
+        return quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'\"'));
+    }
+    if !locale_is_utf8() {
+        return quote_c_locale_operand(operand);
+    }
+    quote_utf8_locale_operand(operand, "‘".as_bytes(), "’".as_bytes(), None)
 }
 
 fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
@@ -452,6 +566,75 @@ fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
     }
     quoted.push(b'\'');
     quoted
+}
+
+fn quote_utf8_locale_operand(
+    operand: &OsStr,
+    left_quote: &[u8],
+    right_quote: &[u8],
+    quote_to_escape: Option<u8>,
+) -> Vec<u8> {
+    let input = operand.as_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        let byte = input[index];
+        if byte.is_ascii() {
+            push_quoted_ascii(&mut quoted, byte, quote_to_escape);
+            index += 1;
+            continue;
+        }
+
+        match std::str::from_utf8(&input[index..]) {
+            Ok(_) => {
+                quoted.extend_from_slice(&input[index..]);
+                break;
+            }
+            Err(error) if error.valid_up_to() > 0 => {
+                let end = index + error.valid_up_to();
+                quoted.extend_from_slice(&input[index..end]);
+                index = end;
+            }
+            Err(error) => {
+                let invalid_length = error.error_len().unwrap_or(input.len() - index);
+                for invalid in &input[index..index + invalid_length] {
+                    push_octal_escape(&mut quoted, *invalid);
+                }
+                index += invalid_length;
+            }
+        }
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn push_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
+    match byte {
+        b'\x07' => output.extend_from_slice(b"\\a"),
+        b'\x08' => output.extend_from_slice(b"\\b"),
+        b'\t' => output.extend_from_slice(b"\\t"),
+        b'\n' => output.extend_from_slice(b"\\n"),
+        b'\x0b' => output.extend_from_slice(b"\\v"),
+        b'\x0c' => output.extend_from_slice(b"\\f"),
+        b'\r' => output.extend_from_slice(b"\\r"),
+        b'\\' => output.extend_from_slice(b"\\\\"),
+        escaped if quote_to_escape == Some(escaped) => {
+            output.push(b'\\');
+            output.push(escaped);
+        }
+        b' '..=b'~' => output.push(byte),
+        _ => push_octal_escape(output, byte),
+    }
+}
+
+fn push_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 7));
+    output.push(b'0' + (byte & 7));
 }
 
 fn is_terminal_option(argument: &[u8]) -> bool {
@@ -542,18 +725,16 @@ mod tests {
         let error =
             prepare_uname_args(["uname", "extra"].map(OsString::from).into_iter()).unwrap_err();
 
-        assert_eq!(error.to_string(), "extra operand 'extra'");
+        assert!(error.to_string().starts_with("extra operand "));
         assert!(error.usage());
     }
 
     #[test]
     fn non_utf8_extra_operand_preserves_original_bytes() {
-        let error = prepare_uname_args(
-            [OsString::from("uname"), OsString::from_vec(vec![0xff])].into_iter(),
-        )
-        .unwrap_err();
-
-        assert_eq!(error.diagnostic_bytes().as_ref(), b"extra operand '\\377'");
+        assert_eq!(
+            quote_c_locale_operand(&OsString::from_vec(vec![0xff])),
+            b"'\\377'"
+        );
     }
 
     #[test]
@@ -635,7 +816,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(error.to_string(), "extra operand 'extra'");
+        assert!(error.to_string().starts_with("extra operand "));
     }
 
     #[test]
@@ -647,6 +828,35 @@ mod tests {
             "Name:\tbash\nSigIgn:\t0000000000000000\n"
         ));
         assert!(!sigpipe_is_ignored_in_status("SigIgn:\tnot-hex\n"));
+    }
+
+    #[test]
+    fn utf8_locale_operand_quoting_preserves_valid_and_invalid_bytes() {
+        assert_eq!(
+            quote_utf8_locale_operand(OsStr::new("x"), "‘".as_bytes(), "’".as_bytes(), None),
+            "‘x’".as_bytes()
+        );
+        assert_eq!(
+            quote_utf8_locale_operand(
+                &OsString::from_vec(vec![0xff]),
+                "‘".as_bytes(),
+                "’".as_bytes(),
+                None
+            ),
+            "‘\\377’".as_bytes()
+        );
+        assert_eq!(
+            quote_utf8_locale_operand(OsStr::new("x"), b"\"", b"\"", Some(b'\"')),
+            b"\"x\""
+        );
+    }
+
+    #[test]
+    fn locale_text_can_be_transcoded_to_gbk() {
+        assert_eq!(
+            transcode_utf8("多余的操作对象", c"GBK").as_deref(),
+            Some(&b"\xb6\xe0\xd3\xe0\xb5\xc4\xb2\xd9\xd7\xf7\xb6\xd4\xcf\xf3"[..])
+        );
     }
 
     #[test]

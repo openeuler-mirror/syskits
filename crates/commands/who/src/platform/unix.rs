@@ -229,6 +229,10 @@ fn runlevel_comment(previous: u8) -> Option<String> {
     Some(format!("last={previous}"))
 }
 
+fn runlevel_line_bytes(label: &str, current: u8) -> Vec<u8> {
+    [label.as_bytes(), b" ", &[current]].concat()
+}
+
 fn updated_boot_time(current: i64, record_type: i16, timestamp: i64) -> i64 {
     if record_type == ct_utmpx::BOOT_TIME {
         timestamp
@@ -435,7 +439,7 @@ impl Who {
                         self.print_user(&utmpx, boot_time)?;
                     } else if self.is_need_runlevel && run_level_chk(utmpx.record_type()) {
                         if cfg!(target_os = "linux") {
-                            self.print_runlevel(&utmpx);
+                            self.print_runlevel(&utmpx)?;
                         }
                     } else if self.is_need_boottime && utmpx.record_type() == ct_utmpx::BOOT_TIME {
                         self.print_boottime(&utmpx);
@@ -482,26 +486,24 @@ impl Who {
     }
 
     #[inline]
-    fn print_runlevel(&self, utmpx: &CtUtmpx) {
+    fn print_runlevel(&self, utmpx: &CtUtmpx) -> CTResult<()> {
         let last_runlevel = (utmpx.pid() / 256) as u8;
-        let current_runlevel = (utmpx.pid() % 256) as u8 as char;
-        // Creating the run-level string
+        let current_runlevel = (utmpx.pid() % 256) as u8;
         let label = t!("who.output.run_level");
-        let runlevel_line = format!("{label} {current_runlevel}");
+        let runlevel_line = runlevel_line_bytes(&label, current_runlevel);
 
-        // 生成有关最后运行级别的注释
         let comment = runlevel_comment(last_runlevel);
-
-        self.print_line(
-            "",
-            ' ',
-            &runlevel_line,
-            &time_string(utmpx.timestamp_seconds()),
-            "",
-            "",
-            comment.as_deref().unwrap_or(""),
-            "",
-        );
+        let time = time_string(utmpx.timestamp_seconds());
+        self.print_line_bytes(&WhoDisplayBytes {
+            user: b"",
+            state: ' ',
+            line: &runlevel_line,
+            time: time.as_bytes(),
+            idle: b"",
+            pid: b"",
+            comment: comment.as_deref().unwrap_or("").as_bytes(),
+            exit: b"",
+        })
     }
 
     #[inline]
@@ -1188,6 +1190,11 @@ mod tests {
         assert_eq!(runlevel_comment(b' ').as_deref(), Some("last= "));
         assert_eq!(runlevel_comment(0x1f), None);
         assert_eq!(runlevel_comment(0xa0), None);
+    }
+
+    #[test]
+    fn runlevel_line_preserves_the_current_level_byte() {
+        assert_eq!(runlevel_line_bytes("run-level", 0xff), b"run-level \xff");
     }
 
     #[test]

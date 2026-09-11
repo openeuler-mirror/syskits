@@ -17,8 +17,9 @@ use ctcore::ct_error::{CTError, CTResult, CTsageError};
 
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 use rust_i18n::t;
@@ -205,10 +206,13 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
     }
 
     if operand_count > 2 && !terminal_option {
-        return Err(CTsageError::new(
-            1,
-            format!("extra operand {}", operands[2].as_os_str().quote()),
-        ));
+        let mut message = b"extra operand ".to_vec();
+        if uses_c_locale() {
+            message.extend(quote_c_locale_operand(operands[2].as_os_str()));
+        } else {
+            message.extend(operands[2].as_os_str().quote().to_string().into_bytes());
+        }
+        return Err(WhoUsageError::boxed(message));
     }
 
     if posixly_correct {
@@ -297,6 +301,46 @@ const WHO_SHORT_OPTIONS: &[u8] = b"abdlmpqrstuwHThV";
 #[derive(Debug)]
 struct WhoUsageError {
     message: Vec<u8>,
+}
+
+fn uses_c_locale() -> bool {
+    for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        let Some(locale) = std::env::var_os(variable) else {
+            continue;
+        };
+        if locale.is_empty() {
+            continue;
+        }
+        return matches!(locale.to_string_lossy().as_ref(), "C" | "POSIX");
+    }
+    true
+}
+
+fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(operand.as_bytes().len() + 2);
+    quoted.push(b'\'');
+    for byte in operand.as_bytes() {
+        match *byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'\'' => quoted.extend_from_slice(b"\\'"),
+            b' '..=b'~' => quoted.push(*byte),
+            _ => {
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 7));
+                quoted.push(b'0' + (byte & 7));
+            }
+        }
+    }
+    quoted.push(b'\'');
+    quoted
 }
 
 impl WhoUsageError {
@@ -473,6 +517,16 @@ mod tests {
         let error = prepare_who_args(args.into_iter()).unwrap_err();
         assert_eq!(error.to_string(), "extra operand 'c'");
         assert!(error.usage());
+    }
+
+    #[test]
+    fn non_utf8_extra_operand_uses_gnu_locale_quoting() {
+        let operand = OsString::from_vec(vec![0xff]);
+        assert_eq!(quote_c_locale_operand(&operand), b"'\\377'");
+        assert_eq!(
+            quote_c_locale_operand(OsStr::new("a'b\\c\n")),
+            b"'a\\'b\\\\c\\n'"
+        );
     }
 
     #[test]

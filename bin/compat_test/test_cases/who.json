@@ -1110,6 +1110,29 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节操作数诊断用例：export LC_ALL='C'；执行who a b并追加第三操作数原始字节0xff；参数完整十六进制=61 62 ff；GNU who通过quote按C locale引用多余操作数，将0xff写为八进制转义，预期RC=1，stdout为0字节、完整十六进制=空，stderr完整十六进制=77686f3a206578747261206f706572616e6420275c333737270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "61",
+                "62",
+                "ff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f3a206578747261206f706572616e6420275c333737270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -212,7 +212,7 @@ fn idle_string_local<'a>(when: i64, boot_time: i64, now: i64) -> Cow<'a, str> {
             .into()
         }
     } else {
-        " old ".into()
+        t!("who.output.old").into()
     }
 }
 
@@ -226,7 +226,7 @@ fn runlevel_comment(previous: u8) -> Option<String> {
     } else {
         char::from(previous)
     };
-    Some(format!("last={previous}"))
+    Some(format!("{}={previous}", t!("who.output.last")))
 }
 
 fn runlevel_line_bytes(label: &str, current: u8) -> Vec<u8> {
@@ -1196,6 +1196,36 @@ mod tests {
         assert_eq!(runlevel_comment(b' ').as_deref(), Some("last= "));
         assert_eq!(runlevel_comment(0x1f), None);
         assert_eq!(runlevel_comment(0xa0), None);
+    }
+
+    #[test]
+    fn chinese_output_catalog_matches_gnu_who() {
+        assert_eq!(t!("who.output.heading_name", locale = "zh-CN"), "名称    ");
+        assert_eq!(
+            t!("who.output.heading_line", locale = "zh-CN"),
+            "线路        "
+        );
+        assert_eq!(
+            t!("who.output.heading_time", locale = "zh-CN"),
+            "时间            "
+        );
+        assert_eq!(t!("who.output.heading_pid", locale = "zh-CN"), "PID");
+        assert_eq!(
+            t!("who.output.heading_comment", locale = "zh-CN"),
+            "备注    "
+        );
+        assert_eq!(t!("who.output.run_level", locale = "zh-CN"), "运行级别  ");
+        assert_eq!(t!("who.output.last", locale = "zh-CN"), "上一个");
+        assert_eq!(
+            t!("who.output.system_boot", locale = "zh-CN"),
+            "系统引导    "
+        );
+        assert_eq!(
+            t!("who.output.clock_change", locale = "zh-CN"),
+            "时钟更改    "
+        );
+        assert_eq!(t!("who.output.login", locale = "zh-CN"), "登录    ");
+        assert_eq!(t!("who.output.old", locale = "zh-CN"), "很久");
     }
 
     #[test]

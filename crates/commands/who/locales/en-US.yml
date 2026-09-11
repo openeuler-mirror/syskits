@@ -29,6 +29,8 @@ who:
     run_level: "run-level"
     clock_change: "clock change"
     login: "LOGIN"
+    last: "last"
+    old: " old "
     term: "term"
     exit: "exit"
     users_count: "# users"

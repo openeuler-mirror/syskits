@@ -238,6 +238,7 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
+        .args_override_self(true)
         .infer_long_args(true)
         .args(&args)
 }
@@ -725,6 +726,28 @@ mod tests {
                 .unwrap();
             let flags = TacFlags::new(&matches).unwrap();
             assert_eq!(flags.separator, ":");
+        }
+
+        #[test]
+        fn test_tac_flags_accept_repeated_options_and_use_last_separator() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    "tac",
+                    "-b",
+                    "--before",
+                    "-r",
+                    "--regex",
+                    "-s",
+                    ":",
+                    "--separator",
+                    ",",
+                ])
+                .unwrap();
+            let flags = TacFlags::new(&matches).unwrap();
+
+            assert!(flags.is_before);
+            assert!(flags.is_regex);
+            assert_eq!(flags.separator, ",");
         }
 
         #[test]

@@ -66,6 +66,8 @@ pub use crate::ct_features::ct_encoding;
 pub use crate::ct_features::ct_format;
 #[cfg(feature = "fs")]
 pub use crate::ct_features::ct_fs;
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "gnu-regex"))]
+pub use crate::ct_features::ct_gnu_regex;
 #[cfg(feature = "lines")]
 pub use crate::ct_features::ct_lines;
 #[cfg(feature = "quoting-style")]

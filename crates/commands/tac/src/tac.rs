@@ -22,9 +22,9 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 
 use ctcore::Tool;
+use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use memchr::memmem;
 use memmap2::Mmap;
-use regex_automata::{Input, hybrid::dfa, nfa::thompson};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
@@ -147,7 +147,13 @@ impl TacFlags {
 #[derive(Debug)]
 pub enum TacError {
     /// 用户给定的正则表达式无效。
-    InvalidRegex(regex::Error),
+    InvalidRegex(String),
+
+    /// 正则搜索内部错误。
+    RegexSearch,
+
+    /// GNU正则偏移量无法表示当前记录。
+    RecordTooLarge,
 
     /// 正则模式不允许空分隔符。
     EmptyRegexSeparator,
@@ -176,7 +182,9 @@ impl Error for TacError {}
 impl Display for TacError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidRegex(e) => write!(f, "invalid regular expression: {e}"),
+            Self::InvalidRegex(message) => f.write_str(message),
+            Self::RegexSearch => write!(f, "error in regular expression search"),
+            Self::RecordTooLarge => write!(f, "record too large"),
             Self::EmptyRegexSeparator => write!(f, "separator cannot be empty"),
             Self::InvalidArgument(s) => {
                 write!(f, "{}: read error: Invalid argument", s.maybe_quote())
@@ -201,6 +209,9 @@ impl Display for TacError {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示命令执行的结果
 pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -267,10 +278,11 @@ pub fn ct_app() -> Command {
 fn tac_buffer_regex<W: Write>(
     writer: &mut W,
     data: &[u8],
-    pattern: &regex::bytes::Regex,
+    pattern: &mut GnuRegex,
     before: bool,
-) -> std::io::Result<()> {
-    tac_write_segments(writer, &tac_collect_regex_segments(data, pattern, before))
+) -> CTResult<()> {
+    let segments = tac_collect_regex_segments(data, pattern, before)?;
+    tac_write_segments(writer, &segments).map_err(|error| TacError::WriteError(error).into())
 }
 
 /// 使用固定字符串作为分隔符反向输出数据
@@ -441,65 +453,33 @@ fn tac_lossy_string(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-fn tac_find_last_regex_match(
-    data: &[u8],
-    pattern: &regex::bytes::Regex,
-    reverse_dfa: Option<(&dfa::DFA, &mut dfa::Cache)>,
-) -> Option<(usize, usize)> {
-    if let Some((reverse_dfa, cache)) = reverse_dfa {
-        match reverse_dfa.try_search_rev(cache, &Input::new(data).earliest(true)) {
-            Ok(None) => return None,
-            Ok(Some(found)) if found.offset() < data.len() => {
-                let start = found.offset();
-                if let Some(forward_match) = pattern.find_at(data, start)
-                    && forward_match.start() == start
-                {
-                    return Some((start, forward_match.end()));
-                }
+impl From<GnuRegexError> for TacError {
+    fn from(error: GnuRegexError) -> Self {
+        match error {
+            GnuRegexError::Compile(message) => {
+                Self::InvalidRegex(String::from_utf8_lossy(&message).into_owned())
             }
-            Ok(Some(_)) | Err(_) => {}
+            GnuRegexError::Search => Self::RegexSearch,
+            GnuRegexError::RecordTooLarge => Self::RecordTooLarge,
         }
     }
-
-    let mut search_start = 0;
-    let mut last_match = None;
-
-    while search_start < data.len() {
-        let Some(found) = pattern.find_at(data, search_start) else {
-            break;
-        };
-        if found.start() == data.len() {
-            break;
-        }
-
-        last_match = Some((found.start(), found.end()));
-        // Advance from the match start so overlapping candidates remain visible.
-        search_start = found.start() + 1;
-    }
-
-    last_match
 }
 
 fn tac_collect_regex_segments(
     data: &[u8],
-    pattern: &regex::bytes::Regex,
+    pattern: &mut GnuRegex,
     before: bool,
-) -> Vec<Vec<u8>> {
-    let reverse_dfa = dfa::DFA::builder()
-        .thompson(thompson::Config::new().reverse(true))
-        .build(pattern.as_str())
-        .ok();
-    let mut reverse_cache = reverse_dfa.as_ref().map(dfa::DFA::create_cache);
+) -> Result<Vec<Vec<u8>>, TacError> {
     let mut segments = Vec::new();
     let mut search_end = data.len();
     let mut past_end = data.len();
     let mut first_match = true;
 
-    while let Some((start, end)) = tac_find_last_regex_match(
-        &data[..search_end],
-        pattern,
-        reverse_dfa.as_ref().zip(reverse_cache.as_mut()),
-    ) {
+    while let Some(found) = pattern
+        .search_backward(&data[..search_end])
+        .map_err(TacError::from)?
+    {
+        let (start, end) = (found.start, found.end);
         if before {
             segments.push(data[start..past_end].to_vec());
             past_end = start;
@@ -516,7 +496,7 @@ fn tac_collect_regex_segments(
     }
 
     segments.push(data[..past_end].to_vec());
-    segments
+    Ok(segments)
 }
 
 fn tac_collect_string_segments(data: &[u8], before: bool, separator: &[u8]) -> Vec<Vec<u8>> {
@@ -550,18 +530,17 @@ fn tac_write_segments<W: Write>(writer: &mut W, segments: &[Vec<u8>]) -> std::io
 }
 
 fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
-    let data = get_file_data(filename)?;
-
     if settings.is_regex {
-        let separator = std::str::from_utf8(&settings.separator)
-            .map_err(|error| TacError::InvalidArgument(error.to_string()))?;
-        let pattern = regex::bytes::Regex::new(separator).map_err(TacError::InvalidRegex)?;
+        let mut pattern = GnuRegex::compile(&settings.separator, GnuRegexCompileOptions::emacs())
+            .map_err(TacError::from)?;
+        let data = get_file_data(filename)?;
         Ok(tac_collect_regex_segments(
             data.as_ref(),
-            &pattern,
+            &mut pattern,
             settings.is_before,
-        ))
+        )?)
     } else {
+        let data = get_file_data(filename)?;
         Ok(tac_collect_string_segments(
             data.as_ref(),
             settings.is_before,
@@ -617,6 +596,9 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
 }
 
 pub fn tac_native_semantic(args: impl ctcore::Args) -> CTResult<TacSemantic> {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let settings = tac_parse_invocation(args)?;
@@ -934,16 +916,11 @@ mod tests {
     #[cfg(test)]
     mod tac_error_tests {
         use super::*;
-        use regex::Error as RegexError;
 
         #[test]
         fn test_tac_error_invalid_regex() {
-            let regex_error = RegexError::Syntax("invalid regex".to_string());
-            let error = TacError::InvalidRegex(regex_error);
-            assert_eq!(
-                error.to_string(),
-                "invalid regular expression: invalid regex"
-            );
+            let error = TacError::InvalidRegex("Invalid regular expression".to_string());
+            assert_eq!(error.to_string(), "Invalid regular expression");
             assert_eq!(error.code(), 1);
         }
 
@@ -1146,77 +1123,80 @@ mod tests {
     #[cfg(test)]
     mod tac_buffer_regex_tests {
         use super::*;
-        use regex::bytes::Regex;
+
+        fn reverse(data: &[u8], pattern: &[u8], before: bool) -> Vec<u8> {
+            let mut output = Vec::new();
+            let mut pattern = GnuRegex::compile(pattern, GnuRegexCompileOptions::emacs()).unwrap();
+            tac_buffer_regex(&mut output, data, &mut pattern, before).unwrap();
+            output
+        }
 
         #[test]
         fn test_tac_buffer_regex_simple() {
-            let mut output = Vec::new();
-            let data = b"line1\nline2\nline3";
-            let pattern = Regex::new(r"\n").unwrap();
-            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
-            assert_eq!(output, b"line3line2\nline1\n");
+            assert_eq!(
+                reverse(b"line1\nline2\nline3", b"\n", false),
+                b"line3line2\nline1\n"
+            );
         }
 
         #[test]
         fn test_tac_buffer_regex_before() {
-            let mut output = Vec::new();
-            let data = b"line1\nline2\nline3";
-            let pattern = Regex::new(r"\n").unwrap();
-            tac_buffer_regex(&mut output, data, &pattern, true).unwrap();
-            // before 模式：分隔符属于后面的记录，输出为 "\nline3\nline2line1"
-            assert_eq!(output, b"\nline3\nline2line1");
+            assert_eq!(
+                reverse(b"line1\nline2\nline3", b"\n", true),
+                b"\nline3\nline2line1"
+            );
         }
 
         #[test]
         fn test_tac_buffer_regex_complex_pattern() {
-            let mut output = Vec::new();
-            let data = b"line1\r\nline2\nline3\r\n";
-            let pattern = Regex::new(r"\r?\n").unwrap();
-            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
-            assert_eq!(output, b"line3\r\nline2\nline1\r\n");
+            assert_eq!(
+                reverse(b"line1\r\nline2\nline3\r\n", b"\r?\n", false),
+                b"line3\r\nline2\nline1\r\n"
+            );
         }
 
         #[test]
-        fn test_tac_buffer_regex_with_word_boundaries() {
-            let mut output = Vec::new();
-            let data = b"word1 word2 word3";
-            let pattern = Regex::new(r"\s+").unwrap();
-            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
-            assert_eq!(output, b"word3word2 word1 ");
+        fn test_tac_buffer_regex_supports_emacs_backreferences() {
+            assert_eq!(reverse(b"ababXcdcd", b"\\(..\\)\\1", false), b"Xcdcdabab");
         }
 
         #[test]
-        fn test_tac_buffer_regex_with_capturing_groups() {
-            let mut output = Vec::new();
-            let data = b"a=1;b=2;c=3";
-            let pattern = Regex::new(r"[;=]").unwrap();
-            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
-            assert_eq!(output, b"3c=2;b=1;a=");
+        fn test_tac_buffer_regex_treats_plain_parentheses_as_literals() {
+            assert_eq!(reverse(b"aa(xx)bb(xx)", b"(xx)", false), b"bb(xx)aa(xx)");
         }
 
         #[test]
         fn test_tac_buffer_regex_with_overlapping_matches() {
-            let mut output = Vec::new();
-            let data = b"aaaa";
-            let pattern = Regex::new(r"aa").unwrap();
-            tac_buffer_regex(&mut output, data, &pattern, false).unwrap();
-            assert_eq!(output, b"aaaa");
+            assert_eq!(reverse(b"aaaa", b"aa", false), b"aaaa");
         }
 
         #[test]
         fn test_tac_buffer_regex_variable_length_separator() {
-            let mut output = Vec::new();
-            let pattern = Regex::new(r":+").unwrap();
-            tac_buffer_regex(&mut output, b"aa::bbb::c::", &pattern, false).unwrap();
-            assert_eq!(output, b":c::bbb::aa:");
+            assert_eq!(reverse(b"aa::bbb::c::", b":+", false), b":c::bbb::aa:");
         }
 
         #[test]
         fn test_tac_buffer_regex_variable_length_separator_before() {
-            let mut output = Vec::new();
-            let pattern = Regex::new(r":+").unwrap();
-            tac_buffer_regex(&mut output, b"aa::bbb::c::", &pattern, true).unwrap();
-            assert_eq!(output, b":::c::bbb:aa");
+            assert_eq!(reverse(b"aa::bbb::c::", b":+", true), b":::c::bbb:aa");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_handles_zero_length_anchors() {
+            assert_eq!(reverse(b"ab\ncd\n", b"^", false), b"cd\nab\n");
+            assert_eq!(reverse(b"ab\ncd\n", b"$", false), b"\n\ncdab");
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_c_locale_dot_matches_one_byte() {
+            assert_eq!(
+                reverse(b"A\xc3\xa9B\xc3\xa9C", b".", false),
+                b"C\xa9\xc3B\xa9\xc3A"
+            );
+        }
+
+        #[test]
+        fn test_tac_buffer_regex_accepts_non_utf8_pattern() {
+            assert_eq!(reverse(b"x\xffy\xff", b"\xff", false), b"y\xffx\xff");
         }
     }
 

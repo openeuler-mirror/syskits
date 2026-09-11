@@ -21,6 +21,8 @@ pub mod ct_format;
 pub mod ct_fs;
 #[cfg(feature = "fsext")]
 pub mod ct_fsext;
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "gnu-regex"))]
+pub mod ct_gnu_regex;
 #[cfg(feature = "lines")]
 pub mod ct_lines;
 #[cfg(feature = "quoting-style")]

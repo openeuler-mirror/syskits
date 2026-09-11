@@ -159,6 +159,27 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "uname",
+            "description": "原始字节操作数诊断用例：export LC_ALL='C'；执行uname并传入单个操作数原始字节0xff；参数完整十六进制=ff；GNU按C locale引用不可打印字节为\\377，预期RC=1，stdout完整十六进制=空，stderr完整十六进制=756e616d653a206578747261206f706572616e6420275c333737270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "ff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e616d653a206578747261206f706572616e6420275c333737270a5472792027756e616d65202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

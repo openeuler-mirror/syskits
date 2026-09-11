@@ -1375,6 +1375,80 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节输出用例：LC_ALL=zh_TW.utf8、TZ=UTC0；执行who -aH utmp，参数完整十六进制=2d6148 75746d70；输入7条400字节Linux utmp记录覆盖全部本地化标签；GNU输出繁体中文标题、记录标签及退出字段，并将“ 舊的 ”按IDLESTR_LEN=6字节截断为包含不完整UTF-8尾字节的空闲字段，预期RC=0、stderr为空且stdout完整十六进制逐字节一致",
+            "setup_commands": [
+                "export LC_ALL='zh_TW.utf8'",
+                "export LANG='zh_TW.utf8'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; types=(1,2,3,5,6,7,8); b=bytearray(400*len(types)); [(struct.pack_into(\"h\",b,i*400,t), struct.pack_into(\"i\",b,i*400+4,12345), b.__setitem__(slice(i*400+8,i*400+12),b\"null\"), b.__setitem__(slice(i*400+40,i*400+42),b\"p0\"), b.__setitem__(slice(i*400+44,i*400+49),b\"alice\"), b.__setitem__(slice(i*400+76,i*400+82),b\"host:1\"), struct.pack_into(\"q\",b,i*400+344,1893456000 if t==2 else 1709210096)) for i,t in enumerate(types)]; open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "2d6148",
+                "75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "e5908de7a8b12020202020e7b79ae8b7af20202020202020e69982e996932020202020202020202020e99692e7bdae202020202020202050494420e58299e8a8bb202020e98080e587ba0a2020202020202020202020e59fb7e8a18ce7b49ae588a5203920323032342d30322d32392031323a333420202020202020202020202020202020202020e69c80e8bf913d300a2020202020202020202020e7b3bbe7b5b1e5bc95e5b08e20323033302d30312d30312030303a30300a2020202020202020202020e69982e99098e8ae8ae69bb420323032342d30322d32392031323a33340a20202020202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d70300ae799bbe585a520202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d70300a616c696365202020202d206e756c6c202020202020202020323032342d30322d32392031323a33342020e8888ae79a20202020202031323334352028686f73743a31290a20202020202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d703020202020e7b582e7abaf3d3020e98080e587ba3d300a",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节输出用例：LC_ALL=zh_TW.big5、TZ=UTC0；执行who -aH utmp，参数完整十六进制=2d6148 75746d70；输入7条400字节Linux utmp记录覆盖全部本地化标签；GNU gettext按Big5 codeset输出繁体中文文本并保留ASCII及utmp字段原始字节，预期RC=0、stderr为空且stdout完整十六进制逐字节一致",
+            "setup_commands": [
+                "export LC_ALL='zh_TW.big5'",
+                "export LANG='zh_TW.big5'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; types=(1,2,3,5,6,7,8); b=bytearray(400*len(types)); [(struct.pack_into(\"h\",b,i*400,t), struct.pack_into(\"i\",b,i*400+4,12345), b.__setitem__(slice(i*400+8,i*400+12),b\"null\"), b.__setitem__(slice(i*400+40,i*400+42),b\"p0\"), b.__setitem__(slice(i*400+44,i*400+49),b\"alice\"), b.__setitem__(slice(i*400+76,i*400+82),b\"host:1\"), struct.pack_into(\"q\",b,i*400+344,1893456000 if t==2 else 1709210096)) for i,t in enumerate(types)]; open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "2d6148",
+                "75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a657bad920202020202020bd75b8f4202020202020202020aec9b6a120202020202020202020202020b6a2b86d2020202020202020202050494420b3c6b5f92020202020b068a5580a2020202020202020202020b0f5a6e6afc5a74f2039202020323032342d30322d32392031323a333420202020202020202020202020202020202020b3ccaaf13d300a2020202020202020202020a874b2cea4debec92020202020323033302d30312d30312030303a30300a2020202020202020202020aec9c4c1c5dca7f32020202020323032342d30322d32392031323a33340a20202020202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d70300ab56ea44a202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d70300a616c696365202020202d206e756c6c202020202020202020323032342d30322d32392031323a33342020c2c2aaba2020202020202031323334352028686f73743a31290a20202020202020202020206e756c6c202020202020202020323032342d30322d32392031323a33342020202020202020202020202031323334352069643d703020202020b2d7badd3d3020b068a5583d300a",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节诊断用例：LC_ALL=zh_TW.utf8；执行who a b c，参数完整十六进制=61 62 63；GNU本地化extra operand与try-help文本并使用繁体中文角引号包围操作数，预期RC=1、stdout为空且stderr完整十六进制=77686f3a20e9a18de5a496e79a84e9818be7ae97e5858320e3808c63e3808d0ae8ab8be59897e8a9a6e59fb7e8a18ce3808c77686f202d2d68656c70e3808de58f96e5be97e69bb4e5a49ae8a88ae681afe380820a",
+            "setup_commands": [
+                "export LC_ALL='zh_TW.utf8'",
+                "export LANG='zh_TW.utf8'"
+            ],
+            "args": [
+                "61",
+                "62",
+                "63"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f3a20e9a18de5a496e79a84e9818be7ae97e5858320e3808c63e3808d0ae8ab8be59897e8a9a6e59fb7e8a18ce3808c77686f202d2d68656c70e3808de58f96e5be97e69bb4e5a49ae8a88ae681afe380820a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

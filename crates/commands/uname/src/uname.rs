@@ -16,7 +16,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, strip_errno};
 use ctcore::libc::{SIG_DFL, SIG_ERR, SIGPIPE, getppid, sighandler_t, signal};
 use platform_info::*;
 
@@ -177,13 +177,51 @@ impl UNameOutput {
 }
 
 fn platform_info_error(error: PlatformInfoError) -> Box<dyn CTError> {
+    let context = t!("uname.errors.cannot_get_system_name");
     match error.downcast::<std::io::Error>() {
-        Ok(error) => CtSimpleError::new(
-            1,
-            format!("cannot get system name: {}", strip_errno(&error)),
-        ),
-        Err(error) => CtSimpleError::new(1, format!("cannot get system name: {error}")),
+        Ok(error) => localized_io_error(&context, &error),
+        Err(error) => localized_runtime_error(&context, &error.to_string()),
     }
+}
+
+#[derive(Debug)]
+struct UnameRuntimeError {
+    diagnostic: Vec<u8>,
+}
+
+impl Display for UnameRuntimeError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.diagnostic).fmt(formatter)
+    }
+}
+
+impl Error for UnameRuntimeError {}
+
+impl CTError for UnameRuntimeError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.diagnostic)
+    }
+}
+
+fn io_error_diagnostic(context: &[u8], error: &std::io::Error) -> Vec<u8> {
+    let mut diagnostic = Vec::with_capacity(context.len() + 2 + error.to_string().len());
+    diagnostic.extend_from_slice(context);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    diagnostic
+}
+
+fn localized_io_error(context: &str, error: &std::io::Error) -> Box<dyn CTError> {
+    Box::new(UnameRuntimeError {
+        diagnostic: io_error_diagnostic(&locale_text_bytes(context), error),
+    })
+}
+
+fn localized_runtime_error(context: &str, detail: &str) -> Box<dyn CTError> {
+    let mut diagnostic = locale_text_bytes(context);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(detail.as_bytes());
+    Box::new(UnameRuntimeError { diagnostic })
 }
 
 #[cfg(target_os = "linux")]
@@ -261,7 +299,7 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
     std::io::stdout()
         .lock()
         .write_all(&rendered)
-        .map_err_context(|| "write error".to_string())
+        .map_err(|error| localized_io_error(&t!("uname.errors.write_error"), &error))
 }
 
 struct SigpipeGuard {
@@ -1412,8 +1450,9 @@ mod tests {
 
             let output = UNameOutput::new_with_platform_provider(&flags, || {
                 provider_called.set(true);
-                PlatformInfo::new()
-                    .map_err(|_error| CtSimpleError::new(1, "cannot get system name"))
+                PlatformInfo::new().map_err(|_error| {
+                    ctcore::ct_error::CtSimpleError::new(1, "cannot get system name")
+                })
             })
             .unwrap();
 
@@ -1427,7 +1466,10 @@ mod tests {
                 generate_uname_flags(false, false, false, false, false, false, true, true, false);
 
             let output = UNameOutput::new_with_platform_provider(&flags, || {
-                Err(CtSimpleError::new(1, "cannot get system name"))
+                Err(ctcore::ct_error::CtSimpleError::new(
+                    1,
+                    "cannot get system name",
+                ))
             })
             .unwrap();
 
@@ -1448,6 +1490,15 @@ mod tests {
                 error.to_string(),
                 "cannot get system name: Operation not permitted"
             );
+        }
+
+        #[test]
+        fn io_error_diagnostic_preserves_localized_context_bytes() {
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC);
+
+            let diagnostic = io_error_diagnostic("写入错误".as_bytes(), &error);
+
+            assert_eq!(diagnostic, "写入错误: No space left on device".as_bytes());
         }
     }
 

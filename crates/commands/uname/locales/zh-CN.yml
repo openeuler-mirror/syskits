@@ -12,4 +12,6 @@ uname:
     没有选项时，与-s相同。
   errors:
     extra_operand: "多余的操作对象"
+    cannot_get_system_name: "无法获取系统名"
+    write_error: "写入错误"
     try_help: '请尝试执行 "uname --help" 来获取更多信息。'

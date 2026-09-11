@@ -677,6 +677,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "简体中文输出错误诊断用例：设置LC_ALL=zh_CN.UTF-8并将stdout连接到/dev/full；GNU预期RC=1、stdout不可写，并将write error上下文翻译为“写入错误”，stderr为uname: 写入错误: No space left on device",
+            "setup_commands": [],
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: 写入错误: No space left on device\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8"
+                },
+                "standardStreams": {
+                    "stdout": "full",
+                    "stderr": "capture"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -12,4 +12,6 @@ uname:
     With no OPTION, same as -s.
   errors:
     extra_operand: "extra operand"
+    cannot_get_system_name: "cannot get system name"
+    write_error: "write error"
     try_help: "Try 'uname --help' for more information."

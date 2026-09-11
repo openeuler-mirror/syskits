@@ -716,6 +716,64 @@
       ]
     },
     {
+      "command": "tac",
+      "description": "原始字节用例：LC_ALL=C下处理文件名0xff；参数完整十六进制=ff，fixture文件内容为first\\nsecond\\n；GNU接受Linux非UTF-8文件名并按换行倒序，预期stdout完整十六进制=7365636f6e640a66697273740a、stderr为空、RC=0",
+      "args": [
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "name=$(printf '\\377'); printf 'first\\nsecond\\n' > \"$name\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "7365636f6e640a66697273740a",
+          "stderr": ""
+        }
+      },
+      "environment": {
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "cleanup_commands": [
+        "name=$(printf '\\377'); rm -f -- \"$name\""
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "command": "tac",
+      "description": "原始字节用例：LC_ALL=C下执行tac -s 0xff bytes；参数完整十六进制=2d73 ff 6279746573，fixture bytes完整十六进制=78ff79ff；GNU把0xff作为固定分隔符并倒序记录，预期stdout完整十六进制=79ff78ff、stderr为空、RC=0",
+      "args": [
+        "2d73",
+        "ff",
+        "6279746573"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "printf 'x\\377y\\377' > bytes"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "79ff78ff",
+          "stderr": ""
+        }
+      },
+      "environment": {
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f bytes"
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
       "tstdin": "",
       "command": "tac",
       "description": "tac: 使用错误的flag",

@@ -13,6 +13,7 @@
 //! 这个命令的名字是 cat（concatenate，连接）的反向拼写，因此它以相反的顺序显示文件的行。
 
 extern crate rust_i18n;
+use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -25,9 +26,10 @@ use memchr::memmem;
 use memmap2::Mmap;
 use regex_automata::{Input, hybrid::dfa, nfa::thompson};
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::io::{Read, Write, stdin, stdout};
+use std::os::unix::ffi::OsStrExt;
 use std::{
     fs::{File, read},
     path::Path,
@@ -53,8 +55,8 @@ pub mod tac_flags {
 struct TacFlags {
     is_before: bool,
     is_regex: bool,
-    separator: String,
-    files: Vec<String>,
+    separator: Vec<u8>,
+    files: Vec<OsString>,
 }
 
 impl Default for TacFlags {
@@ -70,8 +72,8 @@ impl Default for TacFlags {
         Self {
             is_before: false,
             is_regex: false,
-            separator: String::from("\n"),
-            files: vec![String::from("-")],
+            separator: b"\n".to_vec(),
+            files: vec![OsString::from("-")],
         }
     }
 }
@@ -114,22 +116,20 @@ impl TacFlags {
 
         // 字符串类型参数提取
         let separator = matches
-            .get_one::<String>(tac_flags::TAC_SEPARATOR)
-            .map(String::as_str)
-            .unwrap_or("\n")
-            .to_string();
+            .get_one::<OsString>(tac_flags::TAC_SEPARATOR)
+            .map_or_else(|| b"\n".to_vec(), |value| value.as_bytes().to_vec());
 
         // 处理空分隔符的特殊情况
         let separator = if separator.is_empty() {
-            String::from("\0")
+            vec![0]
         } else {
             separator
         };
 
         // 向量类型参数提取
         let files = matches
-            .get_many::<String>(tac_flags::TAC_FILE)
-            .map_or_else(|| vec![String::from("-")], |v| v.cloned().collect());
+            .get_many::<OsString>(tac_flags::TAC_FILE)
+            .map_or_else(|| vec![OsString::from("-")], |v| v.cloned().collect());
 
         Ok(Self {
             is_before: before,
@@ -227,10 +227,12 @@ pub fn ct_app() -> Command {
             .short('s')
             .long(tac_flags::TAC_SEPARATOR)
             .help(t!("tac.clap.tac_separator"))
+            .value_parser(OsStringValueParser::new())
             .value_name("STRING"),
         Arg::new(tac_flags::TAC_FILE)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -278,7 +280,7 @@ fn tac_buffer<W: Write>(
     writer: &mut W,
     data: &[u8],
     before: bool,
-    separator: &str,
+    separator: &[u8],
 ) -> std::io::Result<()> {
     tac_write_segments(
         writer,
@@ -359,8 +361,8 @@ impl AsRef<[u8]> for FileData {
 ///
 /// # 返回值
 /// 返回 `CTResult<FileData>`，包含文件数据或错误信息
-fn get_file_data(filename: &str) -> CTResult<FileData> {
-    if filename == "-" {
+fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
+    if filename.as_bytes() == b"-" {
         if ctcore::ct_io::injected_stdin_bytes().is_some() {
             let buffer = read_from_stdin()?;
             return Ok(FileData::Buffer(buffer));
@@ -509,7 +511,7 @@ fn tac_collect_regex_segments(
     segments
 }
 
-fn tac_collect_string_segments(data: &[u8], before: bool, separator: &str) -> Vec<Vec<u8>> {
+fn tac_collect_string_segments(data: &[u8], before: bool, separator: &[u8]) -> Vec<Vec<u8>> {
     let slen = separator.len();
     let mut segments = Vec::new();
     let mut following_line_start = data.len();
@@ -539,12 +541,13 @@ fn tac_write_segments<W: Write>(writer: &mut W, segments: &[Vec<u8>]) -> std::io
     Ok(())
 }
 
-fn tac_collect_file_segments(filename: &str, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
+fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
     let data = get_file_data(filename)?;
 
     if settings.is_regex {
-        let pattern =
-            regex::bytes::Regex::new(&settings.separator).map_err(TacError::InvalidRegex)?;
+        let separator = std::str::from_utf8(&settings.separator)
+            .map_err(|error| TacError::InvalidArgument(error.to_string()))?;
+        let pattern = regex::bytes::Regex::new(separator).map_err(TacError::InvalidRegex)?;
         Ok(tac_collect_regex_segments(
             data.as_ref(),
             &pattern,
@@ -568,7 +571,11 @@ fn tac_collect_file_segments(filename: &str, settings: &TacFlags) -> CTResult<Ve
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示处理结果
-fn tac_process_file<W: Write>(writer: &mut W, filename: &str, settings: &TacFlags) -> CTResult<()> {
+fn tac_process_file<W: Write>(
+    writer: &mut W,
+    filename: &OsStr,
+    settings: &TacFlags,
+) -> CTResult<()> {
     let segments = tac_collect_file_segments(filename, settings)?;
     tac_write_segments(writer, &segments).map_err(TacError::WriteError)?;
 
@@ -620,7 +627,7 @@ pub fn tac_native_semantic(args: impl ctcore::Args) -> CTResult<TacSemantic> {
                         continue;
                     }
                     rows.push(TacRow {
-                        source_name: filename.clone(),
+                        source_name: filename.to_string_lossy().into_owned(),
                         file_index: file_index + 1,
                         row_index: global_row_index,
                         chunk: tac_lossy_string(&segment),
@@ -638,7 +645,7 @@ pub fn tac_native_semantic(args: impl ctcore::Args) -> CTResult<TacSemantic> {
 
     Ok(TacSemantic {
         separator_kind: tac_separator_kind(&settings).into(),
-        separator_text: settings.separator,
+        separator_text: tac_lossy_string(&settings.separator),
         before: settings.is_before,
         rows,
         classic_text: tac_lossy_string(&classic_bytes),
@@ -719,7 +726,7 @@ mod tests {
             let flags = TacFlags::default();
             assert!(!flags.is_before);
             assert!(!flags.is_regex);
-            assert_eq!(flags.separator, "\n");
+            assert_eq!(flags.separator, b"\n");
             assert_eq!(flags.files, vec!["-"]);
         }
 
@@ -730,7 +737,7 @@ mod tests {
             let flags = TacFlags::new(&matches).unwrap();
             assert!(!flags.is_before);
             assert!(!flags.is_regex);
-            assert_eq!(flags.separator, "\n");
+            assert_eq!(flags.separator, b"\n");
             assert_eq!(flags.files, vec!["-"]);
         }
 
@@ -757,7 +764,7 @@ mod tests {
                 .try_get_matches_from(vec!["tac", "--separator", ":"])
                 .unwrap();
             let flags = TacFlags::new(&matches).unwrap();
-            assert_eq!(flags.separator, ":");
+            assert_eq!(flags.separator, b":");
         }
 
         #[test]
@@ -779,7 +786,7 @@ mod tests {
 
             assert!(flags.is_before);
             assert!(flags.is_regex);
-            assert_eq!(flags.separator, ",");
+            assert_eq!(flags.separator, b",");
         }
 
         #[test]
@@ -789,7 +796,7 @@ mod tests {
                 .try_get_matches_from(vec!["tac", "--separator", ""])
                 .unwrap();
             let flags = TacFlags::new(&matches).unwrap();
-            assert_eq!(flags.separator, "\0");
+            assert_eq!(flags.separator, b"\0");
         }
 
         #[test]
@@ -898,9 +905,9 @@ mod tests {
             assert_eq!(
                 result
                     .unwrap()
-                    .get_one::<String>(tac_flags::TAC_SEPARATOR)
-                    .map(String::as_str),
-                Some(":")
+                    .get_one::<OsString>(tac_flags::TAC_SEPARATOR)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new(":"))
             );
         }
     }
@@ -1010,7 +1017,7 @@ mod tests {
             // This test is ignored because it requires real stdin
             // In a real environment, we would need integration tests
             // or a more sophisticated mock setup
-            let result = get_file_data("-");
+            let result = get_file_data(OsStr::new("-"));
             assert!(result.is_ok());
         }
 
@@ -1018,7 +1025,7 @@ mod tests {
         fn test_get_file_data_regular_file() {
             let mut temp_file = NamedTempFile::new().unwrap();
             temp_file.write_all(b"test content").unwrap();
-            let result = get_file_data(temp_file.path().to_str().unwrap());
+            let result = get_file_data(temp_file.path().as_os_str());
             assert!(result.is_ok());
             match result.unwrap() {
                 FileData::Mapped(_) | FileData::Buffer(_) => (),
@@ -1027,7 +1034,7 @@ mod tests {
 
         #[test]
         fn test_get_file_data_nonexistent() {
-            let result = get_file_data("nonexistent.txt");
+            let result = get_file_data(OsStr::new("nonexistent.txt"));
             assert!(result.is_err());
         }
     }
@@ -1040,7 +1047,7 @@ mod tests {
         fn test_tac_buffer_simple() {
             let mut output = Vec::new();
             let data = b"line1\nline2\nline3";
-            tac_buffer(&mut output, data, false, "\n").unwrap();
+            tac_buffer(&mut output, data, false, b"\n").unwrap();
             assert_eq!(output, b"line3line2\nline1\n");
         }
 
@@ -1048,7 +1055,7 @@ mod tests {
         fn test_tac_buffer_before() {
             let mut output = Vec::new();
             let data = b"line1\nline2\nline3";
-            tac_buffer(&mut output, data, true, "\n").unwrap();
+            tac_buffer(&mut output, data, true, b"\n").unwrap();
             assert_eq!(output, b"\nline3\nline2line1");
         }
 
@@ -1056,7 +1063,7 @@ mod tests {
         fn test_tac_buffer_custom_separator() {
             let mut output = Vec::new();
             let data = b"line1:line2:line3";
-            tac_buffer(&mut output, data, false, ":").unwrap();
+            tac_buffer(&mut output, data, false, b":").unwrap();
             assert_eq!(output, b"line3line2:line1:");
         }
 
@@ -1064,7 +1071,7 @@ mod tests {
         fn test_tac_buffer_empty_input() {
             let mut output = Vec::new();
             let data = b"";
-            tac_buffer(&mut output, data, false, "\n").unwrap();
+            tac_buffer(&mut output, data, false, b"\n").unwrap();
             assert_eq!(output, b"");
         }
 
@@ -1072,7 +1079,7 @@ mod tests {
         fn test_tac_buffer_single_line() {
             let mut output = Vec::new();
             let data = b"single line";
-            tac_buffer(&mut output, data, false, "\n").unwrap();
+            tac_buffer(&mut output, data, false, b"\n").unwrap();
             assert_eq!(output, b"single line");
         }
 
@@ -1080,7 +1087,7 @@ mod tests {
         fn test_tac_buffer_with_trailing_separator() {
             let mut output = Vec::new();
             let data = b"line1\nline2\nline3\n";
-            tac_buffer(&mut output, data, false, "\n").unwrap();
+            tac_buffer(&mut output, data, false, b"\n").unwrap();
             assert_eq!(output, b"line3\nline2\nline1\n");
         }
 
@@ -1088,7 +1095,7 @@ mod tests {
         fn test_tac_buffer_with_multiple_separators() {
             let mut output = Vec::new();
             let data = b"line1\n\nline2\n\nline3";
-            tac_buffer(&mut output, data, false, "\n").unwrap();
+            tac_buffer(&mut output, data, false, b"\n").unwrap();
             assert_eq!(output, b"line3\nline2\n\nline1\n");
         }
 
@@ -1096,7 +1103,7 @@ mod tests {
         fn test_tac_buffer_with_empty_lines() {
             let mut output = Vec::new();
             let data = b"\n\n\n";
-            tac_buffer(&mut output, data, false, "\n").unwrap();
+            tac_buffer(&mut output, data, false, b"\n").unwrap();
             assert_eq!(output, b"\n\n\n");
         }
 
@@ -1104,7 +1111,7 @@ mod tests {
         fn test_tac_buffer_with_custom_multi_byte_separator() {
             let mut output = Vec::new();
             let data = b"line1<sep>line2<sep>line3";
-            tac_buffer(&mut output, data, false, "<sep>").unwrap();
+            tac_buffer(&mut output, data, false, b"<sep>").unwrap();
             assert_eq!(output, b"line3line2<sep>line1<sep>");
         }
 
@@ -1112,7 +1119,7 @@ mod tests {
         fn test_tac_buffer_with_no_separator() {
             let mut output = Vec::new();
             let data = b"content";
-            tac_buffer(&mut output, data, false, "|").unwrap();
+            tac_buffer(&mut output, data, false, b"|").unwrap();
             assert_eq!(output, b"content");
         }
     }
@@ -1211,7 +1218,7 @@ mod tests {
             let temp_file = create_temp_file_with_content(b"line1\nline2\nline3\n");
             let mut output = Vec::new();
             let settings = TacFlags::default();
-            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            tac_process_file(&mut output, temp_file.path().as_os_str(), &settings).unwrap();
             assert_eq!(output, b"line3\nline2\nline1\n");
         }
 
@@ -1223,7 +1230,7 @@ mod tests {
                 is_before: true,
                 ..Default::default()
             };
-            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            tac_process_file(&mut output, temp_file.path().as_os_str(), &settings).unwrap();
             assert_eq!(output, b"\nline3\nline2line1");
         }
 
@@ -1232,7 +1239,7 @@ mod tests {
             let temp_file = NamedTempFile::new().unwrap();
             let mut output = Vec::new();
             let settings = TacFlags::default();
-            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            tac_process_file(&mut output, temp_file.path().as_os_str(), &settings).unwrap();
             assert_eq!(output, b"");
         }
 
@@ -1243,11 +1250,10 @@ mod tests {
             let mut output = Vec::new();
             let settings = TacFlags {
                 is_regex: true,
-                separator: "[".to_string(), // Invalid regex
+                separator: b"[".to_vec(), // Invalid regex
                 ..Default::default()
             };
-            let result =
-                tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings);
+            let result = tac_process_file(&mut output, temp_file.path().as_os_str(), &settings);
             assert!(result.is_err());
         }
 
@@ -1257,10 +1263,10 @@ mod tests {
             let mut output = Vec::new();
             let settings = TacFlags {
                 is_before: true,
-                separator: ",".to_string(),
+                separator: b",".to_vec(),
                 ..Default::default()
             };
-            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            tac_process_file(&mut output, temp_file.path().as_os_str(), &settings).unwrap();
             assert_eq!(output, b",3,21");
         }
 
@@ -1270,7 +1276,7 @@ mod tests {
             let temp_file = create_temp_file_with_content(&content);
             let mut output = Vec::new();
             let settings = TacFlags::default();
-            tac_process_file(&mut output, temp_file.path().to_str().unwrap(), &settings).unwrap();
+            tac_process_file(&mut output, temp_file.path().as_os_str(), &settings).unwrap();
             assert_eq!(output, content);
         }
     }
@@ -1279,7 +1285,9 @@ mod tests {
     mod tac_main_tests {
         use super::*;
         use std::ffi::OsString;
-        use tempfile::NamedTempFile;
+        use std::fs;
+        use std::os::unix::ffi::OsStringExt;
+        use tempfile::{NamedTempFile, tempdir};
 
         #[test]
         fn test_tac_main_simple() {
@@ -1312,6 +1320,36 @@ mod tests {
             let result = tac_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             assert_eq!(output, b"2\n1\nb\na\n");
+        }
+
+        #[test]
+        fn test_tac_main_accepts_non_utf8_filename() {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join(OsString::from_vec(vec![0xff]));
+            fs::write(&path, b"first\nsecond\n").unwrap();
+            let args = [OsString::from("tac"), path.into_os_string()];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            assert_eq!(output, b"second\nfirst\n");
+        }
+
+        #[test]
+        fn test_tac_main_accepts_non_utf8_fixed_separator() {
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(b"x\xffy\xff").unwrap();
+            let args = [
+                OsString::from("tac"),
+                OsString::from("-s"),
+                OsString::from_vec(vec![0xff]),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            assert_eq!(output, b"y\xffx\xff");
         }
 
         #[test]

@@ -230,7 +230,11 @@ fn runlevel_comment(previous: u8) -> Option<String> {
 }
 
 fn runlevel_line_bytes(label: &str, current: u8) -> Vec<u8> {
-    [label.as_bytes(), b" ", &[current]].concat()
+    let mut line = [label.as_bytes(), b" "].concat();
+    if current != 0 {
+        line.push(current);
+    }
+    line
 }
 
 fn updated_boot_time(current: i64, record_type: i16, timestamp: i64) -> i64 {
@@ -1195,6 +1199,11 @@ mod tests {
     #[test]
     fn runlevel_line_preserves_the_current_level_byte() {
         assert_eq!(runlevel_line_bytes("run-level", 0xff), b"run-level \xff");
+    }
+
+    #[test]
+    fn runlevel_line_treats_nul_as_the_c_string_terminator() {
+        assert_eq!(runlevel_line_bytes("run-level", 0), b"run-level ");
     }
 
     #[test]

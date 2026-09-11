@@ -1133,6 +1133,28 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "export LC_ALL='C.UTF-8'；执行who a b c；GNU who通过quote按UTF-8 locale引用第三个操作数，使用左右弯单引号包围可打印ASCII内容，预期RC=1、stdout为空，stderr为who: extra operand ‘c’及帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C.UTF-8'"
+            ],
+            "args": [
+                "a",
+                "b",
+                "c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "who: extra operand ‘c’\nTry 'who --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

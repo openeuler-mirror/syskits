@@ -12,7 +12,6 @@
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError};
 
 use std::borrow::Cow;
@@ -207,11 +206,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
 
     if operand_count > 2 && !terminal_option {
         let mut message = b"extra operand ".to_vec();
-        if uses_c_locale() {
-            message.extend(quote_c_locale_operand(operands[2].as_os_str()));
-        } else {
-            message.extend(operands[2].as_os_str().quote().to_string().into_bytes());
-        }
+        message.extend(quote_locale_operand(operands[2].as_os_str()));
         return Err(WhoUsageError::boxed(message));
     }
 
@@ -303,7 +298,7 @@ struct WhoUsageError {
     message: Vec<u8>,
 }
 
-fn uses_c_locale() -> bool {
+fn locale_name() -> String {
     for variable in ["LC_ALL", "LC_CTYPE", "LANG"] {
         let Some(locale) = std::env::var_os(variable) else {
             continue;
@@ -311,9 +306,23 @@ fn uses_c_locale() -> bool {
         if locale.is_empty() {
             continue;
         }
-        return matches!(locale.to_string_lossy().as_ref(), "C" | "POSIX");
+        return locale.to_string_lossy().into_owned();
     }
-    true
+    "C".to_string()
+}
+
+fn quote_locale_operand(operand: &OsStr) -> Vec<u8> {
+    let locale = locale_name().to_ascii_uppercase();
+    let is_utf8 = locale.contains("UTF-8") || locale.contains("UTF8");
+    if !is_utf8 {
+        return quote_c_locale_operand(operand);
+    }
+
+    if locale.starts_with("ZH_") || locale.starts_with("ZH-") {
+        quote_utf8_locale_operand(operand, b"\"", b"\"", Some(b'"'))
+    } else {
+        quote_utf8_locale_operand(operand, "‘".as_bytes(), "’".as_bytes(), None)
+    }
 }
 
 fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
@@ -341,6 +350,75 @@ fn quote_c_locale_operand(operand: &OsStr) -> Vec<u8> {
     }
     quoted.push(b'\'');
     quoted
+}
+
+fn quote_utf8_locale_operand(
+    operand: &OsStr,
+    left_quote: &[u8],
+    right_quote: &[u8],
+    quote_to_escape: Option<u8>,
+) -> Vec<u8> {
+    let input = operand.as_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        let byte = input[index];
+        if byte.is_ascii() {
+            push_quoted_ascii(&mut quoted, byte, quote_to_escape);
+            index += 1;
+            continue;
+        }
+
+        match std::str::from_utf8(&input[index..]) {
+            Ok(_) => {
+                quoted.extend_from_slice(&input[index..]);
+                break;
+            }
+            Err(error) if error.valid_up_to() > 0 => {
+                let end = index + error.valid_up_to();
+                quoted.extend_from_slice(&input[index..end]);
+                index = end;
+            }
+            Err(error) => {
+                let invalid_length = error.error_len().unwrap_or(input.len() - index);
+                for invalid in &input[index..index + invalid_length] {
+                    push_octal_escape(&mut quoted, *invalid);
+                }
+                index += invalid_length;
+            }
+        }
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn push_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
+    match byte {
+        b'\x07' => output.extend_from_slice(b"\\a"),
+        b'\x08' => output.extend_from_slice(b"\\b"),
+        b'\t' => output.extend_from_slice(b"\\t"),
+        b'\n' => output.extend_from_slice(b"\\n"),
+        b'\x0b' => output.extend_from_slice(b"\\v"),
+        b'\x0c' => output.extend_from_slice(b"\\f"),
+        b'\r' => output.extend_from_slice(b"\\r"),
+        b'\\' => output.extend_from_slice(b"\\\\"),
+        escaped if quote_to_escape == Some(escaped) => {
+            output.push(b'\\');
+            output.push(escaped);
+        }
+        b' '..=b'~' => output.push(byte),
+        _ => push_octal_escape(output, byte),
+    }
+}
+
+fn push_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 7));
+    output.push(b'0' + (byte & 7));
 }
 
 impl WhoUsageError {
@@ -463,6 +541,32 @@ mod tests {
 
     use super::*;
 
+    static LOCALE_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct LocaleRestore(Option<OsString>);
+
+    impl Drop for LocaleRestore {
+        fn drop(&mut self) {
+            // SAFETY: LOCALE_ENV_LOCK remains held while this guard restores LC_ALL.
+            unsafe {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("LC_ALL", value),
+                    None => std::env::remove_var("LC_ALL"),
+                }
+            }
+        }
+    }
+
+    fn with_lc_all<T>(locale: &str, test: impl FnOnce() -> T) -> T {
+        let _lock = LOCALE_ENV_LOCK.lock().unwrap();
+        let restore = LocaleRestore(std::env::var_os("LC_ALL"));
+        // SAFETY: LOCALE_ENV_LOCK serializes test mutations and LocaleRestore restores LC_ALL.
+        unsafe { std::env::set_var("LC_ALL", locale) };
+        let result = test();
+        drop(restore);
+        result
+    }
+
     #[test]
     fn file_operand_accepts_non_utf8_paths() {
         let path = OsString::from_vec(vec![b'u', b't', b'm', b'p', b'-', 0xff]);
@@ -513,10 +617,12 @@ mod tests {
 
     #[test]
     fn third_operand_uses_the_gnu_extra_operand_diagnostic() {
-        let args = ["who", "a", "b", "c"].map(OsString::from);
-        let error = prepare_who_args(args.into_iter()).unwrap_err();
-        assert_eq!(error.to_string(), "extra operand 'c'");
-        assert!(error.usage());
+        with_lc_all("C", || {
+            let args = ["who", "a", "b", "c"].map(OsString::from);
+            let error = prepare_who_args(args.into_iter()).unwrap_err();
+            assert_eq!(error.to_string(), "extra operand 'c'");
+            assert!(error.usage());
+        });
     }
 
     #[test]
@@ -527,6 +633,34 @@ mod tests {
             quote_c_locale_operand(OsStr::new("a'b\\c\n")),
             b"'a\\'b\\\\c\\n'"
         );
+    }
+
+    #[test]
+    fn utf8_extra_operand_uses_gnu_locale_quoting() {
+        with_lc_all("C.UTF-8", || {
+            let ascii_args = ["who", "a", "b", "c"].map(OsString::from);
+            let ascii_error = prepare_who_args(ascii_args.into_iter()).unwrap_err();
+            assert_eq!(
+                ascii_error.diagnostic_bytes().as_ref(),
+                "extra operand ‘c’".as_bytes()
+            );
+
+            let raw_args = [
+                OsString::from("who"),
+                OsString::from("a"),
+                OsString::from("b"),
+                OsString::from_vec(vec![0xff]),
+            ];
+            let raw_error = prepare_who_args(raw_args.into_iter()).unwrap_err();
+            assert_eq!(
+                raw_error.diagnostic_bytes().as_ref(),
+                "extra operand ‘\\377’".as_bytes()
+            );
+        });
+
+        with_lc_all("zh_CN.UTF-8", || {
+            assert_eq!(quote_locale_operand(OsStr::new("c")), b"\"c\"");
+        });
     }
 
     #[test]

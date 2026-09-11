@@ -200,16 +200,28 @@ fn ct_reopen_fd(fd: libc::c_int, path: &std::ffi::CStr, flags: libc::c_int) -> b
     ok
 }
 
-#[cfg(all(unix, feature = "libc"))]
-unsafe extern "C" fn ct_probe_stdout_closed_before_runtime() {
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+unsafe extern "C" fn ct_probe_standard_fds_before_runtime() {
+    let stdin_closed = ct_fd_is_closed(libc::STDIN_FILENO);
     let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
+    STDIN_CLOSED_AT_START.store(stdin_closed, Ordering::Relaxed);
     STDOUT_CLOSED_AT_START.store(stdout_closed, Ordering::Relaxed);
 }
 
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 #[used]
 #[cfg_attr(target_os = "linux", unsafe(link_section = ".init_array"))]
-static CT_STDOUT_PROBE_INIT: unsafe extern "C" fn() = ct_probe_stdout_closed_before_runtime;
+static CT_STANDARD_FD_PROBE_INIT: unsafe extern "C" fn() = ct_probe_standard_fds_before_runtime;
+
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+fn ct_stdin_closed_before_main() -> bool {
+    STDIN_CLOSED_AT_START.load(Ordering::Relaxed)
+}
+
+#[cfg(all(unix, feature = "libc", not(target_os = "linux")))]
+fn ct_stdin_closed_before_main() -> bool {
+    ct_fd_is_closed(libc::STDIN_FILENO)
+}
 
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 fn ct_stdout_closed_before_main() -> bool {
@@ -247,15 +259,19 @@ fn ct_stdout_closed_before_main() -> bool {
 pub fn ct_ensure_standard_fds() {
     use std::ffi::CString;
 
+    let stdin_closed = ct_fd_is_closed(libc::STDIN_FILENO);
+    let stdin_closed_before_main = ct_stdin_closed_before_main();
+    let stdin_missing = stdin_closed || stdin_closed_before_main;
     let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
     let stdout_closed_before_main = ct_stdout_closed_before_main();
     let stdout_missing = stdout_closed || stdout_closed_before_main;
+    STDIN_WAS_CLOSED.store(stdin_missing, Ordering::Relaxed);
     STDOUT_WAS_CLOSED.store(stdout_missing, Ordering::Relaxed);
 
     let dev_null = CString::new("/dev/null").expect("literal has no NUL");
     let dev_full = CString::new("/dev/full").expect("literal has no NUL");
 
-    if ct_fd_is_closed(libc::STDIN_FILENO) {
+    if stdin_missing {
         let _ = ct_reopen_fd(libc::STDIN_FILENO, &dev_null, libc::O_RDONLY);
     }
 
@@ -270,7 +286,12 @@ pub fn ct_ensure_standard_fds() {
 
 #[cfg(not(all(unix, feature = "libc")))]
 pub fn ct_ensure_standard_fds() {
+    STDIN_WAS_CLOSED.store(false, Ordering::Relaxed);
     STDOUT_WAS_CLOSED.store(false, Ordering::Relaxed);
+}
+
+pub fn ct_stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
 #[cfg(all(unix, feature = "libc"))]
@@ -320,7 +341,10 @@ pub fn ct_set_utility_is_second_arg() {
 // 调用args_os()可能代价较高，因为它会在迭代前复制整个argv。
 // 因此，如果我们只需要第一个参数左右的信息，这样做就有些过分了。所以我们将其缓存起来。
 static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+static STDIN_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 static STDOUT_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 

@@ -13,6 +13,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult};
+use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -166,13 +167,13 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
-pub(crate) fn ct_app_for_parse(posixly_correct: bool) -> Command {
-    ct_app().trailing_var_arg(posixly_correct)
+pub(crate) fn ct_app_for_parse(posix_mode: bool) -> Command {
+    ct_app().gnu_getopt_with_mode(posix_mode)
 }
 
 pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     let args = args.collect::<Vec<_>>();
-    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+    let posix_mode = posixly_correct();
     let mut parse_options = true;
     let mut operand_count = 0;
     let mut options = Vec::new();
@@ -199,7 +200,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
 
         operand_count += 1;
         operands.push(argument.clone());
-        if posixly_correct {
+        if posix_mode {
             parse_options = false;
         }
     }
@@ -211,7 +212,7 @@ pub(crate) fn prepare_who_args(args: impl ctcore::Args) -> CTResult<Vec<OsString
         return Err(WhoUsageError::boxed(message));
     }
 
-    if posixly_correct {
+    if posix_mode {
         return Ok(args);
     }
 

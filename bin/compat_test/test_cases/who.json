@@ -947,6 +947,31 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节输出用例：export LC_ALL='C'，export LANG='C'，export TZ='UTC0'；执行who -r utmp；参数完整十六进制=2d72 75746d70；stdin为0字节、完整十六进制=空；输入fixture：400字节Linux RUN_LVL记录，PID=0x33ff表示前一级别ASCII 3、当前级别原始字节0xff，时间=2024-02-29 12:34:56 UTC；GNU通过%c保留当前级别单字节并按字节列宽排版，预期RC=0，stderr为0字节、完整十六进制=空，stdout为60字节/1条换行分隔、完整十六进制=20202020202020202072756e2d6c6576656c20ff20204665622032392031323a3334202020202020202020202020202020202020206c6173743d330a",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,1); struct.pack_into(\"i\",b,4,0x33ff); struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "2d72",
+                "75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "20202020202020202072756e2d6c6576656c20ff20204665622032392031323a3334202020202020202020202020202020202020206c6173743d330a",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

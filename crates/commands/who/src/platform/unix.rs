@@ -356,16 +356,18 @@ fn time_format_width() -> usize {
 }
 
 #[inline]
-fn cur_tty() -> String {
+fn cur_tty() -> Option<String> {
     unsafe {
         let result = ttyname(STDIN_FILENO);
         if result.is_null() {
-            String::new()
+            None
         } else {
-            CStr::from_ptr(result as *const _)
-                .to_string_lossy()
-                .trim_start_matches("/dev/")
-                .to_owned()
+            Some(
+                CStr::from_ptr(result as *const _)
+                    .to_string_lossy()
+                    .trim_start_matches("/dev/")
+                    .to_owned(),
+            )
         }
     }
 }
@@ -432,7 +434,10 @@ impl Who {
             }
 
             let current_tty = match self.is_my_line_only {
-                true => cur_tty(),
+                true => match cur_tty() {
+                    Some(tty) => tty,
+                    None => return Ok(()),
+                },
                 false => String::new(),
             };
 
@@ -1023,7 +1028,10 @@ impl Who {
         }
 
         let current_tty = if self.is_my_line_only {
-            cur_tty()
+            match cur_tty() {
+                Some(tty) => tty,
+                None => return Ok(semantic),
+            }
         } else {
             String::new()
         };
@@ -1167,12 +1175,50 @@ mod tests {
     use crate::ct_app;
     use ctcore::ct_utmpx::time::OffsetDateTime;
     use std::env;
+    use std::io::Write;
     use std::sync::Mutex;
 
     use super::*;
 
     // 互斥锁确保环境变量测试的串行执行，避免并发测试时的干扰
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn my_line_only_does_not_match_an_empty_line_when_stdin_is_not_a_tty() {
+        assert!(unsafe { ttyname(STDIN_FILENO) }.is_null());
+
+        let mut fixture = tempfile::NamedTempFile::new().unwrap();
+        let mut record = [0_u8; 400];
+        record[0..2].copy_from_slice(&ct_utmpx::USER_PROCESS.to_ne_bytes());
+        record[4..8].copy_from_slice(&12345_i32.to_ne_bytes());
+        record[44..49].copy_from_slice(b"alice");
+        record[344..352].copy_from_slice(&1_709_210_096_i64.to_ne_bytes());
+        fixture.write_all(&record).unwrap();
+
+        let mut who = Who {
+            is_do_lookup: false,
+            is_short_list: false,
+            is_short_output: true,
+            is_include_idle: false,
+            is_include_heading: false,
+            is_include_mesg: false,
+            is_include_exit: false,
+            is_need_boottime: false,
+            is_need_deadprocs: false,
+            is_need_login: false,
+            is_need_initspawn: false,
+            is_need_clockchange: false,
+            is_need_runlevel: false,
+            is_need_users: true,
+            is_my_line_only: true,
+            who_args: vec![fixture.path().as_os_str().to_owned()],
+        };
+
+        let semantic = who.collect_semantic().unwrap();
+        assert!(semantic.rows.is_empty());
+        assert!(semantic.classic_text.is_empty());
+    }
 
     #[test]
     fn explicit_short_option_suppresses_optional_user_fields() {

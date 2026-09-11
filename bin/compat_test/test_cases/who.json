@@ -1197,6 +1197,52 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "非TTY标准输入下执行who -m utmp；输入400字节Linux USER_PROCESS记录，user=alice且line为空；GNU ttyname(0)失败后不扫描记录，预期RC=0且stdout、stderr均为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "-m",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "who",
+            "description": "非TTY标准输入下执行who -mH utmp；输入400字节Linux USER_PROCESS记录，user=alice且line为空；GNU先输出heading再因ttyname(0)失败停止扫描，预期RC=0、stdout仅含表头、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export TZ='UTC0'",
+                "python3 -c 'import struct; b=bytearray(400); struct.pack_into(\"h\",b,0,7); struct.pack_into(\"i\",b,4,12345); b[44:49]=b\"alice\"; struct.pack_into(\"q\",b,344,1709210096); open(\"utmp\",\"wb\").write(b)'"
+            ],
+            "args": [
+                "-mH",
+                "utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "NAME     LINE         TIME         COMMENT\n",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

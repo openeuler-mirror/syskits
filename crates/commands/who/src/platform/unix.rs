@@ -15,8 +15,8 @@ use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_utmpx::{self, CtUtmpx, time};
 use ctcore::libc::{
-    CLOCK_BOOTTIME, CLOCK_REALTIME, ESRCH, S_IWGRP, STDIN_FILENO, clock_gettime, kill, timespec,
-    ttyname,
+    CLOCK_BOOTTIME, CLOCK_REALTIME, ESRCH, S_IWGRP, SIG_DFL, SIG_ERR, SIGPIPE, STDIN_FILENO,
+    clock_gettime, getppid, kill, sighandler_t, signal, timespec, ttyname,
 };
 use rust_i18n::t;
 use std::borrow::Cow;
@@ -39,6 +39,8 @@ fn get_long_usage() -> String {
 }
 
 pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
+    let _sigpipe_guard = SigpipeGuard::for_cli();
+
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -50,6 +52,56 @@ pub fn who_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut who_cmd = who_from_matches(&matches);
 
     who_cmd.exec()
+}
+
+struct SigpipeGuard {
+    previous: sighandler_t,
+}
+
+impl SigpipeGuard {
+    #[cfg(target_os = "linux")]
+    fn for_cli() -> Option<Self> {
+        if parent_ignores_sigpipe() {
+            return None;
+        }
+
+        let previous = unsafe { signal(SIGPIPE, SIG_DFL) };
+        (previous != SIG_ERR).then_some(Self { previous })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn for_cli() -> Option<Self> {
+        None
+    }
+}
+
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            signal(SIGPIPE, self.previous);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parent_ignores_sigpipe() -> bool {
+    let parent = unsafe { getppid() };
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    sigpipe_is_ignored_in_status(&status)
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_is_ignored_in_status(status: &str) -> bool {
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (SIGPIPE - 1)) != 0
 }
 
 pub fn who_native_semantic(args: impl ctcore::Args) -> CTResult<WhoSemantic> {
@@ -423,14 +475,17 @@ impl Who {
             output.push(b'=');
             output.extend_from_slice(users.len().to_string().as_bytes());
             output.push(b'\n');
-            io::stdout().lock().write_all(&output)?;
+            io::stdout()
+                .lock()
+                .write_all(&output)
+                .map_err_context(|| "write error".to_string())?;
         } else {
             let records = CtUtmpx::iter_all_records_from(f);
             let mut boot_time = i64::MIN;
             let mut saw_boot_time = false;
 
             if self.is_include_heading {
-                self.print_head();
+                self.print_head()?;
             }
 
             let current_tty = match self.is_my_line_only {
@@ -453,10 +508,10 @@ impl Who {
                             self.print_runlevel(&utmpx)?;
                         }
                     } else if self.is_need_boottime && utmpx.record_type() == ct_utmpx::BOOT_TIME {
-                        self.print_boottime(&utmpx);
+                        self.print_boottime(&utmpx)?;
                     } else if self.is_need_clockchange && utmpx.record_type() == ct_utmpx::NEW_TIME
                     {
-                        self.print_clockchange(&utmpx);
+                        self.print_clockchange(&utmpx)?;
                     } else if self.is_need_initspawn
                         && utmpx.record_type() == ct_utmpx::INIT_PROCESS
                     {
@@ -490,7 +545,7 @@ impl Who {
                     "",
                     "",
                     "",
-                );
+                )?;
             }
         }
         Ok(())
@@ -518,7 +573,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_clockchange(&self, utmpx: &CtUtmpx) {
+    fn print_clockchange(&self, utmpx: &CtUtmpx) -> CTResult<()> {
         self.print_line(
             "",
             ' ',
@@ -528,7 +583,7 @@ impl Who {
             "",
             "",
             "",
-        );
+        )
     }
 
     #[inline]
@@ -592,7 +647,7 @@ impl Who {
     }
 
     #[inline]
-    fn print_boottime(&self, utmpx: &CtUtmpx) {
+    fn print_boottime(&self, utmpx: &CtUtmpx) -> CTResult<()> {
         self.print_line(
             "",
             ' ',
@@ -602,7 +657,7 @@ impl Who {
             "",
             "",
             "",
-        );
+        )
     }
 
     fn print_user(&self, utmpx: &CtUtmpx, boot_time: i64) -> CTResult<()> {
@@ -670,7 +725,7 @@ impl Who {
         pid: &str,
         comment: &str,
         exit: &str,
-    ) {
+    ) -> CTResult<()> {
         let rendered = self.render_line(&WhoDisplayLine {
             user: user.to_string(),
             state,
@@ -681,7 +736,12 @@ impl Who {
             comment: comment.to_string(),
             exit: exit.to_string(),
         });
-        println!("{rendered}");
+        let mut output = rendered.into_bytes();
+        output.push(b'\n');
+        io::stdout()
+            .lock()
+            .write_all(&output)
+            .map_err_context(|| "write error".to_string())
     }
 
     fn render_line(&self, fields: &WhoDisplayLine) -> String {
@@ -738,12 +798,14 @@ impl Who {
     fn print_line_bytes(&self, fields: &WhoDisplayBytes<'_>) -> CTResult<()> {
         let mut rendered = self.render_line_bytes(fields);
         rendered.push(b'\n');
-        io::stdout().lock().write_all(&rendered)?;
-        Ok(())
+        io::stdout()
+            .lock()
+            .write_all(&rendered)
+            .map_err_context(|| "write error".to_string())
     }
 
     #[inline]
-    fn print_head(&self) {
+    fn print_head(&self) -> CTResult<()> {
         self.print_line(
             &t!("who.output.heading_name"),
             ' ',
@@ -753,7 +815,7 @@ impl Who {
             &t!("who.output.heading_pid"),
             &t!("who.output.heading_comment"),
             &t!("who.output.heading_exit"),
-        );
+        )
     }
 
     fn source_file(&self) -> &OsStr {
@@ -1185,6 +1247,15 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn sigpipe_ignore_mask_parsing_matches_linux_proc_status() {
+        assert!(sigpipe_is_ignored_in_status("SigIgn:\t0000000000001000\n"));
+        assert!(!sigpipe_is_ignored_in_status("SigIgn:\t0000000000000000\n"));
+        assert!(!sigpipe_is_ignored_in_status("SigIgn:\tnot-hex\n"));
+        assert!(!sigpipe_is_ignored_in_status("Name:\tbash\n"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn my_line_only_does_not_match_an_empty_line_when_stdin_is_not_a_tty() {
         assert!(unsafe { ttyname(STDIN_FILENO) }.is_null());
 
@@ -1476,7 +1547,8 @@ mod tests {
         let exit = "0";
 
         // This will print to stdout, we would need to capture stdout in a real test to assert on it
-        who.print_line(user, state, line, time, idle, pid, comment, exit);
+        who.print_line(user, state, line, time, idle, pid, comment, exit)
+            .unwrap();
     }
 
     #[test]

@@ -16,7 +16,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use platform_info::*;
 use sys_locale::get_locale;
 
@@ -148,7 +148,7 @@ impl Tool for Uname {
 pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = ct_app().try_get_matches_from(prepare_uname_args(args)?)?;
 
     let flags = UnameFlags {
         is_all: matches.get_flag(uname_flags::UNAME_ALL),
@@ -164,6 +164,42 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
     let output = UNameOutput::new(&flags)?;
     println!("{}", output.display().trim_end());
     Ok(())
+}
+
+fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut parse_options = true;
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if parse_options && bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            if is_terminal_option(bytes) {
+                return Ok(args);
+            }
+            continue;
+        }
+
+        return Err(CTsageError::new(
+            1,
+            format!("extra operand '{}'", String::from_utf8_lossy(bytes)),
+        ));
+    }
+
+    Ok(args)
+}
+
+fn is_terminal_option(argument: &[u8]) -> bool {
+    if let Some(long) = argument.strip_prefix(b"--") {
+        return b"help".starts_with(long) || b"version".starts_with(long);
+    }
+
+    argument[1..]
+        .iter()
+        .any(|option| matches!(option, b'h' | b'V'))
 }
 
 pub fn ct_app() -> Command {
@@ -237,6 +273,15 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[test]
+    fn extra_operand_uses_gnu_diagnostic() {
+        let error =
+            prepare_uname_args(["uname", "extra"].map(OsString::from).into_iter()).unwrap_err();
+
+        assert_eq!(error.to_string(), "extra operand 'extra'");
+        assert!(error.usage());
+    }
 
     #[test]
     fn test_tool_implementation() {

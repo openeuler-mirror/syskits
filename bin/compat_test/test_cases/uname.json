@@ -139,6 +139,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "LC_ALL=C下执行uname extra；uname不接受操作数，GNU预期RC=1、stdout为空，并报告extra operand及Try help诊断",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "extra"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uname: extra operand 'extra'\nTry 'uname --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

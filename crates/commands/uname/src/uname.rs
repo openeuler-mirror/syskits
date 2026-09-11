@@ -53,7 +53,7 @@ pub struct UNameOutput {
 impl UNameOutput {
     fn display(&self) -> String {
         let mut output = String::new();
-        for name in [
+        let mut names = [
             self.kernel_name.as_ref(),
             self.node_name.as_ref(),
             self.kernel_release.as_ref(),
@@ -64,10 +64,13 @@ impl UNameOutput {
             self.os.as_ref(),
         ]
         .into_iter()
-        .flatten()
-        {
+        .flatten();
+        if let Some(name) = names.next() {
             output.push_str(name);
+        }
+        for name in names {
             output.push(' ');
+            output.push_str(name);
         }
         output
     }
@@ -166,7 +169,7 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
         is_os: matches.get_flag(uname_flags::UNAME_OS),
     };
     let output = UNameOutput::new(&flags)?;
-    println!("{}", output.display().trim_end());
+    println!("{}", output.display());
     Ok(())
 }
 
@@ -693,6 +696,22 @@ mod tests {
             assert!(uname_output.processor.is_none());
             assert!(uname_output.hardware_platform.is_some());
             assert!(!uname_output.display().is_empty());
+        }
+
+        #[test]
+        fn display_preserves_trailing_whitespace_inside_last_field() {
+            let output = UNameOutput {
+                kernel_name: None,
+                node_name: Some("node ".to_string()),
+                kernel_release: None,
+                kernel_version: None,
+                machine: None,
+                os: None,
+                processor: None,
+                hardware_platform: None,
+            };
+
+            assert_eq!(output.display(), "node ");
         }
     }
 

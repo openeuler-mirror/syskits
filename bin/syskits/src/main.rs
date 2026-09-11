@@ -519,11 +519,8 @@ fn execute_tool(tool: Box<dyn Tool>, args: &[OsString]) -> i32 {
     match result {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),
         Err(err) => {
-            let s_err = format!("{err}");
+            let _ = ctcore::ct_error::write_error_diagnostic(err.as_ref());
             let code = err.code();
-            if !s_err.is_empty() {
-                ctcore::ct_show_error!("{}", s_err);
-            }
             if code == 0 {
                 return 0;
             }

@@ -156,6 +156,15 @@ pub type CTResult<T> = Result<T, Box<dyn CTError>>;
 /// 类似于 quick_error 这样的 crate 也可使用，
 /// 但仍然需要为 code 方法提供 impl 实现。
 pub trait CTError: Error + Send {
+    /// Return the diagnostic message bytes written after the utility prefix.
+    ///
+    /// Errors containing only UTF-8 text use their [`Display`] representation.
+    /// Utilities may override this for diagnostics that must preserve raw input
+    /// bytes on Unix.
+    fn diagnostic_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
+        std::borrow::Cow::Owned(self.to_string().into_bytes())
+    }
+
     /// 自定义错误的错误码。
     ///
     ///
@@ -261,6 +270,20 @@ pub trait CTError: Error + Send {
     fn usage(&self) -> bool {
         false
     }
+}
+
+/// Write a utility-prefixed error while preserving any raw diagnostic bytes.
+pub fn write_error_diagnostic(error: &dyn CTError) -> io::Result<()> {
+    let diagnostic = error.diagnostic_bytes();
+    if diagnostic.is_empty() {
+        return Ok(());
+    }
+
+    let mut stderr = io::stderr().lock();
+    stderr.write_all(crate::ct_util_name().as_bytes())?;
+    stderr.write_all(b": ")?;
+    stderr.write_all(diagnostic.as_ref())?;
+    stderr.write_all(b"\n")
 }
 
 impl<T> From<T> for Box<dyn CTError>

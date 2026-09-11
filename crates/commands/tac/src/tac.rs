@@ -31,7 +31,6 @@ use std::fmt::Display;
 use std::io::{Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::{fs::File, path::Path};
-use sys_locale::get_locale;
 
 // 定义配置标志常量
 pub mod tac_flags {
@@ -262,16 +261,70 @@ fn tac_error_message(error: &TacError, locale: &str) -> String {
 /// 返回 `CTResult<()>`，表示命令执行的结果
 pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     let _sigpipe_guard = SigpipeGuard::for_cli();
-    unsafe {
-        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
-    }
-    // 设置语言
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_tac_locale();
     let settings = tac_parse_invocation(args)?;
 
     // 使用配置执行主要逻辑
     tac(writer, &settings)
+}
+
+fn initialize_tac_locale() {
+    let locale_is_valid =
+        unsafe { !ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr()).is_null() };
+    let locale = if locale_is_valid {
+        tac_message_locale_from_values(
+            std::env::var("LC_ALL").ok().as_deref(),
+            std::env::var("LC_MESSAGES").ok().as_deref(),
+            std::env::var("LANG").ok().as_deref(),
+            std::env::var("LANGUAGE").ok().as_deref(),
+        )
+    } else {
+        "en-US"
+    };
+    rust_i18n::set_locale(locale);
+}
+
+fn tac_message_locale_from_values(
+    lc_all: Option<&str>,
+    lc_messages: Option<&str>,
+    lang: Option<&str>,
+    language: Option<&str>,
+) -> &'static str {
+    let base = [lc_all, lc_messages, lang]
+        .into_iter()
+        .flatten()
+        .find(|locale| !locale.is_empty())
+        .unwrap_or("C");
+
+    if base.eq_ignore_ascii_case("C") || base.eq_ignore_ascii_case("POSIX") {
+        return "en-US";
+    }
+
+    if let Some(locale) = language
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.split(':').find_map(known_tac_message_locale))
+    {
+        return locale;
+    }
+
+    known_tac_message_locale(base).unwrap_or("en-US")
+}
+
+fn known_tac_message_locale(locale: &str) -> Option<&'static str> {
+    let language = locale
+        .split(['.', '@'])
+        .next()
+        .unwrap_or(locale)
+        .replace('-', "_")
+        .to_ascii_lowercase();
+
+    if language == "c" || language == "posix" || language == "en" || language.starts_with("en_") {
+        Some("en-US")
+    } else if language == "zh" || language.starts_with("zh_cn") {
+        Some("zh-CN")
+    } else {
+        None
+    }
 }
 
 struct SigpipeGuard {
@@ -744,11 +797,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
 }
 
 pub fn tac_native_semantic(args: impl ctcore::Args) -> CTResult<TacSemantic> {
-    unsafe {
-        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
-    }
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_tac_locale();
     let settings = tac_parse_invocation(args)?;
     let mut rows = Vec::new();
     let mut classic_bytes = Vec::new();
@@ -1093,6 +1142,32 @@ mod tests {
     #[cfg(test)]
     mod tac_error_tests {
         use super::*;
+
+        #[test]
+        fn test_tac_message_locale_uses_gettext_category_priority() {
+            assert_eq!(
+                tac_message_locale_from_values(
+                    None,
+                    Some("zh_CN.UTF-8"),
+                    Some("en_US.UTF-8"),
+                    None
+                ),
+                "zh-CN"
+            );
+            assert_eq!(
+                tac_message_locale_from_values(None, None, Some("zh_CN.UTF-8"), Some("C")),
+                "en-US"
+            );
+            assert_eq!(
+                tac_message_locale_from_values(
+                    Some("C"),
+                    Some("zh_CN.UTF-8"),
+                    Some("zh_CN.UTF-8"),
+                    Some("zh_CN")
+                ),
+                "en-US"
+            );
+        }
 
         #[test]
         fn test_tac_error_uses_simplified_chinese_runtime_messages() {

@@ -15,7 +15,6 @@ repository = "https://atomgit.com/openeuler/syskits/src/branch/master/crates/com
 path = "src/tac.rs"
 
 [dependencies]
-sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 memchr = { workspace = true }
 memmap2 = { workspace = true }

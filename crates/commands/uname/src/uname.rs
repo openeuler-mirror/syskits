@@ -16,7 +16,8 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::libc::{SIG_DFL, SIG_ERR, SIGPIPE, getppid, sighandler_t, signal};
 use platform_info::*;
 use sys_locale::get_locale;
 
@@ -162,6 +163,8 @@ impl Tool for Uname {
 }
 
 pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
+    let _sigpipe_guard = SigpipeGuard::for_cli();
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(prepare_uname_args(args)?)?;
@@ -180,8 +183,52 @@ pub fn uname_main(args: impl ctcore::Args) -> CTResult<()> {
     let output = UNameOutput::new(&flags)?;
     let mut rendered = output.display_bytes();
     rendered.push(b'\n');
-    std::io::stdout().lock().write_all(&rendered)?;
-    Ok(())
+    std::io::stdout()
+        .lock()
+        .write_all(&rendered)
+        .map_err_context(|| "write error".to_string())
+}
+
+struct SigpipeGuard {
+    previous: sighandler_t,
+}
+
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        if parent_ignores_sigpipe() {
+            return None;
+        }
+
+        let previous = unsafe { signal(SIGPIPE, SIG_DFL) };
+        (previous != SIG_ERR).then_some(Self { previous })
+    }
+}
+
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            signal(SIGPIPE, self.previous);
+        }
+    }
+}
+
+fn parent_ignores_sigpipe() -> bool {
+    let parent = unsafe { getppid() };
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    sigpipe_is_ignored_in_status(&status)
+}
+
+fn sigpipe_is_ignored_in_status(status: &str) -> bool {
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (SIGPIPE - 1)) != 0
 }
 
 fn prepare_uname_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
@@ -589,6 +636,17 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.to_string(), "extra operand 'extra'");
+    }
+
+    #[test]
+    fn sigpipe_ignore_mask_is_parsed_from_proc_status() {
+        assert!(sigpipe_is_ignored_in_status(
+            "Name:\tbash\nSigIgn:\t0000000000001000\n"
+        ));
+        assert!(!sigpipe_is_ignored_in_status(
+            "Name:\tbash\nSigIgn:\t0000000000000000\n"
+        ));
+        assert!(!sigpipe_is_ignored_in_status("SigIgn:\tnot-hex\n"));
     }
 
     #[test]

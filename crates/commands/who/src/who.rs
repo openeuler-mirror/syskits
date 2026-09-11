@@ -13,9 +13,12 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError};
+use ctcore::ct_error::{CTError, CTResult, CTsageError};
 
+use std::borrow::Cow;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 use sys_locale::get_locale;
 
 use rust_i18n::t;
@@ -291,6 +294,35 @@ fn match_long_option(name: &[u8]) -> LongOptionMatch {
 
 const WHO_SHORT_OPTIONS: &[u8] = b"abdlmpqrstuwHThV";
 
+#[derive(Debug)]
+struct WhoUsageError {
+    message: Vec<u8>,
+}
+
+impl WhoUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for WhoUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for WhoUsageError {}
+
+impl CTError for WhoUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 fn is_terminal_option(argument: &[u8]) -> bool {
     if let Some(long) = argument.strip_prefix(b"--") {
         let name = &long[..long
@@ -315,10 +347,10 @@ fn validate_option(argument: &[u8]) -> CTResult<()> {
         .iter()
         .find(|option| !WHO_SHORT_OPTIONS.contains(option))
     {
-        Err(CTsageError::new(
-            1,
-            format!("invalid option -- '{}'", char::from(*unknown)),
-        ))
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(*unknown);
+        message.push(b'\'');
+        Err(WhoUsageError::boxed(message))
     } else {
         Ok(())
     }
@@ -348,13 +380,12 @@ fn validate_long_option(argument: &[u8]) -> CTResult<()> {
                 format!("option '{argument}' is ambiguous; possibilities: {possibilities}"),
             ))
         }
-        LongOptionMatch::None => Err(CTsageError::new(
-            1,
-            format!(
-                "unrecognized option '{}'",
-                String::from_utf8_lossy(argument)
-            ),
-        )),
+        LongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(WhoUsageError::boxed(message))
+        }
         LongOptionMatch::Recognized(_) => Ok(()),
     }
 }
@@ -505,6 +536,31 @@ mod tests {
         let args = ["who", "-az"].map(OsString::from);
         let error = prepare_who_args(args.into_iter()).unwrap_err();
         assert_eq!(error.to_string(), "invalid option -- 'z'");
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn unknown_non_utf8_short_option_preserves_the_original_byte() {
+        let args = [OsString::from("who"), OsString::from_vec(vec![b'-', 0xff])];
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"invalid option -- '\xff'"
+        );
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn unknown_non_utf8_long_option_preserves_the_original_byte() {
+        let args = [
+            OsString::from("who"),
+            OsString::from_vec(b"--bad\xff".to_vec()),
+        ];
+        let error = prepare_who_args(args.into_iter()).unwrap_err();
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"unrecognized option '--bad\xff'"
+        );
         assert!(error.usage());
     }
 

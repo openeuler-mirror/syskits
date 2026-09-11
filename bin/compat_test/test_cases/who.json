@@ -1068,6 +1068,48 @@
                 "verifications": []
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节参数诊断用例：export LC_ALL='C'；执行who加短选项原始字节0xff；参数完整十六进制=2dff；GNU getopt保留无效短选项的原始单字节，预期RC=1，stdout为0字节、完整十六进制=空，stderr完整十六进制=77686f3a20696e76616c6964206f7074696f6e202d2d2027ff270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f3a20696e76616c6964206f7074696f6e202d2d2027ff270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "who",
+            "description": "原始字节参数诊断用例：export LC_ALL='C'；执行who加未知长选项--bad后跟原始字节0xff；参数完整十六进制=2d2d626164ff；GNU getopt在unrecognized option诊断中保留完整参数字节，预期RC=1，stdout为0字节、完整十六进制=空，stderr完整十六进制=77686f3a20756e7265636f676e697a6564206f7074696f6e20272d2d626164ff270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2d2d626164ff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f3a20756e7265636f676e697a6564206f7074696f6e20272d2d626164ff270a547279202777686f202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": []
+            },
+            "cleanup_commands": []
         }
     ]
 }

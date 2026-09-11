@@ -137,10 +137,7 @@ macro_rules! ct_bin {
             let code = match result {
                 Ok(()) => ctcore::ct_error::get_ct_exit_code(),
                 Err(err) => {
-                    let s_err = format!("{}", err);
-                    if !s_err.is_empty() {
-                        ctcore::ct_show_error!("{}", s_err);
-                    }
+                    let _ = ctcore::ct_error::write_error_diagnostic(err.as_ref());
                     if err.usage() {
                         eprintln!(
                             "Try '{} --help' for more information.",

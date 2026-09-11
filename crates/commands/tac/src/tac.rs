@@ -218,7 +218,9 @@ impl Display for TacError {
                 tac_quote_path(path, true),
                 strip_errno(error)
             ),
-            Self::ReadError(s, e) => write!(f, "failed to read from {s}: {e}"),
+            Self::ReadError(source, error) => {
+                write!(f, "{source}: read error: {}", strip_errno(error))
+            }
             Self::WriteError(_) => write!(f, "write error"),
             Self::FlushError(error) => write!(f, "write error: {}", strip_errno(error)),
         }
@@ -390,11 +392,26 @@ fn tac_buffer<W: Write>(
 /// # 返回值
 /// 返回 `CTResult<Vec<u8>>`，包含读取的数据或错误信息
 fn read_from_stdin() -> CTResult<Vec<u8>> {
+    if ctcore::ct_stdin_was_closed() {
+        return Err(
+            tac_stdin_read_error(std::io::Error::from_raw_os_error(ctcore::libc::EBADF)).into(),
+        );
+    }
+
     let mut buffer = Vec::new();
     ctcore::ct_io::stdin_reader_box()
         .read_to_end(&mut buffer)
-        .map_err(|e| TacError::ReadError("stdin".to_string(), e))?;
+        .map_err(tac_stdin_read_error)?;
     Ok(buffer)
+}
+
+fn tac_stdin_read_error(error: std::io::Error) -> TacError {
+    let error = if error.raw_os_error() == Some(ctcore::libc::EISDIR) {
+        std::io::Error::from_raw_os_error(ctcore::libc::EINVAL)
+    } else {
+        error
+    };
+    TacError::ReadError("'standard input'".to_string(), error)
 }
 
 fn open_file(path: &Path) -> CTResult<File> {
@@ -658,9 +675,11 @@ fn tac_process_file<W: Write>(
 /// 返回 `CTResult<()>`，表示执行结果
 fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
     let mut has_error = false;
+    let mut read_stdin = false;
     let mut pattern = tac_compile_regex(settings)?;
 
     for filename in &settings.files {
+        read_stdin |= filename.as_bytes() == b"-";
         match tac_collect_file_segments_with_regex(filename, settings, pattern.as_mut()) {
             Ok(segments) => {
                 tac_write_segments(writer, &segments).map_err(TacError::WriteError)?;
@@ -670,6 +689,10 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
                 has_error = true;
             }
         }
+    }
+
+    if read_stdin && ctcore::ct_stdin_was_closed() {
+        ctcore::ct_show_error!("-: Bad file descriptor");
     }
 
     writer.flush().map_err(TacError::FlushError)?;
@@ -1064,11 +1087,30 @@ mod tests {
         fn test_tac_error_read_error() {
             let io_error = std::io::Error::other("read error");
             let error = TacError::ReadError("test.txt".to_string(), io_error);
+            assert_eq!(error.to_string(), "test.txt: read error: read error");
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_stdin_directory_read_error_uses_invalid_argument() {
+            let error =
+                tac_stdin_read_error(std::io::Error::from_raw_os_error(ctcore::libc::EISDIR));
+
             assert_eq!(
                 error.to_string(),
-                "failed to read from test.txt: read error"
+                "'standard input': read error: Invalid argument"
             );
-            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn test_stdin_read_error_preserves_other_errno() {
+            let error =
+                tac_stdin_read_error(std::io::Error::from_raw_os_error(ctcore::libc::EBADF));
+
+            assert_eq!(
+                error.to_string(),
+                "'standard input': read error: Bad file descriptor"
+            );
         }
 
         #[test]

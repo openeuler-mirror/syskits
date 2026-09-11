@@ -1266,6 +1266,56 @@
       "cleanup_commands": [
         "rm -f sigpipe-ignored-input"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下无文件操作数执行tac，并在进程启动前关闭fd 0；GNU尝试读取standard input后在退出时再次关闭stdin，预期RC=1、stdout为空、stderr依次为standard input读取EBADF和-关闭EBADF两行诊断",
+      "setup_commands": [],
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdin": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 'standard input': read error: Bad file descriptor\ntac: -: Bad file descriptor\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下无文件操作数执行tac，并将fd 0连接到目录stdin-directory；GNU对目录stdin的非seekable读取使用standard input上下文并规范为EINVAL，预期RC=1、stdout为空、stderr为Invalid argument",
+      "setup_commands": [
+        "mkdir stdin-directory"
+      ],
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdinFile": "stdin-directory"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: 'standard input': read error: Invalid argument\n"
+        }
+      },
+      "cleanup_commands": [
+        "rmdir stdin-directory"
+      ]
     }
   ]
 }

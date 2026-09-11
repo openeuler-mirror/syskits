@@ -14,7 +14,7 @@
 
 use crate::CommandResult;
 use crate::test_case::{
-    FileType, OutputStream, SignalDisposition, StandardStreams, TestCase, TestFile,
+    FileType, InputStream, OutputStream, SignalDisposition, StandardStreams, TestCase, TestFile,
 };
 use crate::{Result, TestError};
 use hex;
@@ -711,6 +711,7 @@ impl IsolatedSandbox {
         };
 
         let streams = options.streams;
+        let close_stdin = streams.stdin_file.is_none() && streams.stdin == InputStream::Closed;
         let stdin = match streams.stdin_file.as_deref() {
             Some(path) => {
                 let path = Path::new(path);
@@ -721,6 +722,7 @@ impl IsolatedSandbox {
                 };
                 Stdio::from(File::open(path)?)
             }
+            None if close_stdin => Stdio::null(),
             None => Stdio::piped(),
         };
         let (stdout, stdout_tty) = configured_output(streams.stdout)?;
@@ -751,6 +753,9 @@ impl IsolatedSandbox {
                     SignalDisposition::Ignore => signal::SigHandler::SigIgn,
                 };
                 signal::signal(signal::Signal::SIGPIPE, handler).map_err(std::io::Error::other)?;
+                if close_stdin && libc::close(libc::STDIN_FILENO) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
                 Ok(())
             });
         }

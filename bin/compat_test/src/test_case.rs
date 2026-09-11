@@ -74,6 +74,17 @@ pub enum OutputStream {
     Tty,
 }
 
+/// 命令标准输入的连接方式。
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InputStream {
+    /// 通过管道传入测试用例的tstdin内容。
+    #[default]
+    Pipe,
+    /// 在启动被测命令前关闭标准输入描述符。
+    Closed,
+}
+
 /// 子进程执行时的 SIGPIPE 处置方式。
 #[derive(Debug, Serialize, Deserialize, Default, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -88,9 +99,11 @@ pub enum SignalDisposition {
 /// 非交互测试的标准流拓扑。
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, Eq)]
 pub struct StandardStreams {
-    /// 将标准输入连接到测试沙箱中的普通文件；未设置时使用管道传入tstdin。
+    /// 将标准输入连接到测试沙箱中的指定路径；未设置时由stdin模式决定。
     #[serde(default, rename = "stdinFile", alias = "stdin_file")]
     pub stdin_file: Option<String>,
+    #[serde(default)]
+    pub stdin: InputStream,
     #[serde(default)]
     pub stdout: OutputStream,
     #[serde(default)]
@@ -443,7 +456,7 @@ mod tests {
             },
             "environment": {
               "standardStreams": {
-                "stdinFile": "stdin.fixture",
+                "stdin": "closed",
                 "stdout": "closed_pipe",
                 "stderr": "tty",
                 "sigpipe": "ignore",
@@ -463,7 +476,8 @@ mod tests {
         assert_eq!(streams.stdout, OutputStream::ClosedPipe);
         assert_eq!(streams.stderr, OutputStream::Tty);
         assert_eq!(streams.sigpipe, SignalDisposition::Ignore);
-        assert_eq!(streams.stdin_file.as_deref(), Some("stdin.fixture"));
+        assert_eq!(streams.stdin, InputStream::Closed);
+        assert_eq!(streams.stdin_file, None);
         assert!(streams.use_bash);
     }
     use tempfile::TempDir;

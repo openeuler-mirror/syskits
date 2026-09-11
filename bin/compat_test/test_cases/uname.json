@@ -702,6 +702,32 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uname",
+            "description": "子进程继承SIGPIPE默认处置用例：Rust测试框架父进程忽略SIGPIPE，但仅在exec前将uname子进程恢复为SIG_DFL，并将stdout连接到已关闭读端；GNU保留实际继承处置，预期被SIGPIPE终止且RC=141、stdout和stderr为空",
+            "setup_commands": [],
+            "args": ["-a"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "stderr": "capture",
+                    "sigpipe": "default"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

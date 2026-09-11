@@ -17,7 +17,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_error::{CTError, CTResult, strip_errno};
-use ctcore::libc::{SIG_DFL, SIG_ERR, SIGPIPE, getppid, sighandler_t, signal};
+use ctcore::libc::{SIG_DFL, SIG_ERR, SIG_IGN, SIGPIPE, getppid, sighandler_t, signal};
 use platform_info::*;
 
 use ctcore::Tool;
@@ -27,6 +27,24 @@ use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(target_os = "linux")]
+static INHERITED_SIGPIPE_HANDLER: AtomicUsize = AtomicUsize::new(SIG_ERR);
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_INHERITED_SIGPIPE: unsafe extern "C" fn() = capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe { ctcore::libc::sigaction(SIGPIPE, std::ptr::null(), action.as_mut_ptr()) } == 0 {
+        let action = unsafe { action.assume_init() };
+        INHERITED_SIGPIPE_HANDLER.store(action.sa_sigaction, Ordering::Relaxed);
+    }
+}
 
 pub mod uname_flags {
     pub static UNAME_ALL: &str = "all";
@@ -308,11 +326,12 @@ struct SigpipeGuard {
 
 impl SigpipeGuard {
     fn for_cli() -> Option<Self> {
-        if parent_ignores_sigpipe() {
+        let target = sigpipe_restore_target(inherited_sigpipe_handler(), parent_ignores_sigpipe());
+        if target == SIG_IGN {
             return None;
         }
 
-        let previous = unsafe { signal(SIGPIPE, SIG_DFL) };
+        let previous = unsafe { signal(SIGPIPE, target) };
         (previous != SIG_ERR).then_some(Self { previous })
     }
 }
@@ -322,6 +341,26 @@ impl Drop for SigpipeGuard {
         unsafe {
             signal(SIGPIPE, self.previous);
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn inherited_sigpipe_handler() -> sighandler_t {
+    INHERITED_SIGPIPE_HANDLER.load(Ordering::Relaxed)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn inherited_sigpipe_handler() -> sighandler_t {
+    SIG_ERR
+}
+
+fn sigpipe_restore_target(captured: sighandler_t, parent_ignored: bool) -> sighandler_t {
+    if captured != SIG_ERR {
+        captured
+    } else if parent_ignored {
+        SIG_IGN
+    } else {
+        SIG_DFL
     }
 }
 
@@ -1183,6 +1222,14 @@ mod tests {
             "Name:\tbash\nSigIgn:\t0000000000000000\n"
         ));
         assert!(!sigpipe_is_ignored_in_status("SigIgn:\tnot-hex\n"));
+    }
+
+    #[test]
+    fn captured_sigpipe_disposition_takes_priority_over_parent_state() {
+        assert_eq!(sigpipe_restore_target(SIG_IGN, false), SIG_IGN);
+        assert_eq!(sigpipe_restore_target(SIG_DFL, true), SIG_DFL);
+        assert_eq!(sigpipe_restore_target(SIG_ERR, true), SIG_IGN);
+        assert_eq!(sigpipe_restore_target(SIG_ERR, false), SIG_DFL);
     }
 
     #[test]

@@ -529,14 +529,24 @@ fn tac_write_segments<W: Write>(writer: &mut W, segments: &[Vec<u8>]) -> std::io
     Ok(())
 }
 
-fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
-    if settings.is_regex {
-        let mut pattern = GnuRegex::compile(&settings.separator, GnuRegexCompileOptions::emacs())
-            .map_err(TacError::from)?;
+fn tac_compile_regex(settings: &TacFlags) -> Result<Option<GnuRegex>, TacError> {
+    settings
+        .is_regex
+        .then(|| GnuRegex::compile(&settings.separator, GnuRegexCompileOptions::emacs()))
+        .transpose()
+        .map_err(TacError::from)
+}
+
+fn tac_collect_file_segments_with_regex(
+    filename: &OsStr,
+    settings: &TacFlags,
+    pattern: Option<&mut GnuRegex>,
+) -> CTResult<Vec<Vec<u8>>> {
+    if let Some(pattern) = pattern {
         let data = get_file_data(filename)?;
         Ok(tac_collect_regex_segments(
             data.as_ref(),
-            &mut pattern,
+            pattern,
             settings.is_before,
         )?)
     } else {
@@ -549,6 +559,12 @@ fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<
     }
 }
 
+#[cfg(test)]
+fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
+    let mut pattern = tac_compile_regex(settings)?;
+    tac_collect_file_segments_with_regex(filename, settings, pattern.as_mut())
+}
+
 /// 处理单个文件的 tac 操作
 ///
 /// # 参数
@@ -558,6 +574,7 @@ fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示处理结果
+#[cfg(test)]
 fn tac_process_file<W: Write>(
     writer: &mut W,
     filename: &OsStr,
@@ -579,11 +596,20 @@ fn tac_process_file<W: Write>(
 /// 返回 `CTResult<()>`，表示执行结果
 fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
     let mut has_error = false;
+    let mut pattern = tac_compile_regex(settings)?;
 
     for filename in &settings.files {
-        if let Err(e) = tac_process_file(writer, filename, settings) {
-            ctcore::ct_show_error!("{}", e);
-            has_error = true;
+        match tac_collect_file_segments_with_regex(filename, settings, pattern.as_mut()) {
+            Ok(segments) => {
+                if let Err(error) = tac_write_segments(writer, &segments) {
+                    ctcore::ct_show_error!("{}", TacError::WriteError(error));
+                    has_error = true;
+                }
+            }
+            Err(error) => {
+                ctcore::ct_show_error!("{}", error);
+                has_error = true;
+            }
         }
     }
 
@@ -607,9 +633,23 @@ pub fn tac_native_semantic(args: impl ctcore::Args) -> CTResult<TacSemantic> {
     let mut stderr_text = String::new();
     let mut global_row_index = 1_usize;
     let mut exit_code = 0;
+    let mut pattern = match tac_compile_regex(&settings) {
+        Ok(pattern) => pattern,
+        Err(error) => {
+            return Ok(TacSemantic {
+                separator_kind: tac_separator_kind(&settings).into(),
+                separator_text: tac_lossy_string(&settings.separator),
+                before: settings.is_before,
+                rows,
+                classic_text: String::new(),
+                stderr_text: format!("tac: {error}\n"),
+                exit_code: 1,
+            });
+        }
+    };
 
     for (file_index, filename) in settings.files.iter().enumerate() {
-        match tac_collect_file_segments(filename, &settings) {
+        match tac_collect_file_segments_with_regex(filename, &settings, pattern.as_mut()) {
             Ok(segments) => {
                 for segment in segments {
                     classic_bytes.extend_from_slice(&segment);
@@ -1481,6 +1521,24 @@ mod tests {
                     .stderr_text
                     .contains("tac: failed to open 'missing-file.txt' for reading")
             );
+        }
+
+        #[test]
+        fn test_tac_native_semantic_reports_invalid_regex_once_for_multiple_files() {
+            let args = [
+                OsString::from("tac"),
+                OsString::from("-r"),
+                OsString::from("-s"),
+                OsString::from("["),
+                OsString::from("missing-one"),
+                OsString::from("missing-two"),
+            ];
+
+            let semantic = tac_native_semantic(args.into_iter()).expect("semantic");
+
+            assert_eq!(semantic.exit_code, 1);
+            assert!(semantic.classic_text.is_empty());
+            assert_eq!(semantic.stderr_text, "tac: Invalid regular expression\n");
         }
     }
 }

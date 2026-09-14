@@ -185,6 +185,31 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=zh_CN.UTF-8下执行tac --bad_flag；GNU的未知选项正文保持英文，Try help提示使用简体中文，预期RC=1且stdout为空",
+      "setup_commands": [],
+      "args": [
+        "--bad_flag"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "zh_CN.UTF-8"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: unrecognized option '--bad_flag'\n请尝试执行 \"tac --help\" 来获取更多信息。\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "tac: 空分隔符-空输入 (nul-0)",
       "setup_commands": [
         "touch nul0.txt"
@@ -1103,31 +1128,153 @@
     {
       "tstdin": "",
       "command": "tac",
-      "description": "tac: 使用错误的flag",
-      "setup_commands": [
-        "echo 'File1 line1' > file1.txt"
-      ],
+      "description": "LC_ALL=C下执行tac --bad_flag；GNU对未知长选项输出简洁unrecognized option诊断和Try help提示，预期RC=1且stdout为空",
+      "setup_commands": [],
       "args": [
-        "--bad_flag",
-        "file1.txt"
+        "--bad_flag"
       ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
       "expectation": {
         "execution": {
           "exit_code": 1,
           "stdout": "",
-          "stderr": null
-        },
-        "verifications": [],
-        "ignore_fields": {
-          "ignore_exit_code": false,
-          "ignore_stdout": false,
-          "ignore_stderr": false,
-          "ignore_function": false
+          "stderr": "tac: unrecognized option '--bad_flag'\nTry 'tac --help' for more information.\n"
         }
       },
-      "cleanup_commands": [
-        "rm -f file1.txt"
-      ]
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --=；空长选项前缀同时匹配全部GNU长选项，预期RC=1并按getopt声明顺序列出歧义候选",
+      "setup_commands": [],
+      "args": [
+        "--="
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: option '--=' is ambiguous; possibilities: '--before' '--regex' '--separator' '--help' '--version'\nTry 'tac --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --before=x；before不接受参数，GNU按规范化长选项名报告doesn't allow an argument，预期RC=1且stdout为空",
+      "setup_commands": [],
+      "args": [
+        "--before=x"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: option '--before' doesn't allow an argument\nTry 'tac --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --separator且未提供后续参数；GNU报告长选项缺少必选参数，预期RC=1且stdout为空",
+      "setup_commands": [],
+      "args": [
+        "--separator"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: option '--separator' requires an argument\nTry 'tac --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac -s且未提供后续参数；GNU报告短选项s缺少必选参数，预期RC=1且stdout为空",
+      "setup_commands": [],
+      "args": [
+        "-s"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: option requires an argument -- 's'\nTry 'tac --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "原始字节用例：LC_ALL=C下执行tac短选项字节0xff；参数完整十六进制=2dff，GNU在invalid option诊断中保留0xff，预期stderr完整十六进制=7461633a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027746163202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+      "setup_commands": [],
+      "args": [
+        "2dff"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7461633a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027746163202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+        }
+      },
+      "cleanup_commands": [],
+      "byteMode": true
     },
     {
       "tstdin": "",

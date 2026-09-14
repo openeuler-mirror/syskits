@@ -26,9 +26,10 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use memchr::memmem;
 use memmap2::Mmap;
+use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
@@ -187,6 +188,48 @@ pub enum TacError {
 impl CTError for TacError {
     fn code(&self) -> i32 {
         1
+    }
+}
+
+#[derive(Debug)]
+struct TacUsageError {
+    message: Vec<u8>,
+    usage_hint: Vec<u8>,
+}
+
+impl TacUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        let usage_hint = if rust_i18n::locale() == "zh-CN" {
+            r#"请尝试执行 "tac --help" 来获取更多信息。"#.as_bytes().to_vec()
+        } else {
+            b"Try 'tac --help' for more information.".to_vec()
+        };
+        Box::new(Self {
+            message,
+            usage_hint,
+        })
+    }
+}
+
+impl Display for TacUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for TacUsageError {}
+
+impl CTError for TacUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
+    }
+
+    fn usage(&self) -> bool {
+        true
     }
 }
 
@@ -668,7 +711,139 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
     }
 }
 
+const TAC_LONG_OPTIONS: &[&str] = &["before", "regex", "separator", "help", "version"];
+const TAC_SHORT_OPTIONS: &[u8] = b"brshV";
+
+enum TacLongOptionMatch {
+    None,
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn tac_match_long_option(name: &[u8]) -> TacLongOptionMatch {
+    if let Some(option) = TAC_LONG_OPTIONS
+        .iter()
+        .find(|option| option.as_bytes() == name)
+    {
+        return TacLongOptionMatch::Recognized(option);
+    }
+
+    let matches = TAC_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => TacLongOptionMatch::None,
+        [option] => TacLongOptionMatch::Recognized(option),
+        _ => TacLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn tac_validate_long_option(argument: &[u8], has_next: bool) -> CTResult<bool> {
+    let long = &argument[2..];
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match tac_match_long_option(name) {
+        TacLongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(TacUsageError::boxed(message))
+        }
+        TacLongOptionMatch::Ambiguous(matches) => {
+            let possibilities = matches
+                .into_iter()
+                .map(|option| format!("'--{option}'"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut message = b"option '".to_vec();
+            message.extend_from_slice(argument);
+            message.extend_from_slice(b"' is ambiguous; possibilities: ");
+            message.extend_from_slice(possibilities.as_bytes());
+            Err(TacUsageError::boxed(message))
+        }
+        TacLongOptionMatch::Recognized("separator") if separator.is_none() && !has_next => Err(
+            TacUsageError::boxed(b"option '--separator' requires an argument".to_vec()),
+        ),
+        TacLongOptionMatch::Recognized("separator") => Ok(separator.is_none()),
+        TacLongOptionMatch::Recognized(canonical) if separator.is_some() => {
+            Err(TacUsageError::boxed(
+                format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+            ))
+        }
+        TacLongOptionMatch::Recognized("help" | "version") => Ok(false),
+        TacLongOptionMatch::Recognized(_) => Ok(false),
+    }
+}
+
+fn tac_validate_options(args: &[OsString], posixly_correct: bool) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_bytes();
+        if argument == b"--" {
+            break;
+        }
+        if argument.len() <= 1 || argument[0] != b'-' {
+            if posixly_correct {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        if argument.starts_with(b"--") {
+            let consumes_next = tac_validate_long_option(argument, index + 1 < args.len())?;
+            let name_end = argument[2..]
+                .iter()
+                .position(|byte| *byte == b'=')
+                .map_or(argument.len(), |equals| equals + 2);
+            if matches!(
+                tac_match_long_option(&argument[2..name_end]),
+                TacLongOptionMatch::Recognized("help" | "version")
+            ) {
+                return Ok(());
+            }
+            index += usize::from(consumes_next) + 1;
+            continue;
+        }
+
+        let mut option_index = 1;
+        while option_index < argument.len() {
+            let option = argument[option_index];
+            if !TAC_SHORT_OPTIONS.contains(&option) {
+                let mut message = b"invalid option -- '".to_vec();
+                message.push(option);
+                message.push(b'\'');
+                return Err(TacUsageError::boxed(message));
+            }
+            if matches!(option, b'h' | b'V') {
+                return Ok(());
+            }
+            if option == b's' {
+                if option_index + 1 < argument.len() {
+                    break;
+                }
+                if index + 1 == args.len() {
+                    return Err(TacUsageError::boxed(
+                        b"option requires an argument -- 's'".to_vec(),
+                    ));
+                }
+                index += 1;
+                break;
+            }
+            option_index += 1;
+        }
+        index += 1;
+    }
+
+    Ok(())
+}
+
 fn tac_parse_invocation(args: impl ctcore::Args) -> CTResult<TacFlags> {
+    let args = args.collect::<Vec<_>>();
+    tac_validate_options(&args, ctcore::ct_posix::posixly_correct())?;
     let matches = ct_app().try_get_matches_from(args)?;
     TacFlags::new(&matches)
 }
@@ -1249,6 +1424,77 @@ mod tests {
             assert!(flags.is_regex);
             assert_eq!(flags.separator, b":");
             assert_eq!(flags.files, vec!["input", "--regex"]);
+        }
+
+        #[test]
+        fn test_tac_reports_gnu_option_diagnostics() {
+            for (args, expected) in [
+                (
+                    vec!["tac", "--bad_flag"],
+                    "unrecognized option '--bad_flag'",
+                ),
+                (vec!["tac", "-x"], "invalid option -- 'x'"),
+                (
+                    vec!["tac", "--before=x"],
+                    "option '--before' doesn't allow an argument",
+                ),
+                (
+                    vec!["tac", "--separator"],
+                    "option '--separator' requires an argument",
+                ),
+                (vec!["tac", "-s"], "option requires an argument -- 's'"),
+            ] {
+                let error = tac_parse_invocation(args.into_iter().map(OsString::from))
+                    .expect_err("invalid GNU option form must fail");
+                assert_eq!(error.to_string(), expected);
+                assert!(error.usage());
+            }
+        }
+
+        #[test]
+        fn test_tac_reports_ambiguous_and_raw_option_diagnostics() {
+            let ambiguous = tac_parse_invocation(["tac", "--="].into_iter().map(OsString::from))
+                .expect_err("empty long option prefix must be ambiguous");
+            assert_eq!(
+                ambiguous.to_string(),
+                "option '--=' is ambiguous; possibilities: '--before' '--regex' '--separator' '--help' '--version'"
+            );
+
+            let raw = tac_validate_options(
+                &[
+                    OsString::from("tac"),
+                    OsStr::from_bytes(&[b'-', 0xff]).to_os_string(),
+                ],
+                false,
+            )
+            .expect_err("unknown option byte must fail");
+            assert_eq!(raw.diagnostic_bytes().as_ref(), b"invalid option -- '\xff'");
+        }
+
+        #[test]
+        fn test_tac_option_validation_preserves_getopt_control_flow() {
+            for args in [
+                vec!["tac", "--help", "--bad"],
+                vec!["tac", "-s", "--bad", "input"],
+                vec!["tac", "-brs:", "input"],
+                vec!["tac", "--sep=:", "input"],
+            ] {
+                tac_validate_options(
+                    &args.into_iter().map(OsString::from).collect::<Vec<_>>(),
+                    false,
+                )
+                .expect("valid GNU option flow must pass prevalidation");
+            }
+
+            tac_validate_options(
+                &[
+                    OsString::from("tac"),
+                    OsString::from("input"),
+                    OsString::from("--bad"),
+                ],
+                true,
+            )
+            .expect("POSIX mode must stop option validation at the first operand");
         }
     }
 

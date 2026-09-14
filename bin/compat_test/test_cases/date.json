@@ -3,6 +3,50 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "GNU两位年份窗口将00展开为2000",
+      "args": ["-d", "01/01/00", "+%Y-%m-%d"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "2000-01-01\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU两位年份窗口将68展开为2068",
+      "args": ["-d", "01/01/68", "+%Y-%m-%d"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "2068-01-01\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU两位年份窗口将69展开为1969",
+      "args": ["-d", "01/01/69", "+%Y-%m-%d"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "1969-01-01\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "带UTC时间的两位年份97按GNU窗口展开为1997",
+      "args": ["-d", "08/01/97 06:00 UTC", "+%Y-%m-%d %H:%M %z"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "1997-08-01 06:00 +0000\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "负零点一Epoch按timespec规范输出秒-1和正纳秒900000000",
       "args": ["-d", "@-0.1", "+%s.%N"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

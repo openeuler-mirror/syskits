@@ -4640,4 +4640,18 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_two_digit_year_uses_gnu_window() {
+        for (input, expected_year) in [
+            ("01/01/00", 2000),
+            ("01/01/68", 2068),
+            ("01/01/69", 1969),
+            ("01/01/99", 1999),
+            ("08/01/97 06:00 UTC", 1997),
+            ("970801", 1997),
+        ] {
+            assert_eq!(parse_date(input).unwrap().year(), expected_year, "{input}");
+        }
+    }
 }

@@ -1512,6 +1512,114 @@ fn gnu_year_field(dt: &DateTime<FixedOffset>, spec: u8) -> Option<(u64, bool, us
     }
 }
 
+#[cfg(target_os = "linux")]
+fn strftime_tm(dt: &DateTime<FixedOffset>) -> tm {
+    let ts = dt.timestamp();
+    let mut tm_val: tm = unsafe { mem::zeroed() };
+    let mut use_tm = false;
+
+    unsafe {
+        let mut tmp_tm: tm = mem::zeroed();
+        if !localtime_r(&ts, &mut tmp_tm).is_null()
+            && tmp_tm.tm_gmtoff as i32 == dt.offset().local_minus_utc()
+        {
+            tm_val = tmp_tm;
+            use_tm = true;
+        }
+    }
+
+    if !use_tm && dt.offset().local_minus_utc() == 0 {
+        unsafe {
+            if !gmtime_r(&ts, &mut tm_val).is_null() {
+                use_tm = true;
+            }
+        }
+    }
+
+    if !use_tm {
+        tm_val.tm_sec = dt.second() as i32;
+        tm_val.tm_min = dt.minute() as i32;
+        tm_val.tm_hour = dt.hour() as i32;
+        tm_val.tm_mday = dt.day() as i32;
+        tm_val.tm_mon = dt.month0() as i32;
+        tm_val.tm_year = dt.year() - 1900;
+        tm_val.tm_wday = dt.weekday().num_days_from_sunday() as i32;
+        tm_val.tm_yday = dt.ordinal0() as i32;
+        tm_val.tm_isdst = -1;
+        tm_val.tm_gmtoff = dt.offset().local_minus_utc() as i64;
+    }
+
+    tm_val
+}
+
+#[cfg(target_os = "linux")]
+fn format_with_libc_strftime(c_fmt: &CStr, tm_val: &tm) -> CTResult<Vec<u8>> {
+    let mut buf = vec![0u8; 256];
+    loop {
+        let res = unsafe {
+            strftime(
+                buf.as_mut_ptr() as *mut c_char,
+                buf.len(),
+                c_fmt.as_ptr(),
+                tm_val,
+            )
+        };
+        if res > 0 {
+            return Ok(buf[..res].to_vec());
+        }
+        if buf.len() > 65536 {
+            if c_fmt.to_bytes().is_empty() {
+                return Ok(Vec::new());
+            }
+            return Err(CtSimpleError::new(1, "strftime failed"));
+        }
+        buf.resize(buf.len() * 2, 0);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn format_gnu_field_bytes(
+    field: &[u8],
+    width: Option<usize>,
+    pad: StrftimePad,
+    default_pad: StrftimePad,
+) -> Vec<u8> {
+    let Some(width) = width else {
+        return field.to_vec();
+    };
+    let pad = if pad == StrftimePad::Default {
+        default_pad
+    } else {
+        pad
+    };
+    let shortage = width.saturating_sub(field.len());
+    if pad == StrftimePad::None || shortage == 0 {
+        return field.to_vec();
+    }
+
+    let pad_byte = if pad == StrftimePad::Space {
+        b' '
+    } else {
+        b'0'
+    };
+    let mut result = Vec::with_capacity(width.max(field.len()));
+    if pad_byte == b'0' && field.first() == Some(&b'-') {
+        result.push(b'-');
+        result.extend(std::iter::repeat_n(pad_byte, shortage));
+        result.extend_from_slice(&field[1..]);
+    } else {
+        result.extend(std::iter::repeat_n(pad_byte, shortage));
+        result.extend_from_slice(field);
+    }
+    result
+}
+
+#[cfg(target_os = "linux")]
+fn format_alternate_numeric_field(tm_val: &tm, spec: u8) -> CTResult<Vec<u8>> {
+    let c_fmt = CString::new([b'%', b'O', spec]).expect("strftime format has no NUL byte");
+    format_with_libc_strftime(&c_fmt, tm_val)
+}
+
 fn res_width_from_nsec(res_nsec: i64) -> usize {
     let mut width = 9;
     let mut temp = res_nsec;
@@ -1594,6 +1702,10 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
     let use_iran_era = lang.starts_with("fa_");
     let use_ethiopia_era = lang.starts_with("am_") || lang.ends_with("_ET");
     let use_alt_era = use_thai_era || use_iran_era || use_ethiopia_era;
+    if !fmt.contains(&b'%') {
+        return Ok(fmt.to_vec());
+    }
+    let tm_val = strftime_tm(dt);
 
     let mut fmt_adjusted = Vec::with_capacity(fmt.len());
     let mut index = 0;
@@ -1658,6 +1770,18 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 let spec = fmt[index];
                 index += 1;
                 match spec {
+                    b'C' | b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'S'
+                    | b'u' | b'U' | b'V' | b'w' | b'W' | b'y' | b'g' | b'G'
+                        if modifier == Some(b'O') =>
+                    {
+                        let field = format_alternate_numeric_field(&tm_val, spec)?;
+                        fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                            &field,
+                            parse_strftime_width(width_str),
+                            pad,
+                            StrftimePad::Space,
+                        ));
+                    }
                     b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'q' | b'S'
                     | b'u' | b'U' | b'V' | b'w' | b'W'
                         if (!width_bytes.is_empty() || has_plus) && modifier.is_none() =>
@@ -1870,62 +1994,7 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
     let c_fmt =
         CString::new(fmt_adjusted).map_err(|_| CtSimpleError::new(1, "Invalid format string"))?;
 
-    let ts = dt.timestamp();
-    let mut tm_val: tm = unsafe { mem::zeroed() };
-    let mut use_tm = false;
-
-    unsafe {
-        let mut tmp_tm: tm = mem::zeroed();
-        if !localtime_r(&ts, &mut tmp_tm).is_null()
-            && tmp_tm.tm_gmtoff as i32 == dt.offset().local_minus_utc()
-        {
-            tm_val = tmp_tm;
-            use_tm = true;
-        }
-    }
-
-    if !use_tm && dt.offset().local_minus_utc() == 0 {
-        unsafe {
-            if !gmtime_r(&ts, &mut tm_val).is_null() {
-                use_tm = true;
-            }
-        }
-    }
-
-    if !use_tm {
-        tm_val.tm_sec = dt.second() as i32;
-        tm_val.tm_min = dt.minute() as i32;
-        tm_val.tm_hour = dt.hour() as i32;
-        tm_val.tm_mday = dt.day() as i32;
-        tm_val.tm_mon = dt.month0() as i32;
-        tm_val.tm_year = dt.year() - 1900;
-        tm_val.tm_wday = dt.weekday().num_days_from_sunday() as i32;
-        tm_val.tm_yday = dt.ordinal0() as i32;
-        tm_val.tm_isdst = -1;
-        tm_val.tm_gmtoff = dt.offset().local_minus_utc() as i64;
-    }
-
-    let mut buf = vec![0u8; 256];
-    loop {
-        let res = unsafe {
-            strftime(
-                buf.as_mut_ptr() as *mut c_char,
-                buf.len(),
-                c_fmt.as_ptr(),
-                &tm_val,
-            )
-        };
-        if res > 0 {
-            return Ok(buf[..res].to_vec());
-        }
-        if buf.len() > 65536 {
-            if c_fmt.as_bytes().is_empty() {
-                return Ok(Vec::new());
-            }
-            return Err(CtSimpleError::new(1, "strftime failed"));
-        }
-        buf.resize(buf.len() * 2, 0);
-    }
+    format_with_libc_strftime(&c_fmt, &tm_val)
 }
 
 fn parse_date<S: AsRef<str> + Clone>(s: S) -> Result<DateTime<FixedOffset>, (String, ())> {
@@ -2199,6 +2268,26 @@ mod tests {
         assert_eq!(
             format_using_strftime(&dt, "%_+6s|%+_6s|%_06s|%-06s|%0-6s|%-010a|%0-10a").unwrap(),
             "000000|     0|000000|000000|0|0000000Thu|Thu"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_alternate_numeric_fields_use_text_width_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+            .unwrap();
+
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%Od|%4Od|%_4Od|%04Od|%+4Od|%Oe|%4Oe|%04Oe|%+4Oe|%4Om|%+4Om|%4Oy|%+4Oy",
+            )
+            .unwrap(),
+            "02|  02|  02|0002|0002| 2|   2|00 2|00 2|  01|0001|  24|0024"
         );
     }
 

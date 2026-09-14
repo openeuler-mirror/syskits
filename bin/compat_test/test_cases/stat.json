@@ -929,6 +929,35 @@
             "cleanup_commands": [
                 "rm -f stat_cross_mount_link"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C下执行stat -c %n stat_write_error并将stdout连接到/dev/full；输入fixture为0字节普通文件stat_write_error；GNU在写入文件名和换行时报告ENOSPC，预期RC=1、stdout为0字节、stderr为stat: write error: No space left on device且不含Rust panic",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch stat_write_error"
+            ],
+            "args": [
+                "-c",
+                "%n",
+                "stat_write_error"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "stat: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_write_error"
+            ]
         }
     ]
 }

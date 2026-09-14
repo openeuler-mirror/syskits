@@ -24,6 +24,7 @@ use rustix::fs::{AtFlags, StatxFlags, major, minor, statx};
 use std::borrow::Cow;
 use std::ffi::{CStr, OsStr, OsString};
 use std::fs;
+use std::io::{self, Write};
 use std::os::fd::FromRawFd;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
@@ -81,11 +82,6 @@ struct StatFlags {
     is_sign: bool,
     is_group: bool,
     is_locale: bool,
-}
-
-enum StatPadding {
-    Zero,
-    Space,
 }
 
 fn device_major(device: u64) -> u64 {
@@ -385,7 +381,13 @@ struct Stater {
 /// * `precision` - An Option containing the precision value.
 ///
 /// This function delegates the printing process to more specialized functions depending on the output type.
-fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: Option<i32>) {
+fn print_it<W: Write>(
+    writer: &mut W,
+    output: &StatOutputType,
+    flags: StatFlags,
+    width: usize,
+    precision: Option<i32>,
+) -> io::Result<()> {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -415,135 +417,7 @@ fn print_it(output: &StatOutputType, flags: StatFlags, width: usize, precision: 
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    let padding_char = determine_padding_char(&flags, &precision);
-
-    match output {
-        StatOutputType::Str(s) => print_str(s, &flags, width, precision),
-        StatOutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
-        StatOutputType::Unsigned(num) => {
-            print_unsigned(*num, &flags, width, precision, padding_char)
-        }
-        StatOutputType::UnsignedOct(num) => {
-            print_unsigned_oct(*num, &flags, width, precision, padding_char)
-        }
-        StatOutputType::UnsignedHex(num) => {
-            print_unsigned_hex(*num, &flags, width, precision, padding_char)
-        }
-        StatOutputType::Timestamp(sec, nsec) => {
-            print_timestamp(*sec, *nsec, &flags, width, precision)
-        }
-        StatOutputType::Unknown => print!("?"),
-    }
-}
-
-/// Determines the padding character based on the provided flags and precision.
-///
-/// # Arguments
-///
-/// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `precision` - An Option containing the precision value.
-///
-/// # Returns
-///
-/// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &StatFlags, precision: &Option<i32>) -> StatPadding {
-    if flags.is_zero && !flags.is_left && precision.is_none() {
-        StatPadding::Zero
-    } else {
-        StatPadding::Space
-    }
-}
-
-/// Prints a string value based on the provided flags, width, and precision.
-///
-/// # Arguments
-///
-/// * `s` - The string to be printed.
-/// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `width` - The width of the field for the printed string.
-/// * `precision` - An Option containing the precision value.
-fn print_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) {
-    print!("{}", render_str(s, flags, width, precision));
-}
-
-/// Prints an integer value based on the provided flags, width, and precision.
-///
-/// # Arguments
-///
-/// * `num` - The integer value to be printed.
-/// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `width` - The width of the field for the printed integer.
-/// * `precision` - An Option containing the precision value.
-/// * `padding_char` - The padding character as determined by `determine_padding_char`.
-fn print_integer(
-    num: i64,
-    flags: &StatFlags,
-    width: usize,
-    precision: Option<i32>,
-    _padding_char: StatPadding,
-) {
-    print!("{}", render_integer(num, flags, width, precision));
-}
-
-/// Prints an unsigned integer value based on the provided flags, width, and precision.
-///
-/// # Arguments
-///
-/// * `num` - The unsigned integer value to be printed.
-/// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `width` - The width of the field for the printed unsigned integer.
-/// * `precision` - An Option containing the precision value.
-/// * `padding_char` - The padding character as determined by `determine_padding_char`.
-fn print_unsigned(
-    num: u64,
-    flags: &StatFlags,
-    width: usize,
-    precision: Option<i32>,
-    _padding_char: StatPadding,
-) {
-    print!("{}", render_unsigned(num, flags, width, precision));
-}
-
-/// Prints an unsigned octal integer value based on the provided flags, width, and precision.
-///
-/// # Arguments
-///
-/// * `num` - The unsigned octal integer value to be printed.
-/// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `width` - The width of the field for the printed unsigned octal integer.
-/// * `precision` - An Option containing the precision value.
-/// * `padding_char` - The padding character as determined by `determine_padding_char`.
-fn print_unsigned_oct(
-    num: u32,
-    flags: &StatFlags,
-    width: usize,
-    precision: Option<i32>,
-    _padding_char: StatPadding,
-) {
-    print!("{}", render_unsigned_oct(num, flags, width, precision));
-}
-
-/// Prints an unsigned hexadecimal integer value based on the provided flags, width, and precision.
-///
-/// # Arguments
-///
-/// * `num` - The unsigned hexadecimal integer value to be printed.
-/// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `width` - The width of the field for the printed unsigned hexadecimal integer.
-/// * `precision` - An Option containing the precision value.
-/// * `padding_char` - The padding character as determined by `determine_padding_char`.
-fn print_unsigned_hex(
-    num: u64,
-    flags: &StatFlags,
-    width: usize,
-    precision: Option<i32>,
-    _padding_char: StatPadding,
-) {
-    print!("{}", render_unsigned_hex(num, flags, width, precision));
-}
-
-fn print_timestamp(sec: i64, nsec: i64, flags: &StatFlags, width: usize, precision: Option<i32>) {
-    print!("{}", render_timestamp(sec, nsec, flags, width, precision));
+    writer.write_all(render_output(output, flags, width, precision).as_bytes())
 }
 
 impl Stater {
@@ -868,7 +742,7 @@ impl Stater {
         None
     }
 
-    fn exec(&self) -> i32 {
+    fn exec<W: Write>(&self, writer: &mut W) -> io::Result<i32> {
         let mut stdin_is_fifo = false;
         if cfg!(unix) {
             if let Ok(md) = fs::metadata("/dev/stdin") {
@@ -878,25 +752,30 @@ impl Stater {
 
         let mut ret = 0;
         for f in &self.files {
-            ret |= self.do_stat(f, stdin_is_fifo);
+            ret |= self.do_stat(f, stdin_is_fifo, writer)?;
         }
-        ret
+        Ok(ret)
     }
 
-    fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
+    fn do_stat<W: Write>(
+        &self,
+        file: &OsStr,
+        stdin_is_fifo: bool,
+        writer: &mut W,
+    ) -> io::Result<i32> {
         let display_name = file.to_string_lossy();
 
         // Handle file path resolution
         let file = match self.resolve_file_path(display_name.as_ref(), stdin_is_fifo) {
             Ok(path) => path,
-            Err(status) => return status,
+            Err(status) => return Ok(status),
         };
 
         // Process based on mode (filesystem or file)
         if self.is_show_fs {
-            self.handle_filesystem_stat(&file, display_name.as_ref())
+            self.handle_filesystem_stat(&file, display_name.as_ref(), writer)
         } else {
-            self.handle_file_stat(&file, display_name.as_ref(), stdin_is_fifo)
+            self.handle_file_stat(&file, display_name.as_ref(), stdin_is_fifo, writer)
         }
     }
 
@@ -913,7 +792,12 @@ impl Stater {
         Ok(OsString::from("-"))
     }
 
-    fn handle_filesystem_stat(&self, file: &OsStr, display_name: &str) -> i32 {
+    fn handle_filesystem_stat<W: Write>(
+        &self,
+        file: &OsStr,
+        display_name: &str,
+        writer: &mut W,
+    ) -> io::Result<i32> {
         #[cfg(unix)]
         let path = file.as_bytes();
         #[cfg(not(unix))]
@@ -921,9 +805,8 @@ impl Stater {
 
         match statfs(path) {
             Ok(meta) => {
-                // 传入 display_name
-                self.print_filesystem_info(&meta, &self.default_tokens, display_name);
-                0
+                self.print_filesystem_info(&meta, &self.default_tokens, display_name, writer)?;
+                Ok(0)
             }
             Err(e) => {
                 // statfs 返回的是 String 类型的错误，直接使用
@@ -943,12 +826,18 @@ impl Stater {
                     display_name.quote(),
                     error_description
                 );
-                1
+                Ok(1)
             }
         }
     }
 
-    fn handle_file_stat(&self, file: &OsStr, display_name: &str, _stdin_is_fifo: bool) -> i32 {
+    fn handle_file_stat<W: Write>(
+        &self,
+        file: &OsStr,
+        display_name: &str,
+        _stdin_is_fifo: bool,
+        writer: &mut W,
+    ) -> io::Result<i32> {
         let result = if display_name == "-" {
             metadata_for_stdin()
         } else {
@@ -958,7 +847,7 @@ impl Stater {
         match result {
             Ok(meta) => {
                 let tokens = self.select_tokens(&meta);
-                self.print_file_info(&meta, tokens, file, display_name)
+                self.print_file_info(&meta, tokens, file, display_name, writer)
             }
             Err(e) => {
                 // 提取错误描述，不包含错误代码
@@ -1003,7 +892,7 @@ impl Stater {
                         error_description
                     );
                 }
-                1
+                Ok(1)
             }
         }
     }
@@ -1018,14 +907,17 @@ impl Stater {
         }
     }
 
-    fn print_filesystem_info(&self, meta: &impl FsMeta, tokens: &[StatToken], display_name: &str) {
+    fn print_filesystem_info<W: Write>(
+        &self,
+        meta: &impl FsMeta,
+        tokens: &[StatToken],
+        display_name: &str,
+        writer: &mut W,
+    ) -> io::Result<()> {
         for token in tokens {
             match token {
-                StatToken::Char(c) => print!("{c}"),
-                StatToken::Byte(b) => {
-                    use std::io::Write;
-                    let _ = std::io::stdout().write_all(&[*b]);
-                }
+                StatToken::Char(c) => write!(writer, "{c}")?,
+                StatToken::Byte(b) => writer.write_all(&[*b])?,
                 StatToken::IgnoredDirective => {}
                 StatToken::Directive {
                     flag,
@@ -1035,10 +927,11 @@ impl Stater {
                     format,
                 } => {
                     let output = self.get_filesystem_output(meta, *format, display_name);
-                    print_it(&output, *flag, *width, *precision);
+                    print_it(writer, &output, *flag, *width, *precision)?;
                 }
             }
         }
+        Ok(())
     }
 
     fn print_file_info(
@@ -1047,16 +940,14 @@ impl Stater {
         tokens: &[StatToken],
         file: &OsStr,
         display_name: &str,
-    ) -> i32 {
+        writer: &mut impl Write,
+    ) -> io::Result<i32> {
         let mut status = 0;
 
         for token in tokens {
             match token {
-                StatToken::Char(c) => print!("{c}"),
-                StatToken::Byte(b) => {
-                    use std::io::Write;
-                    let _ = std::io::stdout().write_all(&[*b]);
-                }
+                StatToken::Char(c) => write!(writer, "{c}")?,
+                StatToken::Byte(b) => writer.write_all(&[*b])?,
                 StatToken::IgnoredDirective => {}
                 StatToken::Directive {
                     flag,
@@ -1073,12 +964,12 @@ impl Stater {
                         *modifier,
                     );
                     status |= output_status;
-                    print_it(&output, *flag, *width, *precision);
+                    print_it(writer, &output, *flag, *width, *precision)?;
                 }
             }
         }
 
-        status
+        Ok(status)
     }
 
     fn get_filesystem_output(
@@ -1500,9 +1391,17 @@ pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
         .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
+    let stdout = io::stdout();
+    let mut output = stdout.lock();
+    let status = stater
+        .exec(&mut output)
+        .map_err_context(|| String::from("write error"))?;
+    output
+        .flush()
+        .map_err_context(|| String::from("write error"))?;
 
     // Convert non-zero exit status to error
-    match stater.exec() {
+    match status {
         0 => Ok(()),
         status => Err(status.into()),
     }
@@ -2451,6 +2350,33 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Write};
+
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from_raw_os_error(libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn formatted_output_propagates_write_errors() {
+        let error = print_it(
+            &mut FailingWriter,
+            &StatOutputType::Str("file".to_string()),
+            StatFlags::default(),
+            0,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.raw_os_error(), Some(libc::ENOSPC));
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -2803,38 +2729,6 @@ mod tests {
     }
 
     #[test]
-    fn test_determine_padding_char_behaviour() {
-        let flags = StatFlags {
-            is_zero: true,
-            ..Default::default()
-        };
-        assert!(matches!(
-            determine_padding_char(&flags, &None),
-            StatPadding::Zero
-        ));
-
-        let flags = StatFlags {
-            is_zero: true,
-            is_left: true,
-            ..Default::default()
-        };
-        assert!(matches!(
-            determine_padding_char(&flags, &None),
-            StatPadding::Space
-        ));
-
-        let flags = StatFlags {
-            is_zero: true,
-            is_left: false,
-            ..Default::default()
-        };
-        assert!(matches!(
-            determine_padding_char(&flags, &Some(3)),
-            StatPadding::Space
-        ));
-    }
-
-    #[test]
     fn test_pretty_time_returns_expected_prefix() {
         let formatted = pretty_time(0, 0);
         assert!(
@@ -3075,10 +2969,14 @@ mod test_stat_all {
         let matches = create_test_matches(vec![temp_path.to_str().unwrap()], true, None, false);
         let stater = Stater::new(&matches).unwrap();
 
-        let result = stater.handle_filesystem_stat(
-            &OsString::from(temp_path.as_os_str()),
-            temp_path.to_string_lossy().as_ref(),
-        );
+        let mut output = Vec::new();
+        let result = stater
+            .handle_filesystem_stat(
+                &OsString::from(temp_path.as_os_str()),
+                temp_path.to_string_lossy().as_ref(),
+                &mut output,
+            )
+            .unwrap();
         assert_eq!(result, 0);
     }
 
@@ -3098,11 +2996,15 @@ mod test_stat_all {
 
         let stater = Stater::new(&matches).unwrap();
 
-        let result = stater.handle_file_stat(
-            &OsString::from(temp_file.as_os_str()),
-            temp_file.to_string_lossy().as_ref(),
-            false,
-        );
+        let mut output = Vec::new();
+        let result = stater
+            .handle_file_stat(
+                &OsString::from(temp_file.as_os_str()),
+                temp_file.to_string_lossy().as_ref(),
+                false,
+                &mut output,
+            )
+            .unwrap();
         assert_eq!(result, 0);
     }
 
@@ -3174,11 +3076,15 @@ mod test_stat_all {
         let matches = create_test_matches(vec![file_path], false, Some("%C"), false);
         let stater = Stater::new(&matches).unwrap();
 
-        let result = stater.handle_file_stat(
-            &OsString::from(temp_file.as_os_str()),
-            temp_file.to_string_lossy().as_ref(),
-            false,
-        );
+        let mut output = Vec::new();
+        let result = stater
+            .handle_file_stat(
+                &OsString::from(temp_file.as_os_str()),
+                temp_file.to_string_lossy().as_ref(),
+                false,
+                &mut output,
+            )
+            .unwrap();
 
         assert_eq!(result, 1);
     }

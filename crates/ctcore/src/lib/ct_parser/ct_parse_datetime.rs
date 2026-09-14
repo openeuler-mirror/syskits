@@ -712,6 +712,26 @@ fn parse_weekday_name(input: &str) -> Option<Weekday> {
     }
 }
 
+fn parse_weekday_ordinal(input: &str) -> Option<i32> {
+    match input.to_ascii_lowercase().as_str() {
+        "last" => Some(-1),
+        "this" => Some(0),
+        "next" | "first" => Some(1),
+        "third" => Some(3),
+        "fourth" => Some(4),
+        "fifth" => Some(5),
+        "sixth" => Some(6),
+        "seventh" => Some(7),
+        "eighth" => Some(8),
+        "ninth" => Some(9),
+        "tenth" => Some(10),
+        "eleventh" => Some(11),
+        "twelfth" => Some(12),
+        value if value.bytes().all(|byte| byte.is_ascii_digit()) => value.parse().ok(),
+        _ => None,
+    }
+}
+
 fn strip_weekday_from_explicit_iso_date(input: &str) -> Option<String> {
     let parts: Vec<&str> = input.split_whitespace().collect();
     let weekday_index = parts
@@ -719,10 +739,7 @@ fn strip_weekday_from_explicit_iso_date(input: &str) -> Option<String> {
         .position(|part| parse_weekday_name(part).is_some())?;
     let weekday_start = if weekday_index > 0 {
         let modifier = parts[weekday_index - 1];
-        if modifier.eq_ignore_ascii_case("next")
-            || modifier.eq_ignore_ascii_case("last")
-            || modifier.eq_ignore_ascii_case("this")
-        {
+        if parse_weekday_ordinal(modifier).is_some() {
             weekday_index - 1
         } else {
             weekday_index
@@ -764,50 +781,18 @@ fn parse_weekday_expression(
     reference_time: DateTime<Local>,
 ) -> Option<DateTime<Local>> {
     let parts: Vec<&str> = input.split_whitespace().collect();
-    let (modifier, weekday) = match parts.as_slice() {
-        [weekday] => (None, *weekday),
-        [modifier @ ("next" | "last" | "this"), weekday] => (Some(*modifier), *weekday),
+    let (ordinal, weekday) = match parts.as_slice() {
+        [weekday] => (0, *weekday),
+        [ordinal, weekday] => (parse_weekday_ordinal(ordinal)?, *weekday),
         _ => return None,
     };
     let target_weekday = parse_weekday_name(weekday)?;
     let current_weekday = reference_time.weekday();
 
-    // 根据修饰词计算目标日期
-    let days_offset = match modifier {
-        Some("next") => {
-            // "next weekday" - GNU语义：如果目标星期几距离超过1天，则指本周；否则指下周
-            let days = (target_weekday.num_days_from_monday() as i32
-                - current_weekday.num_days_from_monday() as i32
-                + 7)
-                % 7;
-            if days == 0 {
-                7 // 如果今天就是目标星期几，下一个是下周
-            } else {
-                days // 如果目标星期几在本周后面几天，就是本周
-            }
-        }
-        Some("last") => {
-            // "last Friday" - 上一个星期五（不包括今天）
-            let days = (current_weekday.num_days_from_monday() as i32
-                - target_weekday.num_days_from_monday() as i32
-                + 7)
-                % 7;
-            if days == 0 { -7 } else { -days }
-        }
-        Some("this") => {
-            // "this Friday" - 本周的星期五
-            let days = target_weekday.num_days_from_monday() as i32
-                - current_weekday.num_days_from_monday() as i32;
-            if days < 0 { days + 7 } else { days }
-        }
-        _ => {
-            // 只有星期几名称，例如 "Friday"
-            // GNU的行为：如果今天是该星期几则返回今天，否则返回下一个该星期几
-            let days = target_weekday.num_days_from_monday() as i32
-                - current_weekday.num_days_from_monday() as i32;
-            if days < 0 { days + 7 } else { days }
-        }
-    };
+    let current = current_weekday.num_days_from_sunday() as i32;
+    let target = target_weekday.num_days_from_sunday() as i32;
+    let ordinal_weeks = ordinal - i32::from(ordinal > 0 && current != target);
+    let days_offset = ordinal_weeks * 7 + (target - current + 7) % 7;
 
     // 计算目标日期并设置时间为午夜00:00:00（匹配GNU coreutils行为）
     Duration::try_days(days_offset as i64)
@@ -882,6 +867,33 @@ mod tests {
 
         let this_saturday = parse_datetime_gnu_compat("this saturday", ref_time).unwrap();
         assert_eq!(this_saturday.weekday(), Weekday::Sat);
+    }
+
+    #[test]
+    fn test_parse_weekday_with_gnu_ordinals() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap(); // Thursday
+
+        for (input, expected) in [
+            (
+                "first monday",
+                NaiveDate::from_ymd_opt(2025, 7, 28).unwrap(),
+            ),
+            (
+                "third monday",
+                NaiveDate::from_ymd_opt(2025, 8, 11).unwrap(),
+            ),
+            ("5 monday", NaiveDate::from_ymd_opt(2025, 8, 25).unwrap()),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected, "input {input}");
+            assert_eq!(parsed.hour(), 0, "input {input}");
+        }
+
+        let explicit = parse_datetime_gnu_compat("third monday 2024-01-01", ref_time).unwrap();
+        assert_eq!(
+            explicit.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
+        );
     }
 
     #[test]

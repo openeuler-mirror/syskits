@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析序数星期与显式日期组合；GNU在存在显式日期时忽略third monday，执行date -d 'third monday 2024-01-01' +%F，预期2024-01-01",
+      "args": ["-d", "third monday 2024-01-01", "+%F"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下解析GNU相对日期单位fortnight；执行date -d '2024-01-01 2 fortnights ago' +%F，两个fortnight按28个日历日回退，预期2023-12-04",
       "args": ["-d", "2024-01-01 2 fortnights ago", "+%F"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

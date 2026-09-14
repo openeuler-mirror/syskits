@@ -1254,7 +1254,7 @@ impl Stater {
             // optimal I/O transfer size hint
             'o' => StatOutputType::Unsigned(meta.blksize()),
             // total size, in bytes
-            's' => StatOutputType::Integer(meta.len() as i64),
+            's' => StatOutputType::Unsigned(meta.len()),
             't' => match modifier {
                 Some('H') => StatOutputType::UnsignedHex(device_major(meta.rdev())),
                 Some('L') => StatOutputType::UnsignedHex(device_minor(meta.rdev())),
@@ -2659,6 +2659,33 @@ mod tests {
     }
 
     #[test]
+    fn file_size_uses_unsigned_formatting() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        temp.as_file().set_len(10).unwrap();
+        let matches = ct_app()
+            .try_get_matches_from(["stat", "-c", "%s", temp.path().to_str().unwrap()])
+            .unwrap();
+        let stater = Stater::new(&matches).unwrap();
+        let metadata = temp.as_file().metadata().unwrap();
+
+        let output = stater.get_file_output(
+            &metadata,
+            's',
+            temp.path().as_os_str(),
+            temp.path().to_str().unwrap(),
+            None,
+        );
+        assert!(matches!(output, StatOutputType::Unsigned(10)));
+
+        let flags = StatFlags {
+            is_sign: true,
+            is_zero: true,
+            ..Default::default()
+        };
+        assert_eq!(render_output(&output, flags, 8, None), "00000010");
+    }
+
+    #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_group_num() {
         assert_eq!("12,379,821,234", group_num("12379821234"));
@@ -3125,7 +3152,7 @@ mod test_stat_all {
             temp_file.to_str().unwrap(),
             None,
         );
-        assert!(matches!(output, StatOutputType::Integer(_)));
+        assert!(matches!(output, StatOutputType::Unsigned(_)));
     }
 }
 

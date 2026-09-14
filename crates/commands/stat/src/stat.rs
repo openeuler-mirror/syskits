@@ -564,7 +564,15 @@ fn print_it<W: Write>(
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    writer.write_all(render_output(output, flags, width, precision).as_bytes())
+    match output {
+        StatOutputType::Str(value) => writer.write_all(&render_str_bytes(
+            value.as_bytes(),
+            &flags,
+            width,
+            precision,
+        )),
+        _ => writer.write_all(render_output(output, flags, width, precision).as_bytes()),
+    }
 }
 
 impl Stater {
@@ -2283,17 +2291,31 @@ fn render_output(
 }
 
 fn render_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) -> String {
+    String::from_utf8_lossy(&render_str_bytes(s.as_bytes(), flags, width, precision)).into_owned()
+}
+
+fn render_str_bytes(
+    value: &[u8],
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+) -> Vec<u8> {
     let p = match precision {
         Some(-1) => 0,
         Some(p) => p as usize,
         None => usize::MAX,
     };
-    let value = if p < s.len() { &s[..p] } else { s };
+    let value = &value[..p.min(value.len())];
+    let padding = width.saturating_sub(value.len());
+    let mut output = Vec::with_capacity(value.len() + padding);
     if flags.is_left {
-        format!("{value:<width$}")
+        output.extend_from_slice(value);
+        output.resize(output.len() + padding, b' ');
     } else {
-        format!("{value:>width$}")
+        output.resize(padding, b' ');
+        output.extend_from_slice(value);
     }
+    output
 }
 
 fn render_integer(num: i64, flags: &StatFlags, width: usize, precision: Option<i32>) -> String {
@@ -2592,6 +2614,47 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.raw_os_error(), Some(libc::ENOSPC));
+    }
+
+    #[test]
+    fn string_precision_truncates_output_by_bytes() {
+        let mut output = Vec::new();
+
+        print_it(
+            &mut output,
+            &StatOutputType::Str("é".to_string()),
+            StatFlags::default(),
+            0,
+            Some(1),
+        )
+        .unwrap();
+
+        assert_eq!(output, vec![0xc3]);
+
+        output.clear();
+        print_it(
+            &mut output,
+            &StatOutputType::Str("é".to_string()),
+            StatFlags::default(),
+            3,
+            Some(1),
+        )
+        .unwrap();
+        assert_eq!(output, vec![b' ', b' ', 0xc3]);
+
+        output.clear();
+        print_it(
+            &mut output,
+            &StatOutputType::Str("é".to_string()),
+            StatFlags {
+                is_left: true,
+                ..StatFlags::default()
+            },
+            3,
+            Some(1),
+        )
+        .unwrap();
+        assert_eq!(output, vec![0xc3, b' ', b' ']);
     }
 
     #[test]

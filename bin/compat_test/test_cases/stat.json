@@ -1139,6 +1139,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "stat",
+            "description": "原始字节用例：LC_ALL=C；创建UTF-8文件名完整十六进制c3a9（é），参数完整十六进制为2d63（-c）、252e316e（%.1n）和c3a9；GNU的字符串精度按字节截断，预期RC=0、stdout完整十六进制为c30a、stderr为空且不发生Rust字符边界panic",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch $'\\303\\251'"
+            ],
+            "args": [
+                "2d63",
+                "252e316e",
+                "c3a9"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c30a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $'\\303\\251'"
+            ]
         }
     ]
 }

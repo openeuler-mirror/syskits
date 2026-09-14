@@ -958,6 +958,103 @@
             "cleanup_commands": [
                 "rm -f stat_write_error"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C且QUOTING_STYLE=literal下执行stat -c %N；输入fixture文件名为a b；literal样式不添加引号或转义，预期RC=0、stdout完整内容为a b和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C' QUOTING_STYLE='literal'",
+                "touch 'a b'"
+            ],
+            "args": [
+                "-c",
+                "%N",
+                "a b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a b\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 'a b'"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C且QUOTING_STYLE=c下执行stat -c %N；输入fixture文件名为a b；C样式始终使用双引号，预期RC=0、stdout完整内容为双引号包裹的a b和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C' QUOTING_STYLE='c'",
+                "touch 'a b'"
+            ],
+            "args": [
+                "-c",
+                "%N",
+                "a b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\"a b\"\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 'a b'"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C且QUOTING_STYLE=invalid下执行stat -c %N plain；无效样式必须输出忽略环境变量诊断并回退shell-escape-always，预期RC=0、stdout完整内容为单引号包裹的plain和换行",
+            "setup_commands": [
+                "export LC_ALL='C' QUOTING_STYLE='invalid'",
+                "touch plain"
+            ],
+            "args": [
+                "-c",
+                "%N",
+                "plain"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'plain'\n",
+                    "stderr": "stat: ignoring invalid value of environment variable QUOTING_STYLE: 'invalid'\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f plain"
+            ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "stat",
+            "description": "原始字节用例：LC_ALL=C且QUOTING_STYLE=shell；参数完整十六进制为2d63（-c）、254e（%N）和610a62（文件名a、换行、b）；shell样式保留控制字节并因换行添加外层单引号，预期RC=0、stdout完整十六进制为27610a62270a、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C' QUOTING_STYLE='shell'",
+                "touch $'a\\nb'"
+            ],
+            "args": [
+                "2d63",
+                "254e",
+                "610a62"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "27610a62270a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f $'a\\nb'"
+            ]
         }
     ]
 }

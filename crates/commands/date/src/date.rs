@@ -263,6 +263,10 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
         ));
     }
 
+    for warning in discarded_source_warnings(&args_match) {
+        ctcore::ct_show_error!("{warning}");
+    }
+
     // 如果指定了 -u/--utc/--universal，设置 TZ 环境变量为 UTC0
     if args_match.get_flag(DATE_OPT_UNIVERSAL) {
         unsafe {
@@ -1059,7 +1063,10 @@ fn date_processing(
 }
 
 fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffset>>, CTResult<()>> {
-    let set_to_params = match args_match.get_one::<OsString>(DATE_OPT_SET) {
+    let set_to_params = match args_match
+        .get_many::<OsString>(DATE_OPT_SET)
+        .and_then(|mut values| values.next_back())
+    {
         None => None,
         Some(input) => match parse_date(input.to_string_lossy().to_string()) {
             Err(_) => {
@@ -1082,13 +1089,40 @@ fn get_date_source(args_match: &ArgMatches) -> DateSource {
         .and_then(|mut iter| iter.next_back())
     {
         DateSource::Custom(date.into())
-    } else if let Some(file) = args_match.get_one::<OsString>(DATE_OPT_FILE) {
+    } else if let Some(file) = args_match
+        .get_many::<OsString>(DATE_OPT_FILE)
+        .and_then(|mut values| values.next_back())
+    {
         DateSource::File(file.into())
-    } else if let Some(file) = args_match.get_one::<OsString>(DATE_OPT_REFERENCE) {
+    } else if let Some(file) = args_match
+        .get_many::<OsString>(DATE_OPT_REFERENCE)
+        .and_then(|mut values| values.next_back())
+    {
         DateSource::Reference(file.into())
     } else {
         DateSource::Now
     }
+}
+
+fn discarded_source_warnings(args_match: &ArgMatches) -> Vec<&'static str> {
+    if !args_match.get_flag(DATE_OPT_DEBUG) {
+        return Vec::new();
+    }
+
+    let mut warnings = Vec::new();
+    if args_match
+        .get_many::<OsString>(DATE_OPT_DATE)
+        .is_some_and(|values| values.count() > 1)
+    {
+        warnings.push("only using last of multiple -d options");
+    }
+    if args_match
+        .get_many::<OsString>(DATE_OPT_SET)
+        .is_some_and(|values| values.count() > 1)
+    {
+        warnings.push("only using last of multiple -s options");
+    }
+    warnings
 }
 
 fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> {
@@ -1183,6 +1217,7 @@ fn date_args_init() -> Vec<Arg> {
             .value_name("DATEFILE")
             .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath)
+            .action(ArgAction::Append)
             .help(t!("date.clap.date_opt_file")),
         Arg::new(DATE_OPT_ISO_8601)
             .short('I')
@@ -1217,12 +1252,14 @@ fn date_args_init() -> Vec<Arg> {
             .value_name("FILE")
             .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath)
+            .action(ArgAction::Append)
             .help(t!("date.clap.date_opt_reference")),
         Arg::new(DATE_OPT_SET)
             .short('s')
             .long(DATE_OPT_SET)
             .value_name("STRING")
             .value_parser(clap::builder::OsStringValueParser::new())
+            .action(ArgAction::Append)
             .help(DATE_OPT_SET_HELP_STRING),
         Arg::new(DATE_OPT_UNIVERSAL)
             .short('u')
@@ -4540,5 +4577,48 @@ mod tests {
             );
             assert!(matches.get_one::<String>(DATE_OPT_FORMAT).is_none());
         }
+    }
+
+    #[test]
+    fn test_repeated_date_sources_use_last_value() {
+        let date_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--debug", "-d", "@0", "-d", "@1"])
+            .unwrap();
+        assert!(matches!(
+            get_date_source(&date_matches),
+            DateSource::Custom(value) if value == "@1"
+        ));
+        assert_eq!(
+            discarded_source_warnings(&date_matches),
+            vec!["only using last of multiple -d options"]
+        );
+
+        let file_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-f", "first", "-f", "second"])
+            .unwrap();
+        assert!(matches!(
+            get_date_source(&file_matches),
+            DateSource::File(value) if value == PathBuf::from("second")
+        ));
+
+        let reference_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-r", "first", "-r", "second"])
+            .unwrap();
+        assert!(matches!(
+            get_date_source(&reference_matches),
+            DateSource::Reference(value) if value == PathBuf::from("second")
+        ));
+
+        let set_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--debug", "-s", "@0", "-s", "@1"])
+            .unwrap();
+        assert_eq!(
+            set_date_params(&set_matches).unwrap().unwrap().timestamp(),
+            1
+        );
+        assert_eq!(
+            discarded_source_warnings(&set_matches),
+            vec!["only using last of multiple -s options"]
+        );
     }
 }

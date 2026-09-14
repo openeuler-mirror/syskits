@@ -1603,7 +1603,6 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
         let current = fmt[index];
         index += 1;
         if current == b'%' {
-            let mut has_minus = false;
             let mut has_plus = false;
             let mut pad = StrftimePad::Default;
             let mut colons = 0;
@@ -1615,7 +1614,6 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 if matches!(next, b'-' | b'_' | b'0' | b'^' | b'#' | b'+') {
                     match next {
                         b'-' => {
-                            has_minus = true;
                             pad = StrftimePad::None;
                         }
                         b'_' => pad = StrftimePad::Space,
@@ -1699,8 +1697,8 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     b's' => {
                         let mut s_val = format!("{}", dt.timestamp());
                         let w = width_str.parse::<usize>().unwrap_or(0);
-                        if w > s_val.len() && !has_minus {
-                            let pad_char = if flags.contains(&b'_') { ' ' } else { '0' };
+                        if w > s_val.len() && pad != StrftimePad::None {
+                            let pad_char = if pad == StrftimePad::Space { ' ' } else { '0' };
                             if pad_char == '0' && s_val.starts_with('-') {
                                 let sign_char = s_val.remove(0);
                                 s_val = format!(
@@ -1829,8 +1827,8 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
 
                         // 处理格式填充
                         let w = width_str.parse::<usize>().unwrap_or(0);
-                        if w > s.len() && !has_minus {
-                            let pad_char = if flags.contains(&b'_') { ' ' } else { '0' };
+                        if w > s.len() && pad != StrftimePad::None {
+                            let pad_char = if pad == StrftimePad::Space { ' ' } else { '0' };
                             s = format!("{}{}", pad_char.to_string().repeat(w - s.len()), s);
                         }
 
@@ -1840,7 +1838,7 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                         // 标准 C 语言 strftime 占位符
                         fmt_adjusted.push(b'%');
                         fmt_adjusted.extend_from_slice(&flags);
-                        if !has_minus {
+                        if pad != StrftimePad::None {
                             fmt_adjusted.extend_from_slice(width_bytes);
                         }
                         if let Some(m) = modifier {
@@ -2190,6 +2188,17 @@ mod tests {
         assert_eq!(
             format_using_strftime(&extended, "%+C|%+Y|%+6G|%+4y|%+4g").unwrap(),
             "+123|+12345|+12345|+045|+045"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_last_padding_flag_wins() {
+        let dt = DateTime::parse_from_rfc3339("1970-01-01T00:00:00+00:00").unwrap();
+
+        assert_eq!(
+            format_using_strftime(&dt, "%_+6s|%+_6s|%_06s|%-06s|%0-6s|%-010a|%0-10a").unwrap(),
+            "000000|     0|000000|000000|0|0000000Thu|Thu"
         );
     }
 

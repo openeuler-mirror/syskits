@@ -20,10 +20,8 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true, features = ["gnu-regex"] }
+tempfile = { workspace = true }
 
 [[bin]]
 name = "tac"
 path = "src/main.rs"
-
-[dev-dependencies]
-tempfile = { workspace = true }

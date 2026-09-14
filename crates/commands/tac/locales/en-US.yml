@@ -11,5 +11,6 @@ tac:
     read_error: read error
     write_error: write error
     standard_input: standard input
+    temporary_file_create: failed to create temporary file
   usage: tac [OPTION]... [FILE]...
   about: Write each file to standard output, last line first.

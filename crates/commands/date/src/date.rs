@@ -4654,4 +4654,17 @@ mod tests {
             assert_eq!(parse_date(input).unwrap().year(), expected_year, "{input}");
         }
     }
+
+    #[test]
+    fn test_month_name_date_accepts_gnu_time_orderings() {
+        for input in [
+            "Apr 11 22:59:00 2011",
+            "Apr 11 22:59 2011",
+            "22:59:00 Apr 11 2011",
+            "22:59 Apr 11 2011",
+        ] {
+            let parsed = parse_date(input).unwrap();
+            assert_eq!(parsed.format("%F %T").to_string(), "2011-04-11 22:59:00");
+        }
+    }
 }

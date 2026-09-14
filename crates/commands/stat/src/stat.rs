@@ -994,15 +994,15 @@ impl Stater {
     ) -> StatOutputType {
         match format {
             // free blocks available to non-superuser
-            'a' => StatOutputType::Unsigned(meta.avail_blocks()),
+            'a' => StatOutputType::Integer(meta.avail_blocks() as i64),
             // total data blocks in file system
-            'b' => StatOutputType::Unsigned(meta.total_blocks()),
+            'b' => StatOutputType::Integer(meta.total_blocks() as i64),
             // total file nodes in file system
             'c' => StatOutputType::Unsigned(meta.total_file_nodes()),
             // free file nodes in file system
-            'd' => StatOutputType::Unsigned(meta.free_file_nodes()),
+            'd' => StatOutputType::Integer(meta.free_file_nodes() as i64),
             // free blocks in file system
-            'f' => StatOutputType::Unsigned(meta.free_blocks()),
+            'f' => StatOutputType::Integer(meta.free_blocks() as i64),
             // file system ID in hex
             'i' => StatOutputType::UnsignedHex(meta.fsid()),
             // maximum length of filenames
@@ -1012,7 +1012,7 @@ impl Stater {
             // block size (for faster transfers)
             's' => StatOutputType::Unsigned(meta.io_size()),
             // fundamental block size (for block counts)
-            'S' => StatOutputType::Integer(meta.block_size()),
+            'S' => StatOutputType::Unsigned(meta.block_size() as u64),
             // file system type in hex
             't' => StatOutputType::UnsignedHex(meta.fs_type() as u64),
             // file system type in human readable form
@@ -2606,6 +2606,28 @@ mod tests {
     }
 
     #[test]
+    fn filesystem_fields_use_gnu_signedness() {
+        let metadata = statfs(b"/").unwrap();
+        let matches = ct_app()
+            .try_get_matches_from(["stat", "-f", "-c", "%b", "/"])
+            .unwrap();
+        let stater = Stater::new(&matches).unwrap();
+
+        for format in ['b', 'f', 'a', 'd'] {
+            assert!(matches!(
+                stater.get_filesystem_output(&metadata, format, "/"),
+                StatOutputType::Integer(_)
+            ));
+        }
+        for format in ['s', 'S', 'c'] {
+            assert!(matches!(
+                stater.get_filesystem_output(&metadata, format, "/"),
+                StatOutputType::Unsigned(_)
+            ));
+        }
+    }
+
+    #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_group_num() {
         assert_eq!("12,379,821,234", group_num("12379821234"));
@@ -3038,7 +3060,7 @@ mod test_stat_all {
 
         // Test various format specifiers
         let output = stater.get_filesystem_output(&fs_meta, 'b', temp_path.to_str().unwrap());
-        assert!(matches!(output, StatOutputType::Unsigned(_)));
+        assert!(matches!(output, StatOutputType::Integer(_)));
 
         let output = stater.get_filesystem_output(&fs_meta, 'T', temp_path.to_str().unwrap());
         assert!(matches!(output, StatOutputType::Str(_)));

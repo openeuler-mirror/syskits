@@ -809,6 +809,28 @@
             "cleanup_commands": [
                 "rm -f stat_numeric_format"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "Linux文件系统字段有符号性：LC_ALL=C；%b按GNU有符号转换接受+标志，%S按无符号转换忽略+标志并在宽度8内零填充；预期RC=0、stdout符合对应字段语义、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-f",
+                "-c",
+                "%+b|%+08S",
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "^\\+[0-9]+\\|[0-9]{8}$",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

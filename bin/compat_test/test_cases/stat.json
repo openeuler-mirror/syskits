@@ -693,6 +693,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "Linux大设备号用例：LC_ALL=C；字符设备major=511、minor=1048575；按Linux dev_t编码解析，预期RC=0、stdout依次为完整十进制和十六进制设备号、十进制major/minor及十六进制major/minor，stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "mknod stat_large_device c 511 1048575"
+            ],
+            "args": [
+                "-c",
+                "%r|%R|%Hr|%Lr|%t|%T",
+                "stat_large_device"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "4294049791|fff1ffff|511|1048575|1ff|fffff\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_large_device"
+            ],
+            "requires_root": true
         }
     ]
 }

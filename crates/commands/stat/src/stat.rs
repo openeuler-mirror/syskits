@@ -20,7 +20,7 @@ use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
 use ctcore::libc::mode_t;
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
-use rustix::fs::{AtFlags, StatxFlags, statx};
+use rustix::fs::{AtFlags, StatxFlags, major, minor, statx};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -84,6 +84,14 @@ struct StatFlags {
 enum StatPadding {
     Zero,
     Space,
+}
+
+fn device_major(device: u64) -> u64 {
+    u64::from(major(device))
+}
+
+fn device_minor(device: u64) -> u64 {
+    u64::from(minor(device))
 }
 
 /// pads the string with zeroes or spaces and prints it
@@ -1121,21 +1129,16 @@ impl Stater {
             //SELinux security context string
             'C' => self.get_file_context_output(file, false).0,
             // device number - handle modifier for major/minor separation
-            'd' => {
-                match modifier {
-                    Some('H') => StatOutputType::Unsigned(meta.dev() >> 8), // major device number
-                    Some('L') => StatOutputType::Unsigned(meta.dev() & 0xff), // minor device number
-                    _ => StatOutputType::Unsigned(meta.dev()),              // full device number
-                }
-            }
-            // device number in hex (新增了对 H 和 L 修饰符的支持)
-            'D' => {
-                match modifier {
-                    Some('H') => StatOutputType::UnsignedHex(meta.dev() >> 8), // major device type
-                    Some('L') => StatOutputType::UnsignedHex(meta.dev() & 0xff), // minor device type
-                    _ => StatOutputType::UnsignedHex(meta.dev()), // full device number
-                }
-            }
+            'd' => match modifier {
+                Some('H') => StatOutputType::Unsigned(device_major(meta.dev())),
+                Some('L') => StatOutputType::Unsigned(device_minor(meta.dev())),
+                _ => StatOutputType::Unsigned(meta.dev()),
+            },
+            'D' => match modifier {
+                Some('H') => StatOutputType::UnsignedHex(device_major(meta.dev())),
+                Some('L') => StatOutputType::UnsignedHex(device_minor(meta.dev())),
+                _ => StatOutputType::UnsignedHex(meta.dev()),
+            },
             // raw mode in hex
             'f' => StatOutputType::UnsignedHex(meta.mode() as u64),
             // file type (localized)
@@ -1193,40 +1196,26 @@ impl Stater {
             'o' => StatOutputType::Unsigned(meta.blksize()),
             // total size, in bytes
             's' => StatOutputType::Integer(meta.len() as i64),
-            // major device type in hex, for character/block device special
-            // files, with modifier support
-            't' => {
-                match modifier {
-                    Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
-                    Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type
-                    _ => StatOutputType::UnsignedHex(meta.rdev() >> 8), // default to major
-                }
-            }
-            // minor device type in hex, for character/block device special
-            // files, with modifier support
-            'T' => {
-                match modifier {
-                    Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
-                    Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type
-                    _ => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // default to minor
-                }
-            }
-            // device type in decimal (r format) - mainly used with modifiers %Hr,%Lr
-            'r' => {
-                match modifier {
-                    Some('H') => StatOutputType::Unsigned(meta.rdev() >> 8), // major device type
-                    Some('L') => StatOutputType::Unsigned(meta.rdev() & 0xff), // minor device type
-                    _ => StatOutputType::Unsigned(meta.rdev()),              // full rdev
-                }
-            }
-            // device type in hex (R format)
-            'R' => {
-                match modifier {
-                    Some('H') => StatOutputType::UnsignedHex(meta.rdev() >> 8), // major device type
-                    Some('L') => StatOutputType::UnsignedHex(meta.rdev() & 0xff), // minor device type
-                    _ => StatOutputType::UnsignedHex(meta.rdev()),                // full rdev
-                }
-            }
+            't' => match modifier {
+                Some('H') => StatOutputType::UnsignedHex(device_major(meta.rdev())),
+                Some('L') => StatOutputType::UnsignedHex(device_minor(meta.rdev())),
+                _ => StatOutputType::UnsignedHex(device_major(meta.rdev())),
+            },
+            'T' => match modifier {
+                Some('H') => StatOutputType::UnsignedHex(device_major(meta.rdev())),
+                Some('L') => StatOutputType::UnsignedHex(device_minor(meta.rdev())),
+                _ => StatOutputType::UnsignedHex(device_minor(meta.rdev())),
+            },
+            'r' => match modifier {
+                Some('H') => StatOutputType::Unsigned(device_major(meta.rdev())),
+                Some('L') => StatOutputType::Unsigned(device_minor(meta.rdev())),
+                _ => StatOutputType::Unsigned(meta.rdev()),
+            },
+            'R' => match modifier {
+                Some('H') => StatOutputType::UnsignedHex(device_major(meta.rdev())),
+                Some('L') => StatOutputType::UnsignedHex(device_minor(meta.rdev())),
+                _ => StatOutputType::UnsignedHex(meta.rdev()),
+            },
             // user ID of owner
             'u' => StatOutputType::Unsigned(meta.uid() as u64),
             // user name of owner
@@ -2572,6 +2561,13 @@ mod tests {
                 StatToken::Char('\n'),
             ]
         );
+    }
+
+    #[test]
+    fn splits_linux_large_device_numbers() {
+        let device = 4_294_049_791;
+        assert_eq!(device_major(device), 511);
+        assert_eq!(device_minor(device), 1_048_575);
     }
 
     #[test]

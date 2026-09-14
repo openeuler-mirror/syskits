@@ -836,7 +836,18 @@ impl Stater {
     }
 
     fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<String> {
-        let path = p.as_ref().canonicalize().ok()?;
+        let input = p.as_ref();
+        let path = if !self.is_follow
+            && fs::symlink_metadata(input).is_ok_and(|metadata| metadata.file_type().is_symlink())
+        {
+            let parent = input
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            parent.canonicalize().ok()?.join(input.file_name()?)
+        } else {
+            input.canonicalize().ok()?
+        };
 
         for root in self.mount_list.as_ref()? {
             if path.starts_with(root) {
@@ -2723,6 +2734,25 @@ mod tests {
         assert_eq!(
             render_timestamp(-1, 876_543_211, &zero_padded, 13, Some(6)),
             "-00000.123456"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mount_point_does_not_follow_symlink_without_dereference() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let link = temp.path().join("cross-mount-link");
+        symlink("/proc/version", &link).unwrap();
+        let matches = ct_app()
+            .try_get_matches_from(["stat", "-c", "%m", link.to_str().unwrap()])
+            .unwrap();
+        let stater = Stater::new(&matches).unwrap();
+
+        assert_eq!(
+            stater.find_mount_point(&link),
+            stater.find_mount_point(temp.path())
         );
     }
 

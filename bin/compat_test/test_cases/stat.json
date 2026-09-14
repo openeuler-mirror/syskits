@@ -905,6 +905,30 @@
             "cleanup_commands": [
                 "rm -f stat_locale_en_dk"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "Linux跨文件系统符号链接：LC_ALL=C；在当前根文件系统创建指向/proc/version的链接且不使用-L；%m必须报告链接自身所在挂载点/而不是目标挂载点/proc",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "ln -s /proc/version stat_cross_mount_link"
+            ],
+            "args": [
+                "-c",
+                "%m",
+                "stat_cross_mount_link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "/\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_cross_mount_link"
+            ]
         }
     ]
 }

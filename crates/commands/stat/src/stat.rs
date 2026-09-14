@@ -2405,6 +2405,7 @@ pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .disable_help_flag(true)
         .disable_version_flag(true)
+        .args_override_self(true)
         .version(crate_version!())
         .about(rust_i18n::t!(stat_options::STAT_ABOUT))
         .override_usage(rust_i18n::t!(stat_options::STAT_USAGE))
@@ -2440,6 +2441,40 @@ mod tests {
         // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
         let args = vec![OsString::from("stat"), OsString::from("--help")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[test]
+    fn repeated_options_keep_the_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                "stat",
+                "-L",
+                "-L",
+                "-f",
+                "-f",
+                "-t",
+                "-t",
+                "-c",
+                "first",
+                "-c",
+                "second",
+                "--cached=always",
+                "--cached=never",
+                "/",
+            ])
+            .unwrap();
+
+        assert!(matches.get_flag(stat_options::STAT_DEREFERENCE));
+        assert!(matches.get_flag(stat_options::STAT_FILE_SYSTEM));
+        assert!(matches.get_flag(stat_options::STAT_TERSE));
+        assert_eq!(
+            matches.get_one::<String>(stat_options::STAT_FORMAT),
+            Some(&"second".to_string())
+        );
+        assert_eq!(
+            matches.get_one::<String>(stat_options::STAT_CACHED),
+            Some(&"never".to_string())
+        );
     }
 
     #[test]

@@ -3,6 +3,36 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU加号格式标志处理五位扩展年份；世纪、日历年和ISO周数年超过各自默认位数时输出前导加号，两位年份字段扩宽时也输出加号并零填充",
+      "args": ["-d", "12345-01-02 03:04:05 UTC", "+%+C|%+Y|%+6G|%+4y|%+4g"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "+123|+12345|+12345|+045|+045\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU加号格式标志作用于数字日期字段；无显式宽度时保持默认宽度，扩宽普通字段时以零填充，扩宽两位或四位年份字段时输出前导加号并将符号计入宽度，多个填充标志按最后一个生效",
+      "args": ["-d", "2024-01-02 03:04:05 UTC", "+%+m|%+4m|%+4d|%+4e|%+4q|%+y|%+4y|%+g|%+4g|%+G|%+6G|%+4C|%+6Y|%+_6m|%_+6m|%+_6y|%_+6y|%+_6Y|%_+6Y|%0+6Y|%+06Y"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "01|0001|0002|0002|0001|24|+024|24|+024|2024|+02024|+020|+02024|     1|000001|    24|+00024|  2024|+02024|+02024|002024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下数字日期转换符的显式宽度覆盖默认填充；固定时间预期月日、时分秒、年日、星期和周数字字段可缩短默认宽度，季度和月份可按零或空格扩宽，减号标志取消填充",
       "args": ["-d", "2024-01-02 03:04:05 UTC", "+%1m|%1d|%1e|%1H|%1I|%1k|%1l|%1M|%1S|%2j|%1u|%1w|%1U|%1V|%1W|%4q|%3m|%_3m|%-3m"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

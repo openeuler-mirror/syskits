@@ -1497,6 +1497,21 @@ fn gnu_numeric_field(dt: &DateTime<FixedOffset>, spec: u8) -> Option<(u64, usize
     }
 }
 
+#[cfg(target_os = "linux")]
+fn gnu_year_field(dt: &DateTime<FixedOffset>, spec: u8) -> Option<(u64, bool, usize)> {
+    let year = match spec {
+        b'y' => dt.year(),
+        b'g' | b'G' => dt.iso_week().year(),
+        _ => return None,
+    };
+
+    match spec {
+        b'y' | b'g' => Some(((year % 100).unsigned_abs() as u64, false, 2)),
+        b'G' => Some((year.unsigned_abs() as u64, year < 0, 4)),
+        _ => None,
+    }
+}
+
 fn res_width_from_nsec(res_nsec: i64) -> usize {
     let mut width = 9;
     let mut temp = res_nsec;
@@ -1647,7 +1662,7 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 match spec {
                     b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'q' | b'S'
                     | b'u' | b'U' | b'V' | b'w' | b'W'
-                        if !width_bytes.is_empty() && modifier.is_none() && !has_plus =>
+                        if (!width_bytes.is_empty() || has_plus) && modifier.is_none() =>
                     {
                         let (value, digits, default_pad) =
                             gnu_numeric_field(dt, spec).expect("matched numeric date field");
@@ -1666,6 +1681,19 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                                 false,
                             )
                             .as_bytes(),
+                        );
+                    }
+                    b'y' | b'g' | b'G' if has_plus && modifier.is_none() => {
+                        let (value, negative, digits) =
+                            gnu_year_field(dt, spec).expect("matched GNU year field");
+                        let width = parse_strftime_width(width_str);
+                        let sign_threshold = if digits == 2 { 99 } else { 9999 };
+                        let always_sign = pad == StrftimePad::Plus
+                            && !negative
+                            && (sign_threshold < value || width.is_some_and(|w| digits < w));
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_number(value, negative, digits, width, pad, always_sign)
+                                .as_bytes(),
                         );
                     }
                     b's' => {
@@ -1717,7 +1745,9 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                         // 世纪数：年份除以 100。需要处理 '+' 标志和宽度填充
                         let century = dt.year() / 100;
                         let width = parse_strftime_width(width_str);
-                        let always_sign = has_plus && century >= 0 && width.is_some_and(|w| 2 < w);
+                        let always_sign = pad == StrftimePad::Plus
+                            && century >= 0
+                            && (99 < century || width.is_some_and(|w| 2 < w));
                         fmt_adjusted.extend_from_slice(
                             format_gnu_number(
                                 century.unsigned_abs() as u64,
@@ -1751,8 +1781,9 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     b'Y' if !use_alt_era => {
                         let year = dt.year();
                         let width = parse_strftime_width(width_str);
-                        let always_sign =
-                            has_plus && year >= 0 && (9999 < year || width.is_some_and(|w| 4 < w));
+                        let always_sign = pad == StrftimePad::Plus
+                            && year >= 0
+                            && (9999 < year || width.is_some_and(|w| 4 < w));
                         fmt_adjusted.extend_from_slice(
                             format_gnu_number(
                                 year.unsigned_abs() as u64,
@@ -2130,6 +2161,35 @@ mod tests {
             )
             .unwrap(),
             "1|2|2|3|3|3|3|4|5|02|2|2|0|1|1|0001|001|  1|1"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_plus_flag_formats_numeric_fields_and_years() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+            .unwrap();
+
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%+m|%+4m|%+4d|%+4e|%+4q|%+y|%+4y|%+g|%+4g|%+G|%+6G|%+4C|%+6Y|%+_6m|%_+6m|%+_6y|%_+6y|%+_6Y|%_+6Y|%0+6Y|%+06Y",
+            )
+            .unwrap(),
+            "01|0001|0002|0002|0001|24|+024|24|+024|2024|+02024|+020|+02024|     1|000001|    24|+00024|  2024|+02024|+02024|002024"
+        );
+
+        let extended = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(12345, 1, 2, 3, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&extended, "%+C|%+Y|%+6G|%+4y|%+4g").unwrap(),
+            "+123|+12345|+12345|+045|+045"
         );
     }
 

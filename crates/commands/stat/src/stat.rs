@@ -2196,50 +2196,48 @@ fn render_timestamp(
     width: usize,
     precision: Option<i32>,
 ) -> String {
-    let mut num = sec.to_string();
-    if flags.is_group {
-        num = group_num(&num).into_owned();
-    }
+    let fraction_precision = precision.map(|value| if value == -1 { 9 } else { value as usize });
+    let stored_precision = fraction_precision.unwrap_or(0).min(9);
+    let divisor = 10_i64.pow((9 - stored_precision) as u32);
+    let mut fraction = nsec / divisor;
+    let mut display_sec = sec;
+    let mut negative_zero = false;
 
-    if let Some(p) = precision {
-        let p = if p == -1 { 9 } else { p as usize };
-        if p > 0 {
-            let nsec_str = format!("{nsec:09}");
-            let frac = if p <= 9 {
-                nsec_str[..p].to_string()
-            } else {
-                format!("{nsec_str:0<p$}")
-            };
-            num = format!("{num}.{frac}");
+    if fraction_precision.is_some() && sec < 0 && nsec != 0 {
+        let modulus = 1_000_000_000 / divisor;
+        fraction = modulus - fraction - i64::from(nsec % divisor != 0);
+        if fraction != 0 {
+            display_sec += 1;
         }
+        negative_zero = display_sec == 0;
     }
 
-    let prefix = if flags.is_sign && sec >= 0 {
+    let negative = display_sec < 0 || negative_zero;
+    let mut digits = display_sec.unsigned_abs().to_string();
+    if flags.is_group {
+        digits = group_num(&digits).into_owned();
+    }
+
+    if let Some(fraction_precision) = fraction_precision
+        && fraction_precision > 0
+    {
+        let mut fraction_text = format!("{fraction:0>stored_precision$}");
+        fraction_text.push_str(&"0".repeat(fraction_precision - stored_precision));
+        digits.push('.');
+        digits.push_str(&fraction_text);
+    }
+
+    let sign = if negative {
+        "-"
+    } else if flags.is_sign {
         "+"
-    } else if flags.is_space && sec >= 0 {
+    } else if flags.is_space {
         " "
     } else {
         ""
     };
-    let pad_char = if flags.is_zero && !flags.is_left {
-        '0'
-    } else {
-        ' '
-    };
-    let total_len = prefix.len() + num.len();
 
-    if !flags.is_left && width > total_len {
-        let pad = pad_char.to_string().repeat(width - total_len);
-        if pad_char == '0' {
-            format!("{prefix}{pad}{num}")
-        } else {
-            format!("{pad}{prefix}{num}")
-        }
-    } else if flags.is_left && width > total_len {
-        format!("{prefix}{num}{}", " ".repeat(width - total_len))
-    } else {
-        format!("{prefix}{num}")
-    }
+    render_numeric(sign, "", &digits, flags, width, None)
 }
 
 fn filesystem_error_description(err: &str) -> String {
@@ -2625,6 +2623,29 @@ mod tests {
                 StatOutputType::Unsigned(_)
             ));
         }
+    }
+
+    #[test]
+    fn negative_epoch_fraction_uses_mathematical_value() {
+        let flags = StatFlags::default();
+        assert_eq!(render_timestamp(-1, 876_543_211, &flags, 0, None), "-1");
+        assert_eq!(
+            render_timestamp(-1, 876_543_211, &flags, 0, Some(-1)),
+            "-0.123456789"
+        );
+        assert_eq!(
+            render_timestamp(-1, 876_543_211, &flags, 0, Some(3)),
+            "-0.123"
+        );
+
+        let zero_padded = StatFlags {
+            is_zero: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            render_timestamp(-1, 876_543_211, &zero_padded, 13, Some(6)),
+            "-00000.123456"
+        );
     }
 
     #[test]

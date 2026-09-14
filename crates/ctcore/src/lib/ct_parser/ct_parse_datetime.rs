@@ -69,12 +69,35 @@ pub fn parse_datetime_gnu_compat(
     input: &str,
     reference_time: DateTime<Local>,
 ) -> Result<DateTime<Local>, ParseDateTimeError> {
+    parse_datetime_gnu_compat_impl(input, reference_time, false)
+}
+
+fn parse_datetime_gnu_compat_impl(
+    input: &str,
+    reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
+) -> Result<DateTime<Local>, ParseDateTimeError> {
     let input_trim = input.trim();
     let input_lower = input_trim.to_lowercase();
 
+    if !normalized_extended_year {
+        if has_explicit_plus_extended_year(input_trim) {
+            return Err(ParseDateTimeError {
+                message: format!("Unable to parse date: {input}"),
+            });
+        }
+        if let Some(normalized) = normalize_gnu_extended_year(input_trim) {
+            return parse_datetime_gnu_compat_impl(&normalized, reference_time, true);
+        }
+    }
+
     // GNU ignores a weekday when an explicit date is also present.
     if let Some(input_without_weekday) = strip_weekday_from_explicit_iso_date(input_trim) {
-        return parse_datetime_gnu_compat(&input_without_weekday, reference_time);
+        return parse_datetime_gnu_compat_impl(
+            &input_without_weekday,
+            reference_time,
+            normalized_extended_year,
+        );
     }
 
     // 负数/正数纪元秒 (Epoch: @-22, @31536000)
@@ -94,7 +117,9 @@ pub fn parse_datetime_gnu_compat(
         });
     }
 
-    if let Some(dt) = parse_gnu_numeric_timezone(input_trim, reference_time) {
+    if let Some(dt) =
+        parse_gnu_numeric_timezone(input_trim, reference_time, normalized_extended_year)
+    {
         return Ok(dt);
     }
 
@@ -131,13 +156,16 @@ pub fn parse_datetime_gnu_compat(
         }
     }
 
-    if let Some(local_result) = parse_gnu_local_timezone(input_trim, reference_time) {
+    if let Some(local_result) =
+        parse_gnu_local_timezone(input_trim, reference_time, normalized_extended_year)
+    {
         return local_result.ok_or_else(|| ParseDateTimeError {
             message: format!("Unable to parse date: {input}"),
         });
     }
 
-    if let Some(dt) = parse_gnu_named_timezone(input_trim, reference_time) {
+    if let Some(dt) = parse_gnu_named_timezone(input_trim, reference_time, normalized_extended_year)
+    {
         return Ok(dt);
     }
 
@@ -283,7 +311,11 @@ pub fn parse_datetime_gnu_compat(
                 let dt_res = if date_part.is_empty() {
                     Ok(reference_time)
                 } else {
-                    parse_datetime_gnu_compat(date_part, reference_time)
+                    parse_datetime_gnu_compat_impl(
+                        date_part,
+                        reference_time,
+                        normalized_extended_year,
+                    )
                 };
 
                 if let Ok(dt) = dt_res {
@@ -591,9 +623,32 @@ fn military_timezone_offset_hours(tz_char: char) -> Option<Option<i32>> {
     }
 }
 
+fn has_explicit_plus_extended_year(input: &str) -> bool {
+    let Some(rest) = input.strip_prefix('+') else {
+        return false;
+    };
+    let year_digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+    year_digits >= 5 && matches!(rest.as_bytes().get(year_digits), Some(b'-' | b'/'))
+}
+
+fn normalize_gnu_extended_year(input: &str) -> Option<String> {
+    let year_digits = input.bytes().take_while(u8::is_ascii_digit).count();
+    if year_digits < 5 || !matches!(input.as_bytes().get(year_digits), Some(b'-' | b'/')) {
+        return None;
+    }
+
+    let normalized = if input.as_bytes()[year_digits] == b'/' {
+        input.replacen('/', "-", 2)
+    } else {
+        input.to_string()
+    };
+    Some(format!("+{normalized}"))
+}
+
 fn parse_gnu_numeric_timezone(
     input: &str,
     reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
     let sign_index = input.rfind(['+', '-'])?;
     let digits = &input[sign_index + 1..];
@@ -623,7 +678,9 @@ fn parse_gnu_numeric_timezone(
         return None;
     }
 
-    let wall_time = parse_datetime_gnu_compat(wall_time_input, reference_time).ok()?;
+    let wall_time =
+        parse_datetime_gnu_compat_impl(wall_time_input, reference_time, normalized_extended_year)
+            .ok()?;
     let utc_naive = wall_time
         .naive_local()
         .checked_sub_signed(Duration::minutes(i64::from(offset_minutes)))?;
@@ -721,6 +778,7 @@ const GNU_DAYLIGHT_TIMEZONES: &[&str] = &[
 fn parse_gnu_local_timezone(
     input: &str,
     reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
 ) -> Option<Option<DateTime<Local>>> {
     let candidates: Vec<(String, bool)> = (0..=3)
         .map(|quarter| reference_time + Duration::days(quarter * 90))
@@ -765,7 +823,11 @@ fn parse_gnu_local_timezone(
     };
 
     let wall_time_input = format!("{} {}", &input[..start], &input[suffix_start..]);
-    let parsed = match parse_datetime_gnu_compat(wall_time_input.trim(), reference_time) {
+    let parsed = match parse_datetime_gnu_compat_impl(
+        wall_time_input.trim(),
+        reference_time,
+        normalized_extended_year,
+    ) {
         Ok(parsed) => parsed,
         Err(_) => return Some(None),
     };
@@ -811,6 +873,7 @@ fn local_timezone_info(_timestamp: i64) -> Option<(String, bool)> {
 fn parse_gnu_named_timezone(
     input: &str,
     reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
     let bytes = input.as_bytes();
     let (start, end, mut offset_seconds, zone_name) = GNU_NAMED_TIMEZONES
@@ -852,7 +915,7 @@ fn parse_gnu_named_timezone(
     let naive = if wall_time_input.is_empty() {
         reference_time.date_naive().and_hms_opt(0, 0, 0)?
     } else {
-        parse_datetime_gnu_compat(wall_time_input, reference_time)
+        parse_datetime_gnu_compat_impl(wall_time_input, reference_time, normalized_extended_year)
             .ok()?
             .naive_local()
     };
@@ -1357,6 +1420,18 @@ mod tests {
                 .unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_extended_years() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let expected = Utc.with_ymd_and_hms(12345, 1, 1, 12, 34, 56).unwrap();
+
+        for input in ["12345-01-01 12:34:56 UTC", "12345/01/01 12:34:56 UTC"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+        assert!(parse_datetime_gnu_compat("+12345-01-01 UTC", ref_time).is_err());
     }
 
     #[test]

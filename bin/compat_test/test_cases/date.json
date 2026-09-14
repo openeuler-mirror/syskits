@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析GNU无符号扩展年份；date -d '12345-01-01 12:34:56 UTC' +%Y预期输出五位年份12345",
+      "args": ["-d", "12345-01-01 12:34:56 UTC", "+%Y"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "12345\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下解析GNU三位数字时区；2024-01-01 12:00 +530按UTC+05:30墙钟时间换算，预期UTC输出06:30:00 +0000",
       "args": ["-d", "2024-01-01 12:00 +530", "+%F %T %z"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

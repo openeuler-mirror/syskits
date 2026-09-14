@@ -3,6 +3,28 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "GNU月名日期允许时间位于年份之前",
+      "args": ["-d", "Apr 11 22:59:00 2011", "+%F %T"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "2011-04-11 22:59:00\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU月名日期允许无秒时间位于日期之前并默认秒为00",
+      "args": ["-d", "22:59 Apr 11 2011", "+%F %T"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "2011-04-11 22:59:00\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "GNU两位年份窗口将00展开为2000",
       "args": ["-d", "01/01/00", "+%Y-%m-%d"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

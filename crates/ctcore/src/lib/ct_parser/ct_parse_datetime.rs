@@ -438,6 +438,10 @@ pub fn parse_datetime_gnu_compat(
         // 包含英文月份名称的格式 (完美解决 "Nov 10 1996" 和 "May-23-2003" 测试)
         "%b %d %Y %H:%M:%S",
         "%b %d %Y %H:%M",
+        "%b %d %H:%M:%S %Y",
+        "%b %d %H:%M %Y",
+        "%H:%M:%S %b %d %Y",
+        "%H:%M %b %d %Y",
         "%b %d %Y",
         "%b-%d-%Y %H:%M:%S",
         "%b-%d-%Y %H:%M",

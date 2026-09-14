@@ -1628,13 +1628,22 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                         fmt_adjusted.extend_from_slice(s_val.as_bytes());
                     }
                     b'N' | b'f' => {
-                        fmt_adjusted.extend_from_slice(
-                            format_gnu_nanoseconds(
-                                dt.nanosecond(),
-                                parse_strftime_width(width_str),
-                                pad,
+                        let (width, nanosecond_pad) = if spec == b'N'
+                            && flags.as_slice() == b"-"
+                            && width_bytes.is_empty()
+                            && modifier.is_none()
+                        {
+                            let (_, resolution_nsec) = get_clock_resolution();
+                            (
+                                Some(res_width_from_nsec(resolution_nsec)),
+                                StrftimePad::Zero,
                             )
-                            .as_bytes(),
+                        } else {
+                            (parse_strftime_width(width_str), pad)
+                        };
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_nanoseconds(dt.nanosecond(), width, nanosecond_pad)
+                                .as_bytes(),
                         );
                     }
                     b'z' => {
@@ -2021,6 +2030,7 @@ mod tests {
     fn test_gnu_strftime_width_flags_for_nanoseconds_timezone_and_year() {
         let dt = DateTime::parse_from_rfc3339("1970-01-01T00:00:00+00:00").unwrap();
 
+        assert_eq!(format_using_strftime(&dt, "%-N").unwrap(), "000000000");
         assert_eq!(format_using_strftime(&dt, "%_9N").unwrap(), "0        ");
         assert_eq!(format_using_strftime(&dt, "%_8z").unwrap(), "      +0");
         assert_eq!(format_using_strftime(&dt, "%+5Y").unwrap(), "+1970");

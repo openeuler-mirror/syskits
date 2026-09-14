@@ -375,20 +375,21 @@ pub fn parse_datetime_gnu_compat(
         "%Y-%m-%d %H:%M:%S%.f %z",
         "%Y-%m-%d %H:%M:%S%.f %:z",
         "%Y-%m-%dT%H:%M%z",
-        // 4位年份美式格式 (带时区)
-        "%m/%d/%Y %H:%M:%S %z",
-        "%m/%d/%Y %H:%M:%S %:z",
-        "%m/%d/%Y %H:%M %z",
-        "%m/%d/%Y %H:%M %:z",
-        // 2位年份美式格式 (带时区，完美解决 08/01/97 6:00 UTC 问题)
+        // 两位年份必须先于%Y尝试，因为chrono的%Y也接受短年份。
         "%m/%d/%y %H:%M:%S %z",
         "%m/%d/%y %H:%M:%S %:z",
         "%m/%d/%y %H:%M %z",
         "%m/%d/%y %H:%M %:z",
+        "%m/%d/%Y %H:%M:%S %z",
+        "%m/%d/%Y %H:%M:%S %:z",
+        "%m/%d/%Y %H:%M %z",
+        "%m/%d/%Y %H:%M %:z",
     ];
     for fmt in formats_with_tz {
         if let Ok(dt) = DateTime::parse_from_str(&normalized_input, fmt) {
-            return Ok(dt.with_timezone(&Local));
+            if let Some(dt) = expand_year_for_format(dt, fmt) {
+                return Ok(dt.with_timezone(&Local));
+            }
         }
     }
 
@@ -405,12 +406,14 @@ pub fn parse_datetime_gnu_compat(
             let synthesized = format!("{date_str} 00:00:00 {tz_str}");
             let synth_formats = [
                 "%Y-%m-%d %H:%M:%S %z",
-                "%m/%d/%Y %H:%M:%S %z",
                 "%m/%d/%y %H:%M:%S %z",
+                "%m/%d/%Y %H:%M:%S %z",
             ];
             for fmt in synth_formats {
                 if let Ok(dt) = DateTime::parse_from_str(&synthesized, fmt) {
-                    return Ok(dt.with_timezone(&Local));
+                    if let Some(dt) = expand_year_for_format(dt, fmt) {
+                        return Ok(dt.with_timezone(&Local));
+                    }
                 }
             }
         }
@@ -425,14 +428,13 @@ pub fn parse_datetime_gnu_compat(
         "%Y-%m-%dT%H:%M",
         "%Y-%m-%d",
         "%Y/%m/%d",
-        // 4位年份美式格式
-        "%m/%d/%Y %H:%M:%S",
-        "%m/%d/%Y %H:%M",
-        "%m/%d/%Y",
-        // 2位年份美式格式
+        // 两位年份必须先于%Y尝试，因为chrono的%Y也接受短年份。
         "%m/%d/%y %H:%M:%S",
         "%m/%d/%y %H:%M",
         "%m/%d/%y",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%Y",
         // 包含英文月份名称的格式 (完美解决 "Nov 10 1996" 和 "May-23-2003" 测试)
         "%b %d %Y %H:%M:%S",
         "%b %d %Y %H:%M",
@@ -449,11 +451,15 @@ pub fn parse_datetime_gnu_compat(
     // 这个 Naive 循环彻底解决了外部 crate 误解单数字月日导致 %U/%V 偏移的问题
     for fmt in naive_formats {
         if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input_trim, fmt) {
-            return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+            if let Some(naive_dt) = expand_year_for_format(naive_dt, fmt) {
+                return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+            }
         }
         if let Ok(naive_date) = NaiveDate::parse_from_str(input_trim, fmt) {
-            if let Some(naive_dt) = naive_date.and_hms_opt(0, 0, 0) {
-                return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+            if let Some(naive_date) = expand_year_for_format(naive_date, fmt) {
+                if let Some(naive_dt) = naive_date.and_hms_opt(0, 0, 0) {
+                    return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+                }
             }
         }
     }
@@ -473,6 +479,20 @@ pub fn parse_datetime_gnu_compat(
             message: format!("Unable to parse date: {input}"),
         }),
     }
+}
+
+fn expand_year_for_format<T: Datelike>(value: T, format: &str) -> Option<T> {
+    if !format.contains("%y") {
+        return Some(value);
+    }
+
+    let two_digit_year = value.year().rem_euclid(100);
+    let expanded = if two_digit_year < 69 {
+        two_digit_year + 2000
+    } else {
+        two_digit_year + 1900
+    };
+    value.with_year(expanded)
 }
 
 fn parse_epoch_decimal(input: &str) -> Option<(i64, u32)> {
@@ -1038,5 +1058,23 @@ mod tests {
 
         let result = parse_datetime_gnu_compat("2023-12-25", ref_time);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_two_digit_year_expansion_path() {
+        let value = NaiveDate::parse_from_str("01/01/00", "%m/%d/%y").unwrap();
+        assert_eq!(value.year(), 2000);
+        assert_eq!(
+            expand_year_for_format(value, "%m/%d/%y").unwrap().year(),
+            2000
+        );
+
+        let reference = Local.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        assert_eq!(
+            parse_datetime_gnu_compat("01/01/00", reference)
+                .unwrap()
+                .year(),
+            2000
+        );
     }
 }

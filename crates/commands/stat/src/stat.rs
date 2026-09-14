@@ -611,15 +611,12 @@ impl Stater {
         }
 
         let mut modifier = None;
-        if chars[*i] == 'H' || chars[*i] == 'L' {
+        if (chars[*i] == 'H' || chars[*i] == 'L')
+            && *i + 1 < bound
+            && (chars[*i + 1] == 'd' || chars[*i + 1] == 'r')
+        {
             modifier = Some(chars[*i]);
             *i += 1;
-            if *i >= bound {
-                return Err(CtSimpleError::new(
-                    1,
-                    format!("'{}': invalid directive", &format_str[old..]),
-                ));
-            }
         }
 
         // 如果跟在修饰符后的是 '%'，直接拦截报错，而不是把它当成合法的 format 指令
@@ -2549,6 +2546,32 @@ mod tests {
         assert_eq!(Some((0x00, 3)), "400".scan_char(8));
         assert_eq!(Some((0x3f, 3)), "477".scan_char(8));
         assert_eq!(None, "z2qzxc".scan_char(8)); // spell-checker:disable-line
+    }
+
+    #[test]
+    fn device_modifiers_only_apply_to_d_and_r() {
+        assert_eq!(
+            Stater::generate_tokens("%HD|%L", false).unwrap(),
+            vec![
+                StatToken::Directive {
+                    flag: StatFlags::default(),
+                    width: 0,
+                    precision: None,
+                    modifier: None,
+                    format: 'H',
+                },
+                StatToken::Char('D'),
+                StatToken::Char('|'),
+                StatToken::Directive {
+                    flag: StatFlags::default(),
+                    width: 0,
+                    precision: None,
+                    modifier: None,
+                    format: 'L',
+                },
+                StatToken::Char('\n'),
+            ]
+        );
     }
 
     #[test]

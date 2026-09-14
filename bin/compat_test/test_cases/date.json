@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下多个GNU填充标志按最后一个生效；Epoch秒字段分别验证加号、下划线、零和减号的覆盖顺序，星期名验证先取消填充再恢复零填充及最后取消填充",
+      "args": ["-d", "@0", "+%_+6s|%+_6s|%_06s|%-06s|%0-6s|%-010a|%0-10a"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "000000|     0|000000|000000|0|0000000Thu|Thu\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU加号格式标志处理五位扩展年份；世纪、日历年和ISO周数年超过各自默认位数时输出前导加号，两位年份字段扩宽时也输出加号并零填充",
       "args": ["-d", "12345-01-02 03:04:05 UTC", "+%+C|%+Y|%+6G|%+4y|%+4g"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

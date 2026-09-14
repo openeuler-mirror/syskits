@@ -2074,6 +2074,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_date_accepts_comma_fractional_seconds() {
+        let parsed = parse_date("2024-01-01 12:00:00,25 UTC").unwrap();
+
+        assert_eq!(parsed.timestamp(), 1_704_110_400);
+        assert_eq!(parsed.timestamp_subsec_nanos(), 250_000_000);
+    }
+
+    #[test]
     fn test_analyze_date_debug_input_with_explicit_utc() {
         assert_eq!(
             analyze_date_debug_input("2024-02-29 12:34:56 UTC"),

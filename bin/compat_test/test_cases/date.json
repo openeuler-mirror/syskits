@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析普通时间中的GNU逗号小数秒；2024-01-01 12:00:00,25 UTC预期输出Epoch秒1704110400和250000000纳秒",
+      "args": ["-d", "2024-01-01 12:00:00,25 UTC", "+%s.%N"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1704110400.250000000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下拒绝闰秒字段；GNU将2016-12-31 23:59:60 UTC判为无效日期，预期RC=1且无标准输出",
       "args": ["-d", "2016-12-31 23:59:60 UTC", "+%F %T"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

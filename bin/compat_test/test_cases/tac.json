@@ -185,6 +185,56 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下执行tac -h；GNU tac不定义短帮助选项，必须拒绝h并返回RC=1，帮助仅支持长选项--help",
+      "setup_commands": [],
+      "args": [
+        "-h"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: invalid option -- 'h'\nTry 'tac --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac -bV；GNU tac不定义短版本选项，解析完b后必须拒绝V并返回RC=1，版本仅支持长选项--version",
+      "setup_commands": [],
+      "args": [
+        "-bV"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: invalid option -- 'V'\nTry 'tac --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "LC_ALL=zh_CN.UTF-8下执行tac --bad_flag；GNU的未知选项正文保持英文，Try help提示使用简体中文，预期RC=1且stdout为空",
       "setup_commands": [],
       "args": [

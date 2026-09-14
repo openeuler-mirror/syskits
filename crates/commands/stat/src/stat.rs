@@ -241,6 +241,7 @@ pub struct StatSemantic {
 enum StatToken {
     Char(char),
     Byte(u8),
+    IgnoredDirective,
     Directive {
         flag: StatFlags,
         width: usize,
@@ -619,26 +620,43 @@ impl Stater {
             *i += 1;
         }
 
-        let mut width = 0;
+        let mut width = 0usize;
+        let mut field_too_large = false;
         let mut precision = None;
         let mut j = *i;
 
         while j < bound && chars[j].is_ascii_digit() {
-            width = width * 10 + chars[j].to_digit(10).unwrap() as usize;
+            let digit = chars[j].to_digit(10).unwrap() as usize;
+            width = width
+                .checked_mul(10)
+                .and_then(|value| value.checked_add(digit))
+                .unwrap_or_else(|| {
+                    field_too_large = true;
+                    usize::MAX
+                });
             j += 1;
         }
+        field_too_large |= width > i32::MAX as usize;
 
         if j < bound && chars[j] == '.' {
             j += 1;
-            let mut prec = 0;
+            let mut prec = 0u64;
             let mut has_precision = false;
             while j < bound && chars[j].is_ascii_digit() {
-                prec = prec * 10 + chars[j].to_digit(10).unwrap() as i32;
+                let digit = u64::from(chars[j].to_digit(10).unwrap());
+                prec = prec
+                    .checked_mul(10)
+                    .and_then(|value| value.checked_add(digit))
+                    .unwrap_or_else(|| {
+                        field_too_large = true;
+                        u64::MAX
+                    });
                 has_precision = true;
                 j += 1;
             }
             if has_precision {
-                precision = Some(prec);
+                field_too_large |= prec > i32::MAX as u64;
+                precision = Some(prec.min(i32::MAX as u64) as i32);
             } else {
                 precision = Some(-1);
             }
@@ -668,6 +686,10 @@ impl Stater {
                 1,
                 format!("'{}': invalid directive", &format_str[old..=*i]),
             ));
+        }
+
+        if field_too_large {
+            return Ok(StatToken::IgnoredDirective);
         }
 
         Ok(StatToken::Directive {
@@ -1022,6 +1044,7 @@ impl Stater {
                     use std::io::Write;
                     let _ = std::io::stdout().write_all(&[*b]);
                 }
+                StatToken::IgnoredDirective => {}
                 StatToken::Directive {
                     flag,
                     width,
@@ -1052,6 +1075,7 @@ impl Stater {
                     use std::io::Write;
                     let _ = std::io::stdout().write_all(&[*b]);
                 }
+                StatToken::IgnoredDirective => {}
                 StatToken::Directive {
                     flag,
                     width,
@@ -2094,6 +2118,7 @@ fn render_filesystem_tokens(
         match token {
             StatToken::Char(c) => text.push(*c),
             StatToken::Byte(b) => text.push(char::from(*b)),
+            StatToken::IgnoredDirective => {}
             StatToken::Directive {
                 flag,
                 width,
@@ -2123,6 +2148,7 @@ fn render_file_tokens(
         match token {
             StatToken::Char(c) => text.push(*c),
             StatToken::Byte(b) => text.push(char::from(*b)),
+            StatToken::IgnoredDirective => {}
             StatToken::Directive {
                 flag,
                 width,
@@ -2616,6 +2642,20 @@ mod tests {
         let file = tempfile::tempfile().unwrap();
         file.set_len(123).unwrap();
         assert_eq!(metadata_for_fd(file.as_raw_fd()).unwrap().len(), 123);
+    }
+
+    #[test]
+    fn ignores_directives_with_unrepresentable_width_or_precision() {
+        for format in [
+            "%999999999999999999999999n",
+            "%.999999999999999999999999n",
+            "%2147483648n",
+        ] {
+            assert_eq!(
+                Stater::generate_tokens(format, false).unwrap(),
+                vec![StatToken::IgnoredDirective, StatToken::Char('\n')]
+            );
+        }
     }
 
     #[test]

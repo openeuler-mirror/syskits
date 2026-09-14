@@ -739,6 +739,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；格式包含超出INT_MAX和usize解析范围的宽度及精度；GNU跳过不可表示的转换并继续输出相邻字面字符，预期RC=0、stdout完整内容为ABCD和换行、stderr为空且不发生Rust panic",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-c",
+                "A%999999999999999999999999nB%.999999999999999999999999nC%2147483648nD",
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ABCD\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

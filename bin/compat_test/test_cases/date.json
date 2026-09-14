@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析GNU相对日期单位fortnight；执行date -d '2024-01-01 2 fortnights ago' +%F，两个fortnight按28个日历日回退，预期2023-12-04",
+      "args": ["-d", "2024-01-01 2 fortnights ago", "+%F"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2023-12-04\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下执行date -d @0 +%-N；GNU将无宽度的%-N调整为系统时间戳分辨率宽度，本机纳秒分辨率预期输出9个0和换行",
       "args": ["-d", "@0", "+%-N"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

@@ -856,6 +856,55 @@
             "cleanup_commands": [
                 "rm -f stat_negative_epoch"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；创建12345字节文件并使用单引号分组标志输出大小；C locale没有千位分隔符，预期输出原始十进制数字和换行",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "truncate -s 12345 stat_locale_c"
+            ],
+            "args": [
+                "-c",
+                "%'s",
+                "stat_locale_c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12345\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_locale_c"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=en_DK.utf8且TZ=UTC0；创建12345字节文件并固定访问时间；locale分组符为点且小数点为逗号，预期大小输出12.345、Epoch三位小数输出1709210096,125",
+            "setup_commands": [
+                "export LC_ALL='en_DK.utf8' TZ='UTC0'",
+                "truncate -s 12345 stat_locale_en_dk",
+                "touch -a -d '2024-02-29 12:34:56.125 UTC' stat_locale_en_dk"
+            ],
+            "args": [
+                "-c",
+                "%'s|%.3X",
+                "stat_locale_en_dk"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "12.345|1709210096,125\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_locale_en_dk"
+            ]
         }
     ]
 }

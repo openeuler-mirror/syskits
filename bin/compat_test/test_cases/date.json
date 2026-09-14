@@ -3,6 +3,44 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "重复-d选项采用最后一个日期字符串@1并输出Epoch秒1",
+      "args": ["-d", "@0", "-d", "@1", "+%s"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "1\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "重复-f选项采用最后一个DATEFILE，只输出second文件中的Epoch秒1",
+      "setup_commands": ["printf '@0\\n' > date-first", "printf '@1\\n' > date-second"],
+      "args": ["-f", "date-first", "-f", "date-second", "+%s"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "1\n", "stderr": ""}
+      },
+      "cleanup_commands": ["rm -f date-first date-second"]
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "重复-r选项采用最后一个参考文件，输出second文件的Epoch修改时间1",
+      "setup_commands": [
+        "touch -d '@0' date-ref-first",
+        "touch -d '@1' date-ref-second"
+      ],
+      "args": ["-r", "date-ref-first", "-r", "date-ref-second", "+%s"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "1\n", "stderr": ""}
+      },
+      "cleanup_commands": ["rm -f date-ref-first date-ref-second"]
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "GNU短选项-I的可选FMT不消费空格分隔的seconds，seconds作为无效日期操作数导致RC=1",
       "args": ["-I", "seconds"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

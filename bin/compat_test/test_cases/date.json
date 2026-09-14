@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下数字日期转换符的显式宽度覆盖默认填充；固定时间预期月日、时分秒、年日、星期和周数字字段可缩短默认宽度，季度和月份可按零或空格扩宽，减号标志取消填充",
+      "args": ["-d", "2024-01-02 03:04:05 UTC", "+%1m|%1d|%1e|%1H|%1I|%1k|%1l|%1M|%1S|%2j|%1u|%1w|%1U|%1V|%1W|%4q|%3m|%_3m|%-3m"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1|2|2|3|3|3|3|4|5|02|2|2|0|1|1|0001|001|  1|1\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下解析普通时间中的GNU逗号小数秒；2024-01-01 12:00:00,25 UTC预期输出Epoch秒1704110400和250000000纳秒",
       "args": ["-d", "2024-01-01 12:00:00,25 UTC", "+%s.%N"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

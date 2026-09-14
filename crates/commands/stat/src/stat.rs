@@ -353,6 +353,7 @@ enum StatToken {
     Char(char),
     Byte(u8),
     IgnoredDirective,
+    InvalidDirective(String),
     Directive {
         flag: StatFlags,
         width: usize,
@@ -360,6 +361,18 @@ enum StatToken {
         modifier: Option<char>,
         format: char,
     },
+}
+
+#[derive(Debug)]
+enum StatExecutionError {
+    Write(io::Error),
+    InvalidDirective(String),
+}
+
+impl From<io::Error> for StatExecutionError {
+    fn from(error: io::Error) -> Self {
+        Self::Write(error)
+    }
 }
 
 trait ScanUtil {
@@ -555,21 +568,16 @@ fn print_it<W: Write>(
 }
 
 impl Stater {
-    fn handle_percent_case(
-        chars: &[char],
-        i: &mut usize,
-        bound: usize,
-        format_str: &str,
-    ) -> CTResult<StatToken> {
+    fn handle_percent_case(chars: &[char], i: &mut usize, bound: usize) -> StatToken {
         let old = *i;
 
         *i += 1;
         if *i >= bound {
-            return Ok(StatToken::Char('%'));
+            return StatToken::Char('%');
         }
         if chars[*i] == '%' {
             *i += 1;
-            return Ok(StatToken::Char('%'));
+            return StatToken::Char('%');
         }
 
         let mut flag = StatFlags::default();
@@ -633,10 +641,8 @@ impl Stater {
         *i = j;
         // 使用单引号包裹错误信息
         if *i >= bound {
-            return Err(CtSimpleError::new(
-                1,
-                format!("'{}': invalid directive", &format_str[old..]),
-            ));
+            let directive = chars[old..].iter().collect::<String>();
+            return StatToken::InvalidDirective(directive);
         }
 
         let mut modifier = None;
@@ -650,31 +656,24 @@ impl Stater {
 
         // 如果跟在修饰符后的是 '%'，直接拦截报错，而不是把它当成合法的 format 指令
         if chars[*i] == '%' {
-            return Err(CtSimpleError::new(
-                1,
-                format!("'{}': invalid directive", &format_str[old..=*i]),
-            ));
+            let directive = chars[old..=*i].iter().collect::<String>();
+            return StatToken::InvalidDirective(directive);
         }
 
         if field_too_large {
-            return Ok(StatToken::IgnoredDirective);
+            return StatToken::IgnoredDirective;
         }
 
-        Ok(StatToken::Directive {
+        StatToken::Directive {
             width,
             flag,
             precision,
             modifier,
             format: chars[*i],
-        })
+        }
     }
 
-    fn handle_escape_sequences(
-        chars: &[char],
-        i: &mut usize,
-        bound: usize,
-        format_str: &str,
-    ) -> StatToken {
+    fn handle_escape_sequences(chars: &[char], i: &mut usize, bound: usize) -> StatToken {
         *i += 1;
         if *i >= bound {
             ct_show_warning!("backslash at end of format");
@@ -684,7 +683,8 @@ impl Stater {
             // 精确区分 \x 是不完整还是无法识别，并使用裸字节
             'x' => {
                 if *i + 1 < bound {
-                    if let Some((b, offset)) = format_str[*i + 1..].scan_char(16) {
+                    let digits = chars[*i + 1..].iter().take(2).collect::<String>();
+                    if let Some((b, offset)) = digits.scan_char(16) {
                         *i += offset;
                         StatToken::Byte(b)
                     } else {
@@ -698,7 +698,8 @@ impl Stater {
             }
             // 八进制直接生成裸字节
             '0'..='7' => {
-                let (b, offset) = format_str[*i..].scan_char(8).unwrap();
+                let digits = chars[*i..].iter().take(3).collect::<String>();
+                let (b, offset) = digits.scan_char(8).unwrap();
                 *i += offset - 1;
                 StatToken::Byte(b)
             }
@@ -725,24 +726,28 @@ impl Stater {
         let bound = chars.len();
         let mut i = 0;
         while i < bound {
-            match chars[i] {
-                '%' => tokens.push(Self::handle_percent_case(
-                    &chars, &mut i, bound, format_str,
-                )?),
+            let token = match chars[i] {
+                '%' => Self::handle_percent_case(&chars, &mut i, bound),
                 '\\' => {
                     if use_printf {
-                        tokens.push(Self::handle_escape_sequences(
-                            &chars, &mut i, bound, format_str,
-                        ));
+                        Self::handle_escape_sequences(&chars, &mut i, bound)
                     } else {
-                        tokens.push(StatToken::Char('\\'));
+                        StatToken::Char('\\')
                     }
                 }
-                c => tokens.push(StatToken::Char(c)),
+                c => StatToken::Char(c),
+            };
+            let invalid = matches!(token, StatToken::InvalidDirective(_));
+            tokens.push(token);
+            if invalid {
+                break;
             }
             i += 1;
         }
-        if !use_printf && !format_str.ends_with('\n') {
+        if !use_printf
+            && !format_str.ends_with('\n')
+            && !matches!(tokens.last(), Some(StatToken::InvalidDirective(_)))
+        {
             tokens.push(StatToken::Char('\n'));
         }
         Ok(tokens)
@@ -907,7 +912,7 @@ impl Stater {
         None
     }
 
-    fn exec<W: Write>(&self, writer: &mut W) -> io::Result<i32> {
+    fn exec<W: Write>(&self, writer: &mut W) -> Result<i32, StatExecutionError> {
         let mut stdin_is_fifo = false;
         if cfg!(unix) {
             if let Ok(md) = fs::metadata("/dev/stdin") {
@@ -927,7 +932,7 @@ impl Stater {
         file: &OsStr,
         stdin_is_fifo: bool,
         writer: &mut W,
-    ) -> io::Result<i32> {
+    ) -> Result<i32, StatExecutionError> {
         let display_name = file.to_string_lossy();
 
         // Handle file path resolution
@@ -962,7 +967,7 @@ impl Stater {
         file: &OsStr,
         display_name: &str,
         writer: &mut W,
-    ) -> io::Result<i32> {
+    ) -> Result<i32, StatExecutionError> {
         #[cfg(unix)]
         let path = file.as_bytes();
         #[cfg(not(unix))]
@@ -1002,7 +1007,7 @@ impl Stater {
         display_name: &str,
         _stdin_is_fifo: bool,
         writer: &mut W,
-    ) -> io::Result<i32> {
+    ) -> Result<i32, StatExecutionError> {
         let result = if display_name == "-" {
             metadata_for_stdin()
         } else {
@@ -1078,12 +1083,17 @@ impl Stater {
         tokens: &[StatToken],
         display_name: &str,
         writer: &mut W,
-    ) -> io::Result<()> {
+    ) -> Result<(), StatExecutionError> {
         for token in tokens {
             match token {
                 StatToken::Char(c) => write!(writer, "{c}")?,
                 StatToken::Byte(b) => writer.write_all(&[*b])?,
                 StatToken::IgnoredDirective => {}
+                StatToken::InvalidDirective(directive) => {
+                    return Err(StatExecutionError::InvalidDirective(format!(
+                        "'{directive}': invalid directive"
+                    )));
+                }
                 StatToken::Directive {
                     flag,
                     width,
@@ -1106,7 +1116,7 @@ impl Stater {
         file: &OsStr,
         display_name: &str,
         writer: &mut impl Write,
-    ) -> io::Result<i32> {
+    ) -> Result<i32, StatExecutionError> {
         let mut status = 0;
 
         for token in tokens {
@@ -1114,6 +1124,11 @@ impl Stater {
                 StatToken::Char(c) => write!(writer, "{c}")?,
                 StatToken::Byte(b) => writer.write_all(&[*b])?,
                 StatToken::IgnoredDirective => {}
+                StatToken::InvalidDirective(directive) => {
+                    return Err(StatExecutionError::InvalidDirective(format!(
+                        "'{directive}': invalid directive"
+                    )));
+                }
                 StatToken::Directive {
                     flag,
                     width,
@@ -1548,9 +1563,18 @@ pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
     let stater = Stater::new(&matches)?;
     let stdout = io::stdout();
     let mut output = stdout.lock();
-    let status = stater
-        .exec(&mut output)
-        .map_err_context(|| String::from("write error"))?;
+    let status = match stater.exec(&mut output) {
+        Ok(status) => status,
+        Err(StatExecutionError::Write(error)) => {
+            return Err(error).map_err_context(|| String::from("write error"));
+        }
+        Err(StatExecutionError::InvalidDirective(message)) => {
+            output
+                .flush()
+                .map_err_context(|| String::from("write error"))?;
+            return Err(CtSimpleError::new(1, message));
+        }
+    };
     output
         .flush()
         .map_err_context(|| String::from("write error"))?;
@@ -1569,6 +1593,15 @@ pub fn stat_native_semantic(args: impl ctcore::Args) -> CTResult<StatSemantic> {
         .after_help(rust_i18n::t!(stat_options::STAT_LONG_USAGE))
         .try_get_matches_from(args)?;
     let stater = Stater::new(&matches)?;
+    if let Some(directive) = stater.default_tokens.iter().find_map(|token| match token {
+        StatToken::InvalidDirective(directive) => Some(directive),
+        _ => None,
+    }) {
+        return Err(CtSimpleError::new(
+            1,
+            format!("'{directive}': invalid directive"),
+        ));
+    }
     let selected_fields = semantic_selected_fields(&stater, &matches);
 
     let mut stdin_is_fifo = false;
@@ -2160,6 +2193,7 @@ fn render_filesystem_tokens(
             StatToken::Char(c) => text.push(*c),
             StatToken::Byte(b) => text.push(char::from(*b)),
             StatToken::IgnoredDirective => {}
+            StatToken::InvalidDirective(_) => break,
             StatToken::Directive {
                 flag,
                 width,
@@ -2190,6 +2224,7 @@ fn render_file_tokens(
             StatToken::Char(c) => text.push(*c),
             StatToken::Byte(b) => text.push(char::from(*b)),
             StatToken::IgnoredDirective => {}
+            StatToken::InvalidDirective(_) => break,
             StatToken::Directive {
                 flag,
                 width,
@@ -2556,6 +2591,48 @@ mod tests {
     fn shell_quoting_wraps_names_containing_control_characters() {
         let style = StatQuotingStyle::parse("shell").unwrap();
         assert_eq!(style.quote("a\nb"), "'a\nb'");
+    }
+
+    #[test]
+    fn parses_directives_and_escapes_after_multibyte_characters() {
+        let tokens = Stater::generate_tokens("é%9", false).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                StatToken::Char('é'),
+                StatToken::InvalidDirective("%9".to_string()),
+            ]
+        );
+
+        assert_eq!(
+            Stater::generate_tokens("éé\\x41|\\101", true).unwrap(),
+            vec![
+                StatToken::Char('é'),
+                StatToken::Char('é'),
+                StatToken::Byte(b'A'),
+                StatToken::Char('|'),
+                StatToken::Byte(b'A'),
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_directive_preserves_already_rendered_multibyte_prefix() {
+        let matches = ct_app()
+            .try_get_matches_from(["stat", "-c", "é%9", "/"])
+            .unwrap();
+        let stater = Stater::new(&matches).unwrap();
+        let mut output = Vec::new();
+
+        let error = stater.exec(&mut output).unwrap_err();
+
+        assert_eq!(output, "é".as_bytes());
+        match error {
+            StatExecutionError::InvalidDirective(message) => {
+                assert_eq!(message, "'%9': invalid directive");
+            }
+            StatExecutionError::Write(error) => panic!("unexpected write error: {error}"),
+        }
     }
 
     #[test]

@@ -1386,6 +1386,35 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "LC_ALL=C下执行tac readonly-stdout并将stdout连接到只读/dev/null；fixture完整内容为单字节a，GNU写入fd 1时报告EBADF，预期RC=1、stdout为空且stderr仅一条Bad file descriptor诊断",
+      "setup_commands": [
+        "printf a > readonly-stdout"
+      ],
+      "args": [
+        "readonly-stdout"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stdout": "read_only_null"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tac: write error: Bad file descriptor\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f readonly-stdout"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "LC_ALL=C下执行tac write-large-a write-large-b并将stdout连接到/dev/full；两个fixture均为16384字节x，GNU记录stdout失败并在退出时只报告一次，预期RC=1、stdout为空、stderr仅一条write error且不含Rust errno编号",
       "setup_commands": [
         "printf '%16384s' '' | tr ' ' x > write-large-a",

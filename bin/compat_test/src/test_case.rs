@@ -68,6 +68,8 @@ pub enum OutputStream {
     Null,
     /// 将输出连接到 `/dev/full`，用于验证写失败处理。
     Full,
+    /// 将输出连接到只读 `/dev/null`，用于验证 EBADF 写失败处理。
+    ReadOnlyNull,
     /// 将输出连接到没有读端的管道，用于验证 broken pipe 处理。
     ClosedPipe,
     /// 将输出连接到伪终端并捕获终端输出。

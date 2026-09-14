@@ -1107,6 +1107,11 @@ fn tac_finish_write_error<W: Write>(
     Err(TacError::WriteError(write_error).into())
 }
 
+fn tac_fd_is_unwritable(fd: ctcore::libc::c_int) -> bool {
+    let flags = unsafe { ctcore::libc::fcntl(fd, ctcore::libc::F_GETFL) };
+    flags < 0 || flags & ctcore::libc::O_ACCMODE == ctcore::libc::O_RDONLY
+}
+
 #[cfg(test)]
 fn tac_collect_file_segments(filename: &OsStr, settings: &TacFlags) -> CTResult<Vec<Vec<u8>>> {
     let mut pattern = tac_compile_regex(settings)?;
@@ -1276,7 +1281,7 @@ impl Tool for Tac {
         tac_main_with_stdout_state(
             &mut stdout,
             args.iter().cloned(),
-            ctcore::ct_stdout_was_closed(),
+            ctcore::ct_stdout_was_closed() || tac_fd_is_unwritable(ctcore::libc::STDOUT_FILENO),
         )
     }
 }
@@ -2506,6 +2511,15 @@ mod tests {
             .unwrap_err();
 
             assert_eq!(error.to_string(), "write error: Bad file descriptor");
+        }
+
+        #[test]
+        fn test_tac_detects_unwritable_file_descriptors() {
+            let read_only = OpenOptions::new().read(true).open("/dev/null").unwrap();
+            let write_only = OpenOptions::new().write(true).open("/dev/null").unwrap();
+
+            assert!(tac_fd_is_unwritable(read_only.as_raw_fd()));
+            assert!(!tac_fd_is_unwritable(write_only.as_raw_fd()));
         }
 
         #[test]

@@ -1838,10 +1838,11 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
     }
 }
 
-fn parse_date<S: AsRef<str> + Clone>(
-    s: S,
-) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
+fn parse_date<S: AsRef<str> + Clone>(s: S) -> Result<DateTime<FixedOffset>, (String, ())> {
     let input = s.as_ref();
+    if ctcore::ct_parse_datetime::contains_leap_second(input) {
+        return Err((input.into(), ()));
+    }
     let ref_time = Local::now().with_nanosecond(0).unwrap();
     if let Ok(dt) = ctcore::ct_parse_datetime::parse_datetime_gnu_compat(input, ref_time) {
         return Ok(dt.into());
@@ -1879,10 +1880,7 @@ fn parse_date<S: AsRef<str> + Clone>(
         }
     }
 
-    match input.parse() {
-        Ok(date) => Ok(date),
-        Err(e) => Err((input.into(), e)),
-    }
+    input.parse().map_err(|_| (input.into(), ()))
 }
 
 fn parse_gnu_compact_time(
@@ -2066,6 +2064,13 @@ mod tests {
 
         assert_eq!(format_using_strftime(&dt, "%Y").unwrap(), "12345");
         assert_eq!(format_using_strftime(&dt, "%F").unwrap(), "+12345-01-02");
+    }
+
+    #[test]
+    fn test_parse_date_rejects_leap_second_input() {
+        for input in ["2016-12-31 23:59:60 UTC", "2016-12-31 3:9:60 UTC"] {
+            assert!(parse_date(input).is_err(), "input {input}");
+        }
     }
 
     #[test]

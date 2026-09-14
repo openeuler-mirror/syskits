@@ -11,5 +11,6 @@ tac:
     read_error: 读取错误
     write_error: 写入错误
     standard_input: 标准输入
+    temporary_file_create: 创建临时文件失败
   usage: tac [选项]... [文件]...
   about: '将每个文件写入标准输出，最后一行最先显示。'

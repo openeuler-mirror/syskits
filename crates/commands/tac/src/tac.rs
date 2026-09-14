@@ -30,8 +30,12 @@ use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::io::{Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
-use std::{fs::File, path::Path};
+use std::{fs::File, path::Path, path::PathBuf};
+use tempfile::Builder;
+
+const GNU_TAC_READ_SIZE: usize = 8192;
 
 // 定义配置标志常量
 pub mod tac_flags {
@@ -172,6 +176,12 @@ pub enum TacError {
 
     /// 刷新标准输出时出错。
     FlushError(std::io::Error),
+
+    /// 无法创建用于缓存非可定位输入的临时文件。
+    TemporaryFileCreate(std::io::Error),
+
+    /// 写入用于缓存非可定位输入的临时文件时出错。
+    TemporaryFileWrite(OsString, std::io::Error),
 }
 
 impl CTError for TacError {
@@ -246,6 +256,17 @@ fn tac_error_message(error: &TacError, locale: &str) -> String {
         TacError::WriteError(_) => t!("tac.errors.write_error", locale = locale).to_string(),
         TacError::FlushError(error) => format!(
             "{}: {}",
+            t!("tac.errors.write_error", locale = locale),
+            strip_errno(error)
+        ),
+        TacError::TemporaryFileCreate(error) => format!(
+            "{}: {}",
+            t!("tac.errors.temporary_file_create", locale = locale),
+            strip_errno(error)
+        ),
+        TacError::TemporaryFileWrite(path, error) => format!(
+            "{}: {}: {}",
+            tac_quote_path(path, false),
             t!("tac.errors.write_error", locale = locale),
             strip_errno(error)
         ),
@@ -512,21 +533,79 @@ fn read_from_file(mut file: File, path: &Path) -> CTResult<Vec<u8>> {
 }
 
 fn read_from_directory(mut file: File, path: &Path) -> CTResult<Vec<u8>> {
-    const GNU_TAC_READ_SIZE: u64 = 8192;
-
     if let Ok(end) = file.seek(SeekFrom::End(0)) {
-        let aligned = end - end % GNU_TAC_READ_SIZE;
+        let aligned = end - end % GNU_TAC_READ_SIZE as u64;
         if aligned != end {
             let _ = file.seek(SeekFrom::Start(aligned));
         }
     }
 
-    let mut buffer = vec![0; GNU_TAC_READ_SIZE as usize];
+    let mut buffer = vec![0; GNU_TAC_READ_SIZE];
     let count = file
         .read(&mut buffer)
         .map_err(|error| TacError::ReadError(tac_quote_path(path.as_os_str(), false), error))?;
     buffer.truncate(count);
     Ok(buffer)
+}
+
+fn tac_input_read_error(path: Option<&Path>, error: std::io::Error) -> TacError {
+    match path {
+        Some(path) => TacError::ReadError(tac_quote_path(path.as_os_str(), false), error),
+        None => tac_stdin_read_error(error),
+    }
+}
+
+fn tac_temporary_directory() -> PathBuf {
+    std::env::var_os("TMPDIR")
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+}
+
+fn read_from_nonseekable<R: Read>(mut reader: R, source: Option<&Path>) -> CTResult<FileData> {
+    let mut temporary = Builder::new()
+        .prefix("cutmp")
+        .tempfile_in(tac_temporary_directory())
+        .map_err(TacError::TemporaryFileCreate)?;
+    let temporary_name = temporary.path().as_os_str().to_os_string();
+    let mut buffer = [0_u8; GNU_TAC_READ_SIZE];
+
+    loop {
+        let count = reader
+            .read(&mut buffer)
+            .map_err(|error| tac_input_read_error(source, error))?;
+        if count == 0 {
+            break;
+        }
+        temporary
+            .as_file_mut()
+            .write_all(&buffer[..count])
+            .map_err(|error| TacError::TemporaryFileWrite(temporary_name.clone(), error))?;
+    }
+
+    temporary
+        .as_file_mut()
+        .flush()
+        .map_err(|error| TacError::TemporaryFileWrite(temporary_name.clone(), error))?;
+    temporary
+        .as_file_mut()
+        .seek(SeekFrom::Start(0))
+        .map_err(|error| TacError::ReadError(tac_quote_path(&temporary_name, false), error))?;
+
+    let file = temporary.into_file();
+    if let Some(mmap) = tac_try_mmap_file(&file) {
+        Ok(FileData::Mapped(mmap))
+    } else {
+        read_from_file(file, Path::new(&temporary_name)).map(FileData::Buffer)
+    }
+}
+
+fn tac_seek_to_start_if_seek_end_supported(fd: ctcore::libc::c_int) -> bool {
+    // SAFETY: lseek only updates the descriptor offset and does not dereference pointers.
+    unsafe {
+        ctcore::libc::lseek(fd, 0, ctcore::libc::SEEK_END) >= 0
+            && ctcore::libc::lseek(fd, 0, ctcore::libc::SEEK_SET) >= 0
+    }
 }
 
 /// 文件数据的枚举类型，支持内存映射和缓冲区两种模式
@@ -559,12 +638,16 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
             let buffer = read_from_stdin()?;
             return Ok(FileData::Buffer(buffer));
         }
+        if ctcore::ct_stdin_was_closed() {
+            return read_from_stdin().map(FileData::Buffer);
+        }
         // 处理标准输入
         if let Some(mmap) = tac_try_mmap_stdin() {
             Ok(FileData::Mapped(mmap))
+        } else if tac_seek_to_start_if_seek_end_supported(ctcore::libc::STDIN_FILENO) {
+            read_from_stdin().map(FileData::Buffer)
         } else {
-            let buffer = read_from_stdin()?;
-            Ok(FileData::Buffer(buffer))
+            read_from_nonseekable(ctcore::ct_io::stdin_reader_box(), None)
         }
     } else {
         // 处理普通文件
@@ -577,9 +660,10 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
 
         if let Some(mmap) = tac_try_mmap_file(&file) {
             Ok(FileData::Mapped(mmap))
+        } else if tac_seek_to_start_if_seek_end_supported(file.as_raw_fd()) {
+            read_from_file(file, path).map(FileData::Buffer)
         } else {
-            let buffer = read_from_file(file, path)?;
-            Ok(FileData::Buffer(buffer))
+            read_from_nonseekable(file, Some(path))
         }
     }
 }
@@ -1288,6 +1372,8 @@ mod tests {
         use std::io::Write;
         use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::symlink;
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::Command;
         use std::thread;
         use std::time::Duration;
         use tempfile::NamedTempFile;
@@ -1466,6 +1552,75 @@ mod tests {
             }
 
             assert_eq!(open_count, 1, "a FIFO operand must be opened only once");
+        }
+
+        #[test]
+        fn test_nonseekable_input_honors_temporary_file_size_limit() {
+            const CHILD_ENV: &str = "TAC_NONSEEKABLE_FSIZE_CHILD";
+            if std::env::var_os(CHILD_ENV).is_some() {
+                let mut pipe_fds = [-1; 2];
+                assert_eq!(unsafe { ctcore::libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
+                let input = [b'x'; 4096];
+                assert_eq!(
+                    unsafe { ctcore::libc::write(pipe_fds[1], input.as_ptr().cast(), input.len()) },
+                    input.len() as isize
+                );
+                unsafe {
+                    ctcore::libc::close(pipe_fds[1]);
+                    ctcore::libc::dup2(pipe_fds[0], ctcore::libc::STDIN_FILENO);
+                    ctcore::libc::close(pipe_fds[0]);
+                    ctcore::libc::signal(ctcore::libc::SIGXFSZ, ctcore::libc::SIG_DFL);
+                }
+                let limit = ctcore::libc::rlimit {
+                    rlim_cur: 1024,
+                    rlim_max: 1024,
+                };
+                assert_eq!(
+                    unsafe { ctcore::libc::setrlimit(ctcore::libc::RLIMIT_FSIZE, &limit) },
+                    0
+                );
+
+                let _ = get_file_data(OsStr::new("-")).unwrap();
+                std::process::exit(0);
+            }
+
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::file_operations_tests::test_nonseekable_input_honors_temporary_file_size_limit",
+                ])
+                .env(CHILD_ENV, "1")
+                .status()
+                .unwrap();
+
+            assert_eq!(status.signal(), Some(ctcore::libc::SIGXFSZ));
+        }
+
+        #[test]
+        fn test_proc_file_without_seek_end_uses_temporary_file() {
+            const CHILD_ENV: &str = "TAC_PROC_TEMP_CHILD";
+            if std::env::var_os(CHILD_ENV).is_some() {
+                let error = get_file_data(OsStr::new("/proc/self/status"))
+                    .expect_err("procfs input without SEEK_END must use a temporary file");
+                assert!(
+                    error
+                        .to_string()
+                        .starts_with("failed to create temporary file:")
+                );
+                return;
+            }
+
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::file_operations_tests::test_proc_file_without_seek_end_uses_temporary_file",
+                ])
+                .env(CHILD_ENV, "1")
+                .env("TMPDIR", "/proc")
+                .status()
+                .unwrap();
+
+            assert!(status.success());
         }
     }
 

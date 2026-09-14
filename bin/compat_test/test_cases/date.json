@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU完整日期F的加号填充标志；五位年份在默认或最终加号填充时保留前导加号，在后续下划线或零标志覆盖加号时去除符号，总宽度仅影响年份符号判定而不改变月日两位格式",
+      "args": ["-d", "12345-01-02 03:04:05 UTC", "+%+F|%+8F|%+10F|%_+10F|%+_10F|%0+10F|%+010F|%+4F"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "+12345-01-02|+12345-01-02|+12345-01-02|+12345-01-02|12345-01-02|+12345-01-02|12345-01-02|+12345-01-02\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU O替代数字转换符的显式宽度按文本字段处理；默认宽度扩展使用空格，0和+标志使用零，覆盖日期、空格日期、月份和两位年份字段",
       "args": ["-d", "2024-01-02 03:04:05 UTC", "+%Od|%4Od|%_4Od|%04Od|%+4Od|%Oe|%4Oe|%04Oe|%+4Oe|%4Om|%+4Om|%4Oy|%+4Oy"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

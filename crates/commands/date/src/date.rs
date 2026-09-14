@@ -1684,6 +1684,33 @@ fn format_gnu_timezone(
 }
 
 #[cfg(target_os = "linux")]
+fn format_gnu_full_date(
+    dt: &DateTime<FixedOffset>,
+    width: Option<usize>,
+    pad: StrftimePad,
+) -> String {
+    let (year_width, year_pad) = if width.is_none() && pad == StrftimePad::Default {
+        (Some(4), StrftimePad::Plus)
+    } else {
+        (Some(width.unwrap_or(0).saturating_sub(6)), pad)
+    };
+    let year = dt.year();
+    let always_sign = year_pad == StrftimePad::Plus
+        && year >= 0
+        && (9999 < year || year_width.is_some_and(|w| 4 < w));
+    let year = format_gnu_number(
+        year.unsigned_abs() as u64,
+        year < 0,
+        4,
+        year_width,
+        year_pad,
+        always_sign,
+    );
+
+    format!("{year}-{:02}-{:02}", dt.month(), dt.day())
+}
+
+#[cfg(target_os = "linux")]
 fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<String> {
     format_using_strftime_bytes(dt, fmt.as_bytes())
         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
@@ -1863,6 +1890,12 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                                 .as_bytes(),
                         );
                     }
+                    b'F' if modifier.is_none() => {
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_full_date(dt, parse_strftime_width(width_str), pad)
+                                .as_bytes(),
+                        );
+                    }
                     b'C' => {
                         // 世纪数：年份除以 100。需要处理 '+' 标志和宽度填充
                         let century = dt.year() / 100;
@@ -1885,20 +1918,6 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     b'q' => {
                         let quarter = (dt.month0() / 3) + 1;
                         fmt_adjusted.extend_from_slice(quarter.to_string().as_bytes());
-                    }
-                    b'F' if flags.is_empty() && width_bytes.is_empty() && modifier.is_none() => {
-                        let year = dt.year();
-                        let year = format_gnu_number(
-                            year.unsigned_abs() as u64,
-                            year < 0,
-                            4,
-                            None,
-                            StrftimePad::Default,
-                            9999 < year,
-                        );
-                        fmt_adjusted.extend_from_slice(
-                            format!("{year}-{:02}-{:02}", dt.month(), dt.day()).as_bytes(),
-                        );
                     }
                     b'Y' if !use_alt_era => {
                         let year = dt.year();
@@ -2288,6 +2307,31 @@ mod tests {
             )
             .unwrap(),
             "02|  02|  02|0002|0002| 2|   2|00 2|00 2|  01|0001|  24|0024"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_full_date_handles_plus_padding_flags() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%+F|%+8F|%+10F|%_+10F|%+_10F|%0+10F|%+010F|%+4F",).unwrap(),
+            "2024-01-02|2024-01-02|2024-01-02|2024-01-02|2024-01-02|2024-01-02|2024-01-02|2024-01-02"
+        );
+
+        let extended = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(12345, 1, 2, 3, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&extended, "%+F|%+8F|%+10F|%_+10F|%+_10F|%0+10F|%+010F|%+4F",)
+                .unwrap(),
+            "+12345-01-02|+12345-01-02|+12345-01-02|+12345-01-02|12345-01-02|+12345-01-02|12345-01-02|+12345-01-02"
         );
     }
 

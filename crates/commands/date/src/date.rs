@@ -226,6 +226,7 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
         setlocale(LC_ALL, c"".as_ptr() as *const c_char);
     }
 
+    let args = normalize_iso_8601_optional_args(args.collect());
     let args_match = match ct_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => {
@@ -290,6 +291,21 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     date_processing(args_match, date_format, date_source, set_to_params)
+}
+
+fn normalize_iso_8601_optional_args(mut args: Vec<OsString>) -> Vec<OsString> {
+    let mut options_ended = false;
+    for arg in &mut args {
+        if options_ended {
+            continue;
+        }
+        if arg == "--" {
+            options_ended = true;
+        } else if arg == "-I" || arg == "--iso-8601" {
+            *arg = OsString::from("--iso-8601=date");
+        }
+    }
+    args
 }
 
 fn format_date_output(date: &DateTime<FixedOffset>, format_string: &str) -> CTResult<String> {
@@ -4475,6 +4491,54 @@ mod tests {
             vec![ctcore::ct_util_name(), "--uct", "-d", "@0", "+%z"],
         ] {
             assert!(ct_app().try_get_matches_from(args).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_iso_8601_optional_value_must_be_attached() {
+        for args in [
+            vec![ctcore::ct_util_name(), "-I", "seconds"],
+            vec![ctcore::ct_util_name(), "--iso-8601", "seconds"],
+        ] {
+            let matches = ct_app()
+                .try_get_matches_from(normalize_iso_8601_optional_args(
+                    args.into_iter().map(OsString::from).collect(),
+                ))
+                .unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(DATE_OPT_ISO_8601)
+                    .unwrap()
+                    .next_back()
+                    .map(String::as_str),
+                Some(DATE)
+            );
+            assert_eq!(
+                matches
+                    .get_one::<String>(DATE_OPT_FORMAT)
+                    .map(String::as_str),
+                Some("seconds")
+            );
+        }
+
+        for args in [
+            vec![ctcore::ct_util_name(), "-Iseconds"],
+            vec![ctcore::ct_util_name(), "--iso-8601=seconds"],
+        ] {
+            let matches = ct_app()
+                .try_get_matches_from(normalize_iso_8601_optional_args(
+                    args.into_iter().map(OsString::from).collect(),
+                ))
+                .unwrap();
+            assert_eq!(
+                matches
+                    .get_many::<String>(DATE_OPT_ISO_8601)
+                    .unwrap()
+                    .next_back()
+                    .map(String::as_str),
+                Some(SECONDS)
+            );
+            assert!(matches.get_one::<String>(DATE_OPT_FORMAT).is_none());
         }
     }
 }

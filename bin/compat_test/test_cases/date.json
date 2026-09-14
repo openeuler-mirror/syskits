@@ -3,6 +3,30 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "GNU短选项-I的可选FMT不消费空格分隔的seconds，seconds作为无效日期操作数导致RC=1",
+      "args": ["-I", "seconds"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""},
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU长选项--iso-8601的可选FMT不消费空格分隔的seconds，seconds作为无效日期操作数导致RC=1",
+      "args": ["--iso-8601", "seconds"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""},
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "同时指定-R与--rfc-3339=seconds时GNU拒绝多个输出格式",
       "args": ["-R", "--rfc-3339=seconds", "-d", "@0"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

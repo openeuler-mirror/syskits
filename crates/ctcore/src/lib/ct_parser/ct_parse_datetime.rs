@@ -196,6 +196,8 @@ pub fn parse_datetime_gnu_compat(
         (" years", 0),
         (" month", 0),
         (" months", 0),
+        (" fortnight", 0),
+        (" fortnights", 0),
         (" week", 604800),
         (" weeks", 604800), // 添加了对 week 的支持
         (" day", 86400),
@@ -271,6 +273,7 @@ pub fn parse_datetime_gnu_compat(
                     // 将 day 和 week 也纳入“日历计算”阵营，避免跨越夏令时边界时的物理物理秒数偏移
                     if suffix.contains("year")
                         || suffix.contains("month")
+                        || suffix.contains("fortnight")
                         || suffix.contains("week")
                         || suffix.contains("day")
                     {
@@ -296,7 +299,9 @@ pub fn parse_datetime_gnu_compat(
                             }
                         } else {
                             // Week 和 Day 直接通过纯粹的日历面板 (NaiveDate) 进行天数平移
-                            let days_to_add = if suffix.contains("week") {
+                            let days_to_add = if suffix.contains("fortnight") {
+                                secs * 14
+                            } else if suffix.contains("week") {
                                 secs * 7
                             } else {
                                 secs
@@ -908,6 +913,19 @@ mod tests {
 
         let today = parse_datetime_gnu_compat("today", ref_time).unwrap();
         assert_eq!(today.day(), 24);
+    }
+
+    #[test]
+    fn test_parse_fortnight_relative_to_explicit_date() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        let parsed = parse_datetime_gnu_compat("2024-01-01 2 fortnights ago", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2023, 12, 4).unwrap()
+        );
+        assert_eq!(parsed.hour(), 0);
     }
 
     #[test]

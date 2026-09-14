@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU O替代数字转换符的显式宽度按文本字段处理；默认宽度扩展使用空格，0和+标志使用零，覆盖日期、空格日期、月份和两位年份字段",
+      "args": ["-d", "2024-01-02 03:04:05 UTC", "+%Od|%4Od|%_4Od|%04Od|%+4Od|%Oe|%4Oe|%04Oe|%+4Oe|%4Om|%+4Om|%4Oy|%+4Oy"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "02|  02|  02|0002|0002| 2|   2|00 2|00 2|  01|0001|  24|0024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下多个GNU填充标志按最后一个生效；Epoch秒字段分别验证加号、下划线、零和减号的覆盖顺序，星期名验证先取消填充再恢复零填充及最后取消填充",
       "args": ["-d", "@0", "+%_+6s|%+_6s|%_06s|%-06s|%0-6s|%-010a|%0-10a"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

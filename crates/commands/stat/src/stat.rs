@@ -568,14 +568,14 @@ fn print_it<W: Write>(
 }
 
 impl Stater {
-    fn handle_percent_case(chars: &[char], i: &mut usize, bound: usize) -> StatToken {
+    fn handle_percent_case(bytes: &[u8], i: &mut usize, bound: usize) -> StatToken {
         let old = *i;
 
         *i += 1;
         if *i >= bound {
             return StatToken::Char('%');
         }
-        if chars[*i] == '%' {
+        if bytes[*i] == b'%' {
             *i += 1;
             return StatToken::Char('%');
         }
@@ -583,14 +583,14 @@ impl Stater {
         let mut flag = StatFlags::default();
 
         while *i < bound {
-            match chars[*i] {
-                '#' => flag.is_alter = true,
-                '0' => flag.is_zero = true,
-                '-' => flag.is_left = true,
-                ' ' => flag.is_space = true,
-                '+' => flag.is_sign = true,
-                '\'' => flag.is_group = true,
-                'I' => flag.is_locale = true, // 【修复】：不再 panic，正确识别 I 标志
+            match bytes[*i] {
+                b'#' => flag.is_alter = true,
+                b'0' => flag.is_zero = true,
+                b'-' => flag.is_left = true,
+                b' ' => flag.is_space = true,
+                b'+' => flag.is_sign = true,
+                b'\'' => flag.is_group = true,
+                b'I' => flag.is_locale = true, // 【修复】：不再 panic，正确识别 I 标志
                 _ => break,
             }
             *i += 1;
@@ -601,8 +601,8 @@ impl Stater {
         let mut precision = None;
         let mut j = *i;
 
-        while j < bound && chars[j].is_ascii_digit() {
-            let digit = chars[j].to_digit(10).unwrap() as usize;
+        while j < bound && bytes[j].is_ascii_digit() {
+            let digit = usize::from(bytes[j] - b'0');
             width = width
                 .checked_mul(10)
                 .and_then(|value| value.checked_add(digit))
@@ -614,12 +614,12 @@ impl Stater {
         }
         field_too_large |= width > i32::MAX as usize;
 
-        if j < bound && chars[j] == '.' {
+        if j < bound && bytes[j] == b'.' {
             j += 1;
             let mut prec = 0u64;
             let mut has_precision = false;
-            while j < bound && chars[j].is_ascii_digit() {
-                let digit = u64::from(chars[j].to_digit(10).unwrap());
+            while j < bound && bytes[j].is_ascii_digit() {
+                let digit = u64::from(bytes[j] - b'0');
                 prec = prec
                     .checked_mul(10)
                     .and_then(|value| value.checked_add(digit))
@@ -641,22 +641,22 @@ impl Stater {
         *i = j;
         // 使用单引号包裹错误信息
         if *i >= bound {
-            let directive = chars[old..].iter().collect::<String>();
+            let directive = String::from_utf8_lossy(&bytes[old..]).into_owned();
             return StatToken::InvalidDirective(directive);
         }
 
         let mut modifier = None;
-        if (chars[*i] == 'H' || chars[*i] == 'L')
+        if (bytes[*i] == b'H' || bytes[*i] == b'L')
             && *i + 1 < bound
-            && (chars[*i + 1] == 'd' || chars[*i + 1] == 'r')
+            && (bytes[*i + 1] == b'd' || bytes[*i + 1] == b'r')
         {
-            modifier = Some(chars[*i]);
+            modifier = Some(char::from(bytes[*i]));
             *i += 1;
         }
 
         // 如果跟在修饰符后的是 '%'，直接拦截报错，而不是把它当成合法的 format 指令
-        if chars[*i] == '%' {
-            let directive = chars[old..=*i].iter().collect::<String>();
+        if bytes[*i] == b'%' {
+            let directive = String::from_utf8_lossy(&bytes[old..=*i]).into_owned();
             return StatToken::InvalidDirective(directive);
         }
 
@@ -669,21 +669,23 @@ impl Stater {
             flag,
             precision,
             modifier,
-            format: chars[*i],
+            format: char::from(bytes[*i]),
         }
     }
 
-    fn handle_escape_sequences(chars: &[char], i: &mut usize, bound: usize) -> StatToken {
+    fn handle_escape_sequences(bytes: &[u8], i: &mut usize, bound: usize) -> StatToken {
         *i += 1;
         if *i >= bound {
             ct_show_warning!("backslash at end of format");
             return StatToken::Char('\\');
         }
-        match chars[*i] {
+        match bytes[*i] {
             // 精确区分 \x 是不完整还是无法识别，并使用裸字节
-            'x' => {
+            b'x' => {
                 if *i + 1 < bound {
-                    let digits = chars[*i + 1..].iter().take(2).collect::<String>();
+                    let start = *i + 1;
+                    let end = (start + 2).min(bound);
+                    let digits = String::from_utf8_lossy(&bytes[start..end]);
                     if let Some((b, offset)) = digits.scan_char(16) {
                         *i += offset;
                         StatToken::Byte(b)
@@ -697,45 +699,49 @@ impl Stater {
                 }
             }
             // 八进制直接生成裸字节
-            '0'..='7' => {
-                let digits = chars[*i..].iter().take(3).collect::<String>();
+            b'0'..=b'7' => {
+                let end = (*i + 3).min(bound);
+                let digits = String::from_utf8_lossy(&bytes[*i..end]);
                 let (b, offset) = digits.scan_char(8).unwrap();
                 *i += offset - 1;
                 StatToken::Byte(b)
             }
-            '"' => StatToken::Char('"'),
-            '\\' => StatToken::Char('\\'),
-            'a' => StatToken::Byte(b'\x07'),
-            'b' => StatToken::Byte(b'\x08'),
-            'e' => StatToken::Byte(b'\x1B'),
-            'f' => StatToken::Byte(b'\x0C'),
-            'n' => StatToken::Byte(b'\n'),
-            'r' => StatToken::Byte(b'\r'),
-            't' => StatToken::Byte(b'\t'),
-            'v' => StatToken::Byte(b'\x0B'),
+            b'"' => StatToken::Char('"'),
+            b'\\' => StatToken::Char('\\'),
+            b'a' => StatToken::Byte(b'\x07'),
+            b'b' => StatToken::Byte(b'\x08'),
+            b'e' => StatToken::Byte(b'\x1B'),
+            b'f' => StatToken::Byte(b'\x0C'),
+            b'n' => StatToken::Byte(b'\n'),
+            b'r' => StatToken::Byte(b'\r'),
+            b't' => StatToken::Byte(b'\t'),
+            b'v' => StatToken::Byte(b'\x0B'),
             c => {
-                ct_show_warning!("unrecognized escape '\\{}'", c);
-                StatToken::Char(c)
+                ct_show_warning!("unrecognized escape '\\{}'", char::from(c));
+                StatToken::Byte(c)
             }
         }
     }
 
     fn generate_tokens(format_str: &str, use_printf: bool) -> CTResult<Vec<StatToken>> {
+        Self::generate_tokens_bytes(format_str.as_bytes(), use_printf)
+    }
+
+    fn generate_tokens_bytes(format_bytes: &[u8], use_printf: bool) -> CTResult<Vec<StatToken>> {
         let mut tokens = Vec::new();
-        let chars = format_str.chars().collect::<Vec<char>>();
-        let bound = chars.len();
+        let bound = format_bytes.len();
         let mut i = 0;
         while i < bound {
-            let token = match chars[i] {
-                '%' => Self::handle_percent_case(&chars, &mut i, bound),
-                '\\' => {
+            let token = match format_bytes[i] {
+                b'%' => Self::handle_percent_case(format_bytes, &mut i, bound),
+                b'\\' => {
                     if use_printf {
-                        Self::handle_escape_sequences(&chars, &mut i, bound)
+                        Self::handle_escape_sequences(format_bytes, &mut i, bound)
                     } else {
                         StatToken::Char('\\')
                     }
                 }
-                c => StatToken::Char(c),
+                _ => Self::literal_token(format_bytes, &mut i),
             };
             let invalid = matches!(token, StatToken::InvalidDirective(_));
             tokens.push(token);
@@ -745,12 +751,35 @@ impl Stater {
             i += 1;
         }
         if !use_printf
-            && !format_str.ends_with('\n')
+            && !format_bytes.ends_with(b"\n")
             && !matches!(tokens.last(), Some(StatToken::InvalidDirective(_)))
         {
             tokens.push(StatToken::Char('\n'));
         }
         Ok(tokens)
+    }
+
+    fn literal_token(format_bytes: &[u8], i: &mut usize) -> StatToken {
+        let first = format_bytes[*i];
+        let char_width = match first {
+            0x00..=0x7f => 1,
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            0xf0..=0xf4 => 4,
+            _ => return StatToken::Byte(first),
+        };
+        let end = *i + char_width;
+        if end > format_bytes.len() {
+            return StatToken::Byte(first);
+        }
+
+        match std::str::from_utf8(&format_bytes[*i..end]) {
+            Ok(text) => {
+                *i = end - 1;
+                StatToken::Char(text.chars().next().unwrap())
+            }
+            Err(_) => StatToken::Byte(first),
+        }
     }
 
     fn new(matches: &ArgMatches) -> CTResult<Self> {
@@ -848,16 +877,9 @@ impl Stater {
 
     fn configure_format(matches: &ArgMatches) -> CTResult<(Vec<StatToken>, Vec<StatToken>)> {
         let format_str = if matches.contains_id(stat_options::STAT_PRINTF) {
-            Some(
-                matches
-                    .get_one::<String>(stat_options::STAT_PRINTF)
-                    .expect("Invalid format string")
-                    .as_str(),
-            )
+            matches.get_one::<OsString>(stat_options::STAT_PRINTF)
         } else {
-            matches
-                .get_one::<String>(stat_options::STAT_FORMAT)
-                .map(|s| s.as_str())
+            matches.get_one::<OsString>(stat_options::STAT_FORMAT)
         };
 
         let use_printf = matches.contains_id(stat_options::STAT_PRINTF);
@@ -865,7 +887,7 @@ impl Stater {
         let show_fs = matches.get_flag(stat_options::STAT_FILE_SYSTEM);
 
         let default_tokens = if let Some(format_str) = format_str {
-            Self::generate_tokens(format_str, use_printf)?
+            Self::generate_tokens_bytes(format_str.as_bytes(), use_printf)?
         } else {
             Self::generate_tokens(&Self::default_format(show_fs, terse, false), false)?
         };
@@ -2491,11 +2513,13 @@ pub fn ct_app() -> Command {
             .long(stat_options::STAT_FORMAT)
             .help(rust_i18n::t!(stat_options::STAT_FORMAT))
             .value_name("FORMAT")
+            .value_parser(ValueParser::os_string())
             .overrides_with(stat_options::STAT_PRINTF),
         Arg::new(stat_options::STAT_PRINTF)
             .long(stat_options::STAT_PRINTF)
             .value_name("FORMAT")
             .help(rust_i18n::t!(stat_options::STAT_PRINTF))
+            .value_parser(ValueParser::os_string())
             .overrides_with(stat_options::STAT_FORMAT),
         Arg::new(stat_options::STAT_CACHED)
             .long(stat_options::STAT_CACHED)
@@ -2541,6 +2565,8 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 mod tests {
     use super::*;
     use std::io::{self, Write};
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     struct FailingWriter;
 
@@ -2635,6 +2661,38 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn format_option_accepts_non_utf8_literal_bytes() {
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                OsString::from("stat"),
+                OsString::from("-c"),
+                OsString::from_vec(vec![0xff, b'%', b'n']),
+                OsString::from("/"),
+            ])
+            .unwrap();
+        let stater = Stater::new(&matches).unwrap();
+        let mut output = Vec::new();
+
+        assert_eq!(stater.exec(&mut output).unwrap(), 0);
+        assert_eq!(output, b"\xff/\n");
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                OsString::from("stat"),
+                OsString::from("--printf"),
+                OsString::from_vec(vec![0xff, b'%', b'n']),
+                OsString::from("/"),
+            ])
+            .unwrap();
+        let stater = Stater::new(&matches).unwrap();
+        let mut output = Vec::new();
+
+        assert_eq!(stater.exec(&mut output).unwrap(), 0);
+        assert_eq!(output, b"\xff/");
+    }
+
     #[test]
     fn test_tool_implementation() {
         let tool = Stat;
@@ -2676,8 +2734,8 @@ mod tests {
         assert!(matches.get_flag(stat_options::STAT_FILE_SYSTEM));
         assert!(matches.get_flag(stat_options::STAT_TERSE));
         assert_eq!(
-            matches.get_one::<String>(stat_options::STAT_FORMAT),
-            Some(&"second".to_string())
+            matches.get_one::<OsString>(stat_options::STAT_FORMAT),
+            Some(&OsString::from("second"))
         );
         assert_eq!(
             matches.get_one::<String>(stat_options::STAT_CACHED),

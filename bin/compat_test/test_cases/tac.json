@@ -1912,6 +1912,70 @@
       "cleanup_commands": [
         "rm -f fixed-before-overlap"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --before --separator=aba fixed-buffer-first fixed-buffer-second；两个16384字节以上的普通文件都在8192字节读取边界写入重叠分隔符，第一个文件末字节额外写入a，验证GNU固定分隔符缓冲的已初始化旧字节跨操作数保留，预期RC=0、stderr为空且完整stdout顺序一致",
+      "setup_commands": [
+        "head -c 16385 /dev/zero | tr '\\0' X > fixed-buffer-first",
+        "printf ababa | dd of=fixed-buffer-first bs=1 seek=8190 conv=notrunc status=none",
+        "printf a | dd of=fixed-buffer-first bs=1 seek=16384 conv=notrunc status=none",
+        "head -c 16384 /dev/zero | tr '\\0' X > fixed-buffer-second",
+        "printf ababa | dd of=fixed-buffer-second bs=1 seek=8190 conv=notrunc status=none"
+      ],
+      "args": [
+        "--before",
+        "--separator=aba",
+        "fixed-buffer-first",
+        "fixed-buffer-second"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f fixed-buffer-first fixed-buffer-second"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --before --separator=ab stale-buffer-first stale-buffer-short；首个8191字节fixture在偏移2写入b以留下缓冲旧字节，第二个fixture完整内容为Xa，验证新操作数首次扫描不把EOF后的旧b与末字节a组成伪分隔符，预期RC=0、stderr为空且完整stdout顺序一致",
+      "setup_commands": [
+        "head -c 8191 /dev/zero | tr '\\0' X > stale-buffer-first",
+        "printf b | dd of=stale-buffer-first bs=1 seek=2 conv=notrunc status=none",
+        "printf Xa > stale-buffer-short"
+      ],
+      "args": [
+        "--before",
+        "--separator=ab",
+        "stale-buffer-first",
+        "stale-buffer-short"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f stale-buffer-first stale-buffer-short"
+      ]
     }
   ]
 }

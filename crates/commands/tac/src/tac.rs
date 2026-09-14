@@ -1214,9 +1214,20 @@ struct TacSeekableInput<'a> {
     source: Option<&'a Path>,
 }
 
+#[derive(Default)]
+struct TacFixedBufferState {
+    buffer: Vec<u8>,
+    initialized_len: usize,
+}
+
+struct TacScanState {
+    read_size: usize,
+    fixed_buffer: TacFixedBufferState,
+}
+
 struct TacInputState {
     temporary_stream: Option<NamedTempFile>,
-    read_size: usize,
+    scan: TacScanState,
 }
 
 fn tac_write_seekable_fd<W: Write>(
@@ -1224,36 +1235,41 @@ fn tac_write_seekable_fd<W: Write>(
     input: TacSeekableInput<'_>,
     settings: &TacFlags,
     mut pattern: Option<&mut GnuRegex>,
-    read_size: &mut usize,
+    scan_state: &mut TacScanState,
     write_error: &mut Option<std::io::Error>,
     stdout_was_closed: bool,
 ) -> CTResult<()> {
-    let file_size = tac_actual_file_size(input.fd, input.estimated_size, *read_size, input.source)?;
+    let file_size = tac_actual_file_size(
+        input.fd,
+        input.estimated_size,
+        scan_state.read_size,
+        input.source,
+    )?;
     if stdout_was_closed && file_size != 0 && write_error.is_none() {
         *write_error = Some(std::io::Error::from_raw_os_error(ctcore::libc::EBADF));
     }
 
     let mut position = file_size;
     let mut pending = Vec::new();
-    let mut fixed_buffer = Vec::new();
-    let mut fixed_initialized_len = 0_usize;
     let mut first_match = true;
     let mut first_read = true;
 
     while position != 0 {
-        let count = if first_read {
-            let remainder = position % *read_size as u64;
+        let initial_read = first_read;
+        let count = if initial_read {
+            let remainder = position % scan_state.read_size as u64;
             first_read = false;
             if remainder == 0 {
-                position.min(*read_size as u64)
+                position.min(scan_state.read_size as u64)
             } else {
                 remainder
             }
-        } else if position < *read_size as u64 {
-            *read_size = usize::try_from(position).map_err(|_| TacError::RecordTooLarge)?;
+        } else if position < scan_state.read_size as u64 {
+            scan_state.read_size =
+                usize::try_from(position).map_err(|_| TacError::RecordTooLarge)?;
             position
         } else {
-            *read_size as u64
+            scan_state.read_size as u64
         };
         let count = usize::try_from(count).map_err(|_| TacError::RecordTooLarge)?;
         position -= count as u64;
@@ -1293,34 +1309,52 @@ fn tac_write_seekable_fd<W: Write>(
                 .checked_add(settings.separator.len() - 1)
                 .ok_or(TacError::RecordTooLarge)?;
             let required_capacity = initialized_end.max(search_capacity);
-            if fixed_buffer.len() < required_capacity {
-                fixed_buffer.resize(required_capacity, 0);
+            if scan_state.fixed_buffer.buffer.len() < required_capacity {
+                scan_state.fixed_buffer.buffer.resize(required_capacity, 0);
             }
-            fixed_buffer[count..initialized_end].copy_from_slice(&pending);
-            fixed_buffer[..count].copy_from_slice(&next);
-            fixed_initialized_len = fixed_initialized_len.max(initialized_end);
+            scan_state.fixed_buffer.buffer[count..initialized_end].copy_from_slice(&pending);
+            scan_state.fixed_buffer.buffer[..count].copy_from_slice(&next);
+            scan_state.fixed_buffer.initialized_len =
+                scan_state.fixed_buffer.initialized_len.max(initialized_end);
 
             let mut past_end = initialized_end;
-            let fixed_search_end = search_capacity.min(fixed_initialized_len);
-            for start in memmem::rfind_iter(&fixed_buffer[..fixed_search_end], &settings.separator)
-            {
+            let fixed_search_end = if initial_read {
+                initialized_end
+            } else {
+                search_capacity.min(scan_state.fixed_buffer.initialized_len)
+            };
+            for start in memmem::rfind_iter(
+                &scan_state.fixed_buffer.buffer[..fixed_search_end],
+                &settings.separator,
+            ) {
                 let end = start + settings.separator.len();
                 if settings.is_before {
-                    tac_write_slice(writer, &fixed_buffer[start..past_end], write_error);
+                    tac_write_slice(
+                        writer,
+                        &scan_state.fixed_buffer.buffer[start..past_end],
+                        write_error,
+                    );
                     past_end = start;
                 } else {
                     if !first_match || end != past_end {
-                        tac_write_slice(writer, &fixed_buffer[end..past_end], write_error);
+                        tac_write_slice(
+                            writer,
+                            &scan_state.fixed_buffer.buffer[end..past_end],
+                            write_error,
+                        );
                     }
                     past_end = end;
                     first_match = false;
                 }
             }
             pending.clear();
-            pending.extend_from_slice(&fixed_buffer[..past_end]);
+            pending.extend_from_slice(&scan_state.fixed_buffer.buffer[..past_end]);
         }
-        if position != 0 && pending.len() > *read_size {
-            *read_size = read_size.checked_mul(2).ok_or(TacError::RecordTooLarge)?;
+        if position != 0 && pending.len() > scan_state.read_size {
+            scan_state.read_size = scan_state
+                .read_size
+                .checked_mul(2)
+                .ok_or(TacError::RecordTooLarge)?;
         }
     }
 
@@ -1379,7 +1413,7 @@ fn tac_write_file_with_regex<W: Write>(
                     },
                     settings,
                     pattern,
-                    &mut input_state.read_size,
+                    &mut input_state.scan,
                     write_error,
                     stdout_was_closed,
                 );
@@ -1403,7 +1437,7 @@ fn tac_write_file_with_regex<W: Write>(
                 },
                 settings,
                 pattern,
-                &mut input_state.read_size,
+                &mut input_state.scan,
                 write_error,
                 stdout_was_closed,
             );
@@ -1422,7 +1456,7 @@ fn tac_write_file_with_regex<W: Write>(
                 },
                 settings,
                 pattern,
-                &mut input_state.read_size,
+                &mut input_state.scan,
                 write_error,
                 stdout_was_closed,
             );
@@ -1445,7 +1479,7 @@ fn tac_write_file_with_regex<W: Write>(
                 },
                 settings,
                 pattern,
-                &mut input_state.read_size,
+                &mut input_state.scan,
                 write_error,
                 stdout_was_closed,
             );
@@ -1545,7 +1579,10 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -
     }
     let mut input_state = TacInputState {
         temporary_stream: None,
-        read_size,
+        scan: TacScanState {
+            read_size,
+            fixed_buffer: TacFixedBufferState::default(),
+        },
     };
 
     for filename in &settings.files {
@@ -2733,6 +2770,67 @@ mod tests {
             let mut expected = b"aba".to_vec();
             expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE * 2 - 4]);
             expected.extend_from_slice(b"ab");
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_fixed_buffer_state_is_preserved_across_operands() {
+            let mut first_data = vec![b'X'; GNU_TAC_READ_SIZE * 2 + 1];
+            first_data[GNU_TAC_READ_SIZE - 2..GNU_TAC_READ_SIZE + 3].copy_from_slice(b"ababa");
+            *first_data.last_mut().unwrap() = b'a';
+            let mut first = NamedTempFile::new().unwrap();
+            first.write_all(&first_data).unwrap();
+
+            let mut second_data = vec![b'X'; GNU_TAC_READ_SIZE * 2];
+            second_data[GNU_TAC_READ_SIZE - 2..GNU_TAC_READ_SIZE + 3].copy_from_slice(b"ababa");
+            let mut second = NamedTempFile::new().unwrap();
+            second.write_all(&second_data).unwrap();
+
+            let args = [
+                OsString::from("tac"),
+                OsString::from("--before"),
+                OsString::from("--separator=aba"),
+                first.path().as_os_str().to_os_string(),
+                second.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = b"aba".to_vec();
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE - 3]);
+            expected.extend_from_slice(b"aab");
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE - 2]);
+            expected.extend_from_slice(b"aba");
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE - 3]);
+            expected.extend_from_slice(b"ab");
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE - 2]);
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_does_not_search_stale_bytes_past_operand_end() {
+            let mut first_data = vec![b'X'; GNU_TAC_READ_SIZE - 1];
+            first_data[2] = b'b';
+            let mut first = NamedTempFile::new().unwrap();
+            first.write_all(&first_data).unwrap();
+
+            let mut second = NamedTempFile::new().unwrap();
+            second.write_all(b"Xa").unwrap();
+
+            let args = [
+                OsString::from("tac"),
+                OsString::from("--before"),
+                OsString::from("--separator=ab"),
+                first.path().as_os_str().to_os_string(),
+                second.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = first_data;
+            expected.extend_from_slice(b"Xa");
             assert_eq!(output, expected);
         }
 

@@ -80,6 +80,12 @@ fn parse_datetime_gnu_compat_impl(
     let input_trim = input.trim();
     let input_lower = input_trim.to_lowercase();
 
+    if contains_leap_second(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if !normalized_extended_year {
         if has_explicit_plus_extended_year(input_trim) {
             return Err(ParseDateTimeError {
@@ -621,6 +627,47 @@ fn military_timezone_offset_hours(tz_char: char) -> Option<Option<i32>> {
         'Z' => Some(Some(0)),
         _ => None,
     }
+}
+
+/// Return whether a date string contains a leap-second field rejected by GNU
+/// `parse-datetime`.
+pub fn contains_leap_second(input: &str) -> bool {
+    let bytes = input.as_bytes();
+    bytes.windows(3).enumerate().any(|(seconds_colon, window)| {
+        if window != b":60" || bytes.get(seconds_colon + 3).is_some_and(u8::is_ascii_digit) {
+            return false;
+        }
+
+        let minute_start = bytes[..seconds_colon]
+            .iter()
+            .rposition(|byte| !byte.is_ascii_digit())
+            .map_or(0, |index| index + 1);
+        let minute_digits = &bytes[minute_start..seconds_colon];
+        if !(1..=2).contains(&minute_digits.len())
+            || minute_start == 0
+            || bytes[minute_start - 1] != b':'
+        {
+            return false;
+        }
+        let minute = minute_digits
+            .iter()
+            .fold(0_u8, |value, digit| value * 10 + (digit - b'0'));
+        if minute > 59 {
+            return false;
+        }
+
+        let hour_end = minute_start - 1;
+        let hour_start = bytes[..hour_end]
+            .iter()
+            .rposition(|byte| !byte.is_ascii_digit())
+            .map_or(0, |index| index + 1);
+        let hour_digits = &bytes[hour_start..hour_end];
+        (1..=2).contains(&hour_digits.len())
+            && hour_start
+                .checked_sub(1)
+                .and_then(|index| bytes.get(index))
+                .is_none_or(|byte| !byte.is_ascii_digit())
+    })
 }
 
 fn has_explicit_plus_extended_year(input: &str) -> bool {
@@ -1432,6 +1479,23 @@ mod tests {
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
         assert!(parse_datetime_gnu_compat("+12345-01-01 UTC", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_rejects_leap_second_input() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in [
+            "2016-12-31 23:59:60 UTC",
+            "2016-12-31 3:9:60 UTC",
+            "2016-12-31T23:59:60+00:00",
+            "Dec 31 2016 23:59:60 UTC",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input}"
+            );
+        }
     }
 
     #[test]

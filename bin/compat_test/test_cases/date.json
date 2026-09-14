@@ -3,6 +3,38 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下拒绝闰秒字段；GNU将2016-12-31 23:59:60 UTC判为无效日期，预期RC=1且无标准输出",
+      "args": ["-d", "2016-12-31 23:59:60 UTC", "+%F %T"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下拒绝单数字时分中的闰秒字段；GNU将2016-12-31 3:9:60 UTC判为无效日期，预期RC=1且无标准输出",
+      "args": ["-d", "2016-12-31 3:9:60 UTC", "+%F %T"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下格式化GNU扩展年份完整日期；%F等价于%+4Y-%m-%d，12345年预期输出+12345-01-01",
       "args": ["-d", "12345-01-01 UTC", "+%F"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

@@ -632,11 +632,15 @@ fn tac_create_temporary_file(directory: &Path) -> Result<NamedTempFile, TacError
         .map_err(|error| TacError::TemporaryFileCreate(attempted_path.into_os_string(), error))
 }
 
-fn read_from_nonseekable<R: Read>(mut reader: R, source: Option<&Path>) -> CTResult<FileData> {
+fn copy_nonseekable_to_temporary<R: Read>(
+    mut reader: R,
+    source: Option<&Path>,
+) -> CTResult<(NamedTempFile, u64)> {
     let temporary_directory = tac_temporary_directory();
     let mut temporary = tac_create_temporary_file(&temporary_directory)?;
     let temporary_name = temporary.path().as_os_str().to_os_string();
     let mut buffer = [0_u8; GNU_TAC_READ_SIZE];
+    let mut bytes_copied = 0_u64;
 
     loop {
         let count = reader
@@ -649,12 +653,22 @@ fn read_from_nonseekable<R: Read>(mut reader: R, source: Option<&Path>) -> CTRes
             .as_file_mut()
             .write_all(&buffer[..count])
             .map_err(|error| TacError::TemporaryFileWrite(temporary_name.clone(), error))?;
+        bytes_copied = bytes_copied
+            .checked_add(count as u64)
+            .ok_or(TacError::RecordTooLarge)?;
     }
 
     temporary
         .as_file_mut()
         .flush()
         .map_err(|error| TacError::TemporaryFileWrite(temporary_name.clone(), error))?;
+
+    Ok((temporary, bytes_copied))
+}
+
+fn read_from_nonseekable<R: Read>(reader: R, source: Option<&Path>) -> CTResult<FileData> {
+    let (mut temporary, _) = copy_nonseekable_to_temporary(reader, source)?;
+    let temporary_name = temporary.path().as_os_str().to_os_string();
     temporary
         .as_file_mut()
         .seek(SeekFrom::Start(0))
@@ -1283,16 +1297,31 @@ fn tac_write_file_with_regex<W: Write>(
     stdout_was_closed: bool,
 ) -> CTResult<()> {
     let data = if filename.as_bytes() == b"-" {
-        if ctcore::ct_io::injected_stdin_bytes().is_none()
-            && !ctcore::ct_stdin_was_closed()
-            && let Some(file_size) = tac_regular_file_size(ctcore::libc::STDIN_FILENO)
-        {
+        if ctcore::ct_io::injected_stdin_bytes().is_none() && !ctcore::ct_stdin_was_closed() {
+            if let Some(file_size) = tac_regular_file_size(ctcore::libc::STDIN_FILENO) {
+                return tac_write_seekable_fd(
+                    writer,
+                    TacSeekableInput {
+                        fd: ctcore::libc::STDIN_FILENO,
+                        estimated_size: file_size,
+                        source: None,
+                    },
+                    settings,
+                    pattern,
+                    read_size,
+                    write_error,
+                    stdout_was_closed,
+                );
+            }
+
+            let (temporary, file_size) =
+                copy_nonseekable_to_temporary(ctcore::ct_io::stdin_reader_box(), None)?;
             return tac_write_seekable_fd(
                 writer,
                 TacSeekableInput {
-                    fd: ctcore::libc::STDIN_FILENO,
+                    fd: temporary.as_file().as_raw_fd(),
                     estimated_size: file_size,
-                    source: None,
+                    source: Some(temporary.path()),
                 },
                 settings,
                 pattern,
@@ -1312,6 +1341,24 @@ fn tac_write_file_with_regex<W: Write>(
                     fd: file.as_raw_fd(),
                     estimated_size: file_size,
                     source: Some(path),
+                },
+                settings,
+                pattern,
+                read_size,
+                write_error,
+                stdout_was_closed,
+            );
+        }
+        if !file.metadata().is_ok_and(|metadata| metadata.is_dir())
+            && !tac_seek_to_start_if_seek_end_supported(file.as_raw_fd())
+        {
+            let (temporary, file_size) = copy_nonseekable_to_temporary(file, Some(path))?;
+            return tac_write_seekable_fd(
+                writer,
+                TacSeekableInput {
+                    fd: temporary.as_file().as_raw_fd(),
+                    estimated_size: file_size,
+                    source: Some(temporary.path()),
                 },
                 settings,
                 pattern,
@@ -2058,6 +2105,7 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::symlink;
         use std::os::unix::process::ExitStatusExt;
+        use std::process::Stdio;
         use std::thread;
         use std::time::Duration;
         use tempfile::NamedTempFile;
@@ -2353,6 +2401,46 @@ mod tests {
                 .env(PATH_ENV, input.path())
                 .status()
                 .unwrap();
+
+            assert!(status.success(), "child status: {status:?}");
+        }
+
+        #[test]
+        fn test_large_nonseekable_input_does_not_map_temporary_file() {
+            const CHILD_ENV: &str = "TAC_NONSEEKABLE_MEMORY_LIMIT_CHILD";
+            if std::env::var_os(CHILD_ENV).is_some() {
+                let limit = ctcore::libc::rlimit {
+                    rlim_cur: 32 * 1024 * 1024,
+                    rlim_max: 32 * 1024 * 1024,
+                };
+                assert_eq!(
+                    unsafe { ctcore::libc::setrlimit(ctcore::libc::RLIMIT_AS, &limit) },
+                    0
+                );
+                let mut output = std::io::sink();
+                tac_main(&mut output, [OsString::from("tac")].into_iter()).unwrap();
+                return;
+            }
+
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::file_operations_tests::test_large_nonseekable_input_does_not_map_temporary_file",
+                ])
+                .env(CHILD_ENV, "1")
+                .stdin(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut child_stdin = child.stdin.take().unwrap();
+            let mut block = [b'x'; GNU_TAC_READ_SIZE];
+            block[GNU_TAC_READ_SIZE - 1] = b'\n';
+            for _ in 0..(64 * 1024 * 1024 / GNU_TAC_READ_SIZE) {
+                if child_stdin.write_all(&block).is_err() {
+                    break;
+                }
+            }
+            drop(child_stdin);
+            let status = child.wait().unwrap();
 
             assert!(status.success(), "child status: {status:?}");
         }

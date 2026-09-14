@@ -3,6 +3,50 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "负零点一Epoch按timespec规范输出秒-1和正纳秒900000000",
+      "args": ["-d", "@-0.1", "+%s.%N"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "-1.900000000\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "十位Epoch整数及九位小数保持十进制精度不经浮点舍入",
+      "args": ["-d", "@9999999999.999999999", "+%s.%N"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "9999999999.999999999\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "负Epoch第十位非零小数按GNU规则向负无穷取整到一纳秒",
+      "args": ["-d", "@-0.0000000001", "+%s.%N"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "-1.999999999\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU Epoch语法接受逗号小数分隔符并输出250000000纳秒",
+      "args": ["-d", "@1,25", "+%s.%N"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "1.250000000\n", "stderr": ""}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "重复-d选项采用最后一个日期字符串@1并输出Epoch秒1",
       "args": ["-d", "@0", "-d", "@1", "+%s"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

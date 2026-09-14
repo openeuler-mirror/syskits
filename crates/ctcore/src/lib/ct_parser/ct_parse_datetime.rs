@@ -76,9 +76,7 @@ pub fn parse_datetime_gnu_compat(
 
     // 负数/正数纪元秒 (Epoch: @-22, @31536000)
     if let Some(epoch_str) = input_trim.strip_prefix('@') {
-        if let Ok(secs) = epoch_str.parse::<f64>() {
-            let s = secs.trunc() as i64;
-            let ns = (secs.fract().abs() * 1_000_000_000.0) as u32;
+        if let Some((s, ns)) = parse_epoch_decimal(epoch_str) {
             if let Some(dt) = chrono::DateTime::from_timestamp(s, ns) {
                 return Ok(dt.with_timezone(&Local));
             }
@@ -475,6 +473,59 @@ pub fn parse_datetime_gnu_compat(
             message: format!("Unable to parse date: {input}"),
         }),
     }
+}
+
+fn parse_epoch_decimal(input: &str) -> Option<(i64, u32)> {
+    let (negative, unsigned) = match input.as_bytes().first() {
+        Some(b'-') => (true, &input[1..]),
+        Some(b'+') => (false, &input[1..]),
+        _ => (false, input),
+    };
+
+    let separator = unsigned
+        .bytes()
+        .position(|byte| byte == b'.' || byte == b',');
+    let (integer, fraction) = match separator {
+        Some(index) => (&unsigned[..index], Some(&unsigned[index + 1..])),
+        None => (unsigned, None),
+    };
+    if integer.is_empty() || !integer.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+
+    let magnitude = integer.parse::<i128>().ok()?;
+    let signed = if negative { -magnitude } else { magnitude };
+    let mut seconds = i64::try_from(signed).ok()?;
+    let mut nanoseconds = 0_u32;
+
+    if let Some(fraction) = fraction {
+        if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+
+        for index in 0..9 {
+            nanoseconds *= 10;
+            if let Some(digit) = fraction.as_bytes().get(index) {
+                nanoseconds += u32::from(*digit - b'0');
+            }
+        }
+
+        if negative
+            && fraction
+                .as_bytes()
+                .get(9..)
+                .is_some_and(|rest| rest.iter().any(|digit| *digit != b'0'))
+        {
+            nanoseconds += 1;
+        }
+
+        if negative && nanoseconds != 0 {
+            seconds = seconds.checked_sub(1)?;
+            nanoseconds = 1_000_000_000 - nanoseconds;
+        }
+    }
+
+    Some((seconds, nanoseconds))
 }
 
 fn military_timezone_offset_hours(tz_char: char) -> Option<Option<i32>> {

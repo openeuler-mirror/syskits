@@ -4621,4 +4621,23 @@ mod tests {
             vec!["only using last of multiple -s options"]
         );
     }
+
+    #[test]
+    fn test_epoch_decimal_parsing_is_exact() {
+        for (input, seconds, nanoseconds) in [
+            ("@-0.1", -1, 900_000_000),
+            ("@-1.1", -2, 900_000_000),
+            ("@9999999999.999999999", 9_999_999_999, 999_999_999),
+            ("@-0.0000000001", -1, 999_999_999),
+            ("@1,25", 1, 250_000_000),
+        ] {
+            let parsed = parse_date(input).unwrap();
+            assert_eq!(parsed.timestamp(), seconds, "input {input}");
+            assert_eq!(
+                parsed.timestamp_subsec_nanos(),
+                nanoseconds,
+                "input {input}"
+            );
+        }
+    }
 }

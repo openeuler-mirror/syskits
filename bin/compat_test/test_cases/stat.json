@@ -1055,6 +1055,47 @@
             "cleanup_commands": [
                 "rm -f $'a\\nb'"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C下使用有效UTF-8前缀和末尾不完整指令格式é%9；GNU先输出é，再报告仅包含%9的invalid directive；预期RC=1且不发生字符边界panic",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-c",
+                "é%9",
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "é",
+                    "stderr": "stat: '%9': invalid directive\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C下使用--printf格式éé\\x41|\\101；两个多字节字符之后分别解析十六进制41和八进制101为单字节A，预期RC=0、stdout完整内容为ééA|A且无换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--printf=éé\\x41|\\101",
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ééA|A",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

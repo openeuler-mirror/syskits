@@ -3,6 +3,22 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C和TZ=UTC0下输出固定Epoch日期到/dev/full，预期RC=1且stderr为GNU写错误诊断，不出现Rust panic",
+      "args": ["-d", "@0", "+%F"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "date: write error: No space left on device\n"
+        }
+      },
+      "environment": {"standardStreams": {"stdout": "full"}},
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "GNU月名日期允许时间位于年份之前",
       "args": ["-d", "Apr 11 22:59:00 2011", "+%F %T"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

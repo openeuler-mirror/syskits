@@ -630,6 +630,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "stat",
+            "description": "原始字节用例：LC_ALL=C；参数完整十六进制为2d2d7072696e74663d5c78（--printf=\\x）和2f（/）；预期RC=0、stdout完整十六进制为78（x）、stderr完整十六进制为737461743a207761726e696e673a20756e7265636f676e697a65642065736361706520275c78270a（stat: warning: unrecognized escape '\\x'和换行）",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2d2d7072696e74663d5c78",
+                "2f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "78",
+                    "stderr": "737461743a207761726e696e673a20756e7265636f676e697a65642065736361706520275c78270a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

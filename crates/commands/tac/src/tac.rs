@@ -33,8 +33,9 @@ use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
-use std::{fs::File, path::Path, path::PathBuf};
-use tempfile::Builder;
+use std::os::unix::fs::OpenOptionsExt;
+use std::{fs::File, fs::OpenOptions, path::Path, path::PathBuf};
+use tempfile::{Builder, NamedTempFile};
 
 const GNU_TAC_READ_SIZE: usize = 8192;
 
@@ -179,7 +180,7 @@ pub enum TacError {
     FlushError(std::io::Error),
 
     /// 无法创建用于缓存非可定位输入的临时文件。
-    TemporaryFileCreate(std::io::Error),
+    TemporaryFileCreate(OsString, std::io::Error),
 
     /// 写入用于缓存非可定位输入的临时文件时出错。
     TemporaryFileWrite(OsString, std::io::Error),
@@ -302,9 +303,10 @@ fn tac_error_message(error: &TacError, locale: &str) -> String {
             t!("tac.errors.write_error", locale = locale),
             strip_errno(error)
         ),
-        TacError::TemporaryFileCreate(error) => format!(
-            "{}: {}",
+        TacError::TemporaryFileCreate(path, error) => format!(
+            "{} {}: {}",
             t!("tac.errors.temporary_file_create", locale = locale),
+            tac_quote_path(path, true),
             strip_errno(error)
         ),
         TacError::TemporaryFileWrite(path, error) => format!(
@@ -605,11 +607,25 @@ fn tac_temporary_directory() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/tmp"))
 }
 
-fn read_from_nonseekable<R: Read>(mut reader: R, source: Option<&Path>) -> CTResult<FileData> {
-    let mut temporary = Builder::new()
+fn tac_create_temporary_file(directory: &Path) -> Result<NamedTempFile, TacError> {
+    let mut attempted_path = directory.join("cutmpXXXXXX");
+    Builder::new()
         .prefix("cutmp")
-        .tempfile_in(tac_temporary_directory())
-        .map_err(TacError::TemporaryFileCreate)?;
+        .make_in(directory, |path| {
+            attempted_path = path.to_path_buf();
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(path)
+        })
+        .map_err(|error| TacError::TemporaryFileCreate(attempted_path.into_os_string(), error))
+}
+
+fn read_from_nonseekable<R: Read>(mut reader: R, source: Option<&Path>) -> CTResult<FileData> {
+    let temporary_directory = tac_temporary_directory();
+    let mut temporary = tac_create_temporary_file(&temporary_directory)?;
     let temporary_name = temporary.path().as_os_str().to_os_string();
     let mut buffer = [0_u8; GNU_TAC_READ_SIZE];
 
@@ -1707,6 +1723,29 @@ mod tests {
             assert_eq!(error.to_string(), "write error");
             assert_eq!(error.code(), 1);
         }
+
+        #[test]
+        fn test_tac_temporary_create_error_includes_attempted_path() {
+            let error = TacError::TemporaryFileCreate(
+                OsString::from("/proc/cutmpXXXXXX"),
+                std::io::Error::from_raw_os_error(ctcore::libc::ENOENT),
+            );
+            assert_eq!(
+                tac_error_message(&error, "en-US"),
+                "failed to create temporary file '/proc/cutmpXXXXXX': No such file or directory"
+            );
+        }
+
+        #[test]
+        fn test_tac_temporary_create_failure_captures_generated_path() {
+            let error = tac_create_temporary_file(Path::new("/proc"))
+                .expect_err("procfs must reject regular temporary files");
+            let TacError::TemporaryFileCreate(path, _) = error else {
+                panic!("expected a temporary-file creation error");
+            };
+            assert!(path.as_bytes().starts_with(b"/proc/cutmp"));
+            assert_eq!(path.as_bytes().len(), b"/proc/cutmpXXXXXX".len());
+        }
     }
 
     #[cfg(test)]
@@ -1951,8 +1990,9 @@ mod tests {
                 assert!(
                     error
                         .to_string()
-                        .starts_with("failed to create temporary file:")
+                        .starts_with("failed to create temporary file '/proc/cutmp")
                 );
+                assert!(error.to_string().ends_with(": No such file or directory"));
                 return;
             }
 

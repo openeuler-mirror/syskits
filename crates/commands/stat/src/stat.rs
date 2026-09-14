@@ -667,7 +667,7 @@ impl Stater {
                         StatToken::Char('x')
                     }
                 } else {
-                    ct_show_warning!("incomplete hex escape '\\x'");
+                    ct_show_warning!("unrecognized escape '\\x'");
                     StatToken::Char('x')
                 }
             }

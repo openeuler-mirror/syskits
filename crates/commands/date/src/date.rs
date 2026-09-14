@@ -1459,6 +1459,44 @@ fn format_gnu_number_string(
     out
 }
 
+#[cfg(target_os = "linux")]
+fn gnu_numeric_field(dt: &DateTime<FixedOffset>, spec: u8) -> Option<(u64, usize, StrftimePad)> {
+    let hour12 = match dt.hour() % 12 {
+        0 => 12,
+        hour => hour,
+    };
+    let zero_pad = StrftimePad::Zero;
+    let space_pad = StrftimePad::Space;
+
+    match spec {
+        b'd' => Some((dt.day() as u64, 2, zero_pad)),
+        b'e' => Some((dt.day() as u64, 2, space_pad)),
+        b'H' => Some((dt.hour() as u64, 2, zero_pad)),
+        b'I' => Some((hour12 as u64, 2, zero_pad)),
+        b'j' => Some((dt.ordinal() as u64, 3, zero_pad)),
+        b'k' => Some((dt.hour() as u64, 2, space_pad)),
+        b'l' => Some((hour12 as u64, 2, space_pad)),
+        b'M' => Some((dt.minute() as u64, 2, zero_pad)),
+        b'm' => Some((dt.month() as u64, 2, zero_pad)),
+        b'q' => Some(((dt.month0() / 3 + 1) as u64, 1, zero_pad)),
+        b'S' => Some((dt.second() as u64, 2, zero_pad)),
+        b'u' => Some((dt.weekday().number_from_monday() as u64, 1, zero_pad)),
+        b'U' => Some((
+            ((dt.ordinal0() + 7 - dt.weekday().num_days_from_sunday()) / 7) as u64,
+            2,
+            zero_pad,
+        )),
+        b'V' => Some((dt.iso_week().week() as u64, 2, zero_pad)),
+        b'w' => Some((dt.weekday().num_days_from_sunday() as u64, 1, zero_pad)),
+        b'W' => Some((
+            ((dt.ordinal0() + 7 - dt.weekday().num_days_from_monday()) / 7) as u64,
+            2,
+            zero_pad,
+        )),
+        _ => None,
+    }
+}
+
 fn res_width_from_nsec(res_nsec: i64) -> usize {
     let mut width = 9;
     let mut temp = res_nsec;
@@ -1607,6 +1645,29 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 let spec = fmt[index];
                 index += 1;
                 match spec {
+                    b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'q' | b'S'
+                    | b'u' | b'U' | b'V' | b'w' | b'W'
+                        if !width_bytes.is_empty() && modifier.is_none() && !has_plus =>
+                    {
+                        let (value, digits, default_pad) =
+                            gnu_numeric_field(dt, spec).expect("matched numeric date field");
+                        let field_pad = if pad == StrftimePad::Default {
+                            default_pad
+                        } else {
+                            pad
+                        };
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_number(
+                                value,
+                                false,
+                                digits,
+                                parse_strftime_width(width_str),
+                                field_pad,
+                                false,
+                            )
+                            .as_bytes(),
+                        );
+                    }
                     b's' => {
                         let mut s_val = format!("{}", dt.timestamp());
                         let w = width_str.parse::<usize>().unwrap_or(0);
@@ -2050,6 +2111,26 @@ mod tests {
         let wide_nsec = format_using_strftime(&dt, "%99N").unwrap();
         assert_eq!(wide_nsec.len(), 99);
         assert!(wide_nsec.chars().all(|c| c == '0'));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_numeric_field_widths_override_default_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+            .unwrap();
+
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%1m|%1d|%1e|%1H|%1I|%1k|%1l|%1M|%1S|%2j|%1u|%1w|%1U|%1V|%1W|%4q|%3m|%_3m|%-3m",
+            )
+            .unwrap(),
+            "1|2|2|3|3|3|3|4|5|02|2|2|0|1|1|0001|001|  1|1"
+        );
     }
 
     #[cfg(target_os = "linux")]

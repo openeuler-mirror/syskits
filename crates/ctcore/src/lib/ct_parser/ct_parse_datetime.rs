@@ -21,6 +21,8 @@ use chrono::{
     DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Weekday,
 };
 use chrono_tz::Tz;
+#[cfg(target_os = "linux")]
+use std::ffi::CStr;
 
 /// 日期时间解析错误
 #[derive(Debug, Clone)]
@@ -122,6 +124,16 @@ pub fn parse_datetime_gnu_compat(
                 }
             }
         }
+    }
+
+    if let Some(local_result) = parse_gnu_local_timezone(input_trim, reference_time) {
+        return local_result.ok_or_else(|| ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
+    if let Some(dt) = parse_gnu_named_timezone(input_trim, reference_time) {
+        return Ok(dt);
     }
 
     if let Some(dt) = parse_embedded_timezone(input_trim) {
@@ -604,6 +616,209 @@ fn parse_military_timezone_only(
     }
 }
 
+const GNU_NAMED_TIMEZONES: &[(&str, i32)] = &[
+    ("GMT", 0),
+    ("UT", 0),
+    ("UTC", 0),
+    ("WET", 0),
+    ("WEST", 3_600),
+    ("BST", 3_600),
+    ("ART", -10_800),
+    ("BRT", -10_800),
+    ("BRST", -7_200),
+    ("NST", -12_600),
+    ("NDT", -9_000),
+    ("AST", -14_400),
+    ("ADT", -10_800),
+    ("CLT", -14_400),
+    ("CLST", -10_800),
+    ("EST", -18_000),
+    ("EDT", -14_400),
+    ("CST", -21_600),
+    ("CDT", -18_000),
+    ("MST", -25_200),
+    ("MDT", -21_600),
+    ("PST", -28_800),
+    ("PDT", -25_200),
+    ("AKST", -32_400),
+    ("AKDT", -28_800),
+    ("HST", -36_000),
+    ("HAST", -36_000),
+    ("HADT", -32_400),
+    ("SST", -43_200),
+    ("WAT", 3_600),
+    ("CET", 3_600),
+    ("CEST", 7_200),
+    ("MET", 3_600),
+    ("MEZ", 3_600),
+    ("MEST", 7_200),
+    ("MESZ", 7_200),
+    ("EET", 7_200),
+    ("EEST", 10_800),
+    ("CAT", 7_200),
+    ("SAST", 7_200),
+    ("EAT", 10_800),
+    ("MSK", 10_800),
+    ("MSD", 14_400),
+    ("IST", 19_800),
+    ("SGT", 28_800),
+    ("KST", 32_400),
+    ("JST", 32_400),
+    ("GST", 36_000),
+    ("NZST", 43_200),
+    ("NZDT", 46_800),
+];
+
+const GNU_DAYLIGHT_TIMEZONES: &[&str] = &[
+    "WEST", "BST", "BRST", "NDT", "ADT", "CLST", "EDT", "CDT", "MDT", "PDT", "AKDT", "HADT",
+    "CEST", "MEST", "MESZ", "EEST", "MSD", "NZDT",
+];
+
+fn parse_gnu_local_timezone(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<Option<DateTime<Local>>> {
+    let candidates: Vec<(String, bool)> = (0..=3)
+        .map(|quarter| reference_time + Duration::days(quarter * 90))
+        .filter_map(|probe| local_timezone_info(probe.timestamp()))
+        .filter(|(name, _)| {
+            !name.is_empty()
+                && name.bytes().all(|byte| byte.is_ascii_alphabetic())
+                && !["GMT", "UT", "UTC"].contains(&name.as_str())
+        })
+        .collect();
+
+    let bytes = input.as_bytes();
+    let (start, end, zone_name) = candidates
+        .iter()
+        .flat_map(|(name, _)| {
+            bytes
+                .windows(name.len())
+                .enumerate()
+                .filter(move |(index, candidate)| {
+                    candidate.eq_ignore_ascii_case(name.as_bytes())
+                        && (*index == 0 || !bytes[*index - 1].is_ascii_alphabetic())
+                        && (*index + name.len() == bytes.len()
+                            || !bytes[*index + name.len()].is_ascii_alphabetic())
+                })
+                .map(move |(index, _)| (index, index + name.len(), name.as_str()))
+        })
+        .min_by_key(|(start, _, _)| *start)?;
+
+    let suffix = &input[end..];
+    let trimmed_suffix = suffix.trim_start();
+    let has_dst_suffix = trimmed_suffix
+        .get(..3)
+        .is_some_and(|word| word.eq_ignore_ascii_case("DST"))
+        && trimmed_suffix
+            .as_bytes()
+            .get(3)
+            .is_none_or(|byte| !byte.is_ascii_alphabetic());
+    let suffix_start = if has_dst_suffix {
+        end + (suffix.len() - trimmed_suffix.len()) + 3
+    } else {
+        end
+    };
+
+    let wall_time_input = format!("{} {}", &input[..start], &input[suffix_start..]);
+    let parsed = match parse_datetime_gnu_compat(wall_time_input.trim(), reference_time) {
+        Ok(parsed) => parsed,
+        Err(_) => return Some(None),
+    };
+    let (parsed_zone_name, parsed_is_dst) = match local_timezone_info(parsed.timestamp()) {
+        Some(info) => info,
+        None => return Some(None),
+    };
+    if has_dst_suffix {
+        Some(parsed_is_dst.then_some(parsed))
+    } else {
+        Some(
+            parsed_zone_name
+                .eq_ignore_ascii_case(zone_name)
+                .then_some(parsed),
+        )
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn local_timezone_info(timestamp: i64) -> Option<(String, bool)> {
+    let timestamp: libc::time_t = timestamp;
+    let mut local_tm = std::mem::MaybeUninit::<libc::tm>::uninit();
+    let result = unsafe { libc::localtime_r(&timestamp, local_tm.as_mut_ptr()) };
+    if result.is_null() {
+        return None;
+    }
+    let local_tm = unsafe { local_tm.assume_init() };
+    if local_tm.tm_zone.is_null() {
+        return None;
+    }
+    let name = unsafe { CStr::from_ptr(local_tm.tm_zone) }
+        .to_str()
+        .ok()?
+        .to_string();
+    Some((name, local_tm.tm_isdst > 0))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn local_timezone_info(_timestamp: i64) -> Option<(String, bool)> {
+    None
+}
+
+fn parse_gnu_named_timezone(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let bytes = input.as_bytes();
+    let (start, end, mut offset_seconds, zone_name) = GNU_NAMED_TIMEZONES
+        .iter()
+        .flat_map(|(name, offset)| {
+            bytes
+                .windows(name.len())
+                .enumerate()
+                .filter(move |(index, candidate)| {
+                    candidate.eq_ignore_ascii_case(name.as_bytes())
+                        && (*index == 0 || !bytes[*index - 1].is_ascii_alphabetic())
+                        && (*index + name.len() == bytes.len()
+                            || !bytes[*index + name.len()].is_ascii_alphabetic())
+                })
+                .map(move |(index, _)| (index, index + name.len(), *offset, *name))
+        })
+        .min_by_key(|(start, _, _, _)| *start)?;
+
+    let mut suffix_start = end;
+    let suffix = &input[end..];
+    let trimmed_suffix = suffix.trim_start();
+    if trimmed_suffix
+        .get(..3)
+        .is_some_and(|word| word.eq_ignore_ascii_case("DST"))
+        && trimmed_suffix
+            .as_bytes()
+            .get(3)
+            .is_none_or(|byte| !byte.is_ascii_alphabetic())
+    {
+        if GNU_DAYLIGHT_TIMEZONES.contains(&zone_name) {
+            return None;
+        }
+        offset_seconds += 3_600;
+        suffix_start = end + (suffix.len() - trimmed_suffix.len()) + 3;
+    }
+
+    let wall_time_input = format!("{} {}", &input[..start], &input[suffix_start..]);
+    let wall_time_input = wall_time_input.trim();
+    let naive = if wall_time_input.is_empty() {
+        reference_time.date_naive().and_hms_opt(0, 0, 0)?
+    } else {
+        parse_datetime_gnu_compat(wall_time_input, reference_time)
+            .ok()?
+            .naive_local()
+    };
+    let offset = FixedOffset::east_opt(offset_seconds)?;
+    offset
+        .from_local_datetime(&naive)
+        .earliest()
+        .map(|date| date.with_timezone(&Local))
+}
+
 fn parse_embedded_timezone(input: &str) -> Option<DateTime<Local>> {
     let rest = input.strip_prefix("TZ=\"")?;
     let quote_idx = rest.find('"')?;
@@ -1042,6 +1257,43 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_named_timezones() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_utc) in [
+            (
+                "2024-01-01 12:00 EST",
+                Utc.with_ymd_and_hms(2024, 1, 1, 17, 0, 0).unwrap(),
+            ),
+            (
+                "NST 2024-01-01 12:00",
+                Utc.with_ymd_and_hms(2024, 1, 1, 15, 30, 0).unwrap(),
+            ),
+            (
+                "2024-01-01 12:00IST",
+                Utc.with_ymd_and_hms(2024, 1, 1, 6, 30, 0).unwrap(),
+            ),
+            (
+                "2024-01-01 12:00 NZDT",
+                Utc.with_ymd_and_hms(2023, 12, 31, 23, 0, 0).unwrap(),
+            ),
+            (
+                "2024-01-01 12:00 EST DST",
+                Utc.with_ymd_and_hms(2024, 1, 1, 16, 0, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                expected_utc.timestamp(),
+                "input {input}"
+            );
+        }
+
+        assert!(parse_datetime_gnu_compat("2024-01-01 12:00 EDT DST", ref_time).is_err());
     }
 
     #[test]

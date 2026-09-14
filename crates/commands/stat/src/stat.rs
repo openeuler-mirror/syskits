@@ -18,6 +18,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use ctcore::libc::{self, mode_t};
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
 use rustix::fs::{AtFlags, StatxFlags, major, minor, statx};
@@ -82,6 +83,138 @@ struct StatFlags {
     is_sign: bool,
     is_group: bool,
     is_locale: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StatQuotingStyle {
+    Common(CtQuotingStyle),
+    Shell { escape: bool, always_quote: bool },
+    CMaybe,
+    Escape,
+    Locale { clocale: bool },
+}
+
+impl StatQuotingStyle {
+    fn parse(style: &str) -> Option<Self> {
+        let common = |style| Self::Common(style);
+        match style {
+            "literal" => Some(common(CtQuotingStyle::Literal { show_control: true })),
+            "shell" => Some(Self::Shell {
+                escape: false,
+                always_quote: false,
+            }),
+            "shell-always" => Some(Self::Shell {
+                escape: false,
+                always_quote: true,
+            }),
+            "shell-escape" => Some(Self::Shell {
+                escape: true,
+                always_quote: false,
+            }),
+            "shell-escape-always" => Some(Self::shell_escape_always()),
+            "c" => Some(common(CtQuotingStyle::C {
+                quotes: CtQuotes::Double,
+            })),
+            "c-maybe" => Some(Self::CMaybe),
+            "escape" => Some(Self::Escape),
+            "locale" => Some(Self::Locale { clocale: false }),
+            "clocale" => Some(Self::Locale { clocale: true }),
+            _ => None,
+        }
+    }
+
+    fn literal() -> Self {
+        Self::Common(CtQuotingStyle::Literal { show_control: true })
+    }
+
+    fn shell_escape_always() -> Self {
+        Self::Shell {
+            escape: true,
+            always_quote: true,
+        }
+    }
+
+    fn quote(self, name: &str) -> String {
+        match self {
+            Self::Common(style) => escape_name(OsStr::new(name), &style),
+            Self::Shell {
+                escape,
+                always_quote,
+            } => {
+                let style = CtQuotingStyle::Shell {
+                    escape,
+                    always_quote,
+                    show_control: true,
+                };
+                let escaped = escape_name(OsStr::new(name), &style);
+                if !escape && !always_quote && escaped == name && name.chars().any(char::is_control)
+                {
+                    format!("'{escaped}'")
+                } else {
+                    escaped
+                }
+            }
+            Self::CMaybe => {
+                let escaped = escape_quoting_component(name, Some('"'));
+                if escaped == name {
+                    name.to_string()
+                } else {
+                    format!("\"{escaped}\"")
+                }
+            }
+            Self::Escape => escape_quoting_component(name, None),
+            Self::Locale { clocale } => {
+                let (left, right) = locale_quoting_marks(clocale);
+                let escaped = escape_quoting_component(name, right.chars().next());
+                format!("{left}{escaped}{right}")
+            }
+        }
+    }
+}
+
+fn escape_quoting_component(name: &str, quote_to_escape: Option<char>) -> String {
+    let mut escaped = String::with_capacity(name.len());
+    for character in name.chars() {
+        match character {
+            '\x07' => escaped.push_str("\\a"),
+            '\x08' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\x0b' => escaped.push_str("\\v"),
+            '\x0c' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            '\\' => escaped.push_str("\\\\"),
+            c if Some(c) == quote_to_escape => {
+                escaped.push('\\');
+                escaped.push(c);
+            }
+            c => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+fn locale_quoting_marks(clocale: bool) -> (&'static str, &'static str) {
+    let message_locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    if message_locale.starts_with("ZH_CN") {
+        return ("\"", "\"");
+    }
+
+    // SAFETY: nl_langinfo returns a process-owned NUL-terminated string after setlocale.
+    let codeset = unsafe { CStr::from_ptr(libc::nl_langinfo(libc::CODESET)) }
+        .to_string_lossy()
+        .to_ascii_uppercase();
+    if matches!(codeset.as_str(), "UTF-8" | "UTF8") {
+        ("‘", "’")
+    } else if clocale {
+        ("\"", "\"")
+    } else {
+        ("'", "'")
+    }
 }
 
 fn device_major(device: u64) -> u64 {
@@ -369,6 +502,7 @@ struct Stater {
     mount_list: Option<Vec<String>>,
     default_tokens: Vec<StatToken>,
     default_dev_tokens: Vec<StatToken>,
+    quoting_style: StatQuotingStyle,
 }
 
 /// Prints a formatted output based on the provided output type, flags, width, and precision.
@@ -633,6 +767,36 @@ impl Stater {
                     .flatten(),
             )
             .any(|token| matches!(token, StatToken::Directive { format: 'm', .. }));
+        let uses_quoting_environment = is_from_user
+            && default_tokens.iter().any(|token| {
+                matches!(
+                    token,
+                    StatToken::Directive {
+                        flag,
+                        width: 0,
+                        precision: None,
+                        modifier: None,
+                        format: 'N',
+                    } if *flag == StatFlags::default()
+                )
+            });
+        let quoting_style = if uses_quoting_environment {
+            match std::env::var_os("QUOTING_STYLE") {
+                Some(value) => {
+                    let value = value.to_string_lossy();
+                    StatQuotingStyle::parse(&value).unwrap_or_else(|| {
+                        ct_show_error!(
+                            "ignoring invalid value of environment variable QUOTING_STYLE: {}",
+                            value.as_ref().quote()
+                        );
+                        StatQuotingStyle::shell_escape_always()
+                    })
+                }
+                None => StatQuotingStyle::shell_escape_always(),
+            }
+        } else {
+            StatQuotingStyle::literal()
+        };
 
         let mount_list = if is_show_fs || !requests_mount_point {
             None
@@ -660,6 +824,7 @@ impl Stater {
             mount_list,
             default_tokens,
             default_dev_tokens,
+            quoting_style,
         })
     }
 
@@ -1093,17 +1258,7 @@ impl Stater {
             'n' => StatOutputType::Str(display_name.to_string()),
             // quoted file name with dereference if symbolic link
             'N' => {
-                let quoting_style = std::env::var("QUOTING_STYLE").unwrap_or_default();
-
-                let format_quote = |s: &str| -> String {
-                    if !self.is_from_user {
-                        s.to_string()
-                    } else if quoting_style == "locale" {
-                        format!("'{}'", s.replace('\'', "\\'"))
-                    } else {
-                        s.quote().to_string()
-                    }
-                };
+                let format_quote = |s: &str| self.quoting_style.quote(s);
 
                 let file_name = if file_type.is_symlink() {
                     // 读取符号链接应该用真实解析出的 file，而不是字面量 display_name
@@ -2376,6 +2531,31 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.raw_os_error(), Some(libc::ENOSPC));
+    }
+
+    #[test]
+    fn parses_all_gnu_quoting_style_names() {
+        for style in [
+            "literal",
+            "shell",
+            "shell-always",
+            "shell-escape",
+            "shell-escape-always",
+            "c",
+            "c-maybe",
+            "escape",
+            "locale",
+            "clocale",
+        ] {
+            assert!(StatQuotingStyle::parse(style).is_some(), "style={style}");
+        }
+        assert!(StatQuotingStyle::parse("invalid").is_none());
+    }
+
+    #[test]
+    fn shell_quoting_wraps_names_containing_control_characters() {
+        let style = StatQuotingStyle::parse("shell").unwrap();
+        assert_eq!(style.quote("a\nb"), "'a\nb'");
     }
 
     #[test]

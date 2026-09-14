@@ -327,12 +327,20 @@ fn tac_error_message(error: &TacError, locale: &str) -> String {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示命令执行的结果
 pub fn tac_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    tac_main_with_stdout_state(writer, args, false)
+}
+
+fn tac_main_with_stdout_state<W: Write>(
+    writer: &mut W,
+    args: impl ctcore::Args,
+    stdout_was_closed: bool,
+) -> CTResult<()> {
     let _sigpipe_guard = SigpipeGuard::for_cli();
     initialize_tac_locale();
     let settings = tac_parse_invocation(args)?;
 
     // 使用配置执行主要逻辑
-    tac(writer, &settings)
+    tac(writer, &settings, stdout_was_closed)
 }
 
 fn initialize_tac_locale() {
@@ -1056,8 +1064,15 @@ fn tac_write_file_with_regex<W: Write>(
     settings: &TacFlags,
     pattern: Option<&mut GnuRegex>,
     write_error: &mut Option<std::io::Error>,
+    stdout_was_closed: bool,
 ) -> CTResult<()> {
     let data = get_file_data(filename)?;
+    if stdout_was_closed && !data.as_ref().is_empty() {
+        if write_error.is_none() {
+            *write_error = Some(std::io::Error::from_raw_os_error(ctcore::libc::EBADF));
+        }
+        return Ok(());
+    }
     if let Some(pattern) = pattern {
         tac_write_regex_slices(
             writer,
@@ -1076,6 +1091,20 @@ fn tac_write_file_with_regex<W: Write>(
         );
     }
     Ok(())
+}
+
+fn tac_finish_write_error<W: Write>(
+    writer: &mut W,
+    write_error: std::io::Error,
+    stdout_was_closed: bool,
+) -> CTResult<()> {
+    if stdout_was_closed {
+        return Err(
+            TacError::FlushError(std::io::Error::from_raw_os_error(ctcore::libc::EBADF)).into(),
+        );
+    }
+    writer.flush().map_err(TacError::FlushError)?;
+    Err(TacError::WriteError(write_error).into())
 }
 
 #[cfg(test)]
@@ -1113,7 +1142,7 @@ fn tac_process_file<W: Write>(
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示执行结果
-fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
+fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -> CTResult<()> {
     let mut has_error = false;
     let mut write_error = None;
     let mut read_stdin = false;
@@ -1127,6 +1156,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
             settings,
             pattern.as_mut(),
             &mut write_error,
+            stdout_was_closed,
         ) {
             Ok(()) => {}
             Err(error) => {
@@ -1141,8 +1171,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
     }
 
     if let Some(error) = write_error {
-        let _ = writer.flush();
-        return Err(TacError::WriteError(error).into());
+        return tac_finish_write_error(writer, error, stdout_was_closed);
     }
 
     writer.flush().map_err(TacError::FlushError)?;
@@ -1244,7 +1273,11 @@ impl Tool for Tac {
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let mut stdout = stdout().lock();
-        tac_main(&mut stdout, args.iter().cloned())
+        tac_main_with_stdout_state(
+            &mut stdout,
+            args.iter().cloned(),
+            ctcore::ct_stdout_was_closed(),
+        )
     }
 }
 
@@ -2332,6 +2365,24 @@ mod tests {
             }
         }
 
+        #[derive(Default)]
+        struct WriteAndFlushFailWriter {
+            write_count: usize,
+            flush_count: usize,
+        }
+
+        impl Write for WriteAndFlushFailWriter {
+            fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+                self.write_count += 1;
+                Err(io::Error::from_raw_os_error(ctcore::libc::EBADF))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                self.flush_count += 1;
+                Err(io::Error::from_raw_os_error(ctcore::libc::EBADF))
+            }
+        }
+
         #[test]
         fn test_tac_main_simple() {
             let mut temp_file = NamedTempFile::new().unwrap();
@@ -2424,6 +2475,54 @@ mod tests {
                 bytes_read > 0,
                 "operands after a stdout error must still be opened"
             );
+        }
+
+        #[test]
+        fn test_tac_main_preserves_errno_when_write_and_flush_fail() {
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(b"data").unwrap();
+            let args = [
+                OsString::from("tac"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = WriteAndFlushFailWriter::default();
+
+            let error = tac_main(&mut output, args.into_iter()).unwrap_err();
+
+            assert_eq!(output.write_count, 1);
+            assert_eq!(output.flush_count, 1);
+            assert_eq!(error.to_string(), "write error: Bad file descriptor");
+        }
+
+        #[test]
+        fn test_tac_write_error_restores_closed_stdout_errno() {
+            let mut output = WriteFailWriter::default();
+
+            let error = tac_finish_write_error(
+                &mut output,
+                io::Error::from_raw_os_error(ctcore::libc::ENOSPC),
+                true,
+            )
+            .unwrap_err();
+
+            assert_eq!(error.to_string(), "write error: Bad file descriptor");
+        }
+
+        #[test]
+        fn test_tac_closed_stdout_rejects_output_before_buffering() {
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(b"x").unwrap();
+            let args = [
+                OsString::from("tac"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            let error =
+                tac_main_with_stdout_state(&mut output, args.into_iter(), true).unwrap_err();
+
+            assert!(output.is_empty());
+            assert_eq!(error.to_string(), "write error: Bad file descriptor");
         }
 
         #[test]

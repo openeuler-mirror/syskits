@@ -3,6 +3,42 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "同时指定-R与--rfc-3339=seconds时GNU拒绝多个输出格式",
+      "args": ["-R", "--rfc-3339=seconds", "-d", "@0"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""},
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "同时指定--rfc-3339=date与-Iseconds时GNU拒绝多个输出格式",
+      "args": ["--rfc-3339=date", "-Iseconds", "-d", "@0"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""},
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "同时指定-R与位置+FORMAT时GNU拒绝多个输出格式",
+      "args": ["-R", "-d", "@0", "+%F"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": ""},
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "GNU历史别名--rfc-822等价于--rfc-email，固定Epoch输入应输出RFC 5322格式",
       "args": ["--rfc-822", "-d", "@0"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

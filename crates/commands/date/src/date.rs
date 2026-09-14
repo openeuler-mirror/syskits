@@ -1076,7 +1076,22 @@ fn get_date_source(args_match: &ArgMatches) -> DateSource {
 }
 
 fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> {
-    if args_match.contains_id(DATE_OPT_ISO_8601) && args_match.get_flag(DATE_OPT_RFC_EMAIL) {
+    let iso_8601_values = args_match
+        .get_many::<String>(DATE_OPT_ISO_8601)
+        .map(|values| values.collect::<Vec<_>>())
+        .unwrap_or_default();
+    let rfc_3339_values = args_match
+        .get_many::<String>(DATE_OPT_RFC_3339)
+        .map(|values| values.collect::<Vec<_>>())
+        .unwrap_or_default();
+    let rfc_email_count = usize::from(args_match.get_count(DATE_OPT_RFC_EMAIL));
+    let custom_format = args_match.get_one::<String>(DATE_OPT_FORMAT);
+    let format_count = iso_8601_values.len()
+        + rfc_email_count
+        + rfc_3339_values.len()
+        + usize::from(custom_format.is_some());
+
+    if format_count > 1 {
         return Err(Err(CtSimpleError::new(
             1,
             "multiple output formats specified",
@@ -1084,7 +1099,7 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
     }
 
     // 根据命令行参数确定日期格式
-    let date_format = if let Some(form) = args_match.get_one::<String>(DATE_OPT_FORMAT) {
+    let date_format = if let Some(form) = custom_format {
         if !form.starts_with('+') {
             return Err(Err(CtSimpleError::new(
                 1,
@@ -1093,20 +1108,13 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         }
         let form = form[1..].to_string();
         DateFormat::Custom(form)
-    } else if args_match.contains_id(DATE_OPT_ISO_8601) {
-        // 使用 contains_id + get_one，完美兼容 --iso-8601 和 --iso-8601=hours
-        let fmt = args_match
-            .get_one::<String>(DATE_OPT_ISO_8601)
-            .map(|s| s.as_str())
-            .unwrap_or(DATE);
+    } else if let Some(fmt) = iso_8601_values.last() {
+        let fmt = fmt.as_str();
         DateFormat::Iso8601(fmt.into())
-    } else if args_match.get_flag(DATE_OPT_RFC_EMAIL) {
+    } else if rfc_email_count != 0 {
         DateFormat::Rfc5322
-    } else if args_match.contains_id(DATE_OPT_RFC_3339) {
-        let fmt = args_match
-            .get_one::<String>(DATE_OPT_RFC_3339)
-            .map(|s| s.as_str())
-            .unwrap_or(DATE);
+    } else if let Some(fmt) = rfc_3339_values.last() {
+        let fmt = fmt.as_str();
         DateFormat::Rfc3339(fmt.into())
     } else if args_match.get_flag(DATE_OPT_RESOLUTION) {
         DateFormat::Custom("%s.%N".to_string())
@@ -1169,17 +1177,19 @@ fn date_args_init() -> Vec<Arg> {
             ]))
             .num_args(0..=1)
             .default_missing_value(DATE_OPT_DATE)
+            .action(ArgAction::Append)
             .help(DATE_ISO_8601_HELP_STRING),
         Arg::new(DATE_OPT_RFC_EMAIL)
             .short('R')
             .long(DATE_OPT_RFC_EMAIL)
             .aliases(["rfc-822", "rfc-2822"])
             .help(DATE_RFC_5322_HELP_STRING)
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(DATE_OPT_RFC_3339)
             .long(DATE_OPT_RFC_3339)
             .value_name("FMT")
             .value_parser(CtShortcutValueParser::new([DATE, SECONDS, NS]))
+            .action(ArgAction::Append)
             .help(DATE_RFC_3339_HELP_STRING),
         Arg::new(DATE_OPT_DEBUG)
             .long(DATE_OPT_DEBUG)
@@ -2594,7 +2604,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-R", "--rfc-email"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -3719,30 +3729,48 @@ mod tests {
         }
 
         #[test]
-        fn test_date_main_rfc_3339_ns() {
+        fn test_date_main_rfc_email_and_rfc_3339_ns_conflict() {
             let args = [ctcore::ct_util_name(), "-R", "--rfc-3339=ns"];
 
-            let result = date_main(args.iter().map(OsString::from));
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert!(result.is_ok());
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]
-        fn test_date_main_r_rfc_3339_date() {
+        fn test_date_main_rfc_email_and_rfc_3339_date_conflict() {
             let args = [ctcore::ct_util_name(), "-R", "--rfc-3339=date"];
 
-            let result = date_main(args.iter().map(OsString::from));
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert!(result.is_ok());
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]
-        fn test_date_main_r_rfc_3339_seconds() {
+        fn test_date_main_rfc_email_and_rfc_3339_seconds_conflict() {
             let args = [ctcore::ct_util_name(), "-R", "--rfc-3339=seconds"];
 
-            let result = date_main(args.iter().map(OsString::from));
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert!(result.is_ok());
+            assert_eq!(error.to_string(), "multiple output formats specified");
+        }
+
+        #[test]
+        fn test_date_main_iso_8601_and_rfc_3339_conflict() {
+            let args = [ctcore::ct_util_name(), "-Iseconds", "--rfc-3339=date"];
+
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple output formats specified");
+        }
+
+        #[test]
+        fn test_date_main_rfc_email_and_custom_format_conflict() {
+            let args = [ctcore::ct_util_name(), "-R", "+%F"];
+
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]
@@ -4260,9 +4288,9 @@ mod tests {
                 "--rfc-3339=ns",
             ];
 
-            let result = date_main(args.iter().map(OsString::from));
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert!(result.is_ok());
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]
@@ -4294,9 +4322,9 @@ mod tests {
                 "--rfc-3339=date",
             ];
 
-            let result = date_main(args.iter().map(OsString::from));
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert!(result.is_ok());
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]
@@ -4328,9 +4356,9 @@ mod tests {
                 "--rfc-3339=seconds",
             ];
 
-            let result = date_main(args.iter().map(OsString::from));
+            let error = date_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert!(result.is_ok());
+            assert_eq!(error.to_string(), "multiple output formats specified");
         }
 
         #[test]

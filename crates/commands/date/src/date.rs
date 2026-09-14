@@ -1173,6 +1173,7 @@ fn date_args_init() -> Vec<Arg> {
         Arg::new(DATE_OPT_RFC_EMAIL)
             .short('R')
             .long(DATE_OPT_RFC_EMAIL)
+            .aliases(["rfc-822", "rfc-2822"])
             .help(DATE_RFC_5322_HELP_STRING)
             .action(ArgAction::SetTrue),
         Arg::new(DATE_OPT_RFC_3339)
@@ -1201,6 +1202,7 @@ fn date_args_init() -> Vec<Arg> {
             .short('u')
             .long(DATE_OPT_UNIVERSAL)
             .visible_alias(DATE_OPT_UNIVERSAL_2)
+            .alias("uct")
             .help(t!("date.clap.date_opt_universal"))
             .action(ArgAction::SetTrue),
         Arg::new(DATE_OPT_RESOLUTION)
@@ -4435,5 +4437,16 @@ mod tests {
         test_date_format!(test_date_format_double_colon_z, "%::z"); // 数字时区，格式为±hh:mm:ss
         test_date_format!(test_date_format_triple_colon_z, "%:::z"); // 数字时区，以':'分隔至必要的精度
         test_date_format!(test_date_format_zz, "%Z"); // 字母时区缩写
+    }
+
+    #[test]
+    fn test_ct_app_accepts_historical_option_aliases() {
+        for args in [
+            vec![ctcore::ct_util_name(), "--rfc-822", "-d", "@0"],
+            vec![ctcore::ct_util_name(), "--rfc-2822", "-d", "@0"],
+            vec![ctcore::ct_util_name(), "--uct", "-d", "@0", "+%z"],
+        ] {
+            assert!(ct_app().try_get_matches_from(args).is_ok());
+        }
     }
 }

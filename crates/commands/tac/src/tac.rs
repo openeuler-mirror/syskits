@@ -185,6 +185,9 @@ pub enum TacError {
 
     /// 写入用于缓存非可定位输入的临时文件时出错。
     TemporaryFileWrite(OsString, std::io::Error),
+
+    /// 重置用于缓存后续非可定位输入的临时文件时出错。
+    TemporaryFileRewind(OsString, std::io::Error),
 }
 
 impl CTError for TacError {
@@ -314,6 +317,15 @@ fn tac_error_message(error: &TacError, locale: &str) -> String {
             "{}: {}: {}",
             tac_quote_path(path, false),
             t!("tac.errors.write_error", locale = locale),
+            strip_errno(error)
+        ),
+        TacError::TemporaryFileRewind(path, error) => format!(
+            "{}: {}",
+            t!(
+                "tac.errors.temporary_file_rewind",
+                locale = locale,
+                path = tac_quote_path(path, false)
+            ),
             strip_errno(error)
         ),
     }
@@ -643,15 +655,45 @@ fn tac_create_temporary_file(directory: &Path) -> Result<NamedTempFile, TacError
 }
 
 fn copy_nonseekable_to_temporary<R: Read>(
-    mut reader: R,
+    reader: R,
     source: Option<&Path>,
 ) -> CTResult<(NamedTempFile, u64)> {
-    let temporary_directory = tac_temporary_directory();
-    let mut temporary = tac_create_temporary_file(&temporary_directory)?;
-    // Match GNU temp_stream and avoid removing a different file if this path is later reused.
-    if std::fs::remove_file(temporary.path()).is_ok() {
-        temporary.disable_cleanup(true);
+    let mut reusable = None;
+    let bytes_copied = copy_nonseekable_to_reusable(reader, source, &mut reusable)?;
+    Ok((
+        reusable.expect("successful temporary copy initializes the stream"),
+        bytes_copied,
+    ))
+}
+
+fn copy_nonseekable_to_reusable<R: Read>(
+    mut reader: R,
+    source: Option<&Path>,
+    reusable: &mut Option<NamedTempFile>,
+) -> CTResult<u64> {
+    if reusable.is_none() {
+        let temporary_directory = tac_temporary_directory();
+        let mut temporary = tac_create_temporary_file(&temporary_directory)?;
+        // Match GNU temp_stream and avoid removing a different file if this path is later reused.
+        if std::fs::remove_file(temporary.path()).is_ok() {
+            temporary.disable_cleanup(true);
+        }
+        *reusable = Some(temporary);
+    } else {
+        let temporary = reusable
+            .as_mut()
+            .expect("the reusable stream is initialized");
+        let temporary_name = temporary.path().as_os_str().to_os_string();
+        temporary
+            .as_file_mut()
+            .seek(SeekFrom::Start(0))
+            .and_then(|_| temporary.as_file_mut().set_len(0))
+            .map_err(|error| TacError::TemporaryFileRewind(temporary_name, error))?;
     }
+
+    let temporary = reusable
+        .as_mut()
+        .expect("the reusable stream is initialized");
     let temporary_name = temporary.path().as_os_str().to_os_string();
     let mut buffer = [0_u8; GNU_TAC_READ_SIZE];
     let mut bytes_copied = 0_u64;
@@ -677,7 +719,7 @@ fn copy_nonseekable_to_temporary<R: Read>(
         .flush()
         .map_err(|error| TacError::TemporaryFileWrite(temporary_name.clone(), error))?;
 
-    Ok((temporary, bytes_copied))
+    Ok(bytes_copied)
 }
 
 fn read_from_nonseekable<R: Read>(reader: R, source: Option<&Path>) -> CTResult<FileData> {
@@ -1172,6 +1214,11 @@ struct TacSeekableInput<'a> {
     source: Option<&'a Path>,
 }
 
+struct TacInputState {
+    temporary_stream: Option<NamedTempFile>,
+    read_size: usize,
+}
+
 fn tac_write_seekable_fd<W: Write>(
     writer: &mut W,
     input: TacSeekableInput<'_>,
@@ -1303,7 +1350,7 @@ fn tac_write_file_with_regex<W: Write>(
     filename: &OsStr,
     settings: &TacFlags,
     pattern: Option<&mut GnuRegex>,
-    read_size: &mut usize,
+    input_state: &mut TacInputState,
     write_error: &mut Option<std::io::Error>,
     stdout_was_closed: bool,
 ) -> CTResult<()> {
@@ -1319,14 +1366,21 @@ fn tac_write_file_with_regex<W: Write>(
                     },
                     settings,
                     pattern,
-                    read_size,
+                    &mut input_state.read_size,
                     write_error,
                     stdout_was_closed,
                 );
             }
 
-            let (temporary, file_size) =
-                copy_nonseekable_to_temporary(ctcore::ct_io::stdin_reader_box(), None)?;
+            let file_size = copy_nonseekable_to_reusable(
+                ctcore::ct_io::stdin_reader_box(),
+                None,
+                &mut input_state.temporary_stream,
+            )?;
+            let temporary = input_state
+                .temporary_stream
+                .as_ref()
+                .expect("successful temporary copy initializes the stream");
             return tac_write_seekable_fd(
                 writer,
                 TacSeekableInput {
@@ -1336,7 +1390,7 @@ fn tac_write_file_with_regex<W: Write>(
                 },
                 settings,
                 pattern,
-                read_size,
+                &mut input_state.read_size,
                 write_error,
                 stdout_was_closed,
             );
@@ -1355,7 +1409,7 @@ fn tac_write_file_with_regex<W: Write>(
                 },
                 settings,
                 pattern,
-                read_size,
+                &mut input_state.read_size,
                 write_error,
                 stdout_was_closed,
             );
@@ -1363,7 +1417,12 @@ fn tac_write_file_with_regex<W: Write>(
         if !file.metadata().is_ok_and(|metadata| metadata.is_dir())
             && !tac_seek_to_start_if_seek_end_supported(file.as_raw_fd())
         {
-            let (temporary, file_size) = copy_nonseekable_to_temporary(file, Some(path))?;
+            let file_size =
+                copy_nonseekable_to_reusable(file, Some(path), &mut input_state.temporary_stream)?;
+            let temporary = input_state
+                .temporary_stream
+                .as_ref()
+                .expect("successful temporary copy initializes the stream");
             return tac_write_seekable_fd(
                 writer,
                 TacSeekableInput {
@@ -1373,7 +1432,7 @@ fn tac_write_file_with_regex<W: Write>(
                 },
                 settings,
                 pattern,
-                read_size,
+                &mut input_state.read_size,
                 write_error,
                 stdout_was_closed,
             );
@@ -1471,6 +1530,10 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -
             read_size = read_size.checked_mul(2).ok_or(TacError::RecordTooLarge)?;
         }
     }
+    let mut input_state = TacInputState {
+        temporary_stream: None,
+        read_size,
+    };
 
     for filename in &settings.files {
         read_stdin |= filename.as_bytes() == b"-";
@@ -1479,7 +1542,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -
             filename,
             settings,
             pattern.as_mut(),
-            &mut read_size,
+            &mut input_state,
             &mut write_error,
             stdout_was_closed,
         ) {
@@ -2319,6 +2382,78 @@ mod tests {
                 .read_to_end(&mut contents)
                 .expect("the unlinked temporary file must remain readable");
             assert_eq!(contents, b"first\nsecond\n");
+        }
+
+        #[test]
+        fn test_tac_main_reuses_temporary_file_across_nonseekable_operands() {
+            const CHILD_ENV: &str = "TAC_REUSABLE_TEMPORARY_CHILD";
+            if std::env::var_os(CHILD_ENV).is_some() {
+                let directory = tempdir().unwrap();
+                unsafe {
+                    std::env::set_var("TMPDIR", directory.path());
+                }
+                let directory_path = CString::new(directory.path().as_os_str().as_bytes()).unwrap();
+                let inotify_fd = unsafe {
+                    ctcore::libc::inotify_init1(
+                        ctcore::libc::IN_NONBLOCK | ctcore::libc::IN_CLOEXEC,
+                    )
+                };
+                assert!(inotify_fd >= 0);
+                assert!(
+                    unsafe {
+                        ctcore::libc::inotify_add_watch(
+                            inotify_fd,
+                            directory_path.as_ptr(),
+                            ctcore::libc::IN_CREATE,
+                        )
+                    } >= 0
+                );
+
+                let mut output = std::io::sink();
+                tac_main(
+                    &mut output,
+                    ["tac", "/proc/self/status", "/proc/self/status"]
+                        .into_iter()
+                        .map(OsString::from),
+                )
+                .unwrap();
+
+                let mut events = [0_u8; 4096];
+                let bytes_read = unsafe {
+                    ctcore::libc::read(inotify_fd, events.as_mut_ptr().cast(), events.len())
+                };
+                unsafe {
+                    ctcore::libc::close(inotify_fd);
+                }
+                assert!(bytes_read > 0);
+                let mut offset = 0_usize;
+                let mut create_count = 0_usize;
+                while offset < bytes_read as usize {
+                    let event = unsafe {
+                        &*events
+                            .as_ptr()
+                            .add(offset)
+                            .cast::<ctcore::libc::inotify_event>()
+                    };
+                    if event.mask & ctcore::libc::IN_CREATE != 0 {
+                        create_count += 1;
+                    }
+                    offset +=
+                        std::mem::size_of::<ctcore::libc::inotify_event>() + event.len as usize;
+                }
+                assert_eq!(create_count, 1, "GNU tac reuses one temporary stream");
+                return;
+            }
+
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::file_operations_tests::test_tac_main_reuses_temporary_file_across_nonseekable_operands",
+                ])
+                .env(CHILD_ENV, "1")
+                .status()
+                .unwrap();
+            assert!(status.success(), "child status: {status:?}");
         }
 
         #[test]

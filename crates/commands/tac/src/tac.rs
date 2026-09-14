@@ -487,12 +487,22 @@ fn tac_command() -> Command {
             .action(ArgAction::Append)
             .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
+        Arg::new("help")
+            .long("help")
+            .help("display this help and exit")
+            .action(ArgAction::Help),
+        Arg::new("version")
+            .long("version")
+            .help("output version information and exit")
+            .action(ArgAction::Version),
     ];
 
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args_override_self(true)
         .infer_long_args(true)
         .args(&args)
@@ -848,7 +858,7 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
 }
 
 const TAC_LONG_OPTIONS: &[&str] = &["before", "regex", "separator", "help", "version"];
-const TAC_SHORT_OPTIONS: &[u8] = b"brshV";
+const TAC_SHORT_OPTIONS: &[u8] = b"brs";
 
 enum TacLongOptionMatch {
     None,
@@ -953,9 +963,6 @@ fn tac_validate_options(args: &[OsString], posixly_correct: bool) -> CTResult<()
                 message.push(option);
                 message.push(b'\'');
                 return Err(TacUsageError::boxed(message));
-            }
-            if matches!(option, b'h' | b'V') {
-                return Ok(());
             }
             if option == b's' {
                 if option_index + 1 < argument.len() {
@@ -1797,6 +1804,8 @@ mod tests {
                     "unrecognized option '--bad_flag'",
                 ),
                 (vec!["tac", "-x"], "invalid option -- 'x'"),
+                (vec!["tac", "-h"], "invalid option -- 'h'"),
+                (vec!["tac", "-bV"], "invalid option -- 'V'"),
                 (
                     vec!["tac", "--before=x"],
                     "option '--before' doesn't allow an argument",

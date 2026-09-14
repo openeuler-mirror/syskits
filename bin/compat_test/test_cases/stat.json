@@ -831,6 +831,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C且TZ=UTC0；将文件访问时间固定为Epoch前0.123456789秒；分别验证无精度、默认9位精度、3位精度及宽度13零填充6位精度，预期按数学负小数而非规范化timespec字段直接拼接",
+            "setup_commands": [
+                "export LC_ALL='C' TZ='UTC0'",
+                "touch stat_negative_epoch",
+                "touch -a -d '1969-12-31 23:59:59.876543211 UTC' stat_negative_epoch"
+            ],
+            "args": [
+                "-c",
+                "%X|%.X|%.3X|%013.6X",
+                "stat_negative_epoch"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-1|-0.123456789|-0.123|-00000.123456\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_negative_epoch"
+            ]
         }
     ]
 }

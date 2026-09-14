@@ -773,24 +773,26 @@ impl Stater {
 
     fn configure_format(matches: &ArgMatches) -> CTResult<(Vec<StatToken>, Vec<StatToken>)> {
         let format_str = if matches.contains_id(stat_options::STAT_PRINTF) {
-            matches
-                .get_one::<String>(stat_options::STAT_PRINTF)
-                .expect("Invalid format string")
+            Some(
+                matches
+                    .get_one::<String>(stat_options::STAT_PRINTF)
+                    .expect("Invalid format string")
+                    .as_str(),
+            )
         } else {
             matches
                 .get_one::<String>(stat_options::STAT_FORMAT)
                 .map(|s| s.as_str())
-                .unwrap_or("")
         };
 
         let use_printf = matches.contains_id(stat_options::STAT_PRINTF);
         let terse = matches.get_flag(stat_options::STAT_TERSE);
         let show_fs = matches.get_flag(stat_options::STAT_FILE_SYSTEM);
 
-        let default_tokens = if format_str.is_empty() {
-            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
-        } else {
+        let default_tokens = if let Some(format_str) = format_str {
             Self::generate_tokens(format_str, use_printf)?
+        } else {
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), false)?
         };
 
         let default_dev_tokens =
@@ -2747,8 +2749,11 @@ mod test_stat_all {
 
         let matches = create_test_matches(vec!["file.txt"], false, Some(""), false);
         let (tokens, _) = Stater::configure_format(&matches).unwrap();
-        // Empty format uses default format
-        assert!(!tokens.is_empty());
+        assert_eq!(tokens, vec![StatToken::Char('\n')]);
+
+        let matches = create_test_matches(vec!["file.txt"], false, Some(""), true);
+        let (tokens, _) = Stater::configure_format(&matches).unwrap();
+        assert!(tokens.is_empty());
     }
 
     #[test]

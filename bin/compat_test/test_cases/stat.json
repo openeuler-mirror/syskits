@@ -559,6 +559,53 @@
             "cleanup_commands": [
                 "rm -f printf_order_file"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；显式指定空的-c格式；空格式仍是用户格式并自动追加换行，预期RC=0、stdout完整内容为一个换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch empty_format_file"
+            ],
+            "args": [
+                "-c",
+                "",
+                "empty_format_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f empty_format_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；显式指定空的--printf格式；空格式不输出默认状态且不追加换行，预期RC=0、stdout和stderr均为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch empty_printf_file"
+            ],
+            "args": [
+                "--printf=",
+                "empty_printf_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f empty_printf_file"
+            ]
         }
     ]
 }

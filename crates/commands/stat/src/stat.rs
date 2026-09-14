@@ -227,12 +227,7 @@ impl ScanUtil for str {
             }
             match c.to_digit(radix) {
                 Some(digit) => {
-                    let tmp = res * radix + digit;
-                    if tmp < 256 {
-                        res = tmp;
-                    } else {
-                        break;
-                    }
+                    res = res * radix + digit;
                 }
                 None => break,
             }
@@ -2550,6 +2545,9 @@ mod tests {
         assert_eq!(Some((b'a', 3)), "141zxc".scan_char(8));
         assert_eq!(Some((b'\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
         assert_eq!(Some((b'\r', 1)), "dqzxc".scan_char(16)); // spell-checker:disable-line
+        assert_eq!(Some((0xff, 3)), "777".scan_char(8));
+        assert_eq!(Some((0x00, 3)), "400".scan_char(8));
+        assert_eq!(Some((0x3f, 3)), "477".scan_char(8));
         assert_eq!(None, "z2qzxc".scan_char(8)); // spell-checker:disable-line
     }
 

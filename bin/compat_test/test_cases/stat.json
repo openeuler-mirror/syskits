@@ -651,6 +651,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "stat",
+            "description": "原始字节用例：LC_ALL=C；参数完整十六进制为2d2d7072696e74663d5c3737377c5c3430307c5c343737（--printf=\\777|\\400|\\477）和2f（/）；三个三位八进制值均完整消费并截断为单字节，预期RC=0、stdout完整十六进制为ff7c007c3f、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2d2d7072696e74663d5c3737377c5c3430307c5c343737",
+                "2f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff7c007c3f",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

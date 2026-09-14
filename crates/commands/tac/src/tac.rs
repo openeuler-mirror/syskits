@@ -21,7 +21,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, strip_errno};
 
 use ctcore::Tool;
-use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
+use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError, GnuRegexMatch};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use memchr::memmem;
@@ -31,6 +31,7 @@ use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::mem::MaybeUninit;
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
@@ -675,6 +676,100 @@ fn tac_seek_to_start_if_seek_end_supported(fd: ctcore::libc::c_int) -> bool {
     }
 }
 
+fn tac_regular_file_size(fd: ctcore::libc::c_int) -> Option<u64> {
+    let mut metadata = MaybeUninit::<ctcore::libc::stat>::uninit();
+    if unsafe { ctcore::libc::fstat(fd, metadata.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    let metadata = unsafe { metadata.assume_init() };
+    if metadata.st_mode & ctcore::libc::S_IFMT != ctcore::libc::S_IFREG {
+        return None;
+    }
+
+    let end = unsafe { ctcore::libc::lseek(fd, 0, ctcore::libc::SEEK_END) };
+    (end >= 0).then_some(end as u64)
+}
+
+fn tac_pread_some(
+    fd: ctcore::libc::c_int,
+    offset: u64,
+    buffer: &mut [u8],
+    source: Option<&Path>,
+) -> CTResult<usize> {
+    loop {
+        let count = unsafe {
+            ctcore::libc::pread(
+                fd,
+                buffer.as_mut_ptr().cast(),
+                buffer.len(),
+                offset as ctcore::libc::off_t,
+            )
+        };
+        if count < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(tac_input_read_error(source, error).into());
+        }
+        return Ok(count as usize);
+    }
+}
+
+fn tac_pread_exact(
+    fd: ctcore::libc::c_int,
+    mut offset: u64,
+    mut buffer: &mut [u8],
+    source: Option<&Path>,
+) -> CTResult<()> {
+    while !buffer.is_empty() {
+        let count = tac_pread_some(fd, offset, buffer, source)?;
+        if count == 0 {
+            return Err(tac_input_read_error(
+                source,
+                std::io::Error::from(std::io::ErrorKind::UnexpectedEof),
+            )
+            .into());
+        }
+
+        offset += count as u64;
+        buffer = &mut buffer[count..];
+    }
+    Ok(())
+}
+
+fn tac_actual_file_size(
+    fd: ctcore::libc::c_int,
+    estimated_size: u64,
+    read_size: usize,
+    source: Option<&Path>,
+) -> CTResult<u64> {
+    let read_size_u64 = read_size as u64;
+    let mut offset = estimated_size - estimated_size % read_size_u64;
+    let mut buffer = vec![0_u8; read_size];
+
+    loop {
+        let count = tac_pread_some(fd, offset, &mut buffer, source)?;
+        if count == 0 && offset != 0 {
+            offset = offset.saturating_sub(read_size_u64);
+            continue;
+        }
+        offset += count as u64;
+        if count < read_size {
+            return Ok(offset);
+        }
+        break;
+    }
+
+    loop {
+        let count = tac_pread_some(fd, offset, &mut buffer, source)?;
+        offset += count as u64;
+        if count < read_size {
+            return Ok(offset);
+        }
+    }
+}
+
 /// 文件数据的枚举类型，支持内存映射和缓冲区两种模式
 #[derive(Debug)]
 enum FileData {
@@ -689,6 +784,20 @@ impl AsRef<[u8]> for FileData {
             FileData::Mapped(mmap) => mmap.as_ref(),
             FileData::Buffer(buf) => buf.as_ref(),
         }
+    }
+}
+
+fn get_open_file_data(file: File, path: &Path) -> CTResult<FileData> {
+    if file.metadata().is_ok_and(|metadata| metadata.is_dir()) {
+        return read_from_directory(file, path).map(FileData::Buffer);
+    }
+
+    if let Some(mmap) = tac_try_mmap_file(&file) {
+        Ok(FileData::Mapped(mmap))
+    } else if tac_seek_to_start_if_seek_end_supported(file.as_raw_fd()) {
+        read_from_file(file, path).map(FileData::Buffer)
+    } else {
+        read_from_nonseekable(file, Some(path))
     }
 }
 
@@ -720,18 +829,7 @@ fn get_file_data(filename: &OsStr) -> CTResult<FileData> {
         // 处理普通文件
         let path = Path::new(filename);
         let file = open_file(path)?;
-
-        if file.metadata().is_ok_and(|metadata| metadata.is_dir()) {
-            return read_from_directory(file, path).map(FileData::Buffer);
-        }
-
-        if let Some(mmap) = tac_try_mmap_file(&file) {
-            Ok(FileData::Mapped(mmap))
-        } else if tac_seek_to_start_if_seek_end_supported(file.as_raw_fd()) {
-            read_from_file(file, path).map(FileData::Buffer)
-        } else {
-            read_from_nonseekable(file, Some(path))
-        }
+        get_open_file_data(file, path)
     }
 }
 
@@ -1028,6 +1126,123 @@ fn tac_write_regex_slices<W: Write>(
     Ok(())
 }
 
+fn tac_search_backward_prefix(
+    pattern: &mut GnuRegex,
+    data: &[u8],
+) -> Result<Option<GnuRegexMatch>, TacError> {
+    if data.is_empty() {
+        return Ok(None);
+    }
+    let range = 1isize
+        .checked_sub(isize::try_from(data.len()).map_err(|_| TacError::RecordTooLarge)?)
+        .ok_or(TacError::RecordTooLarge)?;
+    pattern
+        .search(data, data.len() - 1, range)
+        .map_err(TacError::from)
+}
+
+struct TacSeekableInput<'a> {
+    fd: ctcore::libc::c_int,
+    estimated_size: u64,
+    source: Option<&'a Path>,
+}
+
+fn tac_write_seekable_fd<W: Write>(
+    writer: &mut W,
+    input: TacSeekableInput<'_>,
+    settings: &TacFlags,
+    mut pattern: Option<&mut GnuRegex>,
+    read_size: &mut usize,
+    write_error: &mut Option<std::io::Error>,
+    stdout_was_closed: bool,
+) -> CTResult<()> {
+    let file_size = tac_actual_file_size(input.fd, input.estimated_size, *read_size, input.source)?;
+    if stdout_was_closed && file_size != 0 && write_error.is_none() {
+        *write_error = Some(std::io::Error::from_raw_os_error(ctcore::libc::EBADF));
+    }
+
+    let mut position = file_size;
+    let mut pending = Vec::new();
+    let mut search_end = 0_usize;
+    let mut first_match = true;
+    let mut first_read = true;
+
+    while position != 0 {
+        let count = if first_read {
+            let remainder = position % *read_size as u64;
+            first_read = false;
+            if remainder == 0 {
+                position.min(*read_size as u64)
+            } else {
+                remainder
+            }
+        } else if position < *read_size as u64 {
+            *read_size = usize::try_from(position).map_err(|_| TacError::RecordTooLarge)?;
+            position
+        } else {
+            *read_size as u64
+        };
+        let count = usize::try_from(count).map_err(|_| TacError::RecordTooLarge)?;
+        position -= count as u64;
+
+        let mut next = vec![0_u8; count];
+        tac_pread_exact(input.fd, position, &mut next, input.source)?;
+        next.extend_from_slice(&pending);
+        pending = next;
+        if pattern.is_some() {
+            search_end = pending.len();
+        }
+
+        let mut past_end = pending.len();
+        if let Some(pattern) = pattern.as_deref_mut() {
+            loop {
+                let Some(found) = tac_search_backward_prefix(pattern, &pending[..search_end])?
+                else {
+                    break;
+                };
+
+                if settings.is_before {
+                    tac_write_slice(writer, &pending[found.start..past_end], write_error);
+                    past_end = found.start;
+                } else {
+                    if !first_match || found.end != past_end {
+                        tac_write_slice(writer, &pending[found.end..past_end], write_error);
+                    }
+                    past_end = found.end;
+                    first_match = false;
+                }
+                search_end = found.start;
+            }
+        } else {
+            let fixed_search_end = count
+                .saturating_add(settings.separator.len() - 1)
+                .min(pending.len());
+            for start in memmem::rfind_iter(&pending[..fixed_search_end], &settings.separator) {
+                let end = start + settings.separator.len();
+                if settings.is_before {
+                    tac_write_slice(writer, &pending[start..past_end], write_error);
+                    past_end = start;
+                } else {
+                    if !first_match || end != past_end {
+                        tac_write_slice(writer, &pending[end..past_end], write_error);
+                    }
+                    past_end = end;
+                    first_match = false;
+                }
+                search_end = start;
+            }
+        }
+
+        pending.truncate(past_end);
+        if position != 0 && pending.len() > *read_size {
+            *read_size = read_size.checked_mul(2).ok_or(TacError::RecordTooLarge)?;
+        }
+    }
+
+    tac_write_slice(writer, &pending, write_error);
+    Ok(())
+}
+
 fn tac_compile_regex(settings: &TacFlags) -> Result<Option<GnuRegex>, TacError> {
     settings
         .is_regex
@@ -1063,10 +1278,50 @@ fn tac_write_file_with_regex<W: Write>(
     filename: &OsStr,
     settings: &TacFlags,
     pattern: Option<&mut GnuRegex>,
+    read_size: &mut usize,
     write_error: &mut Option<std::io::Error>,
     stdout_was_closed: bool,
 ) -> CTResult<()> {
-    let data = get_file_data(filename)?;
+    let data = if filename.as_bytes() == b"-" {
+        if ctcore::ct_io::injected_stdin_bytes().is_none()
+            && !ctcore::ct_stdin_was_closed()
+            && let Some(file_size) = tac_regular_file_size(ctcore::libc::STDIN_FILENO)
+        {
+            return tac_write_seekable_fd(
+                writer,
+                TacSeekableInput {
+                    fd: ctcore::libc::STDIN_FILENO,
+                    estimated_size: file_size,
+                    source: None,
+                },
+                settings,
+                pattern,
+                read_size,
+                write_error,
+                stdout_was_closed,
+            );
+        }
+        get_file_data(filename)?
+    } else {
+        let path = Path::new(filename);
+        let file = open_file(path)?;
+        if let Some(file_size) = tac_regular_file_size(file.as_raw_fd()) {
+            return tac_write_seekable_fd(
+                writer,
+                TacSeekableInput {
+                    fd: file.as_raw_fd(),
+                    estimated_size: file_size,
+                    source: Some(path),
+                },
+                settings,
+                pattern,
+                read_size,
+                write_error,
+                stdout_was_closed,
+            );
+        }
+        get_open_file_data(file, path)?
+    };
     if stdout_was_closed && !data.as_ref().is_empty() {
         if write_error.is_none() {
             *write_error = Some(std::io::Error::from_raw_os_error(ctcore::libc::EBADF));
@@ -1152,6 +1407,12 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -
     let mut write_error = None;
     let mut read_stdin = false;
     let mut pattern = tac_compile_regex(settings)?;
+    let mut read_size = GNU_TAC_READ_SIZE;
+    if pattern.is_none() {
+        while settings.separator.len() >= read_size / 2 {
+            read_size = read_size.checked_mul(2).ok_or(TacError::RecordTooLarge)?;
+        }
+    }
 
     for filename in &settings.files {
         read_stdin |= filename.as_bytes() == b"-";
@@ -1160,6 +1421,7 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -
             filename,
             settings,
             pattern.as_mut(),
+            &mut read_size,
             &mut write_error,
             stdout_was_closed,
         ) {
@@ -1796,7 +2058,6 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::symlink;
         use std::os::unix::process::ExitStatusExt;
-        use std::process::Command;
         use std::thread;
         use std::time::Duration;
         use tempfile::NamedTempFile;
@@ -2007,7 +2268,7 @@ mod tests {
                 std::process::exit(0);
             }
 
-            let status = Command::new(std::env::current_exe().unwrap())
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "tests::file_operations_tests::test_nonseekable_input_honors_temporary_file_size_limit",
@@ -2034,7 +2295,7 @@ mod tests {
                 return;
             }
 
-            let status = Command::new(std::env::current_exe().unwrap())
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "tests::file_operations_tests::test_proc_file_without_seek_end_uses_temporary_file",
@@ -2053,8 +2314,8 @@ mod tests {
             const PATH_ENV: &str = "TAC_MEMORY_LIMIT_PATH";
             if std::env::var_os(CHILD_ENV).is_some() {
                 let limit = ctcore::libc::rlimit {
-                    rlim_cur: 256 * 1024 * 1024,
-                    rlim_max: 256 * 1024 * 1024,
+                    rlim_cur: 32 * 1024 * 1024,
+                    rlim_max: 32 * 1024 * 1024,
                 };
                 assert_eq!(
                     unsafe { ctcore::libc::setrlimit(ctcore::libc::RLIMIT_AS, &limit) },
@@ -2062,13 +2323,28 @@ mod tests {
                 );
                 let path = std::env::var_os(PATH_ENV).unwrap();
                 let mut output = std::io::sink();
-                tac_main(&mut output, [OsString::from("tac"), path].into_iter()).unwrap();
+                tac_main(
+                    &mut output,
+                    [OsString::from("tac"), path.clone()].into_iter(),
+                )
+                .unwrap();
+
+                let input = File::open(path).unwrap();
+                assert_eq!(
+                    unsafe { ctcore::libc::dup2(input.as_raw_fd(), ctcore::libc::STDIN_FILENO) },
+                    ctcore::libc::STDIN_FILENO
+                );
+                tac_main(&mut output, [OsString::from("tac")].into_iter()).unwrap();
                 return;
             }
 
-            let input = NamedTempFile::new().unwrap();
-            input.as_file().set_len(128 * 1024 * 1024).unwrap();
-            let status = Command::new(std::env::current_exe().unwrap())
+            let mut input = NamedTempFile::new().unwrap();
+            let mut block = [b'x'; GNU_TAC_READ_SIZE];
+            block[GNU_TAC_READ_SIZE - 1] = b'\n';
+            for _ in 0..(64 * 1024 * 1024 / GNU_TAC_READ_SIZE) {
+                input.write_all(&block).unwrap();
+            }
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "tests::file_operations_tests::test_large_seekable_input_does_not_copy_all_segments",
@@ -2079,6 +2355,123 @@ mod tests {
                 .unwrap();
 
             assert!(status.success(), "child status: {status:?}");
+        }
+
+        #[test]
+        fn test_tac_main_regex_uses_gnu_aligned_read_blocks() {
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(&vec![b'A'; GNU_TAC_READ_SIZE]).unwrap();
+            input.write_all(&vec![b'B'; 808]).unwrap();
+            let args = [
+                OsString::from("tac"),
+                OsString::from("-r"),
+                OsString::from("-s"),
+                OsString::from("^"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = vec![b'B'; 808];
+            expected.extend_from_slice(&vec![b'A'; GNU_TAC_READ_SIZE]);
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_handles_regular_files_with_estimated_size() {
+            let path = Path::new("/sys/kernel/profiling");
+            let Ok(expected) = fs::read(path) else {
+                return;
+            };
+            let mut output = Vec::new();
+
+            tac_main(
+                &mut output,
+                [OsString::from("tac"), path.as_os_str().to_os_string()].into_iter(),
+            )
+            .unwrap();
+
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_fixed_separator_preserves_gnu_boundary_overlap() {
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(&vec![b'A'; GNU_TAC_READ_SIZE - 1]).unwrap();
+            input.write_all(b"::: ").unwrap();
+            input.write_all(&vec![b'B'; 805]).unwrap();
+            let args = [
+                OsString::from("tac"),
+                OsString::from("-s"),
+                OsString::from("::"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = vec![b' '];
+            expected.extend_from_slice(&vec![b'B'; 805]);
+            expected.push(b':');
+            expected.extend_from_slice(&vec![b'A'; GNU_TAC_READ_SIZE - 1]);
+            expected.extend_from_slice(b"::");
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_preserves_grown_read_size_across_operands() {
+            let mut first = NamedTempFile::new().unwrap();
+            first.write_all(&vec![b'A'; 50_000]).unwrap();
+
+            let mut second_data = vec![b'b'; 50_000];
+            second_data[40_960] = b'Z';
+            let mut second = NamedTempFile::new().unwrap();
+            second.write_all(&second_data).unwrap();
+
+            let args = [
+                OsString::from("tac"),
+                OsString::from("-r"),
+                OsString::from("-s"),
+                OsString::from("^Z"),
+                first.path().as_os_str().to_os_string(),
+                second.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = vec![b'A'; 50_000];
+            expected.extend_from_slice(&second_data);
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_preserves_final_partial_read_size_across_operands() {
+            let mut first = NamedTempFile::new().unwrap();
+            first.write_all(&vec![b'A'; 50_000]).unwrap();
+
+            let mut second_data = vec![b'b'; 50_000];
+            second_data[24_576] = b'Z';
+            let mut second = NamedTempFile::new().unwrap();
+            second.write_all(&second_data).unwrap();
+
+            let args = [
+                OsString::from("tac"),
+                OsString::from("-r"),
+                OsString::from("-s"),
+                OsString::from("^Z"),
+                first.path().as_os_str().to_os_string(),
+                second.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = vec![b'A'; 50_000];
+            expected.extend_from_slice(&vec![b'b'; 49_999]);
+            expected.push(b'Z');
+            assert_eq!(output, expected);
         }
     }
 
@@ -2235,10 +2628,26 @@ mod tests {
 
         #[test]
         fn test_tac_buffer_regex_c_locale_dot_matches_one_byte() {
-            assert_eq!(
-                reverse(b"A\xc3\xa9B\xc3\xa9C", b".", false),
-                b"C\xa9\xc3B\xa9\xc3A"
-            );
+            const CHILD_ENV: &str = "TAC_C_LOCALE_REGEX_CHILD";
+            if std::env::var_os(CHILD_ENV).is_some() {
+                assert_eq!(
+                    reverse(b"A\xc3\xa9B\xc3\xa9C", b".", false),
+                    b"C\xa9\xc3B\xa9\xc3A"
+                );
+                return;
+            }
+
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::tac_buffer_regex_tests::test_tac_buffer_regex_c_locale_dot_matches_one_byte",
+                ])
+                .env(CHILD_ENV, "1")
+                .env("LC_ALL", "C")
+                .status()
+                .unwrap();
+
+            assert!(status.success(), "child status: {status:?}");
         }
 
         #[test]

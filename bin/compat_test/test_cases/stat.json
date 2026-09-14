@@ -1096,6 +1096,49 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "stat",
+            "description": "原始字节用例：LC_ALL=C；参数完整十六进制为2d63（-c）、ff256e（字节ff后跟%n）和2f（/）；GNU逐字节解析非UTF-8格式并保留字面ff，预期RC=0、stdout完整十六进制为ff2f0a、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2d63",
+                "ff256e",
+                "2f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff2f0a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "stat",
+            "description": "原始字节用例：LC_ALL=C；参数完整十六进制为2d2d7072696e74663dff256e（--printf后接字节ff和%n）及2f（/）；GNU逐字节解析非UTF-8格式且--printf不追加换行，预期RC=0、stdout完整十六进制为ff2f、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "2d2d7072696e74663dff256e",
+                "2f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff2f",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

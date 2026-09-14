@@ -672,6 +672,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；格式中的H和L仅在d或r转换前作为设备号修饰符，其他位置自身是未知转换且后续字符继续解析；预期RC=0、stdout完整内容为?D|?D|?N|?n|?|?和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-c",
+                "%HD|%LD|%HN|%Ln|%H|%L",
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "?D|?D|?N|?n|?|?\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

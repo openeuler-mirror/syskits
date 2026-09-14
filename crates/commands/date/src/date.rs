@@ -28,7 +28,7 @@ use libc::{
 #[cfg(target_os = "linux")]
 use std::ffi::CString;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
@@ -294,7 +294,18 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
         Err(value) => return value,
     };
 
-    date_processing(args_match, date_format, date_source, set_to_params)
+    let stdout = io::stdout();
+    let mut output = stdout.lock();
+    date_processing(
+        args_match,
+        date_format,
+        date_source,
+        set_to_params,
+        &mut output,
+    )?;
+    output
+        .flush()
+        .map_err_context(|| String::from("write error"))
 }
 
 fn normalize_iso_8601_optional_args(mut args: Vec<OsString>) -> Vec<OsString> {
@@ -334,10 +345,13 @@ fn format_date_output(date: &DateTime<FixedOffset>, format_string: &str) -> CTRe
     }
 }
 
-fn print_formatted_date(date: &DateTime<FixedOffset>, format_string: &str) -> CTResult<()> {
+fn write_formatted_date<W: Write>(
+    output: &mut W,
+    date: &DateTime<FixedOffset>,
+    format_string: &str,
+) -> CTResult<()> {
     let s = format_date_output(date, format_string)?;
-    println!("{s}");
-    Ok(())
+    writeln!(output, "{s}").map_err_context(|| String::from("write error"))
 }
 
 fn date_row_from_datetime(
@@ -910,11 +924,12 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
     })
 }
 
-fn date_processing(
+fn date_processing<W: Write>(
     args_match: ArgMatches,
     date_format: DateFormat,
     date_source: DateSource,
     set_to_params: Option<DateTime<FixedOffset>>,
+    output: &mut W,
 ) -> CTResult<()> {
     // 创建日期设置结构体
     let date_set = DateSettings {
@@ -954,7 +969,7 @@ fn date_processing(
         if let Err(err) = set_system_datetime(system_date) {
             ct_show!(err);
         }
-        print_formatted_date(&display_date, &make_format_string(&date_set))
+        write_formatted_date(output, &display_date, &make_format_string(&date_set))
     } else {
         let format_string = make_format_string(&date_set);
 
@@ -971,7 +986,7 @@ fn date_processing(
                     if date_set.debug {
                         emit_date_debug(&input_str, &date, &format_string);
                     }
-                    print_formatted_date(&date, &format_string)?;
+                    write_formatted_date(output, &date, &format_string)?;
                 }
                 Err(_) => {
                     ct_show!(CtSimpleError::new(
@@ -1053,7 +1068,7 @@ fn date_processing(
         for date in dates_iterator {
             match date {
                 Ok(date) => {
-                    print_formatted_date(&date, &format_string)?;
+                    write_formatted_date(output, &date, &format_string)?;
                 }
                 Err(err) => ct_show!(err),
             }
@@ -4666,5 +4681,24 @@ mod tests {
             let parsed = parse_date(input).unwrap();
             assert_eq!(parsed.format("%F %T").to_string(), "2011-04-11 22:59:00");
         }
+    }
+
+    #[test]
+    fn test_formatted_date_propagates_write_errors() {
+        struct FailingWriter;
+
+        impl std::io::Write for FailingWriter {
+            fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(libc::ENOSPC))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let date = DateTime::parse_from_rfc3339("1970-01-01T00:00:00+00:00").unwrap();
+        let error = write_formatted_date(&mut FailingWriter, &date, "%F").unwrap_err();
+        assert_eq!(error.to_string(), "write error: No space left on device");
     }
 }

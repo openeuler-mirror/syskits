@@ -1882,6 +1882,36 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
+      "description": "LC_ALL=C下执行tac --before --separator=aba fixed-before-overlap；fixture为16385字节普通文件，默认填充X，偏移8190写入ababa且末字节写入a，使重叠分隔符跨越8192字节读取边界；GNU会利用已初始化的缓冲旧字节继续匹配，预期RC=0、stderr为空且完整16385字节stdout顺序一致",
+      "setup_commands": [
+        "head -c 16385 /dev/zero | tr '\\0' X > fixed-before-overlap",
+        "printf ababa | dd of=fixed-before-overlap bs=1 seek=8190 conv=notrunc status=none",
+        "printf a | dd of=fixed-before-overlap bs=1 seek=16384 conv=notrunc status=none"
+      ],
+      "args": [
+        "--before",
+        "--separator=aba",
+        "fixed-before-overlap"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f fixed-before-overlap"
+      ]
     }
   ]
 }

@@ -1235,7 +1235,8 @@ fn tac_write_seekable_fd<W: Write>(
 
     let mut position = file_size;
     let mut pending = Vec::new();
-    let mut search_end = 0_usize;
+    let mut fixed_buffer = Vec::new();
+    let mut fixed_initialized_len = 0_usize;
     let mut first_match = true;
     let mut first_read = true;
 
@@ -1259,14 +1260,11 @@ fn tac_write_seekable_fd<W: Write>(
 
         let mut next = vec![0_u8; count];
         tac_pread_exact(input.fd, position, &mut next, input.source)?;
-        next.extend_from_slice(&pending);
-        pending = next;
-        if pattern.is_some() {
-            search_end = pending.len();
-        }
-
-        let mut past_end = pending.len();
         if let Some(pattern) = pattern.as_deref_mut() {
+            next.extend_from_slice(&pending);
+            pending = next;
+            let mut search_end = pending.len();
+            let mut past_end = pending.len();
             loop {
                 let Some(found) = tac_search_backward_prefix(pattern, &pending[..search_end])?
                 else {
@@ -1285,27 +1283,42 @@ fn tac_write_seekable_fd<W: Write>(
                 }
                 search_end = found.start;
             }
+            pending.truncate(past_end);
         } else {
-            let fixed_search_end = count
-                .saturating_add(settings.separator.len() - 1)
-                .min(pending.len());
-            for start in memmem::rfind_iter(&pending[..fixed_search_end], &settings.separator) {
+            let saved_record_size = pending.len();
+            let initialized_end = count
+                .checked_add(saved_record_size)
+                .ok_or(TacError::RecordTooLarge)?;
+            let search_capacity = count
+                .checked_add(settings.separator.len() - 1)
+                .ok_or(TacError::RecordTooLarge)?;
+            let required_capacity = initialized_end.max(search_capacity);
+            if fixed_buffer.len() < required_capacity {
+                fixed_buffer.resize(required_capacity, 0);
+            }
+            fixed_buffer[count..initialized_end].copy_from_slice(&pending);
+            fixed_buffer[..count].copy_from_slice(&next);
+            fixed_initialized_len = fixed_initialized_len.max(initialized_end);
+
+            let mut past_end = initialized_end;
+            let fixed_search_end = search_capacity.min(fixed_initialized_len);
+            for start in memmem::rfind_iter(&fixed_buffer[..fixed_search_end], &settings.separator)
+            {
                 let end = start + settings.separator.len();
                 if settings.is_before {
-                    tac_write_slice(writer, &pending[start..past_end], write_error);
+                    tac_write_slice(writer, &fixed_buffer[start..past_end], write_error);
                     past_end = start;
                 } else {
                     if !first_match || end != past_end {
-                        tac_write_slice(writer, &pending[end..past_end], write_error);
+                        tac_write_slice(writer, &fixed_buffer[end..past_end], write_error);
                     }
                     past_end = end;
                     first_match = false;
                 }
-                search_end = start;
             }
+            pending.clear();
+            pending.extend_from_slice(&fixed_buffer[..past_end]);
         }
-
-        pending.truncate(past_end);
         if position != 0 && pending.len() > *read_size {
             *read_size = read_size.checked_mul(2).ok_or(TacError::RecordTooLarge)?;
         }
@@ -2674,6 +2687,52 @@ mod tests {
             expected.push(b':');
             expected.extend_from_slice(&vec![b'A'; GNU_TAC_READ_SIZE - 1]);
             expected.extend_from_slice(b"::");
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_fixed_before_preserves_cross_block_overlap() {
+            let mut data = vec![b'X'; GNU_TAC_READ_SIZE * 2 + 1];
+            data[GNU_TAC_READ_SIZE - 2..GNU_TAC_READ_SIZE + 3].copy_from_slice(b"ababa");
+            *data.last_mut().unwrap() = b'a';
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(&data).unwrap();
+            let args = [
+                OsString::from("tac"),
+                OsString::from("--before"),
+                OsString::from("--separator=aba"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = b"aba".to_vec();
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE - 3]);
+            expected.extend_from_slice(b"aab");
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE - 2]);
+            assert_eq!(output, expected);
+        }
+
+        #[test]
+        fn test_tac_main_fixed_before_ignores_uninitialized_cross_block_bytes() {
+            let mut data = vec![b'X'; GNU_TAC_READ_SIZE * 2 + 1];
+            data[GNU_TAC_READ_SIZE - 2..GNU_TAC_READ_SIZE + 3].copy_from_slice(b"ababa");
+            let mut input = NamedTempFile::new().unwrap();
+            input.write_all(&data).unwrap();
+            let args = [
+                OsString::from("tac"),
+                OsString::from("--before"),
+                OsString::from("--separator=aba"),
+                input.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            tac_main(&mut output, args.into_iter()).unwrap();
+
+            let mut expected = b"aba".to_vec();
+            expected.extend_from_slice(&vec![b'X'; GNU_TAC_READ_SIZE * 2 - 4]);
+            expected.extend_from_slice(b"ab");
             assert_eq!(output, expected);
         }
 

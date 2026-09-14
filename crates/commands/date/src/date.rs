@@ -1673,6 +1673,20 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                         let quarter = (dt.month0() / 3) + 1;
                         fmt_adjusted.extend_from_slice(quarter.to_string().as_bytes());
                     }
+                    b'F' if flags.is_empty() && width_bytes.is_empty() && modifier.is_none() => {
+                        let year = dt.year();
+                        let year = format_gnu_number(
+                            year.unsigned_abs() as u64,
+                            year < 0,
+                            4,
+                            None,
+                            StrftimePad::Default,
+                            9999 < year,
+                        );
+                        fmt_adjusted.extend_from_slice(
+                            format!("{year}-{:02}-{:02}", dt.month(), dt.day()).as_bytes(),
+                        );
+                    }
                     b'Y' if !use_alt_era => {
                         let year = dt.year();
                         let width = parse_strftime_width(width_str);
@@ -2038,6 +2052,20 @@ mod tests {
         let wide_nsec = format_using_strftime(&dt, "%99N").unwrap();
         assert_eq!(wide_nsec.len(), 99);
         assert!(wide_nsec.chars().all(|c| c == '0'));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_full_date_adds_sign_to_extended_year() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(12345, 1, 2, 0, 0, 0)
+            .unwrap();
+
+        assert_eq!(format_using_strftime(&dt, "%Y").unwrap(), "12345");
+        assert_eq!(format_using_strftime(&dt, "%F").unwrap(), "+12345-01-02");
     }
 
     #[test]

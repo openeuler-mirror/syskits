@@ -3,6 +3,67 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析GNU固定字母时区EST；2024-01-01 12:00 EST按UTC-05墙钟时间换算，预期UTC输出17:00:00 +0000",
+      "args": ["-d", "2024-01-01 12:00 EST", "+%F %T %z"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 17:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析GNU标准时区DST后缀；2024-01-01 12:00 EST DST按UTC-04墙钟时间换算，预期UTC输出16:00:00 +0000",
+      "args": ["-d", "2024-01-01 12:00 EST DST", "+%F %T %z"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 16:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=Asia/Shanghai下本地时区缩写优先于GNU固定表；CST按本地UTC+08解释，预期保持12:00:00 +0800",
+      "args": ["-d", "2024-01-01 12:00 CST", "+%F %T %z"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "Asia/Shanghai"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 12:00:00 +0800\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=America/Chicago下本地标准时缩写CST与夏季目标日期冲突；GNU拒绝2024-07-01 12:00 CST且不得回退固定时区表",
+      "args": ["-d", "2024-07-01 12:00 CST", "+%F %T %z"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "America/Chicago"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {"ignore_stderr": true}
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下解析序数星期与显式日期组合；GNU在存在显式日期时忽略third monday，执行date -d 'third monday 2024-01-01' +%F，预期2024-01-01",
       "args": ["-d", "third monday 2024-01-01", "+%F"],
       "env": {"LC_ALL": "C", "TZ": "UTC0"},

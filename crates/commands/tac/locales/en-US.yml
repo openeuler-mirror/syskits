@@ -12,5 +12,6 @@ tac:
     write_error: write error
     standard_input: standard input
     temporary_file_create: failed to create temporary file
+    temporary_file_rewind: "failed to rewind stream for %{path}"
   usage: tac [OPTION]... [FILE]...
   about: Write each file to standard output, last line first.

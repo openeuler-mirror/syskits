@@ -17,7 +17,6 @@ use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, strip_errno};
 
 use ctcore::Tool;
@@ -39,6 +38,16 @@ use std::{fs::File, fs::OpenOptions, path::Path, path::PathBuf};
 use tempfile::{Builder, NamedTempFile};
 
 const GNU_TAC_READ_SIZE: usize = 8192;
+
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
 
 // 定义配置标志常量
 pub mod tac_flags {
@@ -241,22 +250,37 @@ impl CTError for TacUsageError {
 impl Error for TacError {}
 
 fn tac_quote_path(path: &OsStr, always_quote: bool) -> String {
-    if path.to_str().is_some() {
-        return if always_quote {
-            path.quote().to_string()
-        } else {
-            path.maybe_quote().to_string()
-        };
+    let bytes = path.as_bytes();
+    let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (
+            length,
+            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
+        )
+    });
+
+    if always_quote && quoted.as_slice() == bytes {
+        quoted.insert(0, b'\'');
+        quoted.push(b'\'');
     }
 
-    String::from_utf8(escape_shell_bytes_with_classifier(
-        path.as_bytes(),
-        |bytes| {
-            let byte = bytes[0];
-            (1, byte.is_ascii_graphic() || byte == b' ')
-        },
-    ))
-    .expect("shell-escaped file names are valid UTF-8")
+    String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
 }
 
 impl Display for TacError {
@@ -2314,6 +2338,18 @@ mod tests {
 
             assert!(diagnostic.contains("\\377"), "{diagnostic}");
             assert!(!diagnostic.contains('\u{fffd}'), "{diagnostic}");
+        }
+
+        #[test]
+        fn test_tac_quote_path_segments_ascii_control_characters() {
+            assert_eq!(
+                tac_quote_path(OsStr::from_bytes(b"line\nbreak"), true),
+                "'line'$'\\n''break'"
+            );
+            assert_eq!(
+                tac_quote_path(OsStr::from_bytes(b"\x01ctrl"), true),
+                "''$'\\001''ctrl'"
+            );
         }
 
         #[test]

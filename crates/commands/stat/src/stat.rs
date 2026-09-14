@@ -58,11 +58,14 @@ enum CachedMode {
 
 impl CachedMode {
     fn from_str(s: &str) -> Result<Self, String> {
-        match s {
-            "default" => Ok(CachedMode::Default),
-            "never" => Ok(CachedMode::Never),
-            "always" => Ok(CachedMode::Always),
-            _ => Err(format!("invalid cached mode: {s}")),
+        if !s.is_empty() && "default".starts_with(s) {
+            Ok(CachedMode::Default)
+        } else if !s.is_empty() && "never".starts_with(s) {
+            Ok(CachedMode::Never)
+        } else if !s.is_empty() && "always".starts_with(s) {
+            Ok(CachedMode::Always)
+        } else {
+            Err(format!("invalid cached mode: {s}"))
         }
     }
 }
@@ -2389,8 +2392,7 @@ pub fn ct_app() -> Command {
         Arg::new(stat_options::STAT_CACHED)
             .long(stat_options::STAT_CACHED)
             .value_name("MODE")
-            .help("specify how to use cached attributes; useful on remote file systems")
-            .value_parser(["always", "never", "default"]),
+            .help("specify how to use cached attributes; useful on remote file systems"),
         Arg::new(stat_options::STAT_FILES)
             .action(ArgAction::Append)
             .value_parser(ValueParser::os_string())
@@ -2479,6 +2481,33 @@ mod tests {
             matches.get_one::<String>(stat_options::STAT_CACHED),
             Some(&"never".to_string())
         );
+    }
+
+    #[test]
+    fn cached_mode_accepts_unique_prefixes() {
+        for (value, expected) in [
+            ("a", CachedMode::Always),
+            ("al", CachedMode::Always),
+            ("n", CachedMode::Never),
+            ("ne", CachedMode::Never),
+            ("d", CachedMode::Default),
+            ("de", CachedMode::Default),
+        ] {
+            let matches = ct_app()
+                .clone()
+                .try_get_matches_from(["stat", &format!("--cached={value}"), "/"])
+                .unwrap();
+            let parsed = CachedMode::from_str(
+                matches
+                    .get_one::<String>(stat_options::STAT_CACHED)
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(parsed, expected);
+        }
+
+        assert!(CachedMode::from_str("").is_err());
+        assert!(CachedMode::from_str("other").is_err());
     }
 
     #[test]

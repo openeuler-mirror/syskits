@@ -22,7 +22,7 @@ use ctcore::libc::{self, mode_t};
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
 use rustix::fs::{AtFlags, StatxFlags, major, minor, statx};
 use std::borrow::Cow;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, OsStr, OsString};
 use std::fs;
 use std::os::fd::FromRawFd;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -271,24 +271,97 @@ fn group_num(s: &str) -> Cow<str> {
     let is_negative = s.starts_with('-');
     assert!(is_negative || s.chars().take(1).all(|c| c.is_ascii_digit()));
     assert!(s.chars().skip(1).all(|c| c.is_ascii_digit()));
-    if s.len() < 4 {
+    let locale = NumericLocale::current();
+    if locale.thousands_separator.is_empty()
+        || locale.grouping.is_empty()
+        || matches!(locale.grouping[0], 0 | 127 | u8::MAX)
+    {
         return s.into();
     }
-    let mut res = String::with_capacity((s.len() - 1) / 3);
-    let s = if is_negative {
-        res.push('-');
-        &s[1..]
-    } else {
-        s
-    };
-    let mut alone = (s.len() - 1) % 3 + 1;
-    res.push_str(&s[..alone]);
-    while alone != s.len() {
-        res.push(',');
-        res.push_str(&s[alone..alone + 3]);
-        alone += 3;
+
+    let (sign, digits) = if is_negative { ("-", &s[1..]) } else { ("", s) };
+    if digits.is_empty() {
+        return s.into();
     }
-    res.into()
+
+    let mut groups = Vec::new();
+    let mut end = digits.len();
+    let mut pattern_index = 0;
+    let mut group_size = locale.grouping[0] as usize;
+    while end > group_size {
+        groups.push(&digits[end - group_size..end]);
+        end -= group_size;
+        if let Some(&next) = locale.grouping.get(pattern_index + 1) {
+            match next {
+                0 => {}
+                127 | u8::MAX => break,
+                value => {
+                    pattern_index += 1;
+                    group_size = value as usize;
+                }
+            }
+        }
+    }
+    groups.push(&digits[..end]);
+    groups.reverse();
+
+    let mut result = String::from(sign);
+    result.push_str(&groups.join(&locale.thousands_separator));
+    Cow::Owned(result)
+}
+
+struct NumericLocale {
+    decimal_point: String,
+    thousands_separator: String,
+    grouping: Vec<u8>,
+}
+
+impl NumericLocale {
+    fn current() -> Self {
+        unsafe {
+            let locale = libc::localeconv();
+            if locale.is_null() {
+                return Self::c();
+            }
+
+            let decimal_point = copy_locale_string((*locale).decimal_point, ".");
+            let thousands_separator = copy_locale_string((*locale).thousands_sep, "");
+            let mut grouping = Vec::new();
+            if !(*locale).grouping.is_null() {
+                for index in 0..16 {
+                    let value = *(*locale).grouping.add(index) as u8;
+                    grouping.push(value);
+                    if matches!(value, 0 | 127 | u8::MAX) {
+                        break;
+                    }
+                }
+            }
+
+            Self {
+                decimal_point,
+                thousands_separator,
+                grouping,
+            }
+        }
+    }
+
+    fn c() -> Self {
+        Self {
+            decimal_point: ".".into(),
+            thousands_separator: String::new(),
+            grouping: Vec::new(),
+        }
+    }
+}
+
+unsafe fn copy_locale_string(value: *const libc::c_char, fallback: &str) -> String {
+    if value.is_null() {
+        fallback.to_string()
+    } else {
+        unsafe { CStr::from_ptr(value) }
+            .to_string_lossy()
+            .into_owned()
+    }
 }
 
 struct Stater {
@@ -1398,9 +1471,7 @@ impl Tool for Stat {
 }
 
 pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
-    // 设置语言（需转换为 `rust_i18n` 支持的格式，例如 "en" -> "en", "zh-CN" -> "zh-CN"）
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    init_stat_locale();
 
     let matches = ct_app()
         .after_help(rust_i18n::t!(stat_options::STAT_LONG_USAGE))
@@ -1416,8 +1487,7 @@ pub fn stat_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn stat_native_semantic(args: impl ctcore::Args) -> CTResult<StatSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    init_stat_locale();
 
     let matches = ct_app()
         .after_help(rust_i18n::t!(stat_options::STAT_LONG_USAGE))
@@ -1518,6 +1588,14 @@ pub fn stat_native_semantic(args: impl ctcore::Args) -> CTResult<StatSemantic> {
         selected_fields,
         classic_text,
     })
+}
+
+fn init_stat_locale() {
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
 }
 
 fn normalize_default_file_classic_text(
@@ -2223,7 +2301,7 @@ fn render_timestamp(
     {
         let mut fraction_text = format!("{fraction:0>stored_precision$}");
         fraction_text.push_str(&"0".repeat(fraction_precision - stored_precision));
-        digits.push('.');
+        digits.push_str(&NumericLocale::current().decimal_point);
         digits.push_str(&fraction_text);
     }
 
@@ -2651,17 +2729,17 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_group_num() {
-        assert_eq!("12,379,821,234", group_num("12379821234"));
-        assert_eq!("21,234", group_num("21234"));
-        assert_eq!("821,234", group_num("821234"));
-        assert_eq!("1,821,234", group_num("1821234"));
-        assert_eq!("1,234", group_num("1234"));
+        assert_eq!("12379821234", group_num("12379821234"));
+        assert_eq!("21234", group_num("21234"));
+        assert_eq!("821234", group_num("821234"));
+        assert_eq!("1821234", group_num("1821234"));
+        assert_eq!("1234", group_num("1234"));
         assert_eq!("234", group_num("234"));
         assert_eq!("24", group_num("24"));
         assert_eq!("4", group_num("4"));
         assert_eq!("", group_num(""));
         assert_eq!("-5", group_num("-5"));
-        assert_eq!("-1,234", group_num("-1234"));
+        assert_eq!("-1234", group_num("-1234"));
     }
 
     #[test]

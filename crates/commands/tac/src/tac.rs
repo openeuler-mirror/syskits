@@ -648,6 +648,10 @@ fn copy_nonseekable_to_temporary<R: Read>(
 ) -> CTResult<(NamedTempFile, u64)> {
     let temporary_directory = tac_temporary_directory();
     let mut temporary = tac_create_temporary_file(&temporary_directory)?;
+    // Match GNU temp_stream and avoid removing a different file if this path is later reused.
+    if std::fs::remove_file(temporary.path()).is_ok() {
+        temporary.disable_cleanup(true);
+    }
     let temporary_name = temporary.path().as_os_str().to_os_string();
     let mut buffer = [0_u8; GNU_TAC_READ_SIZE];
     let mut bytes_copied = 0_u64;
@@ -2293,6 +2297,28 @@ mod tests {
             }
 
             assert_eq!(open_count, 1, "a FIFO operand must be opened only once");
+        }
+
+        #[test]
+        fn test_nonseekable_temporary_is_unlinked_while_open() {
+            let (mut temporary, _) = copy_nonseekable_to_temporary(&b"first\nsecond\n"[..], None)
+                .expect("nonseekable input must be copied to a temporary file");
+            let temporary_path = temporary.path().to_path_buf();
+
+            assert!(
+                !temporary_path.exists(),
+                "GNU tac unlinks its temporary file immediately after creation"
+            );
+            let mut contents = Vec::new();
+            temporary
+                .as_file_mut()
+                .seek(SeekFrom::Start(0))
+                .expect("the unlinked temporary file must remain seekable");
+            temporary
+                .as_file_mut()
+                .read_to_end(&mut contents)
+                .expect("the unlinked temporary file must remain readable");
+            assert_eq!(contents, b"first\nsecond\n");
         }
 
         #[test]

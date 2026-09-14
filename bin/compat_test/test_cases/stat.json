@@ -480,6 +480,37 @@
             "cleanup_commands": [
                 "rm -f test_file"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；重复-L、-f、-t、-c和--cached选项；GNU接受重复选项并采用最后一个带值选项，预期RC=0、stdout为/tmp和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-L",
+                "-L",
+                "-f",
+                "-f",
+                "-t",
+                "-t",
+                "-c",
+                "first",
+                "-c",
+                "%n",
+                "--cached=always",
+                "--cached=never",
+                "/tmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "/tmp\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

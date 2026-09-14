@@ -1742,6 +1742,7 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
         let current = fmt[index];
         index += 1;
         if current == b'%' {
+            let percent_start = index - 1;
             let mut has_plus = false;
             let mut pad = StrftimePad::Default;
             let mut colons = 0;
@@ -1797,6 +1798,9 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 let spec = fmt[index];
                 index += 1;
                 match spec {
+                    b'q' | b'Y' if modifier == Some(b'O') => {
+                        fmt_adjusted.extend_from_slice(&fmt[percent_start..index]);
+                    }
                     b'C' | b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'S'
                     | b'u' | b'U' | b'V' | b'w' | b'W' | b'y' | b'g' | b'G'
                         if modifier == Some(b'O') =>
@@ -2332,6 +2336,21 @@ mod tests {
             format_using_strftime(&extended, "%+F|%+8F|%+10F|%_+10F|%+_10F|%0+10F|%+010F|%+4F",)
                 .unwrap(),
             "+12345-01-02|+12345-01-02|+12345-01-02|+12345-01-02|12345-01-02|+12345-01-02|12345-01-02|+12345-01-02"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_invalid_alternate_modifiers_are_literal() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%Oq|%OY|%4OY").unwrap(),
+            "%Oq|%OY|%4OY"
         );
     }
 

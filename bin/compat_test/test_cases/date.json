@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU date将无效的O修饰符与季度和年份字段原样输出，而不是忽略修饰符后继续格式化",
+      "args": ["-d", "2024-01-02 03:04:05 UTC", "+%Oq|%OY|%4OY"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "%Oq|%OY|%4OY\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU完整日期F的加号填充标志；五位年份在默认或最终加号填充时保留前导加号，在后续下划线或零标志覆盖加号时去除符号，总宽度仅影响年份符号判定而不改变月日两位格式",
       "args": ["-d", "12345-01-02 03:04:05 UTC", "+%+F|%+8F|%+10F|%_+10F|%+_10F|%0+10F|%+010F|%+4F"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

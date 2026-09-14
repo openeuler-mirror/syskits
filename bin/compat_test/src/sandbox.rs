@@ -59,6 +59,10 @@ fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>)> {
             let full = fs::OpenOptions::new().write(true).open("/dev/full")?;
             Ok((Stdio::from(full), None))
         }
+        OutputStream::ReadOnlyNull => {
+            let null = fs::OpenOptions::new().read(true).open("/dev/null")?;
+            Ok((Stdio::from(null), None))
+        }
         OutputStream::ClosedPipe => {
             let (read_end, write_end) = nix::unistd::pipe()
                 .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;

@@ -784,6 +784,31 @@
             "cleanup_commands": [
                 "rm -f stat_size_unsigned"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；创建0644普通文件并组合替代形式、字段宽度、零填充及零精度输出模式和设备号；预期0x前缀位于宽度零之后、八进制精度包含替代前导零，数值零在精度零时为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch stat_numeric_format",
+                "chmod 0644 stat_numeric_format"
+            ],
+            "args": [
+                "-c",
+                "%#08f|%#.5a|%.0r|%.0R",
+                "stat_numeric_format"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0x0081a4|00644||\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_numeric_format"
+            ]
         }
     ]
 }

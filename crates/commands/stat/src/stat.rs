@@ -129,24 +129,6 @@ fn metadata_for_stdin() -> std::io::Result<fs::Metadata> {
     metadata_for_fd(libc::STDIN_FILENO)
 }
 
-/// pads the string with zeroes or spaces and prints it
-///
-/// # Example
-/// ```ignore
-/// ct_stat::pad_and_print("1", false, 5, Padding::Zero) == "00001";
-/// ```
-/// currently only supports '0' & ' ' as the padding character
-/// because the format specification of print! does not support general
-/// fill characters.
-fn pad_and_print(result: &str, left: bool, width: usize, padding: StatPadding) {
-    match (left, padding) {
-        (false, StatPadding::Zero) => print!("{result:0>width$}"),
-        (false, StatPadding::Space) => print!("{result:>width$}"),
-        (true, StatPadding::Zero) => print!("{result:0<width$}"),
-        (true, StatPadding::Space) => print!("{result:<width$}"),
-    };
-}
-
 #[derive(Debug)]
 pub enum StatOutputType {
     Str(String),
@@ -408,13 +390,7 @@ fn determine_padding_char(flags: &StatFlags, precision: &Option<i32>) -> StatPad
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - An Option containing the precision value.
 fn print_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) {
-    let p = match precision {
-        Some(-1) => 0, // 对于字符串，单独的 '.' 意味着精度为 0
-        Some(p) => p as usize,
-        None => usize::MAX,
-    };
-    let s = if p < s.len() { &s[..p] } else { s };
-    pad_and_print(s, flags.is_left, width, StatPadding::Space);
+    print!("{}", render_str(s, flags, width, precision));
 }
 
 /// Prints an integer value based on the provided flags, width, and precision.
@@ -431,28 +407,9 @@ fn print_integer(
     flags: &StatFlags,
     width: usize,
     precision: Option<i32>,
-    padding_char: StatPadding,
+    _padding_char: StatPadding,
 ) {
-    let num_str = num.to_string();
-    let arg = if flags.is_group {
-        group_num(&num_str)
-    } else {
-        Cow::Borrowed(num_str.as_str())
-    };
-    let prefix = if flags.is_sign {
-        "+"
-    } else if flags.is_space {
-        " "
-    } else {
-        ""
-    };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
-    };
-    let extended = format!("{prefix}{arg:0>prec$}");
-    pad_and_print(&extended, flags.is_left, width, padding_char);
+    print!("{}", render_integer(num, flags, width, precision));
 }
 
 /// Prints an unsigned integer value based on the provided flags, width, and precision.
@@ -469,21 +426,9 @@ fn print_unsigned(
     flags: &StatFlags,
     width: usize,
     precision: Option<i32>,
-    padding_char: StatPadding,
+    _padding_char: StatPadding,
 ) {
-    let num_str = num.to_string();
-    let s = if flags.is_group {
-        group_num(&num_str)
-    } else {
-        Cow::Borrowed(num_str.as_str())
-    };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
-    };
-    let s = format!("{s:0>prec$}");
-    pad_and_print(&s, flags.is_left, width, padding_char);
+    print!("{}", render_unsigned(num, flags, width, precision));
 }
 
 /// Prints an unsigned octal integer value based on the provided flags, width, and precision.
@@ -500,16 +445,9 @@ fn print_unsigned_oct(
     flags: &StatFlags,
     width: usize,
     precision: Option<i32>,
-    padding_char: StatPadding,
+    _padding_char: StatPadding,
 ) {
-    let prefix = if flags.is_alter { "0" } else { "" };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
-    };
-    let s = format!("{prefix}{num:0>prec$o}");
-    pad_and_print(&s, flags.is_left, width, padding_char);
+    print!("{}", render_unsigned_oct(num, flags, width, precision));
 }
 
 /// Prints an unsigned hexadecimal integer value based on the provided flags, width, and precision.
@@ -526,64 +464,13 @@ fn print_unsigned_hex(
     flags: &StatFlags,
     width: usize,
     precision: Option<i32>,
-    padding_char: StatPadding,
+    _padding_char: StatPadding,
 ) {
-    let prefix = if flags.is_alter { "0x" } else { "" };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
-    };
-    let s = format!("{prefix}{num:0>prec$x}");
-    pad_and_print(&s, flags.is_left, width, padding_char);
+    print!("{}", render_unsigned_hex(num, flags, width, precision));
 }
 
 fn print_timestamp(sec: i64, nsec: i64, flags: &StatFlags, width: usize, precision: Option<i32>) {
-    let mut num = sec.to_string();
-    if flags.is_group {
-        num = group_num(&num).into_owned();
-    }
-
-    if let Some(p) = precision {
-        let p = if p == -1 { 9 } else { p as usize }; // 对于时间戳，单独的 '.' 意味着输出完整的 9 位纳秒！
-        if p > 0 {
-            let nsec_str = format!("{nsec:09}");
-            let frac = if p <= 9 {
-                nsec_str[..p].to_string()
-            } else {
-                format!("{nsec_str:0<p$}")
-            };
-            num = format!("{num}.{frac}");
-        }
-    }
-
-    let prefix = if flags.is_sign && sec >= 0 {
-        "+"
-    } else if flags.is_space && sec >= 0 {
-        " "
-    } else {
-        ""
-    };
-    let pad_char = if flags.is_zero && !flags.is_left {
-        '0'
-    } else {
-        ' '
-    };
-
-    let total_len = prefix.len() + num.len();
-    if !flags.is_left && width > total_len {
-        let pad_str = pad_char.to_string().repeat(width - total_len);
-        if pad_char == '0' {
-            print!("{prefix}{pad_str}{num}");
-        } else {
-            print!("{pad_str}{prefix}{num}");
-        }
-    } else if flags.is_left && width > total_len {
-        let pad_str = ' '.to_string().repeat(width - total_len);
-        print!("{prefix}{num}{pad_str}");
-    } else {
-        print!("{prefix}{num}");
-    }
+    print!("{}", render_timestamp(sec, nsec, flags, width, precision));
 }
 
 impl Stater {
@@ -2171,35 +2058,16 @@ fn render_output(
     width: usize,
     precision: Option<i32>,
 ) -> String {
-    let padding_char = determine_padding_char(&flags, &precision);
-
     match output {
         StatOutputType::Str(value) => render_str(value, &flags, width, precision),
-        StatOutputType::Integer(value) => {
-            render_integer(*value, &flags, width, precision, padding_char)
-        }
-        StatOutputType::Unsigned(value) => {
-            render_unsigned(*value, &flags, width, precision, padding_char)
-        }
-        StatOutputType::UnsignedOct(value) => {
-            render_unsigned_oct(*value, &flags, width, precision, padding_char)
-        }
-        StatOutputType::UnsignedHex(value) => {
-            render_unsigned_hex(*value, &flags, width, precision, padding_char)
-        }
+        StatOutputType::Integer(value) => render_integer(*value, &flags, width, precision),
+        StatOutputType::Unsigned(value) => render_unsigned(*value, &flags, width, precision),
+        StatOutputType::UnsignedOct(value) => render_unsigned_oct(*value, &flags, width, precision),
+        StatOutputType::UnsignedHex(value) => render_unsigned_hex(*value, &flags, width, precision),
         StatOutputType::Timestamp(sec, nsec) => {
             render_timestamp(*sec, *nsec, &flags, width, precision)
         }
         StatOutputType::Unknown => "?".into(),
-    }
-}
-
-fn render_padded(result: &str, left: bool, width: usize, padding: StatPadding) -> String {
-    match (left, padding) {
-        (false, StatPadding::Zero) => format!("{result:0>width$}"),
-        (false, StatPadding::Space) => format!("{result:>width$}"),
-        (true, StatPadding::Zero) => format!("{result:0<width$}"),
-        (true, StatPadding::Space) => format!("{result:<width$}"),
     }
 }
 
@@ -2210,66 +2078,36 @@ fn render_str(s: &str, flags: &StatFlags, width: usize, precision: Option<i32>) 
         None => usize::MAX,
     };
     let value = if p < s.len() { &s[..p] } else { s };
-    render_padded(value, flags.is_left, width, StatPadding::Space)
+    if flags.is_left {
+        format!("{value:<width$}")
+    } else {
+        format!("{value:>width$}")
+    }
 }
 
-fn render_integer(
-    num: i64,
-    flags: &StatFlags,
-    width: usize,
-    precision: Option<i32>,
-    padding_char: StatPadding,
-) -> String {
-    let num_str = num.to_string();
-    let arg = if flags.is_group {
-        group_num(&num_str)
-    } else {
-        Cow::Borrowed(num_str.as_str())
-    };
-    let prefix = if flags.is_sign {
+fn render_integer(num: i64, flags: &StatFlags, width: usize, precision: Option<i32>) -> String {
+    let sign = if num < 0 {
+        "-"
+    } else if flags.is_sign {
         "+"
     } else if flags.is_space {
         " "
     } else {
         ""
     };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
-    };
-    render_padded(
-        &format!("{prefix}{arg:0>prec$}"),
-        flags.is_left,
-        width,
-        padding_char,
-    )
+    let mut digits = decimal_digits(num.unsigned_abs(), precision);
+    if flags.is_group {
+        digits = group_num(&digits).into_owned();
+    }
+    render_numeric(sign, "", &digits, flags, width, precision)
 }
 
-fn render_unsigned(
-    num: u64,
-    flags: &StatFlags,
-    width: usize,
-    precision: Option<i32>,
-    padding_char: StatPadding,
-) -> String {
-    let num_str = num.to_string();
-    let value = if flags.is_group {
-        group_num(&num_str)
-    } else {
-        Cow::Borrowed(num_str.as_str())
-    };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
-    };
-    render_padded(
-        &format!("{value:0>prec$}"),
-        flags.is_left,
-        width,
-        padding_char,
-    )
+fn render_unsigned(num: u64, flags: &StatFlags, width: usize, precision: Option<i32>) -> String {
+    let mut digits = decimal_digits(num, precision);
+    if flags.is_group {
+        digits = group_num(&digits).into_owned();
+    }
+    render_numeric("", "", &digits, flags, width, precision)
 }
 
 fn render_unsigned_oct(
@@ -2277,20 +2115,20 @@ fn render_unsigned_oct(
     flags: &StatFlags,
     width: usize,
     precision: Option<i32>,
-    padding_char: StatPadding,
 ) -> String {
-    let prefix = if flags.is_alter { "0" } else { "" };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
+    let mut digits = if num == 0 && numeric_precision(precision) == Some(0) {
+        String::new()
+    } else {
+        format!("{num:o}")
     };
-    render_padded(
-        &format!("{prefix}{num:0>prec$o}"),
-        flags.is_left,
-        width,
-        padding_char,
-    )
+    let mut minimum = numeric_precision(precision).unwrap_or(0);
+    if flags.is_alter && !digits.starts_with('0') {
+        minimum = minimum.max(digits.len() + 1);
+    }
+    if minimum > digits.len() {
+        digits.insert_str(0, &"0".repeat(minimum - digits.len()));
+    }
+    render_numeric("", "", &digits, flags, width, precision)
 }
 
 fn render_unsigned_hex(
@@ -2298,20 +2136,57 @@ fn render_unsigned_hex(
     flags: &StatFlags,
     width: usize,
     precision: Option<i32>,
-    padding_char: StatPadding,
 ) -> String {
-    let prefix = if flags.is_alter { "0x" } else { "" };
-    let prec = match precision {
-        Some(-1) => 0,
-        Some(p) => p as usize,
-        None => 0,
+    let mut digits = if num == 0 && numeric_precision(precision) == Some(0) {
+        String::new()
+    } else {
+        format!("{num:x}")
     };
-    render_padded(
-        &format!("{prefix}{num:0>prec$x}"),
-        flags.is_left,
-        width,
-        padding_char,
-    )
+    if let Some(minimum) = numeric_precision(precision)
+        && minimum > digits.len()
+    {
+        digits.insert_str(0, &"0".repeat(minimum - digits.len()));
+    }
+    let prefix = if flags.is_alter && num != 0 { "0x" } else { "" };
+    render_numeric("", prefix, &digits, flags, width, precision)
+}
+
+fn numeric_precision(precision: Option<i32>) -> Option<usize> {
+    precision.map(|value| value.max(0) as usize)
+}
+
+fn decimal_digits(num: u64, precision: Option<i32>) -> String {
+    let mut digits = if num == 0 && numeric_precision(precision) == Some(0) {
+        String::new()
+    } else {
+        num.to_string()
+    };
+    if let Some(minimum) = numeric_precision(precision)
+        && minimum > digits.len()
+    {
+        digits.insert_str(0, &"0".repeat(minimum - digits.len()));
+    }
+    digits
+}
+
+fn render_numeric(
+    sign: &str,
+    base_prefix: &str,
+    digits: &str,
+    flags: &StatFlags,
+    width: usize,
+    precision: Option<i32>,
+) -> String {
+    let value_len = sign.len() + base_prefix.len() + digits.len();
+    let padding = width.saturating_sub(value_len);
+
+    if flags.is_left {
+        format!("{sign}{base_prefix}{digits}{}", " ".repeat(padding))
+    } else if flags.is_zero && precision.is_none() {
+        format!("{sign}{base_prefix}{}{digits}", "0".repeat(padding))
+    } else {
+        format!("{}{sign}{base_prefix}{digits}", " ".repeat(padding))
+    }
 }
 
 fn render_timestamp(
@@ -2683,6 +2558,51 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(render_output(&output, flags, 8, None), "00000010");
+    }
+
+    #[test]
+    fn numeric_formatting_places_prefixes_and_honors_precision() {
+        let alternate_zero = StatFlags {
+            is_alter: true,
+            is_zero: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            render_output(
+                &StatOutputType::UnsignedHex(0x81a4),
+                alternate_zero,
+                8,
+                None,
+            ),
+            "0x0081a4"
+        );
+
+        let alternate = StatFlags {
+            is_alter: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            render_output(&StatOutputType::UnsignedOct(0o644), alternate, 0, Some(5),),
+            "00644"
+        );
+        assert_eq!(
+            render_output(
+                &StatOutputType::Unsigned(0),
+                StatFlags::default(),
+                0,
+                Some(0)
+            ),
+            ""
+        );
+        assert_eq!(
+            render_output(
+                &StatOutputType::UnsignedHex(0),
+                StatFlags::default(),
+                0,
+                Some(0),
+            ),
+            ""
+        );
     }
 
     #[test]

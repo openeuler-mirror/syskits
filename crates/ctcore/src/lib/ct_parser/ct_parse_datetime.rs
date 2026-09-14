@@ -86,6 +86,14 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if let Some(normalized) = normalize_comma_fractional_seconds(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     if !normalized_extended_year {
         if has_explicit_plus_extended_year(input_trim) {
             return Err(ParseDateTimeError {
@@ -668,6 +676,47 @@ pub fn contains_leap_second(input: &str) -> bool {
                 .and_then(|index| bytes.get(index))
                 .is_none_or(|byte| !byte.is_ascii_digit())
     })
+}
+
+fn normalize_comma_fractional_seconds(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut normalized = bytes.to_vec();
+    let mut changed = false;
+
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b',' && is_fractional_seconds_comma(bytes, index) {
+            normalized[index] = b'.';
+            changed = true;
+        }
+    }
+
+    changed.then(|| String::from_utf8(normalized).expect("ASCII replacement preserves UTF-8"))
+}
+
+fn is_fractional_seconds_comma(bytes: &[u8], comma: usize) -> bool {
+    if !bytes.get(comma + 1).is_some_and(u8::is_ascii_digit) {
+        return false;
+    }
+
+    let mut seconds_start = comma;
+    while seconds_start > 0 && bytes[seconds_start - 1].is_ascii_digit() {
+        seconds_start -= 1;
+    }
+    if seconds_start == comma || seconds_start == 0 || bytes[seconds_start - 1] != b':' {
+        return false;
+    }
+
+    let minute_end = seconds_start - 1;
+    let mut minute_start = minute_end;
+    while minute_start > 0 && bytes[minute_start - 1].is_ascii_digit() {
+        minute_start -= 1;
+    }
+    if minute_start == minute_end || minute_start == 0 || bytes[minute_start - 1] != b':' {
+        return false;
+    }
+
+    let hour_end = minute_start - 1;
+    hour_end > 0 && bytes[hour_end - 1].is_ascii_digit()
 }
 
 fn has_explicit_plus_extended_year(input: &str) -> bool {
@@ -1496,6 +1545,23 @@ mod tests {
                 "input {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_comma_fractional_seconds() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("2024-01-01 12:00:00,25 UTC", ref_time).unwrap();
+
+        assert_eq!(parsed.timestamp(), 1_704_110_400);
+        assert_eq!(parsed.timestamp_subsec_nanos(), 250_000_000);
+    }
+
+    #[test]
+    fn test_normalizes_all_comma_fractional_seconds_in_one_pass() {
+        assert_eq!(
+            normalize_comma_fractional_seconds("1:2:3,4 5:6:7,8"),
+            Some("1:2:3.4 5:6:7.8".to_string())
+        );
     }
 
     #[test]

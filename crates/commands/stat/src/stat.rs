@@ -2377,11 +2377,13 @@ pub fn ct_app() -> Command {
             .short('c')
             .long(stat_options::STAT_FORMAT)
             .help(rust_i18n::t!(stat_options::STAT_FORMAT))
-            .value_name("FORMAT"),
+            .value_name("FORMAT")
+            .overrides_with(stat_options::STAT_PRINTF),
         Arg::new(stat_options::STAT_PRINTF)
             .long(stat_options::STAT_PRINTF)
             .value_name("FORMAT")
-            .help(rust_i18n::t!(stat_options::STAT_PRINTF)),
+            .help(rust_i18n::t!(stat_options::STAT_PRINTF))
+            .overrides_with(stat_options::STAT_FORMAT),
         Arg::new(stat_options::STAT_CACHED)
             .long(stat_options::STAT_CACHED)
             .value_name("MODE")
@@ -2474,6 +2476,41 @@ mod tests {
         assert_eq!(
             matches.get_one::<String>(stat_options::STAT_CACHED),
             Some(&"never".to_string())
+        );
+    }
+
+    #[test]
+    fn format_and_printf_use_the_last_option() {
+        let matches = ct_app()
+            .clone()
+            .try_get_matches_from(["stat", "--printf=first", "--format=second", "file"])
+            .unwrap();
+        assert_eq!(
+            Stater::configure_format(&matches).unwrap().0,
+            vec![
+                StatToken::Char('s'),
+                StatToken::Char('e'),
+                StatToken::Char('c'),
+                StatToken::Char('o'),
+                StatToken::Char('n'),
+                StatToken::Char('d'),
+                StatToken::Char('\n'),
+            ]
+        );
+
+        let matches = ct_app()
+            .try_get_matches_from(["stat", "--format=first", "--printf=second", "file"])
+            .unwrap();
+        assert_eq!(
+            Stater::configure_format(&matches).unwrap().0,
+            vec![
+                StatToken::Char('s'),
+                StatToken::Char('e'),
+                StatToken::Char('c'),
+                StatToken::Char('o'),
+                StatToken::Char('n'),
+                StatToken::Char('d'),
+            ]
         );
     }
 

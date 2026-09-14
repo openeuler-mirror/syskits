@@ -511,6 +511,54 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；先指定--printf=first再指定--format=second；最后的--format生效并追加换行，预期RC=0、stdout完整内容为second和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch format_order_file"
+            ],
+            "args": [
+                "--printf=first",
+                "--format=second",
+                "format_order_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "second\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f format_order_file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；先指定--format=first再指定--printf=second；最后的--printf生效且不追加换行，预期RC=0、stdout完整内容为second、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "touch printf_order_file"
+            ],
+            "args": [
+                "--format=first",
+                "--printf=second",
+                "printf_order_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "second",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f printf_order_file"
+            ]
         }
     ]
 }

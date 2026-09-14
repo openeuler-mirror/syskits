@@ -2,6 +2,21 @@
   "tests": [
     {
       "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下执行date -d @0 +%-N；GNU将无宽度的%-N调整为系统时间戳分辨率宽度，本机纳秒分辨率预期输出9个0和换行",
+      "args": ["-d", "@0", "+%-N"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "000000000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
       "byteMode": true,
       "command": "date",
       "description": "原始字节用例：LC_ALL=C、TZ=UTC0；执行date -d @0，FORMAT完整十六进制=2bff2546（加号、无效UTF-8字节ff、%F）；stdin为0字节、完整十六进制=空；预期RC=0，stderr完整十六进制=空，stdout完整十六进制=ff313937302d30312d30310a（字节ff、1970-01-01和换行）",

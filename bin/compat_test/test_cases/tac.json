@@ -1329,6 +1329,32 @@
     {
       "tstdin": "",
       "command": "tac",
+      "description": "原始字节错误用例：LC_ALL=C下执行tac且不存在路径完整十六进制=6c696e650a627265616b（line、换行、break）；GNU quoteaf把普通文本和控制字节分别放入单引号与$'\\n'片段，预期RC=1、stdout为空且stderr完整十六进制保留GNU分段shell引用",
+      "setup_commands": [],
+      "args": [
+        "6c696e650a627265616b"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7461633a206661696c656420746f206f70656e20276c696e652724275c6e2727627265616b2720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": [],
+      "byteMode": true
+    },
+    {
+      "tstdin": "",
+      "command": "tac",
       "description": "LC_ALL=C下执行tac parent-file/child；parent-file是普通文件而非目录，GNU保留open返回的ENOTDIR，预期RC=1、stdout为空、stderr为failed to open 'parent-file/child' for reading: Not a directory",
       "setup_commands": [
         "printf data > parent-file"

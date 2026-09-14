@@ -760,6 +760,30 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；创建固定10字节文件并以%+8s和%+08s输出文件大小；GNU将%s作为无符号数并忽略+标志，预期分别为空格右对齐和零填充且不输出正号",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "printf '0123456789' > stat_size_unsigned"
+            ],
+            "args": [
+                "-c",
+                "%+8s|%+08s",
+                "stat_size_unsigned"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "      10|00000010\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f stat_size_unsigned"
+            ]
         }
     ]
 }

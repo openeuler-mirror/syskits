@@ -718,6 +718,27 @@
                 "rm -f stat_large_device"
             ],
             "requires_root": true
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；操作数-直接读取标准输入文件描述符的元数据，测试框架提供空管道且不写入数据以避免写端竞态；预期RC=0、stdout完整内容为-|fifo|0和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "-c",
+                "%n|%F|%s",
+                "-"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "-|fifo|0\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

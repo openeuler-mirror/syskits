@@ -18,15 +18,17 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
-use ctcore::libc::mode_t;
+use ctcore::libc::{self, mode_t};
 use ctcore::{ct_entries, ct_show_error, ct_show_warning};
 use rustix::fs::{AtFlags, StatxFlags, major, minor, statx};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::os::fd::FromRawFd;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // 声明 i18n 宏和初始化函数
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -92,6 +94,39 @@ fn device_major(device: u64) -> u64 {
 
 fn device_minor(device: u64) -> u64 {
     u64::from(minor(device))
+}
+
+fn metadata_for_fd(fd: libc::c_int) -> std::io::Result<fs::Metadata> {
+    // SAFETY: fcntl only reads the supplied descriptor and returns a new owned descriptor.
+    let duplicate = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
+    if duplicate < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    // SAFETY: duplicate is a fresh descriptor owned by this function.
+    let file = unsafe { fs::File::from_raw_fd(duplicate) };
+    file.metadata()
+}
+
+static STDIN_WAS_CLOSED_AT_STARTUP: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn record_initial_stdin_state() {
+    // SAFETY: F_GETFD only queries the descriptor and runs before Rust initializes stdio.
+    let result = unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) };
+    if result < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EBADF) {
+        STDIN_WAS_CLOSED_AT_STARTUP.store(true, Ordering::Relaxed);
+    }
+}
+
+#[used]
+#[unsafe(link_section = ".init_array")]
+static RECORD_INITIAL_STDIN_STATE: extern "C" fn() = record_initial_stdin_state;
+
+fn metadata_for_stdin() -> std::io::Result<fs::Metadata> {
+    if STDIN_WAS_CLOSED_AT_STARTUP.load(Ordering::Relaxed) {
+        return Err(std::io::Error::from_raw_os_error(libc::EBADF));
+    }
+    metadata_for_fd(libc::STDIN_FILENO)
 }
 
 /// pads the string with zeroes or spaces and prints it
@@ -871,11 +906,7 @@ impl Stater {
             return Err(1);
         }
 
-        Ok(if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
-            p.into_os_string()
-        } else {
-            OsString::from("/dev/stdin")
-        })
+        Ok(OsString::from("-"))
     }
 
     fn handle_filesystem_stat(&self, file: &OsStr, display_name: &str) -> i32 {
@@ -913,9 +944,9 @@ impl Stater {
         }
     }
 
-    fn handle_file_stat(&self, file: &OsStr, display_name: &str, stdin_is_fifo: bool) -> i32 {
-        let result = if stdin_is_fifo && display_name == "-" {
-            fs::metadata(file)
+    fn handle_file_stat(&self, file: &OsStr, display_name: &str, _stdin_is_fifo: bool) -> i32 {
+        let result = if display_name == "-" {
+            metadata_for_stdin()
         } else {
             get_metadata(file, self.is_follow, self.cached_mode)
         };
@@ -959,11 +990,15 @@ impl Stater {
                         }
                     }
                 };
-                ct_show_error!(
-                    "cannot statx {}: {}",
-                    display_name.quote(),
-                    error_description
-                );
+                if display_name == "-" {
+                    ct_show_error!("cannot stat standard input: {}", error_description);
+                } else {
+                    ct_show_error!(
+                        "cannot statx {}: {}",
+                        display_name.quote(),
+                        error_description
+                    );
+                }
                 1
             }
         }
@@ -1529,17 +1564,21 @@ pub fn stat_native_semantic(args: impl ctcore::Args) -> CTResult<StatSemantic> {
                 &rendered,
             ));
         } else {
-            let meta =
-                get_metadata(&resolved, stater.is_follow, stater.cached_mode).map_err(|e| {
-                    CtSimpleError::new(
-                        1,
-                        format!(
-                            "cannot statx {}: {}",
-                            display_name.quote(),
-                            file_error_description(&e)
-                        ),
-                    )
-                })?;
+            let meta = (if display_name == "-" {
+                metadata_for_stdin()
+            } else {
+                get_metadata(&resolved, stater.is_follow, stater.cached_mode)
+            })
+            .map_err(|e| {
+                CtSimpleError::new(
+                    1,
+                    format!(
+                        "cannot statx {}: {}",
+                        display_name.quote(),
+                        file_error_description(&e)
+                    ),
+                )
+            })?;
 
             let tokens = stater.select_tokens(&meta);
             let rendered = normalize_default_file_classic_text(
@@ -2568,6 +2607,15 @@ mod tests {
         let device = 4_294_049_791;
         assert_eq!(device_major(device), 511);
         assert_eq!(device_minor(device), 1_048_575);
+    }
+
+    #[test]
+    fn reads_metadata_from_an_open_descriptor() {
+        use std::os::fd::AsRawFd;
+
+        let file = tempfile::tempfile().unwrap();
+        file.set_len(123).unwrap();
+        assert_eq!(metadata_for_fd(file.as_raw_fd()).unwrap().len(), 123);
     }
 
     #[test]

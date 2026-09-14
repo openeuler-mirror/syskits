@@ -757,6 +757,78 @@ fn tac_write_segments<W: Write>(writer: &mut W, segments: &[Vec<u8>]) -> std::io
     Ok(())
 }
 
+fn tac_write_slice<W: Write>(
+    writer: &mut W,
+    data: &[u8],
+    write_error: &mut Option<std::io::Error>,
+) {
+    if write_error.is_none()
+        && let Err(error) = writer.write_all(data)
+    {
+        *write_error = Some(error);
+    }
+}
+
+fn tac_write_string_slices<W: Write>(
+    writer: &mut W,
+    data: &[u8],
+    before: bool,
+    separator: &[u8],
+    write_error: &mut Option<std::io::Error>,
+) {
+    let separator_length = separator.len();
+    let mut following_line_start = data.len();
+
+    for start in memmem::rfind_iter(data, separator) {
+        let segment = if before {
+            let segment = &data[start..following_line_start];
+            following_line_start = start;
+            segment
+        } else {
+            let segment = &data[start + separator_length..following_line_start];
+            following_line_start = start + separator_length;
+            segment
+        };
+        tac_write_slice(writer, segment, write_error);
+    }
+
+    tac_write_slice(writer, &data[..following_line_start], write_error);
+}
+
+fn tac_write_regex_slices<W: Write>(
+    writer: &mut W,
+    data: &[u8],
+    pattern: &mut GnuRegex,
+    before: bool,
+    write_error: &mut Option<std::io::Error>,
+) -> Result<(), TacError> {
+    let mut search_end = data.len();
+    let mut past_end = data.len();
+    let mut first_match = true;
+
+    while let Some(found) = pattern
+        .search_backward(&data[..search_end])
+        .map_err(TacError::from)?
+    {
+        let (start, end) = (found.start, found.end);
+        if before {
+            tac_write_slice(writer, &data[start..past_end], write_error);
+            past_end = start;
+        } else {
+            if !first_match || end != past_end {
+                tac_write_slice(writer, &data[end..past_end], write_error);
+            }
+            past_end = end;
+            first_match = false;
+        }
+
+        search_end = start;
+    }
+
+    tac_write_slice(writer, &data[..past_end], write_error);
+    Ok(())
+}
+
 fn tac_compile_regex(settings: &TacFlags) -> Result<Option<GnuRegex>, TacError> {
     settings
         .is_regex
@@ -785,6 +857,34 @@ fn tac_collect_file_segments_with_regex(
             &settings.separator,
         ))
     }
+}
+
+fn tac_write_file_with_regex<W: Write>(
+    writer: &mut W,
+    filename: &OsStr,
+    settings: &TacFlags,
+    pattern: Option<&mut GnuRegex>,
+    write_error: &mut Option<std::io::Error>,
+) -> CTResult<()> {
+    let data = get_file_data(filename)?;
+    if let Some(pattern) = pattern {
+        tac_write_regex_slices(
+            writer,
+            data.as_ref(),
+            pattern,
+            settings.is_before,
+            write_error,
+        )?;
+    } else {
+        tac_write_string_slices(
+            writer,
+            data.as_ref(),
+            settings.is_before,
+            &settings.separator,
+            write_error,
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -830,14 +930,14 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags) -> CTResult<()> {
 
     for filename in &settings.files {
         read_stdin |= filename.as_bytes() == b"-";
-        match tac_collect_file_segments_with_regex(filename, settings, pattern.as_mut()) {
-            Ok(segments) => {
-                if write_error.is_none()
-                    && let Err(error) = tac_write_segments(writer, &segments)
-                {
-                    write_error = Some(error);
-                }
-            }
+        match tac_write_file_with_regex(
+            writer,
+            filename,
+            settings,
+            pattern.as_mut(),
+            &mut write_error,
+        ) {
+            Ok(()) => {}
             Err(error) => {
                 ctcore::ct_show_error!("{}", error);
                 has_error = true;
@@ -1621,6 +1721,40 @@ mod tests {
                 .unwrap();
 
             assert!(status.success());
+        }
+
+        #[test]
+        fn test_large_seekable_input_does_not_copy_all_segments() {
+            const CHILD_ENV: &str = "TAC_MEMORY_LIMIT_CHILD";
+            const PATH_ENV: &str = "TAC_MEMORY_LIMIT_PATH";
+            if std::env::var_os(CHILD_ENV).is_some() {
+                let limit = ctcore::libc::rlimit {
+                    rlim_cur: 256 * 1024 * 1024,
+                    rlim_max: 256 * 1024 * 1024,
+                };
+                assert_eq!(
+                    unsafe { ctcore::libc::setrlimit(ctcore::libc::RLIMIT_AS, &limit) },
+                    0
+                );
+                let path = std::env::var_os(PATH_ENV).unwrap();
+                let mut output = std::io::sink();
+                tac_main(&mut output, [OsString::from("tac"), path].into_iter()).unwrap();
+                return;
+            }
+
+            let input = NamedTempFile::new().unwrap();
+            input.as_file().set_len(128 * 1024 * 1024).unwrap();
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::file_operations_tests::test_large_seekable_input_does_not_copy_all_segments",
+                ])
+                .env(CHILD_ENV, "1")
+                .env(PATH_ENV, input.path())
+                .status()
+                .unwrap();
+
+            assert!(status.success(), "child status: {status:?}");
         }
     }
 

@@ -606,6 +606,30 @@
             "cleanup_commands": [
                 "rm -f empty_printf_file"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "stat",
+            "description": "LC_ALL=C；依次使用--cached的always、never和default唯一前缀；GNU接受前缀且最后的default模式生效，预期RC=0、stdout完整内容为/和换行、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C'"
+            ],
+            "args": [
+                "--cached=a",
+                "--cached=n",
+                "--cached=d",
+                "-c",
+                "%n",
+                "/"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "/\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

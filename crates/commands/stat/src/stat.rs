@@ -747,8 +747,20 @@ impl Stater {
         // Get format configuration
         let (default_tokens, default_dev_tokens) = Self::configure_format(matches)?;
 
-        // Get mount list if needed
-        let mount_list = if matches.get_flag(stat_options::STAT_FILE_SYSTEM) {
+        let is_show_fs = matches.get_flag(stat_options::STAT_FILE_SYSTEM);
+        let is_from_user = matches.contains_id(stat_options::STAT_FORMAT)
+            || matches.contains_id(stat_options::STAT_PRINTF);
+        let requests_mount_point = default_tokens
+            .iter()
+            .chain(
+                (!is_from_user)
+                    .then_some(default_dev_tokens.iter())
+                    .into_iter()
+                    .flatten(),
+            )
+            .any(|token| matches!(token, StatToken::Directive { format: 'm', .. }));
+
+        let mount_list = if is_show_fs || !requests_mount_point {
             None
         } else {
             Self::get_mount_list()?
@@ -767,9 +779,8 @@ impl Stater {
 
         Ok(Self {
             is_follow: matches.get_flag(stat_options::STAT_DEREFERENCE),
-            is_show_fs: matches.get_flag(stat_options::STAT_FILE_SYSTEM),
-            is_from_user: matches.contains_id(stat_options::STAT_FORMAT)
-                || matches.contains_id(stat_options::STAT_PRINTF),
+            is_show_fs,
+            is_from_user,
             cached_mode,
             files,
             mount_list,
@@ -2757,6 +2768,19 @@ mod tests {
     }
 
     #[test]
+    fn mount_table_is_loaded_only_for_mount_point_formats() {
+        let without_mount = ct_app()
+            .try_get_matches_from(["stat", "-c", "%s", "/"])
+            .unwrap();
+        assert!(Stater::new(&without_mount).unwrap().mount_list.is_none());
+
+        let with_mount = ct_app()
+            .try_get_matches_from(["stat", "-c", "%m", "/"])
+            .unwrap();
+        assert!(Stater::new(&with_mount).unwrap().mount_list.is_some());
+    }
+
+    #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_group_num() {
         assert_eq!("12379821234", group_num("12379821234"));
@@ -3019,7 +3043,8 @@ mod test_stat_all {
         let temp_dir = tempdir().unwrap();
         let temp_path = temp_dir.path();
 
-        let matches = create_test_matches(vec![temp_path.to_str().unwrap()], false, None, false);
+        let matches =
+            create_test_matches(vec![temp_path.to_str().unwrap()], false, Some("%m"), false);
         let stater = Stater::new(&matches).unwrap();
 
         let mount_point = stater.find_mount_point(temp_path);

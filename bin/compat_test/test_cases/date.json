@@ -3,6 +3,51 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "GNU历史别名--rfc-822等价于--rfc-email，固定Epoch输入应输出RFC 5322格式",
+      "args": ["--rfc-822", "-d", "@0"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Thu, 01 Jan 1970 00:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU历史别名--rfc-2822等价于--rfc-email，固定Epoch输入应输出RFC 5322格式",
+      "args": ["--rfc-2822", "-d", "@0"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "Thu, 01 Jan 1970 00:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "GNU历史别名--uct等价于--utc，TZ为Asia/Shanghai时固定Epoch仍输出UTC时区",
+      "args": ["--uct", "-d", "@0", "+%F %T %z"],
+      "env": {"LC_ALL": "C", "TZ": "Asia/Shanghai"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "1970-01-01 00:00:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "基本功能测试 - 显示当前日期",
       "args": [],
       "expectation": {

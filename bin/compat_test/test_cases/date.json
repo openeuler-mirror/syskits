@@ -2,6 +2,22 @@
   "tests": [
     {
       "tstdin": "",
+      "byteMode": true,
+      "command": "date",
+      "description": "原始字节用例：LC_ALL=C、TZ=UTC0；执行date -d @0，FORMAT完整十六进制=2bff2546（加号、无效UTF-8字节ff、%F）；stdin为0字节、完整十六进制=空；预期RC=0，stderr完整十六进制=空，stdout完整十六进制=ff313937302d30312d30310a（字节ff、1970-01-01和换行）",
+      "args": ["2d64", "4030", "2bff2546"],
+      "env": {"LC_ALL": "C", "TZ": "UTC0"},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "ff313937302d30312d30310a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
       "command": "date",
       "description": "LC_ALL=C和TZ=UTC0下输出固定Epoch日期到/dev/full，预期RC=1且stderr为GNU写错误诊断，不出现Rust panic",
       "args": ["-d", "@0", "+%F"],

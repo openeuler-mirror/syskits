@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下解析GNU三位数字时区；2024-01-01 12:00 +530按UTC+05:30墙钟时间换算，预期UTC输出06:30:00 +0000",
+      "args": ["-d", "2024-01-01 12:00 +530", "+%F %T %z"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01 06:30:00 +0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下解析GNU固定字母时区EST；2024-01-01 12:00 EST按UTC-05墙钟时间换算，预期UTC输出17:00:00 +0000",
       "args": ["-d", "2024-01-01 12:00 EST", "+%F %T %z"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

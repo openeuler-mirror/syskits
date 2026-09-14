@@ -18,7 +18,8 @@
 
 use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
-    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Weekday,
+    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Utc,
+    Weekday,
 };
 use chrono_tz::Tz;
 #[cfg(target_os = "linux")]
@@ -91,6 +92,10 @@ pub fn parse_datetime_gnu_compat(
                 message: format!("Unable to parse date: {input}"),
             }
         });
+    }
+
+    if let Some(dt) = parse_gnu_numeric_timezone(input_trim, reference_time) {
+        return Ok(dt);
     }
 
     if let Some(dt) = parse_military_timezone_only(input_trim, reference_time) {
@@ -584,6 +589,45 @@ fn military_timezone_offset_hours(tz_char: char) -> Option<Option<i32>> {
         'Z' => Some(Some(0)),
         _ => None,
     }
+}
+
+fn parse_gnu_numeric_timezone(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let sign_index = input.rfind(['+', '-'])?;
+    let digits = &input[sign_index + 1..];
+    if digits.is_empty() || digits.len() > 4 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+
+    let wall_time_input = input[..sign_index].trim_end();
+    let last_word = wall_time_input.split_ascii_whitespace().next_back()?;
+    let has_explicit_time = wall_time_input.contains(':')
+        || ((1..=2).contains(&last_word.len())
+            && last_word.bytes().all(|byte| byte.is_ascii_digit()));
+    if !has_explicit_time {
+        return None;
+    }
+
+    let value = digits.parse::<i32>().ok()?;
+    let mut offset_minutes = if digits.len() <= 2 {
+        value.checked_mul(60)?
+    } else {
+        (value / 100).checked_mul(60)?.checked_add(value % 100)?
+    };
+    if input.as_bytes()[sign_index] == b'-' {
+        offset_minutes = -offset_minutes;
+    }
+    if !(-24 * 60..=24 * 60).contains(&offset_minutes) {
+        return None;
+    }
+
+    let wall_time = parse_datetime_gnu_compat(wall_time_input, reference_time).ok()?;
+    let utc_naive = wall_time
+        .naive_local()
+        .checked_sub_signed(Duration::minutes(i64::from(offset_minutes)))?;
+    Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
 }
 
 fn parse_military_timezone_only(
@@ -1294,6 +1338,25 @@ mod tests {
         }
 
         assert!(parse_datetime_gnu_compat("2024-01-01 12:00 EDT DST", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_parse_gnu_numeric_timezones() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_utc) in [
+            ("2024-01-01 12:00 +530", (2024, 1, 1, 6, 30, 0)),
+            ("2024-01-01 12:00 -530", (2024, 1, 1, 17, 30, 0)),
+            ("2024-01-01 12:00 +1260", (2023, 12, 31, 23, 0, 0)),
+            ("2024-01-01 12:00 +2400", (2023, 12, 31, 12, 0, 0)),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let (year, month, day, hour, minute, second) = expected_utc;
+            let expected = Utc
+                .with_ymd_and_hms(year, month, day, hour, minute, second)
+                .unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
     }
 
     #[test]

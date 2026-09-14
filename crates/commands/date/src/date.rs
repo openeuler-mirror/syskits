@@ -37,9 +37,11 @@ use ctcore::Tool;
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 #[cfg(target_os = "linux")]
 use std::ffi::CStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 #[cfg(target_os = "linux")]
 use std::mem;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 // Options
 const DATE: &str = "date";
@@ -120,7 +122,7 @@ enum DateFormat {
     Iso8601(DateIso8601Format),
     Rfc5322,
     Rfc3339(DateRfc3339Format),
-    Custom(String),
+    Custom(OsString),
     Default,
 }
 
@@ -345,13 +347,30 @@ fn format_date_output(date: &DateTime<FixedOffset>, format_string: &str) -> CTRe
     }
 }
 
+fn format_date_output_bytes(
+    date: &DateTime<FixedOffset>,
+    format_string: &OsStr,
+) -> CTResult<Vec<u8>> {
+    #[cfg(target_os = "linux")]
+    {
+        format_using_strftime_bytes(date, format_string.as_bytes())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        format_date_output(date, &format_string.to_string_lossy()).map(String::into_bytes)
+    }
+}
+
 fn write_formatted_date<W: Write>(
     output: &mut W,
     date: &DateTime<FixedOffset>,
-    format_string: &str,
+    format_string: impl AsRef<OsStr>,
 ) -> CTResult<()> {
-    let s = format_date_output(date, format_string)?;
-    writeln!(output, "{s}").map_err_context(|| String::from("write error"))
+    let bytes = format_date_output_bytes(date, format_string.as_ref())?;
+    output
+        .write_all(&bytes)
+        .and_then(|_| output.write_all(b"\n"))
+        .map_err_context(|| String::from("write error"))
 }
 
 fn date_row_from_datetime(
@@ -969,9 +988,9 @@ fn date_processing<W: Write>(
         if let Err(err) = set_system_datetime(system_date) {
             ct_show!(err);
         }
-        write_formatted_date(output, &display_date, &make_format_string(&date_set))
+        write_formatted_date(output, &display_date, make_format_os_string(&date_set))
     } else {
-        let format_string = make_format_string(&date_set);
+        let format_string = make_format_os_string(&date_set);
 
         if let DateSource::Custom(ref input) = date_set.date_source {
             let input_str = input.to_string_lossy().to_string();
@@ -984,7 +1003,7 @@ fn date_processing<W: Write>(
             match date {
                 Ok(date) => {
                     if date_set.debug {
-                        emit_date_debug(&input_str, &date, &format_string);
+                        emit_date_debug(&input_str, &date, &format_string.to_string_lossy());
                     }
                     write_formatted_date(output, &date, &format_string)?;
                 }
@@ -1150,7 +1169,7 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         .map(|values| values.collect::<Vec<_>>())
         .unwrap_or_default();
     let rfc_email_count = usize::from(args_match.get_count(DATE_OPT_RFC_EMAIL));
-    let custom_format = args_match.get_one::<String>(DATE_OPT_FORMAT);
+    let custom_format = args_match.get_one::<OsString>(DATE_OPT_FORMAT);
     let format_count = iso_8601_values.len()
         + rfc_email_count
         + rfc_3339_values.len()
@@ -1165,13 +1184,20 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
 
     // 根据命令行参数确定日期格式
     let date_format = if let Some(form) = custom_format {
-        if !form.starts_with('+') {
+        #[cfg(target_os = "linux")]
+        let form_bytes = form.as_bytes();
+        #[cfg(not(target_os = "linux"))]
+        let form_bytes = form.to_string_lossy().as_bytes();
+        if !form_bytes.starts_with(b"+") {
             return Err(Err(CtSimpleError::new(
                 1,
                 format!("invalid date {}", form.quote()),
             )));
         }
-        let form = form[1..].to_string();
+        #[cfg(target_os = "linux")]
+        let form = OsString::from_vec(form_bytes[1..].to_vec());
+        #[cfg(not(target_os = "linux"))]
+        let form = OsString::from(String::from_utf8_lossy(&form_bytes[1..]).into_owned());
         DateFormat::Custom(form)
     } else if let Some(fmt) = iso_8601_values.last() {
         let fmt = fmt.as_str();
@@ -1182,7 +1208,7 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         let fmt = fmt.as_str();
         DateFormat::Rfc3339(fmt.into())
     } else if args_match.get_flag(DATE_OPT_RESOLUTION) {
-        DateFormat::Custom("%s.%N".to_string())
+        DateFormat::Custom(OsString::from("%s.%N"))
     } else {
         DateFormat::Default
     };
@@ -1287,30 +1313,36 @@ fn date_args_init() -> Vec<Arg> {
             .long(DATE_OPT_RESOLUTION)
             .help("output the available resolution of timestamps")
             .action(ArgAction::SetTrue),
-        Arg::new(DATE_OPT_FORMAT),
+        Arg::new(DATE_OPT_FORMAT).value_parser(clap::builder::OsStringValueParser::new()),
     ];
     args
 }
 
 /// Return the appropriate format string for the given settings.
-fn make_format_string(date_settings: &DateSettings) -> String {
+fn make_format_os_string(date_settings: &DateSettings) -> OsString {
     match date_settings.format {
         DateFormat::Iso8601(ref fmt) => match *fmt {
-            DateIso8601Format::Date => "%F".to_string(),
-            DateIso8601Format::Hours => "%FT%H%:z".to_string(),
-            DateIso8601Format::Minutes => "%FT%H:%M%:z".to_string(),
-            DateIso8601Format::Seconds => "%FT%T%:z".to_string(),
-            _ => "%FT%T,%f%:z".to_string(),
+            DateIso8601Format::Date => OsString::from("%F"),
+            DateIso8601Format::Hours => OsString::from("%FT%H%:z"),
+            DateIso8601Format::Minutes => OsString::from("%FT%H:%M%:z"),
+            DateIso8601Format::Seconds => OsString::from("%FT%T%:z"),
+            _ => OsString::from("%FT%T,%f%:z"),
         },
-        DateFormat::Rfc5322 => "%a, %d %b %Y %H:%M:%S %z".to_string(),
+        DateFormat::Rfc5322 => OsString::from("%a, %d %b %Y %H:%M:%S %z"),
         DateFormat::Rfc3339(ref fmt) => match *fmt {
-            DateRfc3339Format::Date => "%F".to_string(),
-            DateRfc3339Format::Seconds => "%F %T%:z".to_string(),
-            _ => "%F %T.%f%:z".to_string(),
+            DateRfc3339Format::Date => OsString::from("%F"),
+            DateRfc3339Format::Seconds => OsString::from("%F %T%:z"),
+            _ => OsString::from("%F %T.%f%:z"),
         },
         DateFormat::Custom(ref fmt) => fmt.clone(),
-        DateFormat::Default => get_default_format(),
+        DateFormat::Default => OsString::from(get_default_format()),
     }
+}
+
+fn make_format_string(date_settings: &DateSettings) -> String {
+    make_format_os_string(date_settings)
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(target_os = "linux")]
@@ -1492,6 +1524,12 @@ fn format_gnu_timezone(
 
 #[cfg(target_os = "linux")]
 fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<String> {
+    format_using_strftime_bytes(dt, fmt.as_bytes())
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[cfg(target_os = "linux")]
+fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResult<Vec<u8>> {
     // 检测当前环境语言
     let lang = std::env::var("LC_ALL")
         .or_else(|_| std::env::var("LC_TIME"))
@@ -1504,86 +1542,76 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
     let use_ethiopia_era = lang.starts_with("am_") || lang.ends_with("_ET");
     let use_alt_era = use_thai_era || use_iran_era || use_ethiopia_era;
 
-    let mut fmt_adjusted = String::with_capacity(fmt.len());
-    let mut chars = fmt.chars().peekable();
+    let mut fmt_adjusted = Vec::with_capacity(fmt.len());
+    let mut index = 0;
 
     // 真正的格式化串解析器
-    while let Some(c) = chars.next() {
-        if c == '%' {
+    while index < fmt.len() {
+        let current = fmt[index];
+        index += 1;
+        if current == b'%' {
             let mut has_minus = false;
             let mut has_plus = false;
             let mut pad = StrftimePad::Default;
             let mut colons = 0;
-            let mut flags_str = String::new();
-            let mut width_str = String::new();
+            let mut flags = Vec::new();
 
             // 提取所有 Flag
-            while let Some(&next) = chars.peek() {
-                if next == '-'
-                    || next == '_'
-                    || next == '0'
-                    || next == '^'
-                    || next == '#'
-                    || next == '+'
-                {
+            while index < fmt.len() {
+                let next = fmt[index];
+                if matches!(next, b'-' | b'_' | b'0' | b'^' | b'#' | b'+') {
                     match next {
-                        '-' => {
+                        b'-' => {
                             has_minus = true;
                             pad = StrftimePad::None;
                         }
-                        '_' => pad = StrftimePad::Space,
-                        '0' => pad = StrftimePad::Zero,
-                        '+' => {
+                        b'_' => pad = StrftimePad::Space,
+                        b'0' => pad = StrftimePad::Zero,
+                        b'+' => {
                             has_plus = true;
                             pad = StrftimePad::Plus;
                         }
                         _ => {}
                     }
-                    flags_str.push(next);
-                    chars.next();
+                    flags.push(next);
+                    index += 1;
                 } else {
                     break;
                 }
             }
 
             // 提取指定宽度
-            while let Some(&next) = chars.peek() {
-                if next.is_ascii_digit() {
-                    width_str.push(next);
-                    chars.next();
-                } else {
-                    break;
-                }
+            let width_start = index;
+            while index < fmt.len() && fmt[index].is_ascii_digit() {
+                index += 1;
             }
+            let width_bytes = &fmt[width_start..index];
+            let width_str = std::str::from_utf8(width_bytes).unwrap_or_default();
 
             // 专门为 %z 提取冒号 (兼容 GNU 的 %8:z 语法)
-            while let Some(&next) = chars.peek() {
-                if next == ':' {
-                    colons += 1;
-                    flags_str.push(next);
-                    chars.next();
-                } else {
-                    break;
-                }
+            while index < fmt.len() && fmt[index] == b':' {
+                colons += 1;
+                flags.push(b':');
+                index += 1;
             }
 
             // 提取修饰符 (E 或 O)
-            let mut modifier = None;
-            if let Some(&m) = chars.peek() {
-                if m == 'E' || m == 'O' {
-                    modifier = Some(m);
-                    chars.next();
-                }
-            }
+            let modifier = (index < fmt.len() && matches!(fmt[index], b'E' | b'O')).then(|| {
+                let modifier = fmt[index];
+                index += 1;
+                modifier
+            });
 
             // 提取指令符
-            if let Some(spec) = chars.next() {
+            if index < fmt.len() {
+                let spec = fmt[index];
+                index += 1;
                 match spec {
-                    's' => {
+                    b's' => {
                         let mut s_val = format!("{}", dt.timestamp());
                         let w = width_str.parse::<usize>().unwrap_or(0);
                         if w > s_val.len() && !has_minus {
-                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
+                            let pad_char = if flags.contains(&b'_') { ' ' } else { '0' };
                             if pad_char == '0' && s_val.starts_with('-') {
                                 let sign_char = s_val.remove(0);
                                 s_val = format!(
@@ -1597,56 +1625,63 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                                 );
                             }
                         }
-                        fmt_adjusted.push_str(&s_val);
+                        fmt_adjusted.extend_from_slice(s_val.as_bytes());
                     }
-                    'N' | 'f' => {
-                        fmt_adjusted.push_str(&format_gnu_nanoseconds(
-                            dt.nanosecond(),
-                            parse_strftime_width(&width_str),
-                            pad,
-                        ));
+                    b'N' | b'f' => {
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_nanoseconds(
+                                dt.nanosecond(),
+                                parse_strftime_width(width_str),
+                                pad,
+                            )
+                            .as_bytes(),
+                        );
                     }
-                    'z' => {
-                        fmt_adjusted.push_str(&format_gnu_timezone(
-                            dt,
-                            colons,
-                            parse_strftime_width(&width_str),
-                            pad,
-                        ));
+                    b'z' => {
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_timezone(dt, colons, parse_strftime_width(width_str), pad)
+                                .as_bytes(),
+                        );
                     }
-                    'C' => {
+                    b'C' => {
                         // 世纪数：年份除以 100。需要处理 '+' 标志和宽度填充
                         let century = dt.year() / 100;
-                        let width = parse_strftime_width(&width_str);
+                        let width = parse_strftime_width(width_str);
                         let always_sign = has_plus && century >= 0 && width.is_some_and(|w| 2 < w);
-                        fmt_adjusted.push_str(&format_gnu_number(
-                            century.unsigned_abs() as u64,
-                            century < 0,
-                            2,
-                            width,
-                            pad,
-                            always_sign,
-                        ));
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_number(
+                                century.unsigned_abs() as u64,
+                                century < 0,
+                                2,
+                                width,
+                                pad,
+                                always_sign,
+                            )
+                            .as_bytes(),
+                        );
                     }
-                    'q' => {
+                    b'q' => {
                         let quarter = (dt.month0() / 3) + 1;
-                        fmt_adjusted.push_str(&quarter.to_string());
+                        fmt_adjusted.extend_from_slice(quarter.to_string().as_bytes());
                     }
-                    'Y' if !use_alt_era => {
+                    b'Y' if !use_alt_era => {
                         let year = dt.year();
-                        let width = parse_strftime_width(&width_str);
+                        let width = parse_strftime_width(width_str);
                         let always_sign =
                             has_plus && year >= 0 && (9999 < year || width.is_some_and(|w| 4 < w));
-                        fmt_adjusted.push_str(&format_gnu_number(
-                            year.unsigned_abs() as u64,
-                            year < 0,
-                            4,
-                            width,
-                            pad,
-                            always_sign,
-                        ));
+                        fmt_adjusted.extend_from_slice(
+                            format_gnu_number(
+                                year.unsigned_abs() as u64,
+                                year < 0,
+                                4,
+                                width,
+                                pad,
+                                always_sign,
+                            )
+                            .as_bytes(),
+                        );
                     }
-                    'Y' | 'y' if use_alt_era => {
+                    b'Y' | b'y' if use_alt_era => {
                         // 手动计算泰国佛历、波斯历和埃塞俄比亚历，绕过 glibc 文字污染！
                         let mut year = dt.year();
                         if use_thai_era {
@@ -1671,7 +1706,7 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                             }
                         }
 
-                        let mut s = if spec == 'Y' {
+                        let mut s = if spec == b'Y' {
                             format!("{year:04}")
                         } else {
                             format!("{:02}", (year % 100).abs())
@@ -1680,42 +1715,42 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
                         // 处理格式填充
                         let w = width_str.parse::<usize>().unwrap_or(0);
                         if w > s.len() && !has_minus {
-                            let pad_char = if flags_str.contains('_') { ' ' } else { '0' };
+                            let pad_char = if flags.contains(&b'_') { ' ' } else { '0' };
                             s = format!("{}{}", pad_char.to_string().repeat(w - s.len()), s);
                         }
 
-                        fmt_adjusted.push_str(&s);
+                        fmt_adjusted.extend_from_slice(s.as_bytes());
                     }
                     _ => {
                         // 标准 C 语言 strftime 占位符
-                        fmt_adjusted.push('%');
-                        fmt_adjusted.push_str(&flags_str);
+                        fmt_adjusted.push(b'%');
+                        fmt_adjusted.extend_from_slice(&flags);
                         if !has_minus {
-                            fmt_adjusted.push_str(&width_str);
+                            fmt_adjusted.extend_from_slice(width_bytes);
                         }
                         if let Some(m) = modifier {
                             fmt_adjusted.push(m);
-                        } else if use_alt_era && matches!(spec, 'c' | 'x' | 'X') {
+                        } else if use_alt_era && matches!(spec, b'c' | b'x' | b'X') {
                             // 对于 %c, %x 仍然允许底层调用带 E 的格式
-                            fmt_adjusted.push('E');
+                            fmt_adjusted.push(b'E');
                         }
                         fmt_adjusted.push(spec);
                     }
                 }
             } else {
-                fmt_adjusted.push('%');
-                fmt_adjusted.push_str(&flags_str);
-                fmt_adjusted.push_str(&width_str);
+                fmt_adjusted.push(b'%');
+                fmt_adjusted.extend_from_slice(&flags);
+                fmt_adjusted.extend_from_slice(width_bytes);
                 if let Some(m) = modifier {
                     fmt_adjusted.push(m);
                 }
             }
         } else {
-            fmt_adjusted.push(c);
+            fmt_adjusted.push(current);
         }
     }
 
-    if !fmt_adjusted.contains('%') {
+    if !fmt_adjusted.contains(&b'%') {
         return Ok(fmt_adjusted);
     }
 
@@ -1768,12 +1803,11 @@ fn format_using_strftime(dt: &DateTime<FixedOffset>, fmt: &str) -> CTResult<Stri
             )
         };
         if res > 0 {
-            let s = String::from_utf8_lossy(&buf[..res]);
-            return Ok(s.to_string());
+            return Ok(buf[..res].to_vec());
         }
         if buf.len() > 65536 {
             if c_fmt.as_bytes().is_empty() {
-                return Ok(String::new());
+                return Ok(Vec::new());
             }
             return Err(CtSimpleError::new(1, "strftime failed"));
         }
@@ -1927,6 +1961,43 @@ fn set_system_datetime(date: DateTime<Utc>) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn custom_format_accepts_non_utf8_literal_bytes() {
+        assert!(
+            ct_app()
+                .try_get_matches_from(vec![
+                    OsString::from("date"),
+                    OsString::from("-d"),
+                    OsString::from("@0"),
+                    OsString::from_vec(vec![b'+', 0xff, b'%', b'F']),
+                ])
+                .is_ok()
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn custom_format_preserves_non_utf8_literal_bytes() {
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                OsString::from("date"),
+                OsString::from("-d"),
+                OsString::from("@0"),
+                OsString::from_vec(vec![b'+', 0xff, b'%', b'F']),
+            ])
+            .unwrap();
+        let format = get_date_format(&matches).unwrap();
+        let source = get_date_source(&matches);
+        let mut output = Vec::new();
+
+        date_processing(matches, format, source, None, &mut output).unwrap();
+
+        assert_eq!(output, b"\xff1970-01-01\n");
+    }
     use std::ffi::OsString;
 
     #[test]
@@ -4567,9 +4638,9 @@ mod tests {
             );
             assert_eq!(
                 matches
-                    .get_one::<String>(DATE_OPT_FORMAT)
-                    .map(String::as_str),
-                Some("seconds")
+                    .get_one::<OsString>(DATE_OPT_FORMAT)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("seconds"))
             );
         }
 
@@ -4590,7 +4661,7 @@ mod tests {
                     .map(String::as_str),
                 Some(SECONDS)
             );
-            assert!(matches.get_one::<String>(DATE_OPT_FORMAT).is_none());
+            assert!(matches.get_one::<OsString>(DATE_OPT_FORMAT).is_none());
         }
     }
 

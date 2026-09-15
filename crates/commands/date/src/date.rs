@@ -1627,6 +1627,12 @@ fn format_era_year_field(tm_val: &tm) -> CTResult<Vec<u8>> {
 }
 
 #[cfg(target_os = "linux")]
+fn format_era_century_field(tm_val: &tm) -> CTResult<Vec<u8>> {
+    let c_fmt = CString::new(b"%EC".as_slice()).expect("strftime format has no NUL byte");
+    format_with_libc_strftime(&c_fmt, tm_val)
+}
+
+#[cfg(target_os = "linux")]
 fn format_gnu_text_field(
     tm_val: &tm,
     modifier: Option<u8>,
@@ -2023,6 +2029,15 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     }
                     b'Y' if modifier == Some(b'E') && !use_alt_era => {
                         let field = format_era_year_field(&tm_val)?;
+                        fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                            &field,
+                            parse_strftime_width(width_str),
+                            pad,
+                            StrftimePad::Space,
+                        ));
+                    }
+                    b'C' if modifier == Some(b'E') => {
+                        let field = format_era_century_field(&tm_val)?;
                         fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
                             &field,
                             parse_strftime_width(width_str),
@@ -2552,6 +2567,25 @@ mod tests {
             )
             .unwrap(),
             "%-6Ea|0000%+10Ea|000%^+10EA|0000000%Oq|    %_10OY|0000%+10EF|0000%+10Ed|0000%+10OD|000%#+10EB|000%+#10EH"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_era_century_width_uses_text_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%EC|%4EC|%6EC|%+4EC|%+6EC|%_+6EC|%+_6EC|%0+6EC|%+06EC|%-6EC",
+            )
+            .unwrap(),
+            "20|  20|    20|0020|000020|000020|    20|000020|000020|20"
         );
     }
 

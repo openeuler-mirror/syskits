@@ -1350,6 +1350,28 @@
       "cleanup_commands": [
         "rm -f -- chown-invalid-uid-sentinel"
       ]
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；旧式点号规格的组部分无效时，GNU将整个OWNER按invalid user诊断",
+      "args": [
+        "root.no_such_group",
+        "chown-invalid-dot-owner"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-invalid-dot-owner"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: invalid user: 'root.no_such_group'\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-invalid-dot-owner"
+      ]
     }
   ]
 }

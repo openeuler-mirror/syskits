@@ -265,35 +265,28 @@ fn is_group_name(name: &str) -> bool {
  *
  * @param user 指定的用户名称或数字用户ID，为字符串格式。
  * @param spec 特定的规格字符串，可能包含用户组信息。
- * @param sep 规格字符串中用于分隔用户和组的字符。
  * @return 返回一个结果选项，可能包含解析出的u32类型的UID，或者在无法解析时返回None。
  */
-fn chown_parse_uid(username: &str, spec_info: &str, sep: char) -> CTResult<Option<u32>> {
-    // 如果用户名称为空，则直接返回None
-    if username.is_empty() {
+fn chown_parse_uid(username: &str, spec_info: &str) -> CTResult<Option<u32>> {
+    // 空用户名和GNU兼容的单独点号规格都不请求修改所有者。
+    if username.is_empty() || spec_info == "." {
         return Ok(None);
     }
     // 尝试根据提供的用户名称定位用户信息
     match CtPasswd::locate(username) {
         Ok(u) => Ok(Some(u.uid)), // 成功找到用户，返回其UID
         Err(_) => {
-            // 未能找到用户，考虑其他解析方法
-            // 检查spec字符串是否包含'.'但不包含':'，尝试以用户名.组名的方式解析
-            if spec_info.contains('.') && !spec_info.contains(':') && sep == ':' {
-                chown_parse_spec(spec_info, '.').map(|(uid_str, _)| uid_str) // 尝试解析规格字符串为UID
-            } else {
-                // 如果'user'字符串包含数字，尝试将其解析为UID
-                match username.parse() {
-                    Ok(uid_num) if uid_num != uid_t::MAX => Ok(Some(uid_num)), // 成功解析为数字UID
-                    Ok(_) => Err(CtSimpleError::new(
-                        1,
-                        format!("invalid user: {}", spec_info.quote()),
-                    )),
-                    Err(_) => Err(CtSimpleError::new(
-                        1,
-                        format!("invalid user: {}", spec_info.quote()),
-                    )), // 解析失败，返回错误
-                }
+            // 如果'user'字符串包含数字，尝试将其解析为UID
+            match username.parse() {
+                Ok(uid_num) if uid_num != uid_t::MAX => Ok(Some(uid_num)), // 成功解析为数字UID
+                Ok(_) => Err(CtSimpleError::new(
+                    1,
+                    format!("invalid user: {}", spec_info.quote()),
+                )),
+                Err(_) => Err(CtSimpleError::new(
+                    1,
+                    format!("invalid user: {}", spec_info.quote()),
+                )), // 解析失败，返回错误
             }
         }
     }
@@ -363,7 +356,7 @@ fn chown_parse_spec(spec_str: &str, sep: char) -> CTResult<(Option<u32>, Option<
     let group_info = argments.next().unwrap_or("");
 
     // 尝试解析用户和组部分为ID
-    let uid_value = chown_parse_uid(username, spec_str, sep)?;
+    let uid_value = chown_parse_uid(username, spec_str)?;
     let gid_value = chown_parse_gid(group_info, spec_str)?;
 
     // 检查特殊情况：如果用户ID是以数字开头且未指定组ID，但提供了分隔符，则视为错误
@@ -430,11 +423,9 @@ mod tests {
 
     #[test]
     fn test_parse_uid() {
-        assert!(matches!(chown_parse_uid("", "", ':'), Ok(None)));
-        assert!(matches!(chown_parse_uid("", ":", ':'), Ok(None)));
-        assert!(matches!(chown_parse_uid("", ".", '.'), Ok(None)));
-        assert!(matches!(chown_parse_uid("", ".", ':'), Ok(None)));
-        assert!(matches!(chown_parse_uid("", ":", '.'), Ok(None)));
+        assert!(matches!(chown_parse_uid("", ""), Ok(None)));
+        assert!(matches!(chown_parse_uid("", ":"), Ok(None)));
+        assert!(matches!(chown_parse_uid("", "."), Ok(None)));
     }
     #[test]
     fn test_parse_gid() {
@@ -447,6 +438,13 @@ mod tests {
     fn test_rejects_uid_gid_minus_one_sentinels() {
         assert!(chown_parse_spec("4294967295", ':').is_err());
         assert!(chown_parse_spec(":4294967295", ':').is_err());
+    }
+
+    #[test]
+    fn test_invalid_legacy_dot_group_reports_invalid_user() {
+        let error = chown_parse_user_spec_warn("root.no_such_group").unwrap_err();
+
+        assert_eq!(error.to_string(), "invalid user: 'root.no_such_group'");
     }
     #[test]
     fn test_parse_spec_with_dot() {
@@ -549,8 +547,7 @@ mod tests {
                 .starts_with("invalid group: ")
         );
         assert!(
-            format!("{}", chown_parse_spec("..", ':').err().unwrap())
-                .starts_with("invalid group: ")
+            format!("{}", chown_parse_spec("..", ':').err().unwrap()).starts_with("invalid user: ")
         );
     }
 

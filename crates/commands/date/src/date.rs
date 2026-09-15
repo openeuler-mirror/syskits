@@ -653,6 +653,53 @@ fn date_output_format_debug_text(format_string: &str) -> String {
     )
 }
 
+fn date_epoch_debug_text(
+    date: &DateTime<FixedOffset>,
+    format_string: &str,
+    env_timezone: Option<&str>,
+) -> String {
+    use std::fmt::Write as _;
+
+    let parts = DateDebugParts::default();
+    let mut output = String::new();
+    let _ = writeln!(
+        output,
+        "date: parsed number of seconds part: number of seconds: {}",
+        date.timestamp()
+    );
+    output.push_str("date: input timezone: '@timespec' - always UTC\n");
+    let _ = writeln!(
+        output,
+        "date: timezone: {}",
+        final_timezone_debug_label(&parts, env_timezone)
+    );
+    let _ = writeln!(
+        output,
+        "date: final: {}.{:09} (epoch-seconds)",
+        date.timestamp(),
+        date.timestamp_subsec_nanos()
+    );
+    let utc = date.with_timezone(&Utc);
+    let _ = writeln!(
+        output,
+        "date: final: (Y-M-D) {:04}-{:02}-{:02} {:02}:{:02}:{:02} (UTC)",
+        utc.year(),
+        utc.month(),
+        utc.day(),
+        utc.hour(),
+        utc.minute(),
+        utc.second()
+    );
+    let _ = writeln!(
+        output,
+        "date: final: {} ({})",
+        date_ymd_hms_label(date),
+        date_offset_label(date)
+    );
+    output.push_str(&date_output_format_debug_text(format_string));
+    output
+}
+
 fn date_debug_text(
     input: &str,
     date: &DateTime<FixedOffset>,
@@ -660,6 +707,10 @@ fn date_debug_text(
     env_timezone: Option<&str>,
 ) -> String {
     use std::fmt::Write as _;
+
+    if input.trim_start().starts_with('@') {
+        return date_epoch_debug_text(date, format_string, env_timezone);
+    }
 
     let parts = analyze_date_debug_input(input);
     let mut output = String::new();
@@ -2913,6 +2964,26 @@ mod tests {
                 }),
                 embedded_timezone: None,
             }
+        );
+    }
+
+    #[test]
+    fn test_date_debug_epoch_timespec_uses_gnu_specific_diagnostics() {
+        let date = parse_date("@-1.5").unwrap();
+
+        assert_eq!(
+            date_debug_text("@-1.5", &date, "%s.%N", Some("UTC0")),
+            format!(
+                "date: parsed number of seconds part: number of seconds: -2\n\
+                 date: input timezone: '@timespec' - always UTC\n\
+                 date: timezone: Universal Time\n\
+                 date: final: -2.500000000 (epoch-seconds)\n\
+                 date: final: (Y-M-D) 1969-12-31 23:59:58 (UTC)\n\
+                 date: final: (Y-M-D) 1969-12-31 23:59:58 (UTC+00)\n\
+                 {}: output format: {}\n",
+                ctcore::ct_util_name(),
+                locale_quote("%s.%N"),
+            )
         );
     }
 

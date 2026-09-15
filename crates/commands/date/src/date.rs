@@ -449,6 +449,39 @@ fn date_file_reader(path: &Path) -> CTResult<Box<dyn BufRead>> {
     Ok(Box::new(BufReader::new(file)))
 }
 
+fn date_file_read_error_message(path: &Path, error: &io::Error) -> String {
+    let input_name = if path == Path::new("-") {
+        "standard input".to_string()
+    } else {
+        path.to_string_lossy().into_owned()
+    };
+    format!(
+        "{input_name}: read error: {}",
+        ctcore::ct_error::strip_errno(error)
+    )
+}
+
+fn date_file_lines<R: BufRead>(reader: R, path: &Path) -> impl Iterator<Item = CTResult<String>> {
+    let path = path.to_path_buf();
+    reader.lines().scan(false, move |read_failed, line| {
+        if *read_failed {
+            return None;
+        }
+
+        let line = match line {
+            Ok(line) => Ok(line),
+            Err(error) => {
+                *read_failed = true;
+                Err(CtSimpleError::new(
+                    1,
+                    date_file_read_error_message(&path, &error),
+                ))
+            }
+        };
+        Some(line)
+    })
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct DateDebugTime {
     parsed: String,
@@ -868,7 +901,15 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
             }
         }
         DateSource::File(path) => {
-            for line in date_file_reader(path)?.lines().map_while(Result::ok) {
+            for line in date_file_lines(date_file_reader(path)?, path) {
+                let line = match line {
+                    Ok(line) => line,
+                    Err(error) => {
+                        exit_code = 1;
+                        stderr_text.push_str(&format!("date: {error}\n"));
+                        break;
+                    }
+                };
                 match parse_date(&line) {
                     Ok(dt) => {
                         let dt = if date_set.utc {
@@ -1037,13 +1078,14 @@ fn date_processing<W: Write>(
                         format!("expected file, got directory {}", path.quote()),
                     ));
                 }
-                let lines = date_file_reader(path)?.lines();
-                let mut iter: Box<dyn Iterator<Item = _>> =
-                    Box::new(lines.map_while(Result::ok).map(|line| {
+                let lines = date_file_lines(date_file_reader(path)?, path);
+                let mut iter: Box<dyn Iterator<Item = _>> = Box::new(lines.map(|line| {
+                    line.and_then(|line| {
                         parse_date(&line).map_err(|_| {
                             CtSimpleError::new(1, format!("invalid date {}", line.quote()))
                         })
-                    }));
+                    })
+                }));
 
                 if date_set.utc {
                     iter = Box::new(iter.map(|res| res.map(|dt| dt.with_timezone(&Utc).into())));
@@ -2888,6 +2930,26 @@ mod tests {
 
         assert_eq!(result.classic_text, "1709164800\n0\n");
         assert_eq!(result.rows.len(), 2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_file_read_error_sets_failure_status() {
+        let args = [
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-f"),
+            OsString::from("/proc/self/mem"),
+            OsString::from("+%F"),
+        ];
+
+        let result = date_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(result.exit_code, 1);
+        assert_eq!(
+            result.stderr_text,
+            "date: /proc/self/mem: read error: Input/output error\n"
+        );
+        assert!(result.classic_text.is_empty());
     }
 
     mod tests_ct_app {

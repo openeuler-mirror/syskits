@@ -397,6 +397,38 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C下stdout和stderr均连接独立PTY且命令不存在；GNU在重定向前保存原stderr，因此failed to run command诊断仍输出到原TTY，nohup.out仅创建且保持0600、0字节",
+            "args": ["no-such-command"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "tty",
+                    "stderr": "tty"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": "nohup: appending output to 'nohup.out'\nnohup: failed to run command 'no-such-command': No such file or directory\n"
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "600:0\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C、LANG=C下执行nohup true；stdin为空管道、stdout为非TTY捕获管道，仅stderr连接PTY；无文件fixture；预期RC=0、stdout为空，PTY stderr规范化为nohup: redirecting stderr to stdout加换行；迁移原Cargo用例nohup_reports_tty_stderr_redirection",
             "args": [
                 "true"

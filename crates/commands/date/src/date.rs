@@ -1229,7 +1229,20 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         .map(|values| values.collect::<Vec<_>>())
         .unwrap_or_default();
     let rfc_email_count = usize::from(args_match.get_count(DATE_OPT_RFC_EMAIL));
-    let custom_format = args_match.get_one::<OsString>(DATE_OPT_FORMAT);
+    let positional_formats = args_match
+        .get_many::<OsString>(DATE_OPT_FORMAT)
+        .map(|values| values.collect::<Vec<_>>())
+        .unwrap_or_default();
+    if let Some(extra_operand) = positional_formats.get(1) {
+        return Err(Err(CtSimpleError::new(
+            1,
+            format!(
+                "extra operand {}\nTry 'date --help' for more information.",
+                extra_operand.quote()
+            ),
+        )));
+    }
+    let custom_format = positional_formats.first().copied();
     let format_count = iso_8601_values.len()
         + rfc_email_count
         + rfc_3339_values.len()
@@ -1382,7 +1395,10 @@ fn date_args_init() -> Vec<Arg> {
             .long(DATE_OPT_RESOLUTION)
             .help("output the available resolution of timestamps")
             .action(ArgAction::SetTrue),
-        Arg::new(DATE_OPT_FORMAT).value_parser(clap::builder::OsStringValueParser::new()),
+        Arg::new(DATE_OPT_FORMAT)
+            .num_args(1..)
+            .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new()),
     ];
     args
 }
@@ -5627,6 +5643,22 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "the argument '010100002024' lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'\nTry 'date --help' for more information."
+        );
+    }
+
+    #[test]
+    fn test_second_format_operand_uses_gnu_extra_operand_diagnostic() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-d", "@0", "+%F", "extra"])
+            .unwrap();
+
+        let error = match get_date_format(&matches) {
+            Err(Err(error)) => error,
+            _ => panic!("expected extra-operand diagnostic"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "extra operand 'extra'\nTry 'date --help' for more information."
         );
     }
 

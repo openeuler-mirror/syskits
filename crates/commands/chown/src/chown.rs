@@ -20,7 +20,7 @@ use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use sys_locale::get_locale;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 
 use std::ffi::OsString;
 use std::fs;
@@ -110,6 +110,7 @@ pub fn ct_app() -> Command {
             .help(t!("chown.clap.reference"))
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
+            .value_parser(OsStringValueParser::new())
             .num_args(1),
         Arg::new(opt_flags::verbosity::SILENT)
             .short('f')
@@ -178,7 +179,7 @@ fn chown_parsing_gid_uid_and_filter(args_match: &ArgMatches) -> CTResult<CtGidUi
     let dest_group_name: Option<String>;
     let raw_owner: String;
     // 处理 `-reference` 参数，若存在，则从指定文件获取UID和GID。
-    if let Some(file) = args_match.get_one::<String>(opt_flags::REFERENCE) {
+    if let Some(file) = args_match.get_one::<OsString>(opt_flags::REFERENCE) {
         let meta = fs::metadata(file)
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?;
         let gid = meta.gid();
@@ -599,6 +600,42 @@ mod tests {
                 OsString::from(ctcore::ct_util_name()),
                 current_uid_arg(),
                 path.into_os_string(),
+            ]
+            .into_iter(),
+        );
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_chown_main_accepts_non_utf8_reference_filename() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_non_utf8_reference_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let reference = directory.join(OsString::from_vec(vec![0xff]));
+        let target = directory.join("target");
+        File::create(&reference).unwrap();
+        File::create(&target).unwrap();
+
+        let mut reference_arg = b"--reference=".to_vec();
+        reference_arg.extend_from_slice(reference.as_os_str().as_bytes());
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from_vec(reference_arg),
+                target.into_os_string(),
             ]
             .into_iter(),
         );

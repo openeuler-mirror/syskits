@@ -2,6 +2,26 @@
     "tests": [
         {
             "tstdin": "",
+            "byteMode": true,
+            "command": "nohup",
+            "description": "原始字节命令路径用例：LC_ALL=C下创建并执行路径字节2e2f636d642dff（./cmd-加0xff）；GNU nohup保留argv原始字节并输出byte-ok，预期RC=0、stdout完整十六进制=627974652d6f6b、stderr为空",
+            "setup_commands": [
+                "export LC_ALL='C' LANG='C'",
+                "printf '#!/bin/sh\\nprintf byte-ok\\n' > \"$(printf 'cmd-\\377')\"",
+                "chmod +x \"$(printf 'cmd-\\377')\""
+            ],
+            "args": ["2e2f636d642dff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "627974652d6f6b",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": ["rm -f \"$(printf 'cmd-\\377')\""]
+        },
+        {
+            "tstdin": "",
             "command": "nohup",
             "description": "LC_ALL=C且三个标准流均非TTY时执行不存在命令，GNU nohup返回127并使用failed to run command诊断，且不附加Rust错误码后缀",
             "args": ["no-such-command"],

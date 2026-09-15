@@ -3,6 +3,40 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--date包含前导零的5位数字时区+01234时，GNU date按+12:34解释并输出对应UTC时间",
+      "args": ["-d", "2024-01-01 00:00 +01234", "+%FT%T%z"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2023-12-31T11:26:00+0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--date包含负号和冒号分隔时区-1:2时，GNU date按-01:02解释并输出对应UTC时间",
+      "args": ["-d", "2024-01-01 00:00 -1:2", "+%FT%T%z"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01T01:02:00+0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--date后给出两个位置参数时，GNU date拒绝第二个操作数并输出extra operand诊断及帮助提示",
       "args": ["-d", "@0", "+%F", "extra"],
       "environment": {

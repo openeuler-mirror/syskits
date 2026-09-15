@@ -1151,7 +1151,8 @@ fn validate_date_source_options(args_match: &ArgMatches) -> CTResult<()> {
     if print_source_count > 1 {
         return Err(CtSimpleError::new(
             1,
-            "multiple time sources specified".to_string(),
+            "the options to specify dates for printing are mutually exclusive\nTry 'date --help' for more information."
+                .to_string(),
         ));
     }
 
@@ -5580,6 +5581,19 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "the options to print and set the time may not be used together\nTry 'date --help' for more information."
+        );
+    }
+
+    #[test]
+    fn test_multiple_print_sources_use_gnu_diagnostic() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-d", "@0", "-r", "/dev/null"])
+            .unwrap();
+
+        let error = validate_date_source_options(&matches).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "the options to specify dates for printing are mutually exclusive\nTry 'date --help' for more information."
         );
     }
 

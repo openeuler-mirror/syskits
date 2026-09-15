@@ -22,6 +22,7 @@ use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
 
 use ctcore::Tool;
+use std::borrow::Cow;
 use std::env;
 use std::ffi::OsString;
 use std::ffi::{CStr, CString};
@@ -60,6 +61,54 @@ enum NohupError {
     CannotReplace(&'static str, Error),     // 无法替换指定的文件描述符
     OpenFailed(i32, Error),                 // 打开文件失败
     OpenFailed2(i32, Error, String, Error), // 打开文件失败（备选路径）
+}
+
+#[derive(Debug)]
+struct NohupUsageError {
+    code: i32,
+    message: Vec<u8>,
+    usage_hint: Vec<u8>,
+}
+
+impl NohupUsageError {
+    fn boxed(code: i32, message: Vec<u8>) -> Box<dyn CTError> {
+        let usage_hint = format!(
+            "Try '{} --help' for more information.",
+            ctcore::ct_help_utility_name()
+        )
+        .into_bytes();
+        Box::new(Self {
+            code,
+            message,
+            usage_hint,
+        })
+    }
+}
+
+impl std::error::Error for NohupUsageError {}
+
+impl Display for NohupUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl CTError for NohupUsageError {
+    fn code(&self) -> i32 {
+        self.code
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 impl std::error::Error for NohupError {}
@@ -159,6 +208,53 @@ fn save_stderr_for_exec_failure() -> Option<OwnedFd> {
     (saved_fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(saved_fd) })
 }
 
+const NOHUP_LONG_OPTIONS: &[&str] = &["help", "version"];
+
+fn nohup_match_long_option(option: &[u8]) -> Option<&'static str> {
+    let mut matches = NOHUP_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|candidate| !option.is_empty() && candidate.as_bytes().starts_with(option));
+    let matching_option = matches.next()?;
+    matches.next().is_none().then_some(matching_option)
+}
+
+fn nohup_validate_standard_options(args: &[OsString], error_code: i32) -> CTResult<()> {
+    let Some(argument) = args.get(1) else {
+        return Ok(());
+    };
+    let bytes = argument.as_bytes();
+    if bytes == b"--" || bytes.len() <= 1 || bytes[0] != b'-' {
+        return Ok(());
+    }
+
+    if bytes[1] != b'-' {
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(bytes[1]);
+        message.push(b'\'');
+        return Err(NohupUsageError::boxed(error_code, message));
+    }
+
+    let option = &bytes[2..];
+    let (name, has_argument) = option
+        .iter()
+        .position(|byte| *byte == b'=')
+        .map_or((option, false), |equals| (&option[..equals], true));
+    match nohup_match_long_option(name) {
+        Some(canonical) if has_argument => Err(NohupUsageError::boxed(
+            error_code,
+            format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+        )),
+        Some(_) => Ok(()),
+        None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(bytes);
+            message.push(b'\'');
+            Err(NohupUsageError::boxed(error_code, message))
+        }
+    }
+}
+
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -168,6 +264,8 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         EXIT_CANCELED
     };
 
+    let args = args.collect::<Vec<_>>();
+    nohup_validate_standard_options(&args, arg_error_code)?;
     let args_match = ct_app()
         .try_get_matches_from(args)
         .with_exit_code(arg_error_code)?;
@@ -228,6 +326,20 @@ pub fn ct_app() -> Command {
         .about(t!("nohup.about"))
         .after_help(t!("nohup.after_help"))
         .override_usage(t!("nohup.usage"))
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .action(ArgAction::Help)
+                .help("Print help"),
+        )
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .action(ArgAction::Version)
+                .help("Print version"),
+        )
         .arg(
             Arg::new(options::CMD)
                 .hide(true)
@@ -357,7 +469,8 @@ mod tests {
     mod tests_messages {
         use crate::{
             exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg,
-            save_stderr_for_exec_failure, should_open_nohup_output,
+            nohup_validate_standard_options, save_stderr_for_exec_failure,
+            should_open_nohup_output,
         };
         use std::io::Error;
         use std::os::fd::AsRawFd;
@@ -409,6 +522,52 @@ mod tests {
             assert_ne!(saved.as_raw_fd(), libc::STDERR_FILENO);
             let flags = unsafe { libc::fcntl(saved.as_raw_fd(), libc::F_GETFD) };
             assert_ne!(flags & libc::FD_CLOEXEC, 0);
+        }
+
+        #[test]
+        fn test_nohup_standard_option_validation_matches_gnu() {
+            let invalid_short = nohup_validate_standard_options(
+                &["nohup".into(), "-h".into()],
+                crate::EXIT_CANCELED,
+            )
+            .unwrap_err();
+            assert_eq!(
+                invalid_short.diagnostic_bytes().as_ref(),
+                b"invalid option -- 'h'"
+            );
+            assert_eq!(
+                invalid_short.usage_hint_bytes().unwrap().as_ref(),
+                format!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                )
+                .as_bytes()
+            );
+
+            let help_with_value = nohup_validate_standard_options(
+                &["nohup".into(), "--help=value".into()],
+                crate::EXIT_CANCELED,
+            )
+            .unwrap_err();
+            assert_eq!(
+                help_with_value.diagnostic_bytes().as_ref(),
+                b"option '--help' doesn't allow an argument"
+            );
+
+            assert!(
+                nohup_validate_standard_options(
+                    &["nohup".into(), "--ver".into(), "ignored".into()],
+                    crate::EXIT_CANCELED,
+                )
+                .is_ok()
+            );
+            assert!(
+                nohup_validate_standard_options(
+                    &["nohup".into(), "echo".into(), "-h".into()],
+                    crate::EXIT_CANCELED,
+                )
+                .is_ok()
+            );
         }
     }
 

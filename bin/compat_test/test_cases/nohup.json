@@ -3,6 +3,41 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C下将-h作为nohup选项传入；GNU只支持--help，预期返回125并输出invalid option -- 'h'和帮助提示，而不是显示帮助内容",
+            "args": ["-h"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nohup: invalid option -- 'h'\nTry 'nohup --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "nohup",
+            "description": "原始字节选项用例：LC_ALL=C下传入字节2d2d626164ff（--bad加0xff）；GNU保留非法UTF-8字节于unrecognized option诊断，预期RC=125、stdout为空、stderr完整十六进制=6e6f6875703a20756e7265636f676e697a6564206f7074696f6e20272d2d626164ff270a54727920276e6f687570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "args": ["2d2d626164ff"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "6e6f6875703a20756e7265636f676e697a6564206f7074696f6e20272d2d626164ff270a54727920276e6f687570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C下不传COMMAND；GNU nohup返回125，并以missing operand和Try 'nohup --help'的专用诊断提示缺少操作数",
             "args": [],
             "environment": {

@@ -371,11 +371,7 @@ fn nohup_command_args(matches: &ArgMatches, error_code: i32) -> CTResult<Vec<OsS
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let arg_error_code = if env::var("POSIXLY_CORRECT").is_ok() {
-        EXIT_ENOENT
-    } else {
-        EXIT_CANCELED
-    };
+    let arg_error_code = nohup_internal_failure_code();
 
     let args = args.collect::<Vec<_>>();
     nohup_validate_standard_options(&args, arg_error_code)?;
@@ -877,6 +873,36 @@ mod tests {
         use crate::{EXIT_CANCELED, nohup_main};
 
         use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        struct EnvironmentVariableGuard {
+            name: &'static str,
+            previous_value: Option<OsString>,
+        }
+
+        impl EnvironmentVariableGuard {
+            fn set(name: &'static str, value: OsString) -> Self {
+                let previous_value = std::env::var_os(name);
+                unsafe {
+                    std::env::set_var(name, value);
+                }
+                Self {
+                    name,
+                    previous_value,
+                }
+            }
+        }
+
+        impl Drop for EnvironmentVariableGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    match &self.previous_value {
+                        Some(value) => std::env::set_var(self.name, value),
+                        None => std::env::remove_var(self.name),
+                    }
+                }
+            }
+        }
 
         #[test]
         fn test_false_main_version() {
@@ -908,6 +934,17 @@ mod tests {
                     ctcore::ct_help_utility_name()
                 )
             );
+        }
+
+        #[test]
+        fn test_nohup_non_utf8_posixly_correct_uses_posix_failure_status() {
+            let _posixly_correct =
+                EnvironmentVariableGuard::set("POSIXLY_CORRECT", OsString::from_vec(vec![0xff]));
+            let args = [ctcore::ct_util_name(), "-h"];
+
+            let error = nohup_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.code(), crate::EXIT_ENOENT);
         }
     }
 

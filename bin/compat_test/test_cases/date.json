@@ -90,6 +90,24 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--debug解析负小数@timespec时，GNU date使用Epoch秒专用诊断，不输出普通日期的起始时间诊断",
+      "args": ["--debug", "-d", "@-1.5", "+%s.%N"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "-2.500000000\n",
+          "stderr": "date: parsed number of seconds part: number of seconds: -2\ndate: input timezone: '@timespec' - always UTC\ndate: timezone: Universal Time\ndate: final: -2.500000000 (epoch-seconds)\ndate: final: (Y-M-D) 1969-12-31 23:59:58 (UTC)\ndate: final: (Y-M-D) 1969-12-31 23:59:58 (UTC+00)\ndate: output format: '%s.%N'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--debug与--reference组合时，GNU date为非解析的参考文件时间输出FORMAT诊断",
       "setup_commands": ["touch -d '2024-01-02 03:04:05 UTC' date-debug-reference"],
       "args": ["--debug", "-r", "date-debug-reference", "+%F"],

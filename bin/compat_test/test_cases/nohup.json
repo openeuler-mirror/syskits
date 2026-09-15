@@ -619,6 +619,48 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C下启动前关闭stdout后执行--help；GNU在标准选项处理阶段保留关闭的fd 1，帮助写入失败应返回125并在stderr报告Bad file descriptor，而不能使用ctcore替换的/dev/full报告No space left on device",
+            "args": ["--help"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {
+                    "stdout": "closed",
+                    "stderr": "capture"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nohup: write error: Bad file descriptor\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C下启动前关闭stdout后执行--version；GNU与--help相同，版本信息写入关闭的fd 1应返回125并在stderr报告Bad file descriptor",
+            "args": ["--version"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {
+                    "stdout": "closed",
+                    "stderr": "capture"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nohup: write error: Bad file descriptor\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C下启动前关闭stderr；GNU nohup需保持描述符2关闭，子命令通过/proc/self/fd确认fd2不存在",
             "args": [
                 "/bin/sh",

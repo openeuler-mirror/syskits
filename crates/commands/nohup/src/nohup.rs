@@ -345,6 +345,30 @@ fn nohup_match_long_option(option: &[u8]) -> Option<&'static str> {
     matches.next().is_none().then_some(matching_option)
 }
 
+fn nohup_standard_option(args: &[OsString]) -> Option<&'static str> {
+    let argument = args.get(1)?;
+    let bytes = argument.as_bytes();
+    if bytes.len() <= 2 || !bytes.starts_with(b"--") || bytes.contains(&b'=') {
+        return None;
+    }
+    nohup_match_long_option(&bytes[2..])
+}
+
+fn write_nohup_standard_option(option: &str) -> io::Result<()> {
+    if ctcore::ct_stdout_is_closed() {
+        return Err(Error::from_raw_os_error(libc::EBADF));
+    }
+
+    let output = match option {
+        "help" => ct_app().render_help().to_string(),
+        "version" => ct_app().render_version(),
+        _ => unreachable!("nohup standard option must be help or version"),
+    };
+    let mut stdout = io::stdout().lock();
+    stdout.write_all(output.as_bytes())?;
+    stdout.flush()
+}
+
 fn nohup_validate_standard_options(args: &[OsString], error_code: i32) -> CTResult<()> {
     let Some(argument) = args.get(1) else {
         return Ok(());
@@ -402,13 +426,25 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let arg_error_code = nohup_internal_failure_code();
 
     let args = args.collect::<Vec<_>>();
+    let stdout_was_closed = ctcore::ct_stdout_was_closed();
+    restore_initially_closed_standard_fds();
+    if stdout_was_closed {
+        if let Some(option) = nohup_standard_option(&args) {
+            if let Err(error) = write_nohup_standard_option(option) {
+                return Err(CtSimpleError::new(
+                    arg_error_code,
+                    format!("write error: {}", gnu_errno_text(&error)),
+                ));
+            }
+            return Ok(());
+        }
+    }
     nohup_validate_standard_options(&args, arg_error_code)?;
     let args_match = ct_app()
         .try_get_matches_from(args)
         .with_exit_code(arg_error_code)?;
     let command_args = nohup_command_args(&args_match, arg_error_code)?;
 
-    restore_initially_closed_standard_fds();
     let exec_failure_stderr = nohup_replace_fds()?;
 
     unsafe { signal(SIGHUP, SIG_IGN) }; // 忽略SIGHUP信号
@@ -445,12 +481,16 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn restore_initially_closed_standard_fds() {
-    for (fd, was_closed) in [
+    restore_standard_fds(&[
         (libc::STDIN_FILENO, ctcore::ct_stdin_was_closed()),
         (libc::STDOUT_FILENO, ctcore::ct_stdout_was_closed()),
         (libc::STDERR_FILENO, ctcore::ct_stderr_was_closed()),
-    ] {
-        close_fd_if_initially_closed(fd, was_closed);
+    ]);
+}
+
+fn restore_standard_fds(fds: &[(RawFd, bool)]) {
+    for (fd, was_closed) in fds {
+        close_fd_if_initially_closed(*fd, *was_closed);
     }
 }
 
@@ -648,10 +688,11 @@ impl Tool for Nohup {
 mod tests {
     mod tests_messages {
         use crate::{
-            ExecFailureStderr, NohupError, can_report_exec_failure, close_fd_if_initially_closed,
-            exec_failure_message, nohup_append_msg, nohup_command_args, nohup_home_output_path,
+            ExecFailureStderr, NohupError, can_report_exec_failure, exec_failure_message,
+            nohup_append_msg, nohup_command_args, nohup_home_output_path, nohup_standard_option,
             nohup_stderr_redirect_msg, nohup_validate_standard_options, redirect_stdout_from_fd,
-            save_stderr_for_exec_failure, should_open_nohup_output, write_nohup_msg,
+            restore_standard_fds, save_stderr_for_exec_failure, should_open_nohup_output,
+            write_nohup_msg,
         };
         use ctcore::ct_error::CTError;
         use std::ffi::{OsStr, OsString};
@@ -855,16 +896,16 @@ mod tests {
         }
 
         #[test]
-        fn test_close_fd_if_initially_closed_only_closes_marked_descriptor() {
+        fn test_restore_standard_fds_only_closes_initially_closed_descriptors() {
             let retained = std::fs::File::open("/dev/null").unwrap().into_raw_fd();
-            close_fd_if_initially_closed(retained, false);
+            let closed = std::fs::File::open("/dev/null").unwrap().into_raw_fd();
+            restore_standard_fds(&[(retained, false), (closed, true)]);
+
             assert_ne!(unsafe { libc::fcntl(retained, libc::F_GETFD) }, -1);
             unsafe {
                 libc::close(retained);
             }
 
-            let closed = std::fs::File::open("/dev/null").unwrap().into_raw_fd();
-            close_fd_if_initially_closed(closed, true);
             assert_eq!(unsafe { libc::fcntl(closed, libc::F_GETFD) }, -1);
             assert_eq!(
                 std::io::Error::last_os_error().raw_os_error(),
@@ -915,6 +956,26 @@ mod tests {
                     crate::EXIT_CANCELED,
                 )
                 .is_ok()
+            );
+        }
+
+        #[test]
+        fn test_nohup_standard_option_recognizes_only_first_gnu_option() {
+            assert_eq!(
+                nohup_standard_option(&["nohup".into(), "--hel".into()]),
+                Some("help")
+            );
+            assert_eq!(
+                nohup_standard_option(&["nohup".into(), "--version".into(), "ignored".into()]),
+                Some("version")
+            );
+            assert_eq!(
+                nohup_standard_option(&["nohup".into(), "--help=value".into()]),
+                None
+            );
+            assert_eq!(
+                nohup_standard_option(&["nohup".into(), "echo".into(), "--help".into()]),
+                None
             );
         }
     }

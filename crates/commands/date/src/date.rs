@@ -483,6 +483,7 @@ struct DateDebugRelative {
 struct DateDebugParts {
     date: Option<String>,
     date_value: Option<NaiveDate>,
+    number_date: bool,
     time: Option<DateDebugTime>,
     zone: Option<DateDebugZone>,
     relative: Option<DateDebugRelative>,
@@ -624,7 +625,13 @@ fn find_debug_timezone(tokens: &[&str], start: usize) -> Option<DateDebugZone> {
 }
 
 fn set_debug_date(parts: &mut DateDebugParts, input: &str) {
-    let date = NaiveDate::parse_from_str(input, "%Y-%m-%d").ok();
+    let compact_date = input.len() == 8
+        && input.bytes().all(|byte| byte.is_ascii_digit())
+        && NaiveDate::parse_from_str(input, "%Y%m%d").is_ok();
+    let date = NaiveDate::parse_from_str(input, "%Y-%m-%d")
+        .or_else(|_| NaiveDate::parse_from_str(input, "%Y%m%d"))
+        .ok();
+    parts.number_date = compact_date;
     parts.date = date.as_ref().map(|date| {
         format!(
             "(Y-M-D) {:04}-{:02}-{:02}",
@@ -776,7 +783,8 @@ fn date_debug_text(
     let parts = analyze_date_debug_input(input);
     let mut output = String::new();
     if let Some(parsed_date) = &parts.date {
-        let _ = writeln!(output, "date: parsed date part: {parsed_date}");
+        let part = if parts.number_date { "number" } else { "date" };
+        let _ = writeln!(output, "date: parsed {part} part: {parsed_date}");
     }
     if let Some(time) = &parts.time {
         let numeric_zone = parts
@@ -3083,6 +3091,7 @@ mod tests {
             DateDebugParts {
                 date: Some("(Y-M-D) 2024-02-29".to_string()),
                 date_value: Some(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()),
+                number_date: false,
                 time: Some(DateDebugTime {
                     parsed: "12:34:56".to_string(),
                     hms: "12:34:56".to_string(),
@@ -3113,6 +3122,29 @@ mod tests {
                  {}: output format: {}\n",
                 ctcore::ct_util_name(),
                 locale_quote("%s.%N"),
+            )
+        );
+    }
+
+    #[test]
+    fn test_date_debug_compact_date_reports_number_part() {
+        let date = DateTime::parse_from_rfc3339("2013-01-01T00:00:00+00:00").unwrap();
+
+        assert_eq!(
+            date_debug_text("20130101", &date, "%F", Some("UTC0")),
+            format!(
+                "date: parsed number part: (Y-M-D) 2013-01-01\n\
+                 date: input timezone: TZ=\"UTC0\" environment value or -u\n\
+                 date: warning: using midnight as starting time: 00:00:00\n\
+                 date: starting date/time: '(Y-M-D) 2013-01-01 00:00:00'\n\
+                 date: '(Y-M-D) 2013-01-01 00:00:00' = 1356998400 epoch-seconds\n\
+                 date: timezone: Universal Time\n\
+                 date: final: 1356998400.000000000 (epoch-seconds)\n\
+                 date: final: (Y-M-D) 2013-01-01 00:00:00 (UTC)\n\
+                 date: final: (Y-M-D) 2013-01-01 00:00:00 (UTC+00)\n\
+                 {}: output format: {}\n",
+                ctcore::ct_util_name(),
+                locale_quote("%F"),
             )
         );
     }

@@ -251,10 +251,7 @@
                         "expected_stdout": "",
                         "expected_stderr": ""
                     }
-                ],
-                "ignore_fields": {
-                    "ignore_stdout": true
-                }
+                ]
             },
             "cleanup_commands": [],
             "timeout": 5

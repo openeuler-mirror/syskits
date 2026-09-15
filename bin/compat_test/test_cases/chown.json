@@ -1054,6 +1054,42 @@
       "requires_root": true
     },
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "chown",
+      "description": "原始字节RFILE用例：LC_ALL=C；参数十六进制为2d2d7265666572656e63653dff726566（--reference=加文件名单字节0xff和ref）和746172676574（target）；将RFILE设为65534:65534、target设为0:0后，预期RC=0、stdout和stderr均为空，并验证target所有权输出十六进制为36353533343a36353533340a（65534:65534换行）",
+      "args": [
+        "2d2d7265666572656e63653dff726566",
+        "746172676574"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "/usr/bin/printf x > \"$(/usr/bin/printf '\\377ref')\"",
+        "/usr/bin/printf x > target",
+        "chown 65534:65534 \"$(/usr/bin/printf '\\377ref')\"",
+        "chown 0:0 target"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "/usr/bin/stat -c %u:%g target",
+            "expected_exit": 0,
+            "expected_stdout": "36353533343a36353533340a",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f -- \"$(/usr/bin/printf '\\377ref')\" target"
+      ],
+      "requires_root": true
+    },
+    {
       "command": "chown",
       "description": "POSIXLY_CORRECT=1；OWNER和首个FILE后面的-v必须作为第二个文件操作数，GNU因此返回失败且不输出verbose信息",
       "args": [

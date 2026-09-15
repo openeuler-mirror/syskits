@@ -1,6 +1,24 @@
 {
   "tests": [
     {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--set与--date同用时，GNU date拒绝同时设置和打印时间，并输出专用冲突诊断及帮助提示",
+      "args": ["-s", "@0", "-d", "@1"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "date: the options to print and set the time may not be used together\nTry 'date --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "tstdin": "2024-02-29 12:34:56 UTC\n",
       "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--debug与-f -组合时，GNU date逐行输出DATEFILE的完整解析轨迹和输出格式诊断",

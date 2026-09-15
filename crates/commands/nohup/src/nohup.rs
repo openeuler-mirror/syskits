@@ -29,7 +29,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
@@ -248,7 +248,11 @@ fn should_open_nohup_output(
 }
 
 fn nohup_internal_failure_code() -> i32 {
-    if env::var_os("POSIXLY_CORRECT").is_some() {
+    nohup_failure_code(env::var_os("POSIXLY_CORRECT").as_deref())
+}
+
+fn nohup_failure_code(posixly_correct: Option<&OsStr>) -> i32 {
+    if posixly_correct.is_some() {
         POSIX_NOHUP_FAILURE
     } else {
         EXIT_CANCELED
@@ -293,6 +297,24 @@ fn open_nohup_out(path: &Path) -> io::Result<File> {
         .open(path);
     unsafe { libc::umask(previous_umask) };
     result
+}
+
+fn nohup_home_output_path(home: &OsStr) -> PathBuf {
+    let home_bytes = home.as_bytes();
+    // GNU file_name_concat removes trailing slashes from non-root directories,
+    // while retaining an all-slash root prefix exactly as supplied.
+    let home_length = home_bytes
+        .iter()
+        .rposition(|byte| *byte != b'/')
+        .map_or(home_bytes.len(), |index| index + 1);
+    let mut path = Vec::with_capacity(home_length + 1 + NOHUP_OUT.len());
+    path.extend_from_slice(&home_bytes[..home_length]);
+    if home_length > 0 && path.last() != Some(&b'/') {
+        path.push(b'/');
+    }
+    path.extend_from_slice(NOHUP_OUT.as_bytes());
+
+    PathBuf::from(OsString::from_vec(path))
 }
 
 fn save_stderr_for_exec_failure() -> Option<OwnedFd> {
@@ -559,8 +581,7 @@ fn nohup_find_stdout(ignoring_input: bool, redirecting_stdout: bool) -> CTResult
                 None => return Err(NohupError::OpenFailed(internal_failure_code, err1).into()),
                 Some(home) => home,
             };
-            let mut path_buf = PathBuf::from(home);
-            path_buf.push(NOHUP_OUT);
+            let path_buf = nohup_home_output_path(&home);
             match open_nohup_output(&path_buf, redirecting_stdout) {
                 Ok(file) => {
                     let msg = nohup_append_msg(&path_buf, ignoring_input);
@@ -603,9 +624,9 @@ mod tests {
     mod tests_messages {
         use crate::{
             ExecFailureStderr, NohupError, can_report_exec_failure, close_fd_if_initially_closed,
-            exec_failure_message, nohup_append_msg, nohup_command_args, nohup_stderr_redirect_msg,
-            nohup_validate_standard_options, redirect_stdout_from_fd, save_stderr_for_exec_failure,
-            should_open_nohup_output,
+            exec_failure_message, nohup_append_msg, nohup_command_args, nohup_home_output_path,
+            nohup_stderr_redirect_msg, nohup_validate_standard_options, redirect_stdout_from_fd,
+            save_stderr_for_exec_failure, should_open_nohup_output,
         };
         use ctcore::ct_error::CTError;
         use std::ffi::{OsStr, OsString};
@@ -628,6 +649,22 @@ mod tests {
             assert_eq!(
                 nohup_append_msg(Path::new(OsStr::from_bytes(b"home-\xff/nohup.out")), true),
                 "ignoring input and appending output to 'home-'$'\\377''/nohup.out'"
+            );
+        }
+
+        #[test]
+        fn test_nohup_home_output_path_matches_gnu_file_name_concat() {
+            assert_eq!(
+                nohup_home_output_path(OsStr::from_bytes(b"home//")),
+                Path::new("home/nohup.out")
+            );
+            assert_eq!(
+                nohup_home_output_path(OsStr::from_bytes(b"logs//archive///")),
+                Path::new("logs//archive/nohup.out")
+            );
+            assert_eq!(
+                nohup_home_output_path(OsStr::from_bytes(b"///")),
+                Path::new("///nohup.out")
             );
         }
 
@@ -870,39 +907,10 @@ mod tests {
     }
 
     mod tests_echo_main {
-        use crate::{EXIT_CANCELED, nohup_main};
+        use crate::{EXIT_CANCELED, nohup_failure_code, nohup_main};
 
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
-
-        struct EnvironmentVariableGuard {
-            name: &'static str,
-            previous_value: Option<OsString>,
-        }
-
-        impl EnvironmentVariableGuard {
-            fn set(name: &'static str, value: OsString) -> Self {
-                let previous_value = std::env::var_os(name);
-                unsafe {
-                    std::env::set_var(name, value);
-                }
-                Self {
-                    name,
-                    previous_value,
-                }
-            }
-        }
-
-        impl Drop for EnvironmentVariableGuard {
-            fn drop(&mut self) {
-                unsafe {
-                    match &self.previous_value {
-                        Some(value) => std::env::set_var(self.name, value),
-                        None => std::env::remove_var(self.name),
-                    }
-                }
-            }
-        }
+        use std::ffi::{OsStr, OsString};
+        use std::os::unix::ffi::OsStrExt;
 
         #[test]
         fn test_false_main_version() {
@@ -938,13 +946,10 @@ mod tests {
 
         #[test]
         fn test_nohup_non_utf8_posixly_correct_uses_posix_failure_status() {
-            let _posixly_correct =
-                EnvironmentVariableGuard::set("POSIXLY_CORRECT", OsString::from_vec(vec![0xff]));
-            let args = [ctcore::ct_util_name(), "-h"];
-
-            let error = nohup_main(args.iter().map(OsString::from)).unwrap_err();
-
-            assert_eq!(error.code(), crate::EXIT_ENOENT);
+            assert_eq!(
+                nohup_failure_code(Some(OsStr::from_bytes(b"\xff"))),
+                crate::EXIT_ENOENT
+            );
         }
     }
 

@@ -747,10 +747,7 @@ fn parse_gnu_numeric_timezone(
     normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
     let sign_index = input.rfind(['+', '-'])?;
-    let digits = &input[sign_index + 1..];
-    if digits.is_empty() || digits.len() > 4 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
+    let zone = &input[sign_index + 1..];
 
     let wall_time_input = input[..sign_index].trim_end();
     let last_word = wall_time_input.split_ascii_whitespace().next_back()?;
@@ -761,15 +758,25 @@ fn parse_gnu_numeric_timezone(
         return None;
     }
 
-    let value = digits.parse::<i32>().ok()?;
-    let mut offset_minutes = if digits.len() <= 2 {
-        value.checked_mul(60)?
+    let negative = input.as_bytes()[sign_index] == b'-';
+    let offset_minutes = if let Some((hours, minutes)) = zone.split_once(':') {
+        let hours = hours.parse::<i64>().ok()?;
+        let minutes = minutes.parse::<i64>().ok()?;
+        let hours_in_minutes = hours.checked_mul(60)?;
+        if negative {
+            hours_in_minutes.checked_neg()?.checked_sub(minutes)?
+        } else {
+            hours_in_minutes.checked_add(minutes)?
+        }
     } else {
-        (value / 100).checked_mul(60)?.checked_add(value % 100)?
+        let value = zone.parse::<i64>().ok()?;
+        let offset = if zone.len() <= 2 {
+            value.checked_mul(60)?
+        } else {
+            (value / 100).checked_mul(60)?.checked_add(value % 100)?
+        };
+        if negative { -offset } else { offset }
     };
-    if input.as_bytes()[sign_index] == b'-' {
-        offset_minutes = -offset_minutes;
-    }
     if !(-24 * 60..=24 * 60).contains(&offset_minutes) {
         return None;
     }
@@ -779,7 +786,7 @@ fn parse_gnu_numeric_timezone(
             .ok()?;
     let utc_naive = wall_time
         .naive_local()
-        .checked_sub_signed(Duration::minutes(i64::from(offset_minutes)))?;
+        .checked_sub_signed(Duration::minutes(offset_minutes))?;
     Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
 }
 
@@ -1508,6 +1515,24 @@ mod tests {
             ("2024-01-01 12:00 -530", (2024, 1, 1, 17, 30, 0)),
             ("2024-01-01 12:00 +1260", (2023, 12, 31, 23, 0, 0)),
             ("2024-01-01 12:00 +2400", (2023, 12, 31, 12, 0, 0)),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let (year, month, day, hour, minute, second) = expected_utc;
+            let expected = Utc
+                .with_ymd_and_hms(year, month, day, hour, minute, second)
+                .unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_numeric_timezone_accepts_variable_width_offsets() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_utc) in [
+            ("2024-01-01 00:00 +01234", (2023, 12, 31, 11, 26, 0)),
+            ("2024-01-01 00:00 +1:2", (2023, 12, 31, 22, 58, 0)),
+            ("2024-01-01 00:00 -1:2", (2024, 1, 1, 1, 2, 0)),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             let (year, month, day, hour, minute, second) = expected_utc;

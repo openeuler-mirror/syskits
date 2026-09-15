@@ -522,7 +522,7 @@ impl CtChownExecutor {
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
         if self.verbosity.level == CtVerbosityLevel::Verbose {
             let path_str = path.quote().to_string();
-            if self.verbosity.groups_only {
+            if self.group_only_output() {
                 let gid_val = gid.unwrap_or(0);
                 let old_str = ct_entries::gid2grp(gid_val).unwrap_or_else(|_| gid_val.to_string());
                 println!(
@@ -561,6 +561,10 @@ impl CtChownExecutor {
                 );
             }
         }
+    }
+
+    fn group_only_output(&self) -> bool {
+        self.verbosity.groups_only || (self.dest_uid.is_none() && self.dest_gid.is_some())
     }
 }
 
@@ -910,6 +914,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(output, format!("ownership of {} retained", file.quote()));
+    }
+
+    #[test]
+    fn test_filtered_group_change_uses_group_diagnostic() {
+        let executor = CtChownExecutor {
+            dest_uid: None,
+            dest_gid: Some(0),
+            dest_user_name: None,
+            dest_group_name: None,
+            raw_owner: ":0".to_string(),
+            traverse_symlinks: CtTraverseSymlinks::None,
+            verbosity: Verbosity {
+                groups_only: false,
+                level: CtVerbosityLevel::Verbose,
+            },
+            filter: CtIfFrom::UserGroup(u32::MAX, u32::MAX),
+            files: Vec::new(),
+            recursive: false,
+            preserve_root: false,
+            dereference: true,
+        };
+
+        assert!(executor.group_only_output());
     }
 
     #[test]

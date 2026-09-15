@@ -1019,6 +1019,39 @@
         "rm -f target-last-dereference link-last-dereference"
       ],
       "requires_root": true
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "chown",
+      "description": "原始字节路径用例：LC_ALL=C；参数完整十六进制为30（OWNER=0）和ff（文件名单字节0xff）；创建同名原始字节文件后，预期RC=0、stdout和stderr完整十六进制均为空，stat输出UID完整十六进制为300a（0\\n）",
+      "args": [
+        "30",
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "/usr/bin/printf x > \"$(/usr/bin/printf '\\377')\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "/usr/bin/stat -c %u \"$(/usr/bin/printf '\\377')\"",
+            "expected_exit": 0,
+            "expected_stdout": "300a",
+            "expected_stderr": ""
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f -- \"$(/usr/bin/printf '\\377')\""
+      ],
+      "requires_root": true
     }
   ]
 }

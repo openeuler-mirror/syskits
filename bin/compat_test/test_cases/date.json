@@ -3,6 +3,23 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--date使用完整英文月名和日后逗号时，GNU date接受January 1, 2024 12:00 UTC并输出对应时间",
+      "args": ["-d", "January 1, 2024 12:00 UTC", "+%FT%T%z"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-01T12:00:00+0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--date包含前导零的5位数字时区+01234时，GNU date按+12:34解释并输出对应UTC时间",
       "args": ["-d", "2024-01-01 00:00 +01234", "+%FT%T%z"],
       "environment": {

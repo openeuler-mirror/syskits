@@ -63,6 +63,12 @@ enum NohupError {
     OpenFailed2(i32, Error, PathBuf, Error), // 打开文件失败（备选路径）
 }
 
+enum ExecFailureStderr {
+    NotRedirected,
+    Saved(OwnedFd),
+    Unavailable,
+}
+
 #[derive(Debug)]
 struct NohupUsageError {
     code: i32,
@@ -378,7 +384,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         .with_exit_code(arg_error_code)?;
     let command_args = nohup_command_args(&args_match, arg_error_code)?;
 
-    let saved_stderr = nohup_replace_fds()?;
+    let exec_failure_stderr = nohup_replace_fds()?;
 
     unsafe { signal(SIGHUP, SIG_IGN) }; // 忽略SIGHUP信号
 
@@ -398,12 +404,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         let err = std::io::Error::last_os_error();
         // 获取命令名用于错误信息
         let err_msg = exec_failure_message(command_args[0].as_os_str(), &err);
-        let can_report_exec_failure = match saved_stderr.as_ref() {
-            Some(saved) => unsafe {
-                dup2(saved.as_raw_fd(), libc::STDERR_FILENO) == libc::STDERR_FILENO
-            },
-            None => true,
-        };
+        let can_report_exec_failure = can_report_exec_failure(&exec_failure_stderr);
         // 尝试输出错误，如果 stderr 写入失败则退出 125
         if can_report_exec_failure && write_nohup_msg(&err_msg).is_err() {
             std::process::exit(125);
@@ -449,7 +450,7 @@ pub fn ct_app() -> Command {
 }
 
 // 替换标准输入、输出和错误输出文件描述符
-fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
+fn nohup_replace_fds() -> CTResult<ExecFailureStderr> {
     let stdin_is_tty = std::io::stdin().is_terminal();
     let stdout_is_tty = std::io::stdout().is_terminal();
     let stderr_is_tty = std::io::stderr().is_terminal();
@@ -478,7 +479,8 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
         .transpose()?;
 
     if stderr_is_tty {
-        let saved_stderr = save_stderr_for_exec_failure();
+        let exec_failure_stderr = save_stderr_for_exec_failure()
+            .map_or(ExecFailureStderr::Unavailable, ExecFailureStderr::Saved);
         if !stdout_is_tty && write_nohup_msg(nohup_stderr_redirect_msg(stdin_is_tty)).is_err() {
             std::process::exit(125);
         }
@@ -490,9 +492,19 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
             )
             .into());
         }
-        return Ok(saved_stderr);
+        return Ok(exec_failure_stderr);
     }
-    Ok(None)
+    Ok(ExecFailureStderr::NotRedirected)
+}
+
+fn can_report_exec_failure(stderr: &ExecFailureStderr) -> bool {
+    match stderr {
+        ExecFailureStderr::NotRedirected => true,
+        ExecFailureStderr::Unavailable => false,
+        ExecFailureStderr::Saved(saved) => unsafe {
+            dup2(saved.as_raw_fd(), libc::STDERR_FILENO) == libc::STDERR_FILENO
+        },
+    }
 }
 
 fn redirect_stdout(file: &File) -> io::Result<()> {
@@ -575,9 +587,10 @@ impl Tool for Nohup {
 mod tests {
     mod tests_messages {
         use crate::{
-            NohupError, exec_failure_message, nohup_append_msg, nohup_command_args,
-            nohup_stderr_redirect_msg, nohup_validate_standard_options, redirect_stdout_from_fd,
-            save_stderr_for_exec_failure, should_open_nohup_output,
+            ExecFailureStderr, NohupError, can_report_exec_failure, exec_failure_message,
+            nohup_append_msg, nohup_command_args, nohup_stderr_redirect_msg,
+            nohup_validate_standard_options, redirect_stdout_from_fd, save_stderr_for_exec_failure,
+            should_open_nohup_output,
         };
         use ctcore::ct_error::CTError;
         use std::ffi::{OsStr, OsString};
@@ -746,6 +759,12 @@ mod tests {
             assert_ne!(saved.as_raw_fd(), libc::STDERR_FILENO);
             let flags = unsafe { libc::fcntl(saved.as_raw_fd(), libc::F_GETFD) };
             assert_ne!(flags & libc::FD_CLOEXEC, 0);
+        }
+
+        #[test]
+        fn test_exec_failure_reporting_requires_a_saved_tty_stderr() {
+            assert!(can_report_exec_failure(&ExecFailureStderr::NotRedirected));
+            assert!(!can_report_exec_failure(&ExecFailureStderr::Unavailable));
         }
 
         #[test]

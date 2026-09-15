@@ -1948,7 +1948,8 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     }
                     b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'q' | b'S'
                     | b'u' | b'U' | b'V' | b'w' | b'W'
-                        if (!width_bytes.is_empty() || has_plus) && modifier.is_none() =>
+                        if (!width_bytes.is_empty() || has_plus)
+                            && (modifier.is_none() || (modifier == Some(b'E') && spec == b'u')) =>
                     {
                         let (value, digits, default_pad) =
                             gnu_numeric_field(dt, spec).expect("matched numeric date field");
@@ -2620,6 +2621,25 @@ mod tests {
             )
             .unwrap(),
             "24|  24|    24|0024|000024|000024|    24|000024|000024|24"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_era_weekday_number_accepts_plus_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%Eu|%4Eu|%+4Eu|%+6Eu|%_+6Eu|%+_6Eu|%0+6Eu|%+06Eu|%-6Eu",
+            )
+            .unwrap(),
+            "2|0002|0002|000002|000002|     2|000002|000002|2"
         );
     }
 

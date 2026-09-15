@@ -307,6 +307,13 @@ fn metadata_failure_action(path: &Path, dereference: bool) -> &'static str {
     }
 }
 
+fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDir {
+    WalkDir::new(root)
+        .follow_links(traverse_symlinks == &CtTraverseSymlinks::All)
+        .min_depth(1)
+        .contents_first(true)
+}
+
 impl CtChownExecutor {
     pub fn exec(&self) -> CTResult<()> {
         let mut ret = 0;
@@ -344,41 +351,10 @@ impl CtChownExecutor {
             return 1;
         }
 
-        let ret = if self.matched(meta.uid(), meta.gid()) {
-            match wrap_chown(
-                path,
-                &meta,
-                self.dest_uid,
-                self.dest_gid,
-                self.dereference,
-                self.verbosity.clone(),
-            ) {
-                Ok(n) => {
-                    if !n.is_empty() {
-                        println!("{n}");
-                    }
-                    0
-                }
-                Err(e) => {
-                    if self.verbosity.level != CtVerbosityLevel::Silent {
-                        ct_show_error!("{}", e);
-                    }
-                    1
-                }
-            }
-        } else {
-            self.print_verbose_ownership_retained_as(
-                path,
-                meta.uid(),
-                self.dest_gid.map(|_| meta.gid()),
-            );
-            0
-        };
-
         if self.recursive {
-            ret | self.dive_into(&root)
+            self.dive_into(path) | self.change_path(path, &meta)
         } else {
-            ret
+            self.change_path(path, &meta)
         }
     }
 
@@ -392,10 +368,7 @@ impl CtChownExecutor {
         }
 
         let mut ret = 0;
-        let mut iterator = WalkDir::new(root)
-            .follow_links(self.traverse_symlinks == CtTraverseSymlinks::All)
-            .min_depth(1)
-            .into_iter();
+        let mut iterator = traversal_walk(root, &self.traverse_symlinks).into_iter();
         // 我们不能使用 for 循环，因为在循环内部我们需要操作迭代器。
         while let Some(entry) = iterator.next() {
             let entry = match entry {
@@ -439,36 +412,7 @@ impl CtChownExecutor {
                 return 1;
             }
 
-            if !self.matched(meta.uid(), meta.gid()) {
-                self.print_verbose_ownership_retained_as(
-                    path,
-                    meta.uid(),
-                    self.dest_gid.map(|_| meta.gid()),
-                );
-                continue;
-            }
-
-            ret |= match wrap_chown(
-                path,
-                &meta,
-                self.dest_uid,
-                self.dest_gid,
-                self.dereference,
-                self.verbosity.clone(),
-            ) {
-                Ok(n) => {
-                    if !n.is_empty() {
-                        println!("{n}");
-                    }
-                    0
-                }
-                Err(e) => {
-                    if self.verbosity.level != CtVerbosityLevel::Silent {
-                        ct_show_error!("{}", e);
-                    }
-                    1
-                }
-            }
+            ret |= self.change_path(path, &meta);
         }
         ret
     }
@@ -504,6 +448,39 @@ impl CtChownExecutor {
             CtIfFrom::User(u) => u == uid,
             CtIfFrom::Group(g) => g == gid,
             CtIfFrom::UserGroup(u, g) => u == uid && g == gid,
+        }
+    }
+
+    fn change_path(&self, path: &Path, meta: &Metadata) -> i32 {
+        if self.matched(meta.uid(), meta.gid()) {
+            match wrap_chown(
+                path,
+                meta,
+                self.dest_uid,
+                self.dest_gid,
+                self.dereference,
+                self.verbosity.clone(),
+            ) {
+                Ok(output) => {
+                    if !output.is_empty() {
+                        println!("{output}");
+                    }
+                    0
+                }
+                Err(error) => {
+                    if self.verbosity.level != CtVerbosityLevel::Silent {
+                        ct_show_error!("{error}");
+                    }
+                    1
+                }
+            }
+        } else {
+            self.print_verbose_ownership_retained_as(
+                path,
+                meta.uid(),
+                self.dest_gid.map(|_| meta.gid()),
+            );
+            0
         }
     }
 
@@ -814,6 +791,24 @@ mod tests {
         };
 
         assert!(executor.exec().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_recursive_walk_visits_directory_after_its_contents() {
+        let temp_dir = tempdir().unwrap();
+        let tree = temp_dir.path().join("tree");
+        let directory = tree.join("directory");
+        fs::create_dir_all(&directory).unwrap();
+        let child = directory.join("child");
+        fs::write(&child, b"").unwrap();
+
+        let paths: Vec<_> = traversal_walk(&tree, &CtTraverseSymlinks::None)
+            .into_iter()
+            .map(|entry| entry.unwrap().into_path())
+            .collect();
+
+        assert_eq!(paths, vec![child, directory]);
     }
 
     #[test]

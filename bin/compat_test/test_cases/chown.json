@@ -1119,6 +1119,32 @@
         "rm -rf -- chown-deref-error"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；递归verbose模式按GNU后序处理目录，先输出子文件再输出父目录",
+      "args": [
+        "-R",
+        "-v",
+        "nobody",
+        "chown-recursive-order"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "mkdir chown-recursive-order",
+        "touch chown-recursive-order/file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "changed ownership of 'chown-recursive-order/file' from root to nobody\nchanged ownership of 'chown-recursive-order' from root to nobody\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf -- chown-recursive-order"
+      ],
+      "requires_root": true
     }
   ]
 }

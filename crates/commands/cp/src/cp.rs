@@ -1824,9 +1824,9 @@ pub(crate) fn copy_attributes_with_deref(
     // 必须先更改所有权以避免干扰模式更改。
     #[cfg(unix)]
     cp_handle_preserve(&attr.ownership, || -> CopyResult<()> {
-        use ctcore::ct_perms::CtVerbosityLevel;
         use ctcore::ct_perms::Verbosity;
         use ctcore::ct_perms::wrap_chown;
+        use ctcore::ct_perms::{CtChownOutputNames, CtVerbosityLevel};
         use std::os::unix::prelude::MetadataExt;
 
         let dest_uid = sour_metadata.uid();
@@ -1838,6 +1838,7 @@ pub(crate) fn copy_attributes_with_deref(
             &dest_path.symlink_metadata().context(str)?,
             Some(dest_uid),
             Some(dest_gid),
+            CtChownOutputNames::default(),
             false,
             Verbosity {
                 groups_only: false,
@@ -1860,6 +1861,7 @@ pub(crate) fn copy_attributes_with_deref(
                         &dest_path.symlink_metadata().context(str)?,
                         None, // 不更改 UID（保持为当前进程 UID）
                         Some(dest_gid),
+                        CtChownOutputNames::default(),
                         false,
                         Verbosity {
                             groups_only: true, // 标记为仅设置组

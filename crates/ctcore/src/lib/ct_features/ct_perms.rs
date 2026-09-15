@@ -44,6 +44,13 @@ pub struct Verbosity {
     pub level: CtVerbosityLevel,
 }
 
+/// Names to use in ownership-change diagnostics.
+#[derive(Default)]
+pub struct CtChownOutputNames<'a> {
+    pub user: Option<&'a str>,
+    pub group: Option<&'a str>,
+}
+
 /// Actually perform the change of owner on a path
 fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
@@ -70,6 +77,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
     meta: &Metadata,
     dest_uid: Option<u32>,
     dest_gid: Option<u32>,
+    output_names: CtChownOutputNames<'_>,
     follow: bool,
     verbosity: Verbosity,
 ) -> Result<String, String> {
@@ -81,10 +89,15 @@ pub fn wrap_chown<P: AsRef<Path>>(
     let uid = meta.uid();
     let gid = meta.gid();
 
-    let (old_str, new_str) = if verbosity.groups_only {
+    let group_only = verbosity.groups_only
+        || (dest_uid.is_none() && output_names.user.is_none() && dest_gid.is_some());
+    let (old_str, new_str) = if group_only {
         (
             ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-            ct_entries::gid2grp(dest_gid_val).unwrap_or_else(|_| dest_gid_val.to_string()),
+            output_names
+                .group
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| dest_gid_val.to_string()),
         )
     } else {
         match (dest_uid, dest_gid) {
@@ -96,13 +109,22 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 ),
                 format!(
                     "{}:{}",
-                    ct_entries::uid2usr(dest_uid_val).unwrap_or_else(|_| dest_uid_val.to_string()),
-                    ct_entries::gid2grp(dest_gid_val).unwrap_or_else(|_| dest_gid_val.to_string())
+                    output_names
+                        .user
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_else(|| dest_uid_val.to_string()),
+                    output_names
+                        .group
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_else(|| dest_gid_val.to_string())
                 ),
             ),
             (Some(_), None) => (
                 ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                ct_entries::uid2usr(dest_uid_val).unwrap_or_else(|_| dest_uid_val.to_string()),
+                output_names
+                    .user
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| dest_uid_val.to_string()),
             ),
             (None, Some(_)) => (
                 format!(
@@ -112,7 +134,10 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 ),
                 format!(
                     ":{}",
-                    ct_entries::gid2grp(dest_gid_val).unwrap_or_else(|_| dest_gid_val.to_string())
+                    output_names
+                        .group
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_else(|| dest_gid_val.to_string())
                 ),
             ),
             (None, None) => (
@@ -129,16 +154,12 @@ pub fn wrap_chown<P: AsRef<Path>>(
             level => {
                 out = format!(
                     "changing {} of {}: {}",
-                    if verbosity.groups_only {
-                        "group"
-                    } else {
-                        "ownership"
-                    },
+                    if group_only { "group" } else { "ownership" },
                     path_str,
                     e
                 );
                 if level == CtVerbosityLevel::Verbose {
-                    out = if verbosity.groups_only {
+                    out = if group_only {
                         format!(
                             "{}\n{}",
                             out,
@@ -170,7 +191,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
         if changed {
             match verbosity.level {
                 CtVerbosityLevel::Changes | CtVerbosityLevel::Verbose => {
-                    out = if verbosity.groups_only {
+                    out = if group_only {
                         t!(
                             "ctcore.chgrp.changed_group",
                             file = path_str,
@@ -191,7 +212,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 _ => (),
             };
         } else if verbosity.level == CtVerbosityLevel::Verbose {
-            out = if verbosity.groups_only {
+            out = if group_only {
                 t!(
                     "ctcore.chgrp.retained_group",
                     file = path_str,
@@ -228,6 +249,8 @@ pub enum CtTraverseSymlinks {
 pub struct CtChownExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
+    pub dest_user_name: Option<String>,
+    pub dest_group_name: Option<String>,
     pub raw_owner: String, //如果第二个字符有效，则移除减号并返回true
     pub traverse_symlinks: CtTraverseSymlinks,
     pub verbosity: Verbosity,
@@ -458,6 +481,10 @@ impl CtChownExecutor {
                 meta,
                 self.dest_uid,
                 self.dest_gid,
+                CtChownOutputNames {
+                    user: self.dest_user_name.as_deref(),
+                    group: self.dest_group_name.as_deref(),
+                },
                 self.dereference,
                 self.verbosity.clone(),
             ) {
@@ -557,6 +584,8 @@ pub mod opt_flags {
 pub struct CtGidUidOwnerFilter {
     pub dest_gid: Option<u32>,
     pub dest_uid: Option<u32>,
+    pub dest_user_name: Option<String>,
+    pub dest_group_name: Option<String>,
     pub raw_owner: String,
     pub filter: CtIfFrom,
 }
@@ -661,6 +690,8 @@ pub fn chown_base(
     let CtGidUidOwnerFilter {
         dest_gid,
         dest_uid,
+        dest_user_name,
+        dest_group_name,
         raw_owner,
         filter,
     } = parse_gid_uid_and_filter(&matches)?;
@@ -669,6 +700,8 @@ pub fn chown_base(
         traverse_symlinks,
         dest_gid,
         dest_uid,
+        dest_user_name,
+        dest_group_name,
         raw_owner,
         verbosity: Verbosity {
             groups_only,
@@ -777,6 +810,8 @@ mod tests {
         let executor = CtChownExecutor {
             dest_uid: Some(unsafe { libc::geteuid() }),
             dest_gid: Some(unsafe { libc::getegid() }),
+            dest_user_name: None,
+            dest_group_name: None,
             raw_owner: "current".to_string(),
             traverse_symlinks: CtTraverseSymlinks::All,
             verbosity: Verbosity {

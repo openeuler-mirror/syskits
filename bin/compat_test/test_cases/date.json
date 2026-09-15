@@ -3,6 +3,24 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--date与--reference同用时，GNU date拒绝多个打印时间来源，并输出专用互斥诊断及帮助提示",
+      "args": ["-d", "@0", "-r", "/dev/null"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "date: the options to specify dates for printing are mutually exclusive\nTry 'date --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--set与--date同用时，GNU date拒绝同时设置和打印时间，并输出专用冲突诊断及帮助提示",
       "args": ["-s", "@0", "-d", "@1"],
       "environment": {

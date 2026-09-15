@@ -15,7 +15,6 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, UClapError, set_ct_exit_code};
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
@@ -25,7 +24,7 @@ use libc::{c_char, dup2, execvp, signal};
 use ctcore::Tool;
 use std::borrow::Cow;
 use std::env;
-use std::ffi::{CStr, CString, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
@@ -269,10 +268,10 @@ fn nohup_open_failure_message(path: &Path, error: &Error) -> String {
     )
 }
 
-fn exec_failure_message(command: &str, error: &Error) -> String {
+fn exec_failure_message(command: &OsStr, error: &Error) -> String {
     format!(
         "failed to run command {}: {}",
-        command.quote(),
+        nohup_quote_path(Path::new(command)),
         gnu_errno_text(error)
     )
 }
@@ -398,8 +397,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     if result == -1 {
         let err = std::io::Error::last_os_error();
         // 获取命令名用于错误信息
-        let cmd_name = cstrings[0].to_string_lossy().into_owned();
-        let err_msg = exec_failure_message(&cmd_name, &err);
+        let err_msg = exec_failure_message(command_args[0].as_os_str(), &err);
         let can_report_exec_failure = match saved_stderr.as_ref() {
             Some(saved) => unsafe {
                 dup2(saved.as_raw_fd(), libc::STDERR_FILENO) == libc::STDERR_FILENO
@@ -645,8 +643,21 @@ mod tests {
         #[test]
         fn test_exec_failure_message_uses_gnu_wording_without_rust_error_suffix() {
             assert_eq!(
-                exec_failure_message("no-such-command", &Error::from_raw_os_error(libc::ENOENT)),
+                exec_failure_message(
+                    OsStr::new("no-such-command"),
+                    &Error::from_raw_os_error(libc::ENOENT)
+                ),
                 "failed to run command 'no-such-command': No such file or directory"
+            );
+        }
+
+        #[test]
+        fn test_exec_failure_message_preserves_non_utf8_command_bytes() {
+            let command = OsStr::from_bytes(b"./missing-\xff");
+
+            assert_eq!(
+                exec_failure_message(command, &Error::from_raw_os_error(libc::ENOENT)),
+                "failed to run command './missing-'$'\\377': No such file or directory"
             );
         }
 

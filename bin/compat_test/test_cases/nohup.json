@@ -91,6 +91,25 @@
         },
         {
             "tstdin": "",
+            "byteMode": true,
+            "command": "nohup",
+            "description": "原始字节不存在命令用例：LC_ALL=C下执行字节路径2e2f6d697373696e672dff（./missing-加0xff）；GNU在failed to run command诊断中保留0xff并以shell转义显示，预期RC=127、stdout为空、stderr完整十六进制=6e6f6875703a206661696c656420746f2072756e20636f6d6d616e6420272e2f6d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a",
+            "args": ["2e2f6d697373696e672dff"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {"stderr": "capture"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": "6e6f6875703a206661696c656420746f2072756e20636f6d6d616e6420272e2f6d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
             "command": "nohup",
             "description": "LC_ALL=C且三个标准流均非TTY时执行不存在命令，GNU nohup返回127并使用failed to run command诊断，且不附加Rust错误码后缀",
             "args": ["no-such-command"],

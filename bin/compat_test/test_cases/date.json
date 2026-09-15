@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下DATEFILE成功打开后读取失败时，GNU date报告输入文件读错误并以状态1退出，不得静默忽略BufRead错误",
+      "args": ["-f", "/proc/self/mem", "+%F"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "date: /proc/self/mem: read error: Input/output error\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU date仅接受最多三个冒号作为%z的时区精度；四个及以上冒号的格式字段保持原样输出，并按原字段总长度应用宽度和最后一个填充标志",
       "args": ["-d", "2024-01-02 15:04:05 UTC", "+%::::z|%+10::::z|%_10::::z|%-10::::z|%E::::z|%O::::z"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

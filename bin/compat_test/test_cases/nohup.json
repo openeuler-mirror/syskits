@@ -311,6 +311,28 @@
         },
         {
             "tstdin": "",
+            "tty": true,
+            "command": "nohup",
+            "description": "输出文件打开失败诊断用例：LC_ALL=C下当前nohup.out为目录、HOME=missing-home；GNU返回125，并依次报告Is a directory与No such file or directory，errno文本不包含Rust的(os error N)后缀。",
+            "args": ["true"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "mkdir nohup.out",
+                "export HOME='missing-home'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
             "byteMode": true,
             "tty": true,
             "command": "nohup",

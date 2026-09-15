@@ -57,10 +57,10 @@ mod options {
 // 定义NohupError枚举，处理可能出现的错误类型
 #[derive(Debug)]
 enum NohupError {
-    CannotDetach,                           // 无法从控制台分离
-    CannotReplace(&'static str, Error),     // 无法替换指定的文件描述符
-    OpenFailed(i32, Error),                 // 打开文件失败
-    OpenFailed2(i32, Error, String, Error), // 打开文件失败（备选路径）
+    CannotDetach,                            // 无法从控制台分离
+    CannotReplace(&'static str, Error),      // 无法替换指定的文件描述符
+    OpenFailed(i32, Error),                  // 打开文件失败
+    OpenFailed2(i32, Error, PathBuf, Error), // 打开文件失败（备选路径）
 }
 
 #[derive(Debug)]
@@ -120,6 +120,21 @@ impl CTError for NohupError {
             _ => 2,
         }
     }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        match self {
+            Self::OpenFailed2(_, first_error, fallback_path, second_error) => Cow::Owned(
+                format!(
+                    "{}\n{}: {}",
+                    nohup_open_failure_message(Path::new(NOHUP_OUT), first_error),
+                    ctcore::ct_util_name(),
+                    nohup_open_failure_message(fallback_path, second_error)
+                )
+                .into_bytes(),
+            ),
+            _ => Cow::Owned(self.to_string().into_bytes()),
+        }
+    }
 }
 
 impl Display for NohupError {
@@ -127,16 +142,14 @@ impl Display for NohupError {
         match self {
             Self::CannotDetach => write!(f, "Cannot detach from console"),
             Self::CannotReplace(s, e) => write!(f, "Cannot replace {s}: {e}"),
-            Self::OpenFailed(_, e) => {
-                write!(f, "failed to open {}: {}", NOHUP_OUT.quote(), e)
+            Self::OpenFailed(_, error) => {
+                f.write_str(&nohup_open_failure_message(Path::new(NOHUP_OUT), error))
             }
-            Self::OpenFailed2(_, e1, s, e2) => write!(
+            Self::OpenFailed2(_, e1, path, e2) => write!(
                 f,
-                "failed to open {}: {}\nfailed to open {}: {}",
-                NOHUP_OUT.quote(),
-                e1,
-                s.quote(),
-                e2
+                "{}\n{}",
+                nohup_open_failure_message(Path::new(NOHUP_OUT), e1),
+                nohup_open_failure_message(path, e2)
             ),
         }
     }
@@ -216,16 +229,31 @@ fn should_open_nohup_output(
     stdout_is_tty || (stderr_is_tty && stdout_was_closed)
 }
 
-fn exec_failure_message(command: &str, error: &Error) -> String {
-    let error_text = error.raw_os_error().map_or_else(
+fn gnu_errno_text(error: &Error) -> String {
+    error.raw_os_error().map_or_else(
         || error.to_string(),
         |errno| {
             unsafe { CStr::from_ptr(libc::strerror(errno)) }
                 .to_string_lossy()
                 .into_owned()
         },
-    );
-    format!("failed to run command {}: {error_text}", command.quote())
+    )
+}
+
+fn nohup_open_failure_message(path: &Path, error: &Error) -> String {
+    format!(
+        "failed to open {}: {}",
+        nohup_quote_path(path),
+        gnu_errno_text(error)
+    )
+}
+
+fn exec_failure_message(command: &str, error: &Error) -> String {
+    format!(
+        "failed to run command {}: {}",
+        command.quote(),
+        gnu_errno_text(error)
+    )
 }
 
 fn open_nohup_out(path: &Path) -> io::Result<File> {
@@ -474,13 +502,9 @@ fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
                     }
                     Ok(file)
                 }
-                Err(err2) => Err(NohupError::OpenFailed2(
-                    internal_failure_code,
-                    err1,
-                    path_buf.to_string_lossy().into_owned(),
-                    err2,
-                )
-                .into()),
+                Err(err2) => {
+                    Err(NohupError::OpenFailed2(internal_failure_code, err1, path_buf, err2).into())
+                }
             }
         }
     }
@@ -511,15 +535,17 @@ impl Tool for Nohup {
 mod tests {
     mod tests_messages {
         use crate::{
-            exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg,
+            NohupError, exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg,
             nohup_validate_standard_options, save_stderr_for_exec_failure,
             should_open_nohup_output,
         };
+        use ctcore::ct_error::CTError;
         use std::ffi::OsStr;
         use std::io::Error;
         use std::os::fd::AsRawFd;
         use std::os::unix::ffi::OsStrExt;
         use std::path::Path;
+        use std::path::PathBuf;
 
         #[test]
         fn test_nohup_append_msg_uses_actual_path() {
@@ -562,6 +588,37 @@ mod tests {
             assert_eq!(
                 exec_failure_message("no-such-command", &Error::from_raw_os_error(libc::ENOENT)),
                 "failed to run command 'no-such-command': No such file or directory"
+            );
+        }
+
+        #[test]
+        fn test_nohup_output_open_error_uses_libc_errno_text() {
+            assert_eq!(
+                NohupError::OpenFailed(
+                    crate::EXIT_CANCELED,
+                    Error::from_raw_os_error(libc::EISDIR)
+                )
+                .to_string(),
+                "failed to open 'nohup.out': Is a directory"
+            );
+        }
+
+        #[test]
+        fn test_nohup_fallback_open_error_prefixes_each_diagnostic() {
+            let error = NohupError::OpenFailed2(
+                crate::EXIT_CANCELED,
+                Error::from_raw_os_error(libc::EISDIR),
+                PathBuf::from("missing-home/nohup.out"),
+                Error::from_raw_os_error(libc::ENOENT),
+            );
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                format!(
+                    "failed to open 'nohup.out': Is a directory\n{}: failed to open 'missing-home/nohup.out': No such file or directory",
+                    ctcore::ct_util_name()
+                )
+                .as_bytes()
             );
         }
 

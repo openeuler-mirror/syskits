@@ -1664,6 +1664,75 @@ fn gnu_text_field_accepts_modifier(spec: u8, modifier: Option<u8>) -> bool {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn gnu_invalid_format_modifier(spec: u8, modifier: Option<u8>) -> bool {
+    match modifier {
+        Some(b'E') => matches!(
+            spec,
+            b'%' | b'a'
+                | b'A'
+                | b'b'
+                | b'B'
+                | b'D'
+                | b'd'
+                | b'e'
+                | b'F'
+                | b'G'
+                | b'g'
+                | b'H'
+                | b'I'
+                | b'j'
+                | b'k'
+                | b'l'
+                | b'M'
+                | b'm'
+                | b'N'
+                | b'S'
+                | b'U'
+                | b'V'
+                | b'W'
+                | b'w'
+                | b'h'
+        ),
+        Some(b'O') => matches!(
+            spec,
+            b'%' | b'a' | b'A' | b'c' | b'D' | b'F' | b'q' | b'X' | b'x' | b'Y'
+        ),
+        _ => false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn format_gnu_invalid_field(
+    field: &[u8],
+    flags: &[u8],
+    width: Option<usize>,
+    pad: StrftimePad,
+    modifier: Option<u8>,
+    spec: u8,
+) -> Vec<u8> {
+    let mut field = if modifier == Some(b'O') && spec == b'q' {
+        b"%Oq".to_vec()
+    } else {
+        field.to_vec()
+    };
+    if flags.contains(&b'^') || (flags.contains(&b'#') && matches!(field.last(), Some(b'b' | b'h')))
+    {
+        field.make_ascii_uppercase();
+    }
+    format_gnu_field_bytes(&field, width, pad, StrftimePad::Space)
+}
+
+#[cfg(target_os = "linux")]
+fn append_strftime_literal(output: &mut Vec<u8>, field: &[u8]) {
+    for byte in field {
+        output.push(*byte);
+        if *byte == b'%' {
+            output.push(b'%');
+        }
+    }
+}
+
 fn res_width_from_nsec(res_nsec: i64) -> usize {
     let mut width = 9;
     let mut temp = res_nsec;
@@ -1842,8 +1911,16 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 let spec = fmt[index];
                 index += 1;
                 match spec {
-                    b'q' | b'Y' if modifier == Some(b'O') => {
-                        fmt_adjusted.extend_from_slice(&fmt[percent_start..index]);
+                    _ if gnu_invalid_format_modifier(spec, modifier) => {
+                        let field = format_gnu_invalid_field(
+                            &fmt[percent_start..index],
+                            &flags,
+                            parse_strftime_width(width_str),
+                            pad,
+                            modifier,
+                            spec,
+                        );
+                        append_strftime_literal(&mut fmt_adjusted, &field);
                     }
                     b'C' | b'd' | b'e' | b'H' | b'I' | b'j' | b'k' | b'l' | b'M' | b'm' | b'S'
                     | b'u' | b'U' | b'V' | b'w' | b'W' | b'y' | b'g' | b'G'
@@ -2456,6 +2533,25 @@ mod tests {
             format_using_strftime(&dt, "%+10a|%+10B|%+10p|%+10Z|%+10R|%+_10a|%+010a|%+10%",)
                 .unwrap(),
             "0000000Tue|000January|00000000PM|0000000UTC|0000015:04|       Tue|0000000Tue|000000%+10%"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_invalid_modifier_preserves_outer_formatting() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%-6Ea|%+10Ea|%^+10Ea|%+10Oq|%_10OY|%+10EF|%+10Ed|%+10OD|%#+10Eb|%+#10Eh",
+            )
+            .unwrap(),
+            "%-6Ea|0000%+10Ea|000%^+10EA|0000000%Oq|    %_10OY|0000%+10EF|0000%+10Ed|0000%+10OD|000%#+10EB|000%+#10EH"
         );
     }
 

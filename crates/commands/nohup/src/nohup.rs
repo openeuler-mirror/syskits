@@ -59,7 +59,7 @@ mod options {
 enum NohupError {
     CannotDetach,                            // 无法从控制台分离
     CannotRenderStdin(i32, Error),           // 无法使标准输入不可读
-    CannotReplace(&'static str, Error),      // 无法替换指定的文件描述符
+    CannotRedirectStderr(i32, Error),        // 无法重定向标准错误
     OpenFailed(i32, Error),                  // 打开文件失败
     OpenFailed2(i32, Error, PathBuf, Error), // 打开文件失败（备选路径）
 }
@@ -118,6 +118,7 @@ impl CTError for NohupError {
     fn code(&self) -> i32 {
         match self {
             Self::CannotRenderStdin(code, _)
+            | Self::CannotRedirectStderr(code, _)
             | Self::OpenFailed(code, _)
             | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,
@@ -149,7 +150,11 @@ impl Display for NohupError {
                 "failed to render standard input unusable: {}",
                 gnu_errno_text(error)
             ),
-            Self::CannotReplace(s, e) => write!(f, "Cannot replace {s}: {e}"),
+            Self::CannotRedirectStderr(_, error) => write!(
+                f,
+                "failed to redirect standard error: {}",
+                gnu_errno_text(error)
+            ),
             Self::OpenFailed(_, error) => {
                 f.write_str(&nohup_open_failure_message(Path::new(NOHUP_OUT), error))
             }
@@ -481,7 +486,11 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
         }
         let stderr_target_fd = output_file.as_ref().map_or(1, AsRawFd::as_raw_fd);
         if unsafe { dup2(stderr_target_fd, 2) } != 2 {
-            return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
+            return Err(NohupError::CannotRedirectStderr(
+                nohup_internal_failure_code(),
+                Error::last_os_error(),
+            )
+            .into());
         }
         return Ok(saved_stderr);
     }
@@ -676,6 +685,20 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 "failed to open 'nohup.out': Bad file descriptor"
+            );
+        }
+
+        #[test]
+        fn test_nohup_stderr_redirection_error_matches_gnu() {
+            let error = NohupError::CannotRedirectStderr(
+                crate::EXIT_CANCELED,
+                Error::from_raw_os_error(libc::EBADF),
+            );
+
+            assert_eq!(error.code(), crate::EXIT_CANCELED);
+            assert_eq!(
+                error.to_string(),
+                "failed to redirect standard error: Bad file descriptor"
             );
         }
 

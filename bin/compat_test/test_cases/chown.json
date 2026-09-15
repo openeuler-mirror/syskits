@@ -977,6 +977,48 @@
       "cleanup_commands": [],
       "tstdin": "",
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；--dereference后接--no-dereference时，GNU按最后一个选项仅修改符号链接本身，目标文件保持UID 0",
+      "args": [
+        "--dereference",
+        "--no-dereference",
+        "65534",
+        "link-last-dereference"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch target-last-dereference",
+        "ln -s target-last-dereference link-last-dereference",
+        "chown 0:0 target-last-dereference",
+        "chown -h 0:0 link-last-dereference"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%u' target-last-dereference",
+            "expected_exit": 0,
+            "expected_stdout": "0\n",
+            "expected_stderr": null
+          },
+          {
+            "command": "stat -c '%u' link-last-dereference",
+            "expected_exit": 0,
+            "expected_stdout": "65534\n",
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f target-last-dereference link-last-dereference"
+      ],
+      "requires_root": true
     }
   ]
-} 
+}

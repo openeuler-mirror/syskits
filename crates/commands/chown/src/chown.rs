@@ -57,6 +57,7 @@ pub fn ct_app() -> Command {
             .short('c')
             .long(opt_flags::verbosity::CHANGES)
             .help(t!("chown.clap.changes"))
+            .overrides_with(opt_flags::verbosity::VERBOSE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::DEREFERENCE)
             .long(opt_flags::dereference::DEREFERENCE)
@@ -64,6 +65,7 @@ pub fn ct_app() -> Command {
                 "affect the referent of each symbolic link (this is the default), \
                      rather than the symbolic link itself",
             )
+            .overrides_with(opt_flags::dereference::NO_DEREFERENCE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::NO_DEREFERENCE)
             .short('h')
@@ -72,6 +74,7 @@ pub fn ct_app() -> Command {
                 "affect symbolic links instead of any referenced file \
                      (useful only on systems that can change the ownership of a symlink)",
             )
+            .overrides_with(opt_flags::dereference::DEREFERENCE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FROM)
             .long(opt_flags::FROM)
@@ -85,10 +88,12 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
             .help(t!("chown.clap.preserve"))
+            .overrides_with(opt_flags::preserve_root::NO_PRESERVE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::NO_PRESERVE)
             .long(opt_flags::preserve_root::NO_PRESERVE)
             .help(t!("chown.clap.no_preserve"))
+            .overrides_with(opt_flags::preserve_root::PRESERVE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::verbosity::QUIET)
             .long(opt_flags::verbosity::QUIET)
@@ -104,7 +109,7 @@ pub fn ct_app() -> Command {
             .help(t!("chown.clap.reference"))
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
-            .num_args(1..),
+            .num_args(1),
         Arg::new(opt_flags::verbosity::SILENT)
             .short('f')
             .long(opt_flags::verbosity::SILENT)
@@ -131,6 +136,7 @@ pub fn ct_app() -> Command {
             .long(opt_flags::verbosity::VERBOSE)
             .short('v')
             .help(t!("chown.clap.verbose"))
+            .overrides_with(opt_flags::verbosity::CHANGES)
             .action(ArgAction::SetTrue),
     ];
 
@@ -141,6 +147,7 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
+        .args_override_self(true)
         .args(&args)
 }
 
@@ -580,6 +587,25 @@ mod tests {
 
         assert!(matches.get_flag(opt_flags::dereference::NO_DEREFERENCE));
         assert!(!matches.get_flag(opt_flags::dereference::DEREFERENCE));
+    }
+
+    #[test]
+    fn test_ct_app_repeated_state_options_use_the_last_occurrence() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--dereference", "--no-dereference"])
+            .unwrap();
+        assert!(!matches.get_flag(opt_flags::dereference::DEREFERENCE));
+        assert!(matches.get_flag(opt_flags::dereference::NO_DEREFERENCE));
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--from=0", "--from=65534"])
+            .unwrap();
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::FROM)
+                .map(String::as_str),
+            Some("65534")
+        );
     }
 
     #[test]

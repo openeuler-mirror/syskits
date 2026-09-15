@@ -1620,6 +1620,12 @@ fn format_alternate_numeric_field(tm_val: &tm, spec: u8) -> CTResult<Vec<u8>> {
     format_with_libc_strftime(&c_fmt, tm_val)
 }
 
+#[cfg(target_os = "linux")]
+fn format_era_year_field(tm_val: &tm) -> CTResult<Vec<u8>> {
+    let c_fmt = CString::new(b"%EY".as_slice()).expect("strftime format has no NUL byte");
+    format_with_libc_strftime(&c_fmt, tm_val)
+}
+
 fn res_width_from_nsec(res_nsec: i64) -> usize {
     let mut width = 9;
     let mut temp = res_nsec;
@@ -1899,6 +1905,15 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                             format_gnu_full_date(dt, parse_strftime_width(width_str), pad)
                                 .as_bytes(),
                         );
+                    }
+                    b'Y' if modifier == Some(b'E') && !use_alt_era => {
+                        let field = format_era_year_field(&tm_val)?;
+                        fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                            &field,
+                            parse_strftime_width(width_str),
+                            pad,
+                            StrftimePad::Space,
+                        ));
                     }
                     b'C' => {
                         // 世纪数：年份除以 100。需要处理 '+' 标志和宽度填充
@@ -2351,6 +2366,21 @@ mod tests {
         assert_eq!(
             format_using_strftime(&dt, "%Oq|%OY|%4OY").unwrap(),
             "%Oq|%OY|%4OY"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_era_year_width_uses_text_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%EY|%6EY|%+6EY|%_6EY|%-6EY").unwrap(),
+            "2024|  2024|002024|  2024|2024"
         );
     }
 

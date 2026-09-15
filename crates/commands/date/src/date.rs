@@ -1633,6 +1633,12 @@ fn format_era_century_field(tm_val: &tm) -> CTResult<Vec<u8>> {
 }
 
 #[cfg(target_os = "linux")]
+fn format_era_short_year_field(tm_val: &tm) -> CTResult<Vec<u8>> {
+    let c_fmt = CString::new(b"%Ey".as_slice()).expect("strftime format has no NUL byte");
+    format_with_libc_strftime(&c_fmt, tm_val)
+}
+
+#[cfg(target_os = "linux")]
 fn format_gnu_text_field(
     tm_val: &tm,
     modifier: Option<u8>,
@@ -2038,6 +2044,15 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     }
                     b'C' if modifier == Some(b'E') => {
                         let field = format_era_century_field(&tm_val)?;
+                        fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                            &field,
+                            parse_strftime_width(width_str),
+                            pad,
+                            StrftimePad::Space,
+                        ));
+                    }
+                    b'y' if modifier == Some(b'E') => {
+                        let field = format_era_short_year_field(&tm_val)?;
                         fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
                             &field,
                             parse_strftime_width(width_str),
@@ -2586,6 +2601,25 @@ mod tests {
             )
             .unwrap(),
             "20|  20|    20|0020|000020|000020|    20|000020|000020|20"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_era_short_year_width_uses_text_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%Ey|%4Ey|%6Ey|%+4Ey|%+6Ey|%_+6Ey|%+_6Ey|%0+6Ey|%+06Ey|%-6Ey",
+            )
+            .unwrap(),
+            "24|  24|    24|0024|000024|000024|    24|000024|000024|24"
         );
     }
 

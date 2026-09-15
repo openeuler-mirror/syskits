@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU E修饰两位年份按文本字段应用宽度，默认空格填充；+仅选择零填充，不添加正号，后续填充标志覆盖此前加号",
+      "args": ["-d", "2024-01-02 15:04:05 UTC", "+%Ey|%4Ey|%6Ey|%+4Ey|%+6Ey|%_+6Ey|%+_6Ey|%0+6Ey|%+06Ey|%-6Ey"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "24|  24|    24|0024|000024|000024|    24|000024|000024|24\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU E修饰世纪按文本字段应用宽度，默认空格填充；+仅选择零填充，不添加正号，后续填充标志覆盖此前加号",
       "args": ["-d", "2024-01-02 15:04:05 UTC", "+%EC|%4EC|%6EC|%+4EC|%+6EC|%_+6EC|%+_6EC|%0+6EC|%+06EC|%-6EC"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

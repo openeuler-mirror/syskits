@@ -232,6 +232,37 @@
             "tstdin": "",
             "tty": true,
             "command": "nohup",
+            "description": "TTY缺少COMMAND用例：LC_ALL=C下不传COMMAND；GNU在处理标准流前直接报missing operand，返回125且不创建nohup.out。",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ],
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
+            "tty": true,
+            "command": "nohup",
             "description": "LC_ALL=C的TTY环境执行nohup /bin/sh -c 'printf output'；输入为空；预期RC=0并创建内容为output、权限0600的nohup.out；迁移原Cargo用例nohup_creates_output_with_private_permissions",
             "args": [
                 "/bin/sh",

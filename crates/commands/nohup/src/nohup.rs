@@ -29,6 +29,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
 use std::os::fd::AsRawFd;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
@@ -161,7 +162,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     let cstrings: Vec<CString> = args_match
-        .get_many::<String>(options::CMD)
+        .get_many::<OsString>(options::CMD)
         .unwrap()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
@@ -172,9 +173,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     if result == -1 {
         let err = std::io::Error::last_os_error();
         // 获取命令名用于错误信息
-        let cmd_name = std::str::from_utf8(cstrings[0].to_bytes())
-            .unwrap_or("<unknown>")
-            .to_string();
+        let cmd_name = cstrings[0].to_string_lossy().into_owned();
         let err_msg = exec_failure_message(&cmd_name, &err);
         // 尝试输出错误，如果 stderr 写入失败则退出 125
         if write_nohup_msg(&err_msg).is_err() {
@@ -200,6 +199,7 @@ pub fn ct_app() -> Command {
                 .hide(true)
                 .required(true)
                 .action(ArgAction::Append)
+                .value_parser(clap::builder::OsStringValueParser::new())
                 .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)
@@ -394,9 +394,11 @@ mod tests {
     }
 
     mod tests_false_app {
-        use crate::ct_app;
+        use crate::{ct_app, options};
 
         use clap::error::ErrorKind;
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
 
         #[test]
         fn test_ct_app_version() {
@@ -416,6 +418,16 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_accepts_non_utf8_command_path() {
+            let command = OsString::from_vec(b"command-\xff".to_vec());
+            let matches = ct_app()
+                .try_get_matches_from([OsString::from("nohup"), command.clone()])
+                .unwrap();
+
+            assert_eq!(matches.get_one::<OsString>(options::CMD), Some(&command));
         }
     }
 }

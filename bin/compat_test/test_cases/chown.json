@@ -1145,6 +1145,56 @@
         "rm -rf -- chown-recursive-order"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；verbose模式对数值UID:GID保留数值规格而不是反查账户名",
+      "args": [
+        "-v",
+        "0:0",
+        "chown-verbose-number"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-verbose-number",
+        "chown 65534:65534 chown-verbose-number"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "changed ownership of 'chown-verbose-number' from nobody:nobody to 0:0\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-verbose-number"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；verbose模式对:数值GID使用changed group并保留数值规格",
+      "args": [
+        "-v",
+        ":0",
+        "chown-verbose-group-number"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-verbose-group-number",
+        "chown 65534:65534 chown-verbose-group-number"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "changed group of 'chown-verbose-group-number' from nobody to 0\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-verbose-group-number"
+      ],
+      "requires_root": true
     }
   ]
 }

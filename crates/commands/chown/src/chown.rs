@@ -174,6 +174,8 @@ fn chown_parsing_gid_uid_and_filter(args_match: &ArgMatches) -> CTResult<CtGidUi
     // 定义用于存储目标UID和GID的变量，以及原始所有者信息。
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
+    let dest_user_name: Option<String>;
+    let dest_group_name: Option<String>;
     let raw_owner: String;
     // 处理 `-reference` 参数，若存在，则从指定文件获取UID和GID。
     if let Some(file) = args_match.get_one::<String>(opt_flags::REFERENCE) {
@@ -183,6 +185,8 @@ fn chown_parsing_gid_uid_and_filter(args_match: &ArgMatches) -> CTResult<CtGidUi
         let uid = meta.uid();
         dest_gid = Some(gid);
         dest_uid = Some(uid);
+        dest_user_name = Some(ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()));
+        dest_group_name = Some(ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()));
         // 格式化文件的所有者信息（用户:组）。
         raw_owner = format!(
             "{}:{}",
@@ -198,14 +202,59 @@ fn chown_parsing_gid_uid_and_filter(args_match: &ArgMatches) -> CTResult<CtGidUi
         let (u, g) = chown_parse_user_spec_warn(&raw_owner)?;
         dest_uid = u;
         dest_gid = g;
+        (dest_user_name, dest_group_name) = chown_output_names(&raw_owner, u, g);
     }
     // 构建并返回 `CtGidUidOwnerFilter` 结构体。
     Ok(CtGidUidOwnerFilter {
         dest_gid,
         dest_uid,
+        dest_user_name,
+        dest_group_name,
         raw_owner,
         filter: filter_info,
     })
+}
+
+fn chown_output_names(
+    spec: &str,
+    dest_uid: Option<u32>,
+    dest_gid: Option<u32>,
+) -> (Option<String>, Option<String>) {
+    let separator = if spec.contains(':') {
+        spec.find(':')
+    } else if spec.contains('.') && !is_user_name(spec) {
+        spec.find('.')
+    } else {
+        None
+    };
+    let (user, group) = match separator {
+        Some(index) => (&spec[..index], Some(&spec[index + 1..])),
+        None => (spec, None),
+    };
+
+    let mut user_name =
+        (dest_uid.is_some() && !user.is_empty() && is_user_name(user)).then(|| user.to_string());
+    let group_name = match group {
+        Some("") if user_name.is_some() => {
+            dest_gid.map(|gid| ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+        }
+        Some(group) if !group.is_empty() && is_group_name(group) => Some(group.to_string()),
+        _ => None,
+    };
+
+    if dest_gid.is_some() && user_name.is_none() && group_name.is_some() {
+        user_name = Some(String::new());
+    }
+
+    (user_name, group_name)
+}
+
+fn is_user_name(name: &str) -> bool {
+    CtPasswd::locate(name).is_ok_and(|entry| entry.name == name)
+}
+
+fn is_group_name(name: &str) -> bool {
+    Group::locate(name).is_ok_and(|entry| entry.name == name)
 }
 
 /// Parses the user string to extract the UID.
@@ -518,6 +567,12 @@ mod tests {
             chown_parse_user_spec_warn(&spec).expect("parse legacy user spec"),
             (Some(passwd.uid), Some(passwd.gid))
         );
+    }
+
+    #[test]
+    fn test_output_names_preserve_numeric_owner_and_group_specs() {
+        assert_eq!(chown_output_names("0:0", Some(0), Some(0)), (None, None));
+        assert_eq!(chown_output_names(":0", None, Some(0)), (None, None));
     }
 
     #[cfg(unix)]

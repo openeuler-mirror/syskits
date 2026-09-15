@@ -134,10 +134,18 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
             }
         }
     };
+    let dest_group_name = dest_gid.and_then(|_| {
+        (!chgrp_raw_group.is_empty()
+            && Group::locate(chgrp_raw_group.as_str())
+                .is_ok_and(|entry| entry.name == chgrp_raw_group))
+        .then(|| chgrp_raw_group.clone())
+    });
     // 构造并返回`CtGidUidOwnerFilter`实例
     Ok(CtGidUidOwnerFilter {
         dest_gid,
         dest_uid: None,
+        dest_user_name: None,
+        dest_group_name,
         raw_owner: chgrp_raw_group,
         filter,
     })

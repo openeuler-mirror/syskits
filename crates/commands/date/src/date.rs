@@ -2023,10 +2023,25 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                         );
                     }
                     b'z' => {
-                        fmt_adjusted.extend_from_slice(
-                            format_gnu_timezone(dt, colons, parse_strftime_width(width_str), pad)
+                        if modifier == Some(b'O') {
+                            let field = format_gnu_timezone(dt, colons, None, StrftimePad::Default);
+                            fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                                field.as_bytes(),
+                                parse_strftime_width(width_str),
+                                pad,
+                                StrftimePad::Space,
+                            ));
+                        } else {
+                            fmt_adjusted.extend_from_slice(
+                                format_gnu_timezone(
+                                    dt,
+                                    colons,
+                                    parse_strftime_width(width_str),
+                                    pad,
+                                )
                                 .as_bytes(),
-                        );
+                            );
+                        }
                     }
                     b'F' if modifier.is_none() => {
                         fmt_adjusted.extend_from_slice(
@@ -2640,6 +2655,25 @@ mod tests {
             )
             .unwrap(),
             "2|0002|0002|000002|000002|     2|000002|000002|2"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_alternate_timezone_uses_text_padding() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(
+                &dt,
+                "%Oz|%4Oz|%+4Oz|%+6Oz|%_+6Oz|%+_6Oz|%0+6Oz|%+06Oz|%-6Oz",
+            )
+            .unwrap(),
+            "+0000|+0000|+0000|0+0000|0+0000| +0000|0+0000|0+0000|+0000"
         );
     }
 

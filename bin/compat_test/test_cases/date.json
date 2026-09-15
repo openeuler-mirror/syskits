@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU O修饰的时区偏移按文本字段应用宽度，零或空格在符号前填充，连字符禁用填充",
+      "args": ["-d", "2024-01-02 15:04:05 UTC", "+%Oz|%4Oz|%+4Oz|%+6Oz|%_+6Oz|%+_6Oz|%0+6Oz|%+06Oz|%-6Oz"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "+0000|+0000|+0000|0+0000|0+0000| +0000|0+0000|0+0000|+0000\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU date接受并忽略u字段的E修饰符，继续按数值字段规则应用宽度、+和最终填充标志",
       "args": ["-d", "2024-01-02 15:04:05 UTC", "+%Eu|%4Eu|%+4Eu|%+6Eu|%_+6Eu|%+_6Eu|%0+6Eu|%+06Eu|%-6Eu"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

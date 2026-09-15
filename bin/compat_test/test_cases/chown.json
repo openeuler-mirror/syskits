@@ -1052,6 +1052,46 @@
         "rm -f -- \"$(/usr/bin/printf '\\377')\""
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "POSIXLY_CORRECT=1；OWNER和首个FILE后面的-v必须作为第二个文件操作数，GNU因此返回失败且不输出verbose信息",
+      "args": [
+        "0",
+        "posix-stop-file",
+        "-v"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export POSIXLY_CORRECT=1",
+        "touch posix-stop-file",
+        "chown 0 posix-stop-file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "stat -c %u posix-stop-file",
+            "expected_exit": 0,
+            "expected_stdout": "0\n",
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": true,
+          "ignore_function": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- posix-stop-file"
+      ],
+      "requires_root": true
     }
   ]
 }

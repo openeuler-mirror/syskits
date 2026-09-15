@@ -58,6 +58,7 @@ mod options {
 #[derive(Debug)]
 enum NohupError {
     CannotDetach,                            // 无法从控制台分离
+    CannotRenderStdin(i32, Error),           // 无法使标准输入不可读
     CannotReplace(&'static str, Error),      // 无法替换指定的文件描述符
     OpenFailed(i32, Error),                  // 打开文件失败
     OpenFailed2(i32, Error, PathBuf, Error), // 打开文件失败（备选路径）
@@ -116,7 +117,9 @@ impl std::error::Error for NohupError {}
 impl CTError for NohupError {
     fn code(&self) -> i32 {
         match self {
-            Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
+            Self::CannotRenderStdin(code, _)
+            | Self::OpenFailed(code, _)
+            | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,
         }
     }
@@ -141,6 +144,11 @@ impl Display for NohupError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::CannotDetach => write!(f, "Cannot detach from console"),
+            Self::CannotRenderStdin(_, error) => write!(
+                f,
+                "failed to render standard input unusable: {}",
+                gnu_errno_text(error)
+            ),
             Self::CannotReplace(s, e) => write!(f, "Cannot replace {s}: {e}"),
             Self::OpenFailed(_, error) => {
                 f.write_str(&nohup_open_failure_message(Path::new(NOHUP_OUT), error))
@@ -227,6 +235,14 @@ fn should_open_nohup_output(
     stdout_was_closed: bool,
 ) -> bool {
     stdout_is_tty || (stderr_is_tty && stdout_was_closed)
+}
+
+fn nohup_internal_failure_code() -> i32 {
+    if env::var_os("POSIXLY_CORRECT").is_some() {
+        POSIX_NOHUP_FAILURE
+    } else {
+        EXIT_CANCELED
+    }
 }
 
 fn gnu_errno_text(error: &Error) -> String {
@@ -440,9 +456,13 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
         let new_stdin = OpenOptions::new()
             .write(true)
             .open(Path::new("/dev/null"))
-            .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
+            .map_err(|e| NohupError::CannotRenderStdin(nohup_internal_failure_code(), e))?;
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
-            return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
+            return Err(NohupError::CannotRenderStdin(
+                nohup_internal_failure_code(),
+                Error::last_os_error(),
+            )
+            .into());
         }
 
         if !stdout_is_tty && !stderr_is_tty && write_nohup_msg("ignoring input").is_err() {
@@ -480,10 +500,7 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
 
 // 查找或创建nohup输出文件
 fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
-    let internal_failure_code = match env::var("POSIXLY_CORRECT") {
-        Ok(_) => POSIX_NOHUP_FAILURE,
-        Err(_) => EXIT_CANCELED,
-    };
+    let internal_failure_code = nohup_internal_failure_code();
 
     match open_nohup_out(Path::new(NOHUP_OUT)) {
         Ok(file) => {
@@ -623,6 +640,20 @@ mod tests {
                 )
                 .to_string(),
                 "failed to open 'nohup.out': Is a directory"
+            );
+        }
+
+        #[test]
+        fn test_nohup_stdin_replacement_error_matches_gnu() {
+            let error = NohupError::CannotRenderStdin(
+                crate::EXIT_CANCELED,
+                Error::from_raw_os_error(libc::EACCES),
+            );
+
+            assert_eq!(error.code(), crate::EXIT_CANCELED);
+            assert_eq!(
+                error.to_string(),
+                "failed to render standard input unusable: Permission denied"
             );
         }
 

@@ -127,6 +127,9 @@ pub struct TestEnvironment {
     pub files: Vec<TestFile>,
     /// 要设置的环境变量
     pub env_vars: HashMap<String, String>,
+    /// 要设置的原始字节环境变量值，键为环境变量名，值为十六进制编码。
+    #[serde(default, rename = "envBytes", alias = "env_bytes")]
+    pub env_bytes: HashMap<String, String>,
     /// 当前工作目录（相对于测试目录）
     pub working_dir: Option<String>,
     /// 以指定用户身份运行测试（如果支持）
@@ -483,6 +486,21 @@ mod tests {
         assert_eq!(streams.stdin, InputStream::Closed);
         assert_eq!(streams.stdin_file, None);
         assert!(streams.use_bash);
+    }
+
+    #[test]
+    fn test_deserialize_raw_environment_value() {
+        let environment: TestEnvironment = serde_json::from_str(
+            r#"{
+                "envBytes": {"HOME": "686f6d652dff"}
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            environment.env_bytes.get("HOME"),
+            Some(&"686f6d652dff".to_string())
+        );
     }
     use tempfile::TempDir;
 

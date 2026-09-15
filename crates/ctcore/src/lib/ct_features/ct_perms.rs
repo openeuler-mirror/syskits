@@ -41,6 +41,7 @@ pub enum CtVerbosityLevel {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Verbosity {
     pub groups_only: bool,
+    pub force_silent: bool,
     pub level: CtVerbosityLevel,
 }
 
@@ -152,37 +153,39 @@ pub fn wrap_chown<P: AsRef<Path>>(
         match verbosity.level {
             CtVerbosityLevel::Silent => (),
             level => {
-                out = format!(
-                    "changing {} of {}: {}",
-                    if group_only { "group" } else { "ownership" },
-                    path_str,
-                    e
-                );
-                if level == CtVerbosityLevel::Verbose {
-                    out = if group_only {
-                        format!(
-                            "{}\n{}",
-                            out,
-                            t!(
-                                "ctcore.chgrp.failed_change",
-                                file = path_str,
-                                old = old_str,
-                                new = new_str
-                            )
-                        )
-                    } else {
-                        format!(
-                            "{}\n{}",
-                            out,
-                            t!(
-                                "ctcore.chown.failed_change",
-                                file = path_str,
-                                old = old_str,
-                                new = new_str
-                            )
-                        )
-                    };
+                let verbose_output = if group_only {
+                    t!(
+                        "ctcore.chgrp.failed_change",
+                        file = path_str,
+                        old = old_str,
+                        new = new_str
+                    )
+                    .to_string()
+                } else {
+                    t!(
+                        "ctcore.chown.failed_change",
+                        file = path_str,
+                        old = old_str,
+                        new = new_str
+                    )
+                    .to_string()
                 };
+
+                if verbosity.force_silent {
+                    if level == CtVerbosityLevel::Verbose {
+                        out = verbose_output;
+                    }
+                } else {
+                    out = format!(
+                        "changing {} of {}: {}",
+                        if group_only { "group" } else { "ownership" },
+                        path_str,
+                        e
+                    );
+                    if level == CtVerbosityLevel::Verbose {
+                        out = format!("{out}\n{verbose_output}");
+                    }
+                }
             }
         }
         return Err(out);
@@ -403,7 +406,7 @@ impl CtChownExecutor {
                         continue;
                     }
                     ret = 1;
-                    if self.verbosity.level != CtVerbosityLevel::Silent {
+                    if !self.verbosity.force_silent {
                         if let Some(path) = e.path() {
                             ct_show_error!(
                                 "cannot {} {}: {}",
@@ -457,14 +460,13 @@ impl CtChownExecutor {
         };
         match meta {
             Err(e) => {
-                match self.verbosity.level {
-                    CtVerbosityLevel::Silent => (),
-                    _ => ct_show_error!(
+                if !self.verbosity.force_silent {
+                    ct_show_error!(
                         "cannot {} {}: {}",
                         metadata_failure_action(path, follow),
                         path.quote(),
                         strip_errno(&e)
-                    ),
+                    );
                 }
                 None
             }
@@ -503,7 +505,11 @@ impl CtChownExecutor {
                     0
                 }
                 Err(error) => {
-                    if self.verbosity.level != CtVerbosityLevel::Silent {
+                    if self.verbosity.force_silent {
+                        if self.verbosity.level == CtVerbosityLevel::Verbose && !error.is_empty() {
+                            println!("{error}");
+                        }
+                    } else {
                         ct_show_error!("{error}");
                     }
                     1
@@ -692,17 +698,7 @@ pub fn chown_base(
         traverse_symlinks = CtTraverseSymlinks::None;
     }
 
-    let verbosity_level = if matches.get_flag(opt_flags::verbosity::CHANGES) {
-        CtVerbosityLevel::Changes
-    } else if matches.get_flag(opt_flags::verbosity::SILENT)
-        || matches.get_flag(opt_flags::verbosity::QUIET)
-    {
-        CtVerbosityLevel::Silent
-    } else if matches.get_flag(opt_flags::verbosity::VERBOSE) {
-        CtVerbosityLevel::Verbose
-    } else {
-        CtVerbosityLevel::Normal
-    };
+    let verbosity = verbosity_from_matches(&matches, groups_only);
     let CtGidUidOwnerFilter {
         dest_gid,
         dest_uid,
@@ -719,10 +715,7 @@ pub fn chown_base(
         dest_user_name,
         dest_group_name,
         raw_owner,
-        verbosity: Verbosity {
-            groups_only,
-            level: verbosity_level,
-        },
+        verbosity,
         recursive,
         dereference: dereference.unwrap_or(true),
         preserve_root,
@@ -730,6 +723,23 @@ pub fn chown_base(
         filter,
     };
     executor.exec()
+}
+
+fn verbosity_from_matches(matches: &ArgMatches, groups_only: bool) -> Verbosity {
+    let level = if matches.get_flag(opt_flags::verbosity::CHANGES) {
+        CtVerbosityLevel::Changes
+    } else if matches.get_flag(opt_flags::verbosity::VERBOSE) {
+        CtVerbosityLevel::Verbose
+    } else {
+        CtVerbosityLevel::Normal
+    };
+
+    Verbosity {
+        groups_only,
+        force_silent: matches.get_flag(opt_flags::verbosity::SILENT)
+            || matches.get_flag(opt_flags::verbosity::QUIET),
+        level,
+    }
 }
 
 #[cfg(test)]
@@ -832,6 +842,7 @@ mod tests {
             traverse_symlinks: CtTraverseSymlinks::All,
             verbosity: Verbosity {
                 groups_only: false,
+                force_silent: false,
                 level: CtVerbosityLevel::Normal,
             },
             filter: CtIfFrom::All,
@@ -861,6 +872,7 @@ mod tests {
             traverse_symlinks: CtTraverseSymlinks::All,
             verbosity: Verbosity {
                 groups_only: false,
+                force_silent: false,
                 level: CtVerbosityLevel::Normal,
             },
             filter: CtIfFrom::All,
@@ -908,6 +920,7 @@ mod tests {
             true,
             Verbosity {
                 groups_only: false,
+                force_silent: false,
                 level: CtVerbosityLevel::Verbose,
             },
         )
@@ -927,6 +940,7 @@ mod tests {
             traverse_symlinks: CtTraverseSymlinks::None,
             verbosity: Verbosity {
                 groups_only: false,
+                force_silent: false,
                 level: CtVerbosityLevel::Verbose,
             },
             filter: CtIfFrom::UserGroup(u32::MAX, u32::MAX),
@@ -937,6 +951,37 @@ mod tests {
         };
 
         assert!(executor.group_only_output());
+    }
+
+    #[test]
+    fn test_force_silent_preserves_verbose_diagnostics() {
+        let command = Command::new("chown")
+            .arg(
+                Arg::new(opt_flags::verbosity::CHANGES)
+                    .short('c')
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(opt_flags::verbosity::SILENT)
+                    .short('f')
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(opt_flags::verbosity::QUIET)
+                    .long(opt_flags::verbosity::QUIET)
+                    .action(clap::ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new(opt_flags::verbosity::VERBOSE)
+                    .short('v')
+                    .action(clap::ArgAction::SetTrue),
+            );
+        let matches = command.try_get_matches_from(["chown", "-f", "-v"]).unwrap();
+
+        let verbosity = verbosity_from_matches(&matches, false);
+
+        assert!(verbosity.force_silent);
+        assert_eq!(verbosity.level, CtVerbosityLevel::Verbose);
     }
 
     #[test]

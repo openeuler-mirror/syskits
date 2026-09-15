@@ -355,6 +355,48 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C下启动前关闭stdout且仅stderr连接PTY；执行命令向stderr写入redirected。GNU创建0600的nohup.out，将命令stderr写入文件，并先后在原TTY stderr报告appending output和redirecting stderr to stdout",
+            "args": [
+                "sh",
+                "-c",
+                "printf redirected >&2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed",
+                    "stderr": "tty"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "nohup: appending output to 'nohup.out'\nnohup: redirecting stderr to stdout\n"
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "600:10\n",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "cat nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "redirected",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C、LANG=C下执行nohup true；stdin为空管道、stdout为非TTY捕获管道，仅stderr连接PTY；无文件fixture；预期RC=0、stdout为空，PTY stderr规范化为nohup: redirecting stderr to stdout加换行；迁移原Cargo用例nohup_reports_tty_stderr_redirection",
             "args": [
                 "true"

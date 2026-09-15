@@ -63,6 +63,7 @@ fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>)> {
             let null = fs::OpenOptions::new().read(true).open("/dev/null")?;
             Ok((Stdio::from(null), None))
         }
+        OutputStream::Closed => Ok((Stdio::null(), None)),
         OutputStream::ClosedPipe => {
             let (read_end, write_end) = nix::unistd::pipe()
                 .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;
@@ -716,6 +717,8 @@ impl IsolatedSandbox {
 
         let streams = options.streams;
         let close_stdin = streams.stdin_file.is_none() && streams.stdin == InputStream::Closed;
+        let close_stdout = streams.stdout == OutputStream::Closed;
+        let close_stderr = streams.stderr == OutputStream::Closed;
         let stdin = match streams.stdin_file.as_deref() {
             Some(path) => {
                 let path = Path::new(path);
@@ -758,6 +761,12 @@ impl IsolatedSandbox {
                 };
                 signal::signal(signal::Signal::SIGPIPE, handler).map_err(std::io::Error::other)?;
                 if close_stdin && libc::close(libc::STDIN_FILENO) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if close_stdout && libc::close(libc::STDOUT_FILENO) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if close_stderr && libc::close(libc::STDERR_FILENO) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
                 Ok(())
@@ -1349,6 +1358,28 @@ mod tests {
         assert_eq!(result.exit_code, 1);
         assert!(result.stdout.is_empty());
         assert!(result.stderr.contains("write error"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_closed_stdout_closes_fd_before_exec() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stdout: OutputStream::Closed,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "sh",
+            &["-c".to_string(), "test ! -e /proc/self/fd/1".to_string()],
+            None,
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
         Ok(())
     }
 

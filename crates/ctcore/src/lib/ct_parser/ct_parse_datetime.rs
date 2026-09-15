@@ -452,6 +452,8 @@ fn parse_datetime_gnu_compat_impl(
         "%m/%d/%Y %H:%M:%S %:z",
         "%m/%d/%Y %H:%M %z",
         "%m/%d/%Y %H:%M %:z",
+        "%B %d, %Y %H:%M:%S %z",
+        "%B %d, %Y %H:%M %z",
     ];
     for fmt in formats_with_tz {
         if let Ok(dt) = DateTime::parse_from_str(&normalized_input, fmt) {
@@ -1553,6 +1555,14 @@ mod tests {
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
         assert!(parse_datetime_gnu_compat("+12345-01-01 UTC", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_parse_full_month_name_with_comma() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("January 1, 2024 12:00 UTC", ref_time).unwrap();
+
+        assert_eq!(parsed.timestamp(), 1_704_110_400);
     }
 
     #[test]

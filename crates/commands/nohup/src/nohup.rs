@@ -23,8 +23,8 @@ use libc::{c_char, dup2, execvp, signal};
 
 use ctcore::Tool;
 use std::env;
-use std::ffi::CString;
 use std::ffi::OsString;
+use std::ffi::{CStr, CString};
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
@@ -114,6 +114,18 @@ fn nohup_stderr_redirect_msg(ignoring_input: bool) -> &'static str {
     }
 }
 
+fn exec_failure_message(command: &str, error: &Error) -> String {
+    let error_text = error.raw_os_error().map_or_else(
+        || error.to_string(),
+        |errno| {
+            unsafe { CStr::from_ptr(libc::strerror(errno)) }
+                .to_string_lossy()
+                .into_owned()
+        },
+    );
+    format!("failed to run command {}: {error_text}", command.quote())
+}
+
 fn open_nohup_out(path: &Path) -> io::Result<File> {
     // GNU nohup temporarily restricts the umask so newly created files are
     // always user-readable and user-writable, regardless of the caller's umask.
@@ -163,7 +175,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         let cmd_name = std::str::from_utf8(cstrings[0].to_bytes())
             .unwrap_or("<unknown>")
             .to_string();
-        let err_msg = format!("cannot run command '{cmd_name}': {err}");
+        let err_msg = exec_failure_message(&cmd_name, &err);
         // 尝试输出错误，如果 stderr 写入失败则退出 125
         if write_nohup_msg(&err_msg).is_err() {
             std::process::exit(125);
@@ -300,7 +312,8 @@ impl Tool for Nohup {
 #[cfg(test)]
 mod tests {
     mod tests_messages {
-        use crate::{nohup_append_msg, nohup_stderr_redirect_msg};
+        use crate::{exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg};
+        use std::io::Error;
 
         #[test]
         fn test_nohup_append_msg_uses_actual_path() {
@@ -323,6 +336,14 @@ mod tests {
             assert_eq!(
                 nohup_stderr_redirect_msg(true),
                 "ignoring input and redirecting stderr to stdout"
+            );
+        }
+
+        #[test]
+        fn test_exec_failure_message_uses_gnu_wording_without_rust_error_suffix() {
+            assert_eq!(
+                exec_failure_message("no-such-command", &Error::from_raw_os_error(libc::ENOENT)),
+                "failed to run command 'no-such-command': No such file or directory"
             );
         }
     }

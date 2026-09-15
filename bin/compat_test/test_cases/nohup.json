@@ -703,6 +703,24 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C、POSIXLY_CORRECT=1下执行不存在命令且stderr连接/dev/full；GNU在exec失败诊断无法写出时按POSIX内部失败规则返回127，而不能返回非POSIX的125",
+            "args": ["no-such-command"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C", "POSIXLY_CORRECT": "1"},
+                "standardStreams": {"stderr": "full"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C、POSIXLY_CORRECT=1下stdout连接TTY且stderr启动前关闭；GNU重定向stdout后不保留临时输出fd，appending output诊断写失败并返回127，nohup.out保持0600和0字节",
             "args": ["true"],
             "environment": {

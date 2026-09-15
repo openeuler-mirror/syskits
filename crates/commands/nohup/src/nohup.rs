@@ -470,7 +470,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         if can_report_exec_failure
             && write_nohup_msg(&err_msg, ctcore::ct_stderr_was_closed()).is_err()
         {
-            std::process::exit(125);
+            std::process::exit(nohup_internal_failure_code());
         }
         match err.raw_os_error() {
             Some(libc::ENOENT) => set_ct_exit_code(EXIT_ENOENT),
@@ -1041,7 +1041,8 @@ mod tests {
         }
 
         #[test]
-        fn test_nohup_non_utf8_posixly_correct_uses_posix_failure_status() {
+        fn test_nohup_failure_code_matches_posix_internal_failure_status() {
+            assert_eq!(nohup_failure_code(None), EXIT_CANCELED);
             assert_eq!(
                 nohup_failure_code(Some(OsStr::from_bytes(b"\xff"))),
                 crate::EXIT_ENOENT

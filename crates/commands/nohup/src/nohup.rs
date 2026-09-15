@@ -28,7 +28,7 @@ use std::ffi::{CStr, CString};
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
@@ -148,6 +148,17 @@ fn open_nohup_out(path: &Path) -> io::Result<File> {
     result
 }
 
+fn save_stderr_for_exec_failure() -> Option<OwnedFd> {
+    let saved_fd = unsafe {
+        libc::fcntl(
+            libc::STDERR_FILENO,
+            libc::F_DUPFD_CLOEXEC,
+            libc::STDERR_FILENO + 1,
+        )
+    };
+    (saved_fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(saved_fd) })
+}
+
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -161,7 +172,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         .try_get_matches_from(args)
         .with_exit_code(arg_error_code)?;
 
-    nohup_replace_fds()?;
+    let saved_stderr = nohup_replace_fds()?;
 
     unsafe { signal(SIGHUP, SIG_IGN) }; // 忽略SIGHUP信号
 
@@ -192,8 +203,14 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         // 获取命令名用于错误信息
         let cmd_name = cstrings[0].to_string_lossy().into_owned();
         let err_msg = exec_failure_message(&cmd_name, &err);
+        let can_report_exec_failure = match saved_stderr.as_ref() {
+            Some(saved) => unsafe {
+                dup2(saved.as_raw_fd(), libc::STDERR_FILENO) == libc::STDERR_FILENO
+            },
+            None => true,
+        };
         // 尝试输出错误，如果 stderr 写入失败则退出 125
-        if write_nohup_msg(&err_msg).is_err() {
+        if can_report_exec_failure && write_nohup_msg(&err_msg).is_err() {
             std::process::exit(125);
         }
         match err.raw_os_error() {
@@ -223,7 +240,7 @@ pub fn ct_app() -> Command {
 }
 
 // 替换标准输入、输出和错误输出文件描述符
-fn nohup_replace_fds() -> CTResult<()> {
+fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
     let stdin_is_tty = std::io::stdin().is_terminal();
     let stdout_is_tty = std::io::stdout().is_terminal();
     let stderr_is_tty = std::io::stderr().is_terminal();
@@ -258,6 +275,7 @@ fn nohup_replace_fds() -> CTResult<()> {
     }
 
     if stderr_is_tty {
+        let saved_stderr = save_stderr_for_exec_failure();
         if !stdout_is_tty && write_nohup_msg(nohup_stderr_redirect_msg(stdin_is_tty)).is_err() {
             std::process::exit(125);
         }
@@ -265,8 +283,9 @@ fn nohup_replace_fds() -> CTResult<()> {
         if unsafe { dup2(stderr_target_fd, 2) } != 2 {
             return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
         }
+        return Ok(saved_stderr);
     }
-    Ok(())
+    Ok(None)
 }
 
 // 查找或创建nohup输出文件
@@ -338,9 +357,10 @@ mod tests {
     mod tests_messages {
         use crate::{
             exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg,
-            should_open_nohup_output,
+            save_stderr_for_exec_failure, should_open_nohup_output,
         };
         use std::io::Error;
+        use std::os::fd::AsRawFd;
 
         #[test]
         fn test_nohup_append_msg_uses_actual_path() {
@@ -380,6 +400,15 @@ mod tests {
                 exec_failure_message("no-such-command", &Error::from_raw_os_error(libc::ENOENT)),
                 "failed to run command 'no-such-command': No such file or directory"
             );
+        }
+
+        #[test]
+        fn test_saved_stderr_for_exec_failure_is_close_on_exec_duplicate() {
+            let saved = save_stderr_for_exec_failure().expect("stderr can be duplicated");
+
+            assert_ne!(saved.as_raw_fd(), libc::STDERR_FILENO);
+            let flags = unsafe { libc::fcntl(saved.as_raw_fd(), libc::F_GETFD) };
+            assert_ne!(flags & libc::FD_CLOEXEC, 0);
         }
     }
 

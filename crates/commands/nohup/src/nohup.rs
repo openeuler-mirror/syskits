@@ -65,6 +65,7 @@ enum NohupError {
 
 enum ExecFailureStderr {
     NotRedirected,
+    InitiallyClosed,
     Saved(OwnedFd),
     Unavailable,
 }
@@ -549,13 +550,17 @@ fn nohup_replace_fds() -> CTResult<ExecFailureStderr> {
         }
         return Ok(exec_failure_stderr);
     }
-    Ok(ExecFailureStderr::NotRedirected)
+    if ctcore::ct_stderr_was_closed() {
+        Ok(ExecFailureStderr::InitiallyClosed)
+    } else {
+        Ok(ExecFailureStderr::NotRedirected)
+    }
 }
 
 fn can_report_exec_failure(stderr: &ExecFailureStderr) -> bool {
     match stderr {
         ExecFailureStderr::NotRedirected => true,
-        ExecFailureStderr::Unavailable => false,
+        ExecFailureStderr::InitiallyClosed | ExecFailureStderr::Unavailable => false,
         ExecFailureStderr::Saved(saved) => unsafe {
             dup2(saved.as_raw_fd(), libc::STDERR_FILENO) == libc::STDERR_FILENO
         },
@@ -843,6 +848,9 @@ mod tests {
         #[test]
         fn test_exec_failure_reporting_requires_a_saved_tty_stderr() {
             assert!(can_report_exec_failure(&ExecFailureStderr::NotRedirected));
+            assert!(!can_report_exec_failure(
+                &ExecFailureStderr::InitiallyClosed
+            ));
             assert!(!can_report_exec_failure(&ExecFailureStderr::Unavailable));
         }
 

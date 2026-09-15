@@ -2,6 +2,40 @@
     "tests": [
         {
             "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C下不传COMMAND；GNU nohup返回125，并以missing operand和Try 'nohup --help'的专用诊断提示缺少操作数",
+            "args": [],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nohup: missing operand\nTry 'nohup --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C且POSIXLY_CORRECT=1下不传COMMAND；GNU nohup保持missing operand诊断，但POSIX模式内部失败状态为127",
+            "args": [],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C", "POSIXLY_CORRECT": "1"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": "nohup: missing operand\nTry 'nohup --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
             "byteMode": true,
             "command": "nohup",
             "description": "原始字节命令路径用例：LC_ALL=C下创建并执行路径字节2e2f636d642dff（./cmd-加0xff）；GNU nohup保留argv原始字节并输出byte-ok，预期RC=0、stdout完整十六进制=627974652d6f6b、stderr为空",

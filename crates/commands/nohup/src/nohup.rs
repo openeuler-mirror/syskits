@@ -16,7 +16,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, UClapError, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, UClapError, set_ct_exit_code};
 
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
@@ -161,9 +161,18 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(NohupError::CannotDetach.into());
     };
 
-    let cstrings: Vec<CString> = args_match
+    let command_args = args_match
         .get_many::<OsString>(options::CMD)
-        .unwrap()
+        .ok_or_else(|| {
+            CtSimpleError::new(
+                arg_error_code,
+                format!(
+                    "missing operand\nTry '{} --help' for more information.",
+                    ctcore::ct_execute_phrase()
+                ),
+            )
+        })?;
+    let cstrings: Vec<CString> = command_args
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
     let mut args: Vec<*const c_char> = cstrings.iter().map(|s| s.as_ptr()).collect();
@@ -197,7 +206,6 @@ pub fn ct_app() -> Command {
         .arg(
             Arg::new(options::CMD)
                 .hide(true)
-                .required(true)
                 .action(ArgAction::Append)
                 .value_parser(clap::builder::OsStringValueParser::new())
                 .value_hint(clap::ValueHint::CommandName),
@@ -371,7 +379,7 @@ mod tests {
     }
 
     mod tests_echo_main {
-        use crate::nohup_main;
+        use crate::{EXIT_CANCELED, nohup_main};
 
         use std::ffi::OsString;
 
@@ -390,6 +398,21 @@ mod tests {
             let result = nohup_main(args.iter().map(OsString::from));
 
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_nohup_main_reports_gnu_missing_operand() {
+            let args = [ctcore::ct_util_name()];
+            let error = nohup_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.code(), EXIT_CANCELED);
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "missing operand\nTry '{} --help' for more information.",
+                    ctcore::ct_execute_phrase()
+                )
+            );
         }
     }
 

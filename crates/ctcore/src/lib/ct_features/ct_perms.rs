@@ -15,7 +15,7 @@ use crate::ct_display::Quotable;
 use crate::ct_error::{CTResult, CtSimpleError, strip_errno};
 pub use crate::ct_features::ct_entries;
 use crate::ct_show_error;
-use clap::{Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, builder::OsStringValueParser};
 use libc::{gid_t, uid_t};
 use rust_i18n::t;
 use walkdir::WalkDir;
@@ -23,7 +23,7 @@ use walkdir::WalkDir;
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
 
-use std::ffi::CString;
+use std::ffi::{CString, OsString};
 use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
@@ -232,7 +232,7 @@ pub struct CtChownExecutor {
     pub traverse_symlinks: CtTraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: CtIfFrom,
-    pub files: Vec<String>,
+    pub files: Vec<OsString>,
     pub recursive: bool,
     pub preserve_root: bool,
     pub dereference: bool,
@@ -619,15 +619,16 @@ pub fn chown_base(
         Arg::new(opt_flags::ARG_FILES)
             .value_name(opt_flags::ARG_FILES)
             .value_hint(clap::ValueHint::FilePath)
+            .value_parser(OsStringValueParser::new())
             .action(clap::ArgAction::Append)
             .required(true)
             .num_args(1..),
     );
     let matches = command.try_get_matches_from(args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(opt_flags::ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(opt_flags::ARG_FILES)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(opt_flags::preserve_root::PRESERVE);

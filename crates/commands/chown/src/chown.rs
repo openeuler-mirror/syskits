@@ -518,6 +518,38 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_chown_main_accepts_non_utf8_filename() {
+        use std::os::unix::ffi::OsStringExt;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_non_utf8_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join(OsString::from_vec(vec![0xff]));
+        File::create(&path).unwrap();
+
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                current_uid_arg(),
+                path.into_os_string(),
+            ]
+            .into_iter(),
+        );
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_ok());
+    }
+
     #[test]
     fn test_ct_app_execution_help() {
         let command = ct_app();

@@ -3,6 +3,24 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C且三个标准流均非TTY时执行不存在命令，GNU nohup返回127并使用failed to run command诊断，且不附加Rust错误码后缀",
+            "args": ["no-such-command"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {"stderr": "capture"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": "nohup: failed to run command 'no-such-command': No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "基本功能测试 - 运行命令并忽略挂起信号",
             "setup_commands": [
             ],

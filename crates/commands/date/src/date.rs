@@ -1626,6 +1626,44 @@ fn format_era_year_field(tm_val: &tm) -> CTResult<Vec<u8>> {
     format_with_libc_strftime(&c_fmt, tm_val)
 }
 
+#[cfg(target_os = "linux")]
+fn format_gnu_text_field(
+    tm_val: &tm,
+    modifier: Option<u8>,
+    spec: u8,
+    flags: &[u8],
+) -> CTResult<Vec<u8>> {
+    let mut c_fmt = vec![b'%'];
+    c_fmt.extend(
+        flags
+            .iter()
+            .copied()
+            .filter(|flag| matches!(flag, b'^' | b'#')),
+    );
+    if let Some(modifier) = modifier {
+        c_fmt.push(modifier);
+    }
+    c_fmt.push(spec);
+    let c_fmt = CString::new(c_fmt).expect("strftime format has no NUL byte");
+    format_with_libc_strftime(&c_fmt, tm_val)
+}
+
+#[cfg(target_os = "linux")]
+fn gnu_text_field_accepts_modifier(spec: u8, modifier: Option<u8>) -> bool {
+    match modifier {
+        None => true,
+        Some(b'E') => matches!(
+            spec,
+            b'c' | b'x' | b'X' | b'r' | b'R' | b'T' | b'p' | b'P' | b'Z' | b'n' | b't'
+        ),
+        Some(b'O') => matches!(
+            spec,
+            b'b' | b'B' | b'h' | b'r' | b'R' | b'T' | b'p' | b'P' | b'Z' | b'n' | b't'
+        ),
+        _ => false,
+    }
+}
+
 fn res_width_from_nsec(res_nsec: i64) -> usize {
     let mut width = 9;
     let mut temp = res_nsec;
@@ -1908,6 +1946,27 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     }
                     b'Y' if modifier == Some(b'E') && !use_alt_era => {
                         let field = format_era_year_field(&tm_val)?;
+                        fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                            &field,
+                            parse_strftime_width(width_str),
+                            pad,
+                            StrftimePad::Space,
+                        ));
+                    }
+                    b'%' if index - percent_start > 2 => {
+                        fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                            &fmt[percent_start..index - 1],
+                            parse_strftime_width(width_str),
+                            pad,
+                            StrftimePad::Space,
+                        ));
+                        index -= 1;
+                    }
+                    b'a' | b'A' | b'b' | b'B' | b'h' | b'c' | b'x' | b'X' | b'r' | b'R' | b'T'
+                    | b'D' | b'p' | b'P' | b'Z' | b'n' | b't'
+                        if has_plus && gnu_text_field_accepts_modifier(spec, modifier) =>
+                    {
+                        let field = format_gnu_text_field(&tm_val, modifier, spec, &flags)?;
                         fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
                             &field,
                             parse_strftime_width(width_str),
@@ -2381,6 +2440,22 @@ mod tests {
         assert_eq!(
             format_using_strftime(&dt, "%EY|%6EY|%+6EY|%_6EY|%-6EY").unwrap(),
             "2024|  2024|002024|  2024|2024"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_plus_padding_for_text_fields() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%+10a|%+10B|%+10p|%+10Z|%+10R|%+_10a|%+010a|%+10%",)
+                .unwrap(),
+            "0000000Tue|000January|00000000PM|0000000UTC|0000015:04|       Tue|0000000Tue|000000%+10%"
         );
     }
 

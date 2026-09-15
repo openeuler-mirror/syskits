@@ -597,6 +597,32 @@ fn parse_debug_relative(tokens: &[&str]) -> Option<DateDebugRelative> {
     seen.then_some(relative)
 }
 
+fn is_debug_relative_value(tokens: &[&str], index: usize) -> bool {
+    tokens
+        .get(index)
+        .and_then(|value| value.parse::<i64>().ok())
+        .is_some()
+        && matches!(
+            tokens
+                .get(index + 1)
+                .map(|unit| unit.to_ascii_lowercase())
+                .as_deref(),
+            Some("year" | "years" | "month" | "months" | "day" | "days")
+        )
+}
+
+fn find_debug_timezone(tokens: &[&str], start: usize) -> Option<DateDebugZone> {
+    tokens
+        .iter()
+        .enumerate()
+        .skip(start)
+        .find_map(|(index, token)| {
+            (!is_debug_relative_value(tokens, index))
+                .then(|| parse_debug_timezone(token))
+                .flatten()
+        })
+}
+
 fn set_debug_date(parts: &mut DateDebugParts, input: &str) {
     let date = NaiveDate::parse_from_str(input, "%Y-%m-%d").ok();
     parts.date = date.as_ref().map(|date| {
@@ -638,11 +664,9 @@ fn analyze_date_debug_input(input: &str) -> DateDebugParts {
         set_debug_date(&mut parts, first);
         if let Some(time) = tokens.get(1).and_then(|value| parse_debug_time(value)) {
             parts.time = Some(time);
-            if parts.relative.is_none() {
-                parts.zone = tokens.get(2).and_then(|value| parse_debug_timezone(value));
-            }
-        } else if parts.relative.is_none() {
-            parts.zone = tokens.get(1).and_then(|value| parse_debug_timezone(value));
+            parts.zone = find_debug_timezone(&tokens, 2);
+        } else {
+            parts.zone = find_debug_timezone(&tokens, 1);
         }
     }
 
@@ -767,13 +791,6 @@ fn date_debug_text(
             time.parsed
         );
     }
-    if let Some(zone) = parts.zone.as_ref().filter(|zone| zone.separate_part) {
-        let _ = writeln!(
-            output,
-            "date: parsed zone part: UTC{}",
-            debug_timezone_offset(zone.offset)
-        );
-    }
     if let Some(relative) = &parts.relative {
         for (value, unit) in [
             (relative.years, "year"),
@@ -784,6 +801,13 @@ fn date_debug_text(
                 let _ = writeln!(output, "date: parsed relative part: {value:+} {unit}(s)");
             }
         }
+    }
+    if let Some(zone) = parts.zone.as_ref().filter(|zone| zone.separate_part) {
+        let _ = writeln!(
+            output,
+            "date: parsed zone part: UTC{}",
+            debug_timezone_offset(zone.offset)
+        );
     }
     let _ = writeln!(
         output,
@@ -842,11 +866,8 @@ fn date_debug_text(
             "date: after date adjustment ({:+} years, {:+} months, {:+} days),",
             relative.years, relative.months, relative.days
         );
-        let _ = writeln!(
-            output,
-            "date:     new date/time = '{}'",
-            date_ymd_hms_label(date)
-        );
+        let adjusted_label = format!("{}{}", date_ymd_hms_label(date), starting_zone);
+        let _ = writeln!(output, "date:     new date/time = '{adjusted_label}'");
         if relative.days == 0 {
             if let Some(base) = parts.date_value {
                 let raw_month = i64::from(base.month0()) + relative.months;
@@ -878,7 +899,7 @@ fn date_debug_text(
     let epoch_label = parts
         .relative
         .as_ref()
-        .map(|_| date_ymd_hms_label(date))
+        .map(|_| format!("{}{}", date_ymd_hms_label(date), starting_zone))
         .unwrap_or(starting_label);
     let _ = writeln!(
         output,
@@ -3116,6 +3137,35 @@ mod tests {
                  date: final: 1704153600.000000000 (epoch-seconds)\n\
                  date: final: (Y-M-D) 2024-01-02 00:00:00 (UTC)\n\
                  date: final: (Y-M-D) 2024-01-02 00:00:00 (UTC+00)\n\
+                 {}: output format: {}\n",
+                ctcore::ct_util_name(),
+                locale_quote("%F"),
+            )
+        );
+    }
+
+    #[test]
+    fn test_date_debug_relative_days_preserves_explicit_timezone() {
+        let date = DateTime::parse_from_rfc3339("2013-10-22T00:00:00+00:00").unwrap();
+
+        assert_eq!(
+            date_debug_text("2013-10-30 00:00:00 UTC -8 days", &date, "%F", Some("UTC0"),),
+            format!(
+                "date: parsed date part: (Y-M-D) 2013-10-30\n\
+                 date: parsed time part: 00:00:00\n\
+                 date: parsed relative part: -8 day(s)\n\
+                 date: parsed zone part: UTC+00\n\
+                 date: input timezone: parsed date/time string (+00)\n\
+                 date: using specified time as starting value: '00:00:00'\n\
+                 date: starting date/time: '(Y-M-D) 2013-10-30 00:00:00 TZ=+00'\n\
+                 date: warning: when adding relative days, it is recommended to specify noon\n\
+                 date: after date adjustment (+0 years, +0 months, -8 days),\n\
+                 date:     new date/time = '(Y-M-D) 2013-10-22 00:00:00 TZ=+00'\n\
+                 date: '(Y-M-D) 2013-10-22 00:00:00 TZ=+00' = 1382400000 epoch-seconds\n\
+                 date: timezone: Universal Time\n\
+                 date: final: 1382400000.000000000 (epoch-seconds)\n\
+                 date: final: (Y-M-D) 2013-10-22 00:00:00 (UTC)\n\
+                 date: final: (Y-M-D) 2013-10-22 00:00:00 (UTC+00)\n\
                  {}: output format: {}\n",
                 ctcore::ct_util_name(),
                 locale_quote("%F"),

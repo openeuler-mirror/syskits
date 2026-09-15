@@ -1282,6 +1282,31 @@
         "rm -f -- chown-verbose-no-target"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；--from不匹配时，:GROUP规格的verbose诊断仍按组格式输出",
+      "args": [
+        "-v",
+        "--from=65534:65534",
+        ":0",
+        "chown-verbose-filtered-group"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-verbose-filtered-group"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "group of 'chown-verbose-filtered-group' retained as root\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-verbose-filtered-group"
+      ],
+      "requires_root": true
     }
   ]
 }

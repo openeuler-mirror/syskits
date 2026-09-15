@@ -29,7 +29,7 @@ use std::ffi::{CStr, CString, OsString};
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
@@ -471,18 +471,8 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
     }
 
     let output_file = should_open_nohup_output(stdout_is_tty, stderr_is_tty, stdout_was_closed)
-        .then(|| nohup_find_stdout(stdin_is_tty))
+        .then(|| nohup_find_stdout(stdin_is_tty, stdout_is_tty))
         .transpose()?;
-
-    if stdout_is_tty {
-        let raw_fd = output_file
-            .as_ref()
-            .expect("terminal stdout requires nohup output file")
-            .as_raw_fd();
-        if unsafe { dup2(raw_fd, 1) } != 1 {
-            return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
-        }
-    }
 
     if stderr_is_tty {
         let saved_stderr = save_stderr_for_exec_failure();
@@ -498,11 +488,31 @@ fn nohup_replace_fds() -> CTResult<Option<OwnedFd>> {
     Ok(None)
 }
 
+fn redirect_stdout(file: &File) -> io::Result<()> {
+    redirect_stdout_from_fd(file.as_raw_fd())
+}
+
+fn redirect_stdout_from_fd(source_fd: RawFd) -> io::Result<()> {
+    if unsafe { dup2(source_fd, libc::STDOUT_FILENO) } == libc::STDOUT_FILENO {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+fn open_nohup_output(path: &Path, redirecting_stdout: bool) -> io::Result<File> {
+    let file = open_nohup_out(path)?;
+    if redirecting_stdout {
+        redirect_stdout(&file)?;
+    }
+    Ok(file)
+}
+
 // 查找或创建nohup输出文件
-fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
+fn nohup_find_stdout(ignoring_input: bool, redirecting_stdout: bool) -> CTResult<File> {
     let internal_failure_code = nohup_internal_failure_code();
 
-    match open_nohup_out(Path::new(NOHUP_OUT)) {
+    match open_nohup_output(Path::new(NOHUP_OUT), redirecting_stdout) {
         Ok(file) => {
             let msg = nohup_append_msg(Path::new(NOHUP_OUT), ignoring_input);
             if write_nohup_msg(&msg).is_err() {
@@ -517,7 +527,7 @@ fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
             };
             let mut path_buf = PathBuf::from(home);
             path_buf.push(NOHUP_OUT);
-            match open_nohup_out(&path_buf) {
+            match open_nohup_output(&path_buf, redirecting_stdout) {
                 Ok(file) => {
                     let msg = nohup_append_msg(&path_buf, ignoring_input);
                     if write_nohup_msg(&msg).is_err() {
@@ -559,7 +569,7 @@ mod tests {
     mod tests_messages {
         use crate::{
             NohupError, exec_failure_message, nohup_append_msg, nohup_command_args,
-            nohup_stderr_redirect_msg, nohup_validate_standard_options,
+            nohup_stderr_redirect_msg, nohup_validate_standard_options, redirect_stdout_from_fd,
             save_stderr_for_exec_failure, should_open_nohup_output,
         };
         use ctcore::ct_error::CTError;
@@ -655,6 +665,25 @@ mod tests {
                 error.to_string(),
                 "failed to render standard input unusable: Permission denied"
             );
+        }
+
+        #[test]
+        fn test_nohup_stdout_redirection_error_uses_open_failure_semantics() {
+            let error =
+                NohupError::OpenFailed(crate::EXIT_CANCELED, Error::from_raw_os_error(libc::EBADF));
+
+            assert_eq!(error.code(), crate::EXIT_CANCELED);
+            assert_eq!(
+                error.to_string(),
+                "failed to open 'nohup.out': Bad file descriptor"
+            );
+        }
+
+        #[test]
+        fn test_redirect_stdout_rejects_invalid_file_descriptor() {
+            let error = redirect_stdout_from_fd(-1).unwrap_err();
+
+            assert_eq!(error.raw_os_error(), Some(libc::EBADF));
         }
 
         #[test]

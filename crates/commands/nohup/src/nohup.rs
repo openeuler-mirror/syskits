@@ -12,7 +12,7 @@
 // nohup命令的作用是在Unix/Linux系统中允许一个命令在用户退出终端后继续在后台运行
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
@@ -327,6 +327,21 @@ fn nohup_validate_standard_options(args: &[OsString], error_code: i32) -> CTResu
     }
 }
 
+fn nohup_command_args(matches: &ArgMatches, error_code: i32) -> CTResult<Vec<OsString>> {
+    matches
+        .get_many::<OsString>(options::CMD)
+        .map(|arguments| arguments.cloned().collect())
+        .ok_or_else(|| {
+            CtSimpleError::new(
+                error_code,
+                format!(
+                    "missing operand\nTry '{} --help' for more information.",
+                    ctcore::ct_execute_phrase()
+                ),
+            )
+        })
+}
+
 pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -341,6 +356,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
     let args_match = ct_app()
         .try_get_matches_from(args)
         .with_exit_code(arg_error_code)?;
+    let command_args = nohup_command_args(&args_match, arg_error_code)?;
 
     let saved_stderr = nohup_replace_fds()?;
 
@@ -350,18 +366,8 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(NohupError::CannotDetach.into());
     };
 
-    let command_args = args_match
-        .get_many::<OsString>(options::CMD)
-        .ok_or_else(|| {
-            CtSimpleError::new(
-                arg_error_code,
-                format!(
-                    "missing operand\nTry '{} --help' for more information.",
-                    ctcore::ct_execute_phrase()
-                ),
-            )
-        })?;
     let cstrings: Vec<CString> = command_args
+        .iter()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
     let mut args: Vec<*const c_char> = cstrings.iter().map(|s| s.as_ptr()).collect();
@@ -535,12 +541,12 @@ impl Tool for Nohup {
 mod tests {
     mod tests_messages {
         use crate::{
-            NohupError, exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg,
-            nohup_validate_standard_options, save_stderr_for_exec_failure,
-            should_open_nohup_output,
+            NohupError, exec_failure_message, nohup_append_msg, nohup_command_args,
+            nohup_stderr_redirect_msg, nohup_validate_standard_options,
+            save_stderr_for_exec_failure, should_open_nohup_output,
         };
         use ctcore::ct_error::CTError;
-        use std::ffi::OsStr;
+        use std::ffi::{OsStr, OsString};
         use std::io::Error;
         use std::os::fd::AsRawFd;
         use std::os::unix::ffi::OsStrExt;
@@ -581,6 +587,23 @@ mod tests {
             assert!(should_open_nohup_output(false, true, true));
             assert!(!should_open_nohup_output(false, true, false));
             assert!(!should_open_nohup_output(false, false, true));
+        }
+
+        #[test]
+        fn test_nohup_requires_command_before_fd_replacement() {
+            let matches = crate::ct_app()
+                .try_get_matches_from([OsString::from("nohup")])
+                .unwrap();
+            let error = nohup_command_args(&matches, crate::EXIT_CANCELED).unwrap_err();
+
+            assert_eq!(error.code(), crate::EXIT_CANCELED);
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "missing operand\nTry '{} --help' for more information.",
+                    ctcore::ct_execute_phrase()
+                )
+            );
         }
 
         #[test]

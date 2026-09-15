@@ -375,6 +375,38 @@
         },
         {
             "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C下stdout和stderr连接PTY且当前nohup.out为目录、HOME=home//；GNU按file_name_concat移除非根目录HOME的尾部重复斜杠，诊断必须显示home/nohup.out并创建该输出文件",
+            "args": ["true"],
+            "setup_commands": [
+                "mkdir -p home nohup.out"
+            ],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C", "HOME": "home//"},
+                "standardStreams": {
+                    "stdout": "tty",
+                    "stderr": "tty"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "nohup: appending output to 'home/nohup.out'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' home/nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "600:0\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
             "tty": true,
             "command": "nohup",
             "description": "输出文件打开失败诊断用例：LC_ALL=C下当前nohup.out为目录、HOME=missing-home；GNU返回125，并依次报告Is a directory与No such file or directory，errno文本不包含Rust的(os error N)后缀。",

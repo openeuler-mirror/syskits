@@ -336,7 +336,7 @@ fn nohup_command_args(matches: &ArgMatches, error_code: i32) -> CTResult<Vec<OsS
                 error_code,
                 format!(
                     "missing operand\nTry '{} --help' for more information.",
-                    ctcore::ct_execute_phrase()
+                    ctcore::ct_help_utility_name()
                 ),
             )
         })
@@ -601,7 +601,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "missing operand\nTry '{} --help' for more information.",
-                    ctcore::ct_execute_phrase()
+                    ctcore::ct_help_utility_name()
                 )
             );
         }
@@ -755,7 +755,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "missing operand\nTry '{} --help' for more information.",
-                    ctcore::ct_execute_phrase()
+                    ctcore::ct_help_utility_name()
                 )
             );
         }

@@ -21,6 +21,7 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use sys_locale::get_locale;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
+use ctcore::libc::{gid_t, uid_t};
 
 use std::ffi::OsString;
 use std::fs;
@@ -283,7 +284,11 @@ fn chown_parse_uid(username: &str, spec_info: &str, sep: char) -> CTResult<Optio
             } else {
                 // 如果'user'字符串包含数字，尝试将其解析为UID
                 match username.parse() {
-                    Ok(uid_num) => Ok(Some(uid_num)), // 成功解析为数字UID
+                    Ok(uid_num) if uid_num != uid_t::MAX => Ok(Some(uid_num)), // 成功解析为数字UID
+                    Ok(_) => Err(CtSimpleError::new(
+                        1,
+                        format!("invalid user: {}", spec_info.quote()),
+                    )),
                     Err(_) => Err(CtSimpleError::new(
                         1,
                         format!("invalid user: {}", spec_info.quote()),
@@ -314,7 +319,11 @@ fn chown_parse_gid(chown_group: &str, spec_str: &str) -> CTResult<Option<u32>> {
     match Group::locate(chown_group) {
         Ok(g) => Ok(Some(g.gid)), // 成功定位组，返回组的gid
         Err(_) => match chown_group.parse() {
-            Ok(gid) => Ok(Some(gid)), // 成功将组名解析为u32，返回解析后的gid
+            Ok(gid) if gid != gid_t::MAX => Ok(Some(gid)), // 成功将组名解析为u32，返回解析后的gid
+            Ok(_) => Err(CtSimpleError::new(
+                1,
+                format!("invalid group: {}", spec_str.quote()),
+            )),
             Err(_) => Err(CtSimpleError::new(
                 1,                                              // 错误码
                 format!("invalid group: {}", spec_str.quote()), // 构造错误消息
@@ -432,6 +441,12 @@ mod tests {
         assert!(matches!(chown_parse_gid("", ""), Ok(None)));
         assert!(matches!(chown_parse_gid("", ":"), Ok(None)));
         assert!(matches!(chown_parse_gid("", "."), Ok(None)));
+    }
+
+    #[test]
+    fn test_rejects_uid_gid_minus_one_sentinels() {
+        assert!(chown_parse_spec("4294967295", ':').is_err());
+        assert!(chown_parse_spec(":4294967295", ':').is_err());
     }
     #[test]
     fn test_parse_spec_with_dot() {

@@ -1328,6 +1328,28 @@
         }
       },
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；Linux的uid_t哨兵值4294967295不是有效OWNER，必须在执行前报invalid user",
+      "args": [
+        "4294967295",
+        "chown-invalid-uid-sentinel"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-invalid-uid-sentinel"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: invalid user: '4294967295'\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-invalid-uid-sentinel"
+      ]
     }
   ]
 }

@@ -1372,6 +1372,26 @@
       "cleanup_commands": [
         "rm -f -- chown-invalid-dot-owner"
       ]
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；-v遇到chown(2)失败时，错误原因写stderr且failed状态行写stdout",
+      "args": [
+        "-v",
+        "1",
+        "/proc/version"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "failed to change ownership of '/proc/version' from root to 1\n",
+          "stderr": "chown: changing ownership of '/proc/version': Permission denied\n"
+        }
+      },
+      "requires_root": true
     }
   ]
 }

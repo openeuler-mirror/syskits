@@ -753,6 +753,7 @@ impl Installer {
     fn get_verbosity(&self) -> Verbosity {
         Verbosity {
             groups_only: self.owner_id.is_none(),
+            force_silent: false,
             level: CtVerbosityLevel::Normal,
         }
     }

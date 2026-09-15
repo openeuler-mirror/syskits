@@ -1307,6 +1307,27 @@
         "rm -f -- chown-verbose-filtered-group"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；-f仅抑制错误流，-v仍须报告不存在文件的失败诊断",
+      "args": [
+        "-f",
+        "-v",
+        "0",
+        "chown-silent-verbose-missing"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "failed to change ownership of 'chown-silent-verbose-missing' to 0\n",
+          "stderr": ""
+        }
+      },
+      "requires_root": true
     }
   ]
 }

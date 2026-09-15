@@ -1842,6 +1842,7 @@ pub(crate) fn copy_attributes_with_deref(
             false,
             Verbosity {
                 groups_only: false,
+                force_silent: false,
                 level: CtVerbosityLevel::Normal,
             },
         ) {
@@ -1865,6 +1866,7 @@ pub(crate) fn copy_attributes_with_deref(
                         false,
                         Verbosity {
                             groups_only: true, // 标记为仅设置组
+                            force_silent: false,
                             level: CtVerbosityLevel::Normal,
                         },
                     );

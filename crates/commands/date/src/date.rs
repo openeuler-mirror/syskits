@@ -473,27 +473,20 @@ struct DateDebugZone {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct DateDebugRelativeDays {
+struct DateDebugRelative {
+    years: i64,
+    months: i64,
     days: i64,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
 struct DateDebugParts {
     date: Option<String>,
+    date_value: Option<NaiveDate>,
     time: Option<DateDebugTime>,
     zone: Option<DateDebugZone>,
-    relative_days: Option<DateDebugRelativeDays>,
+    relative: Option<DateDebugRelative>,
     embedded_timezone: Option<String>,
-}
-
-fn parse_debug_date(input: &str) -> Option<String> {
-    let date = NaiveDate::parse_from_str(input, "%Y-%m-%d").ok()?;
-    Some(format!(
-        "(Y-M-D) {:04}-{:02}-{:02}",
-        date.year(),
-        date.month(),
-        date.day()
-    ))
 }
 
 fn parse_debug_time(input: &str) -> Option<DateDebugTime> {
@@ -582,12 +575,39 @@ fn split_embedded_timezone(input: &str) -> (Option<String>, &str) {
     (Some(timezone), remaining)
 }
 
-fn parse_debug_relative_days(tokens: &[&str]) -> Option<DateDebugRelativeDays> {
-    tokens.windows(2).find_map(|pair| {
-        let value = pair[0].parse::<i64>().ok()?;
-        matches!(pair[1].to_ascii_lowercase().as_str(), "day" | "days")
-            .then_some(DateDebugRelativeDays { days: value })
-    })
+fn parse_debug_relative(tokens: &[&str]) -> Option<DateDebugRelative> {
+    let mut relative = DateDebugRelative {
+        years: 0,
+        months: 0,
+        days: 0,
+    };
+    let mut seen = false;
+    for pair in tokens.windows(2) {
+        let Ok(value) = pair[0].parse::<i64>() else {
+            continue;
+        };
+        match pair[1].to_ascii_lowercase().as_str() {
+            "year" | "years" => relative.years += value,
+            "month" | "months" => relative.months += value,
+            "day" | "days" => relative.days += value,
+            _ => continue,
+        }
+        seen = true;
+    }
+    seen.then_some(relative)
+}
+
+fn set_debug_date(parts: &mut DateDebugParts, input: &str) {
+    let date = NaiveDate::parse_from_str(input, "%Y-%m-%d").ok();
+    parts.date = date.as_ref().map(|date| {
+        format!(
+            "(Y-M-D) {:04}-{:02}-{:02}",
+            date.year(),
+            date.month(),
+            date.day()
+        )
+    });
+    parts.date_value = date;
 }
 
 fn analyze_date_debug_input(input: &str) -> DateDebugParts {
@@ -600,10 +620,10 @@ fn analyze_date_debug_input(input: &str) -> DateDebugParts {
     let Some(first) = tokens.first() else {
         return parts;
     };
-    parts.relative_days = parse_debug_relative_days(&tokens);
+    parts.relative = parse_debug_relative(&tokens);
 
     if let Some((date, time_and_zone)) = first.split_once('T') {
-        parts.date = parse_debug_date(date);
+        set_debug_date(&mut parts, date);
         let zone_start = time_and_zone
             .char_indices()
             .skip(1)
@@ -615,13 +635,13 @@ fn analyze_date_debug_input(input: &str) -> DateDebugParts {
             parts.time = parse_debug_time(time_and_zone);
         }
     } else {
-        parts.date = parse_debug_date(first);
+        set_debug_date(&mut parts, first);
         if let Some(time) = tokens.get(1).and_then(|value| parse_debug_time(value)) {
             parts.time = Some(time);
-            if parts.relative_days.is_none() {
+            if parts.relative.is_none() {
                 parts.zone = tokens.get(2).and_then(|value| parse_debug_timezone(value));
             }
-        } else if parts.relative_days.is_none() {
+        } else if parts.relative.is_none() {
             parts.zone = tokens.get(1).and_then(|value| parse_debug_timezone(value));
         }
     }
@@ -754,12 +774,16 @@ fn date_debug_text(
             debug_timezone_offset(zone.offset)
         );
     }
-    if let Some(relative) = &parts.relative_days {
-        let _ = writeln!(
-            output,
-            "date: parsed relative part: {:+} day(s)",
-            relative.days
-        );
+    if let Some(relative) = &parts.relative {
+        for (value, unit) in [
+            (relative.years, "year"),
+            (relative.months, "month"),
+            (relative.days, "day"),
+        ] {
+            if value != 0 {
+                let _ = writeln!(output, "date: parsed relative part: {value:+} {unit}(s)");
+            }
+        }
     }
     let _ = writeln!(
         output,
@@ -797,7 +821,17 @@ fn date_debug_text(
         .unwrap_or_default();
     let starting_label = format!("{starting_date} {starting_time}{starting_zone}");
     let _ = writeln!(output, "date: starting date/time: '{starting_label}'");
-    if let Some(relative) = &parts.relative_days {
+    if let Some(relative) = &parts.relative {
+        if (relative.years != 0 || relative.months != 0)
+            && parts
+                .date_value
+                .as_ref()
+                .is_some_and(|date| date.day() != 15)
+        {
+            output.push_str(
+                "date: warning: when adding relative months/years, it is recommended to specify the 15th of the months\n",
+            );
+        }
         if relative.days != 0 && date.hour() != 12 {
             output.push_str(
                 "date: warning: when adding relative days, it is recommended to specify noon\n",
@@ -805,17 +839,44 @@ fn date_debug_text(
         }
         let _ = writeln!(
             output,
-            "date: after date adjustment (+0 years, +0 months, {:+} days),",
-            relative.days
+            "date: after date adjustment ({:+} years, {:+} months, {:+} days),",
+            relative.years, relative.months, relative.days
         );
         let _ = writeln!(
             output,
             "date:     new date/time = '{}'",
             date_ymd_hms_label(date)
         );
+        if relative.days == 0 {
+            if let Some(base) = parts.date_value {
+                let raw_month = i64::from(base.month0()) + relative.months;
+                let raw_year = i64::from(base.year()) + relative.years + raw_month.div_euclid(12);
+                let raw_month = raw_month.rem_euclid(12) + 1;
+                let raw_day = i64::from(base.day());
+                if i64::from(date.year()) != raw_year
+                    || i64::from(date.month()) != raw_month
+                    || i64::from(date.day()) != raw_day
+                {
+                    output.push_str(
+                        "date: warning: month/year adjustment resulted in shifted dates:\n",
+                    );
+                    let _ = writeln!(
+                        output,
+                        "date:      adjusted Y M D: {raw_year:04} {raw_month:02} {raw_day:02}"
+                    );
+                    let _ = writeln!(
+                        output,
+                        "date:    normalized Y M D: {:04} {:02} {:02}",
+                        date.year(),
+                        date.month(),
+                        date.day()
+                    );
+                }
+            }
+        }
     }
     let epoch_label = parts
-        .relative_days
+        .relative
         .as_ref()
         .map(|_| date_ymd_hms_label(date))
         .unwrap_or(starting_label);
@@ -3000,6 +3061,7 @@ mod tests {
             analyze_date_debug_input("2024-02-29 12:34:56 UTC"),
             DateDebugParts {
                 date: Some("(Y-M-D) 2024-02-29".to_string()),
+                date_value: Some(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()),
                 time: Some(DateDebugTime {
                     parsed: "12:34:56".to_string(),
                     hms: "12:34:56".to_string(),
@@ -3008,7 +3070,7 @@ mod tests {
                     offset: 0,
                     separate_part: true,
                 }),
-                relative_days: None,
+                relative: None,
                 embedded_timezone: None,
             }
         );
@@ -3054,6 +3116,36 @@ mod tests {
                  date: final: 1704153600.000000000 (epoch-seconds)\n\
                  date: final: (Y-M-D) 2024-01-02 00:00:00 (UTC)\n\
                  date: final: (Y-M-D) 2024-01-02 00:00:00 (UTC+00)\n\
+                 {}: output format: {}\n",
+                ctcore::ct_util_name(),
+                locale_quote("%F"),
+            )
+        );
+    }
+
+    #[test]
+    fn test_date_debug_relative_month_reports_normalization() {
+        let date = DateTime::parse_from_rfc3339("2024-03-02T00:00:00+00:00").unwrap();
+
+        assert_eq!(
+            date_debug_text("2024-01-31 +1 month", &date, "%F", Some("UTC0")),
+            format!(
+                "date: parsed date part: (Y-M-D) 2024-01-31\n\
+                 date: parsed relative part: +1 month(s)\n\
+                 date: input timezone: TZ=\"UTC0\" environment value or -u\n\
+                 date: warning: using midnight as starting time: 00:00:00\n\
+                 date: starting date/time: '(Y-M-D) 2024-01-31 00:00:00'\n\
+                 date: warning: when adding relative months/years, it is recommended to specify the 15th of the months\n\
+                 date: after date adjustment (+0 years, +1 months, +0 days),\n\
+                 date:     new date/time = '(Y-M-D) 2024-03-02 00:00:00'\n\
+                 date: warning: month/year adjustment resulted in shifted dates:\n\
+                 date:      adjusted Y M D: 2024 02 31\n\
+                 date:    normalized Y M D: 2024 03 02\n\
+                 date: '(Y-M-D) 2024-03-02 00:00:00' = 1709337600 epoch-seconds\n\
+                 date: timezone: Universal Time\n\
+                 date: final: 1709337600.000000000 (epoch-seconds)\n\
+                 date: final: (Y-M-D) 2024-03-02 00:00:00 (UTC)\n\
+                 date: final: (Y-M-D) 2024-03-02 00:00:00 (UTC+00)\n\
                  {}: output format: {}\n",
                 ctcore::ct_util_name(),
                 locale_quote("%F"),

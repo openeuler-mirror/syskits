@@ -90,6 +90,24 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--debug解析月末加相对月数时，GNU date报告第15日建议和月末溢出的归一化日期",
+      "args": ["--debug", "-d", "2024-01-31 +1 month", "+%F"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-03-02\n",
+          "stderr": "date: parsed date part: (Y-M-D) 2024-01-31\ndate: parsed relative part: +1 month(s)\ndate: input timezone: TZ=\"UTC0\" environment value or -u\ndate: warning: using midnight as starting time: 00:00:00\ndate: starting date/time: '(Y-M-D) 2024-01-31 00:00:00'\ndate: warning: when adding relative months/years, it is recommended to specify the 15th of the months\ndate: after date adjustment (+0 years, +1 months, +0 days),\ndate:     new date/time = '(Y-M-D) 2024-03-02 00:00:00'\ndate: warning: month/year adjustment resulted in shifted dates:\ndate:      adjusted Y M D: 2024 02 31\ndate:    normalized Y M D: 2024 03 02\ndate: '(Y-M-D) 2024-03-02 00:00:00' = 1709337600 epoch-seconds\ndate: timezone: Universal Time\ndate: final: 1709337600.000000000 (epoch-seconds)\ndate: final: (Y-M-D) 2024-03-02 00:00:00 (UTC)\ndate: final: (Y-M-D) 2024-03-02 00:00:00 (UTC+00)\ndate: output format: '%F'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--debug解析显式日期加相对天数时，GNU date报告相对项、午间建议和日期调整过程",
       "args": ["--debug", "-d", "2024-01-01 +1 day", "+%F"],
       "environment": {

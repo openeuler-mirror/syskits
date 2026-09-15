@@ -115,6 +115,14 @@ fn nohup_stderr_redirect_msg(ignoring_input: bool) -> &'static str {
     }
 }
 
+fn should_open_nohup_output(
+    stdout_is_tty: bool,
+    stderr_is_tty: bool,
+    stdout_was_closed: bool,
+) -> bool {
+    stdout_is_tty || (stderr_is_tty && stdout_was_closed)
+}
+
 fn exec_failure_message(command: &str, error: &Error) -> String {
     let error_text = error.raw_os_error().map_or_else(
         || error.to_string(),
@@ -219,6 +227,7 @@ fn nohup_replace_fds() -> CTResult<()> {
     let stdin_is_tty = std::io::stdin().is_terminal();
     let stdout_is_tty = std::io::stdout().is_terminal();
     let stderr_is_tty = std::io::stderr().is_terminal();
+    let stdout_was_closed = ctcore::ct_stdout_was_closed();
 
     if stdin_is_tty {
         let new_stdin = OpenOptions::new()
@@ -234,9 +243,15 @@ fn nohup_replace_fds() -> CTResult<()> {
         }
     }
 
+    let output_file = should_open_nohup_output(stdout_is_tty, stderr_is_tty, stdout_was_closed)
+        .then(|| nohup_find_stdout(stdin_is_tty))
+        .transpose()?;
+
     if stdout_is_tty {
-        let new_stdout = nohup_find_stdout(stdin_is_tty)?;
-        let raw_fd = new_stdout.as_raw_fd();
+        let raw_fd = output_file
+            .as_ref()
+            .expect("terminal stdout requires nohup output file")
+            .as_raw_fd();
         if unsafe { dup2(raw_fd, 1) } != 1 {
             return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
         }
@@ -246,7 +261,8 @@ fn nohup_replace_fds() -> CTResult<()> {
         if !stdout_is_tty && write_nohup_msg(nohup_stderr_redirect_msg(stdin_is_tty)).is_err() {
             std::process::exit(125);
         }
-        if unsafe { dup2(1, 2) } != 2 {
+        let stderr_target_fd = output_file.as_ref().map_or(1, AsRawFd::as_raw_fd);
+        if unsafe { dup2(stderr_target_fd, 2) } != 2 {
             return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
         }
     }
@@ -320,7 +336,10 @@ impl Tool for Nohup {
 #[cfg(test)]
 mod tests {
     mod tests_messages {
-        use crate::{exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg};
+        use crate::{
+            exec_failure_message, nohup_append_msg, nohup_stderr_redirect_msg,
+            should_open_nohup_output,
+        };
         use std::io::Error;
 
         #[test]
@@ -345,6 +364,14 @@ mod tests {
                 nohup_stderr_redirect_msg(true),
                 "ignoring input and redirecting stderr to stdout"
             );
+        }
+
+        #[test]
+        fn test_nohup_output_is_opened_for_tty_stderr_when_stdout_started_closed() {
+            assert!(should_open_nohup_output(true, false, false));
+            assert!(should_open_nohup_output(false, true, true));
+            assert!(!should_open_nohup_output(false, true, false));
+            assert!(!should_open_nohup_output(false, false, true));
         }
 
         #[test]

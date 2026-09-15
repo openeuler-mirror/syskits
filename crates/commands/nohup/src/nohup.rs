@@ -173,7 +173,12 @@ impl Display for NohupError {
     }
 }
 
-fn write_nohup_msg(msg: &str) -> io::Result<()> {
+fn write_nohup_msg(msg: &str, stderr_was_closed: bool) -> io::Result<()> {
+    // Rust may sanitize a closed stderr before nohup restores the original fd state.
+    if stderr_was_closed {
+        return Err(Error::from_raw_os_error(libc::EBADF));
+    }
+
     let mut handle = stderr();
     writeln!(handle, "nohup: {msg}")?;
     handle.flush()
@@ -425,7 +430,9 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         let err_msg = exec_failure_message(command_args[0].as_os_str(), &err);
         let can_report_exec_failure = can_report_exec_failure(&exec_failure_stderr);
         // 尝试输出错误，如果 stderr 写入失败则退出 125
-        if can_report_exec_failure && write_nohup_msg(&err_msg).is_err() {
+        if can_report_exec_failure
+            && write_nohup_msg(&err_msg, ctcore::ct_stderr_was_closed()).is_err()
+        {
             std::process::exit(125);
         }
         match err.raw_os_error() {
@@ -506,20 +513,31 @@ fn nohup_replace_fds() -> CTResult<ExecFailureStderr> {
             .into());
         }
 
-        if !stdout_is_tty && !stderr_is_tty && write_nohup_msg("ignoring input").is_err() {
-            std::process::exit(125);
+        if !stdout_is_tty
+            && !stderr_is_tty
+            && write_nohup_msg("ignoring input", ctcore::ct_stderr_was_closed()).is_err()
+        {
+            std::process::exit(nohup_internal_failure_code());
         }
     }
 
-    let output_file = should_open_nohup_output(stdout_is_tty, stderr_is_tty, stdout_was_closed)
-        .then(|| nohup_find_stdout(stdin_is_tty, stdout_is_tty))
-        .transpose()?;
+    let output_file = if should_open_nohup_output(stdout_is_tty, stderr_is_tty, stdout_was_closed) {
+        nohup_find_stdout(stdin_is_tty, stdout_is_tty)?
+    } else {
+        None
+    };
 
     if stderr_is_tty {
         let exec_failure_stderr = save_stderr_for_exec_failure()
             .map_or(ExecFailureStderr::Unavailable, ExecFailureStderr::Saved);
-        if !stdout_is_tty && write_nohup_msg(nohup_stderr_redirect_msg(stdin_is_tty)).is_err() {
-            std::process::exit(125);
+        if !stdout_is_tty
+            && write_nohup_msg(
+                nohup_stderr_redirect_msg(stdin_is_tty),
+                ctcore::ct_stderr_was_closed(),
+            )
+            .is_err()
+        {
+            std::process::exit(nohup_internal_failure_code());
         }
         let stderr_target_fd = output_file.as_ref().map_or(1, AsRawFd::as_raw_fd);
         if unsafe { dup2(stderr_target_fd, 2) } != 2 {
@@ -556,23 +574,25 @@ fn redirect_stdout_from_fd(source_fd: RawFd) -> io::Result<()> {
     }
 }
 
-fn open_nohup_output(path: &Path, redirecting_stdout: bool) -> io::Result<File> {
+fn open_nohup_output(path: &Path, redirecting_stdout: bool) -> io::Result<Option<File>> {
     let file = open_nohup_out(path)?;
     if redirecting_stdout {
         redirect_stdout(&file)?;
+        Ok(None)
+    } else {
+        Ok(Some(file))
     }
-    Ok(file)
 }
 
 // 查找或创建nohup输出文件
-fn nohup_find_stdout(ignoring_input: bool, redirecting_stdout: bool) -> CTResult<File> {
+fn nohup_find_stdout(ignoring_input: bool, redirecting_stdout: bool) -> CTResult<Option<File>> {
     let internal_failure_code = nohup_internal_failure_code();
 
     match open_nohup_output(Path::new(NOHUP_OUT), redirecting_stdout) {
         Ok(file) => {
             let msg = nohup_append_msg(Path::new(NOHUP_OUT), ignoring_input);
-            if write_nohup_msg(&msg).is_err() {
-                std::process::exit(125);
+            if write_nohup_msg(&msg, ctcore::ct_stderr_was_closed()).is_err() {
+                std::process::exit(nohup_internal_failure_code());
             }
             Ok(file)
         }
@@ -585,8 +605,8 @@ fn nohup_find_stdout(ignoring_input: bool, redirecting_stdout: bool) -> CTResult
             match open_nohup_output(&path_buf, redirecting_stdout) {
                 Ok(file) => {
                     let msg = nohup_append_msg(&path_buf, ignoring_input);
-                    if write_nohup_msg(&msg).is_err() {
-                        std::process::exit(125);
+                    if write_nohup_msg(&msg, ctcore::ct_stderr_was_closed()).is_err() {
+                        std::process::exit(nohup_internal_failure_code());
                     }
                     Ok(file)
                 }
@@ -626,7 +646,7 @@ mod tests {
             ExecFailureStderr, NohupError, can_report_exec_failure, close_fd_if_initially_closed,
             exec_failure_message, nohup_append_msg, nohup_command_args, nohup_home_output_path,
             nohup_stderr_redirect_msg, nohup_validate_standard_options, redirect_stdout_from_fd,
-            save_stderr_for_exec_failure, should_open_nohup_output,
+            save_stderr_for_exec_failure, should_open_nohup_output, write_nohup_msg,
         };
         use ctcore::ct_error::CTError;
         use std::ffi::{OsStr, OsString};
@@ -678,6 +698,13 @@ mod tests {
                 nohup_stderr_redirect_msg(true),
                 "ignoring input and redirecting stderr to stdout"
             );
+        }
+
+        #[test]
+        fn test_nohup_diagnostic_fails_when_stderr_started_closed() {
+            let error = write_nohup_msg("ignored", true).unwrap_err();
+
+            assert_eq!(error.raw_os_error(), Some(libc::EBADF));
         }
 
         #[test]

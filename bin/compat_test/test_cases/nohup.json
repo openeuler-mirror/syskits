@@ -643,6 +643,34 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C、POSIXLY_CORRECT=1下stdout连接TTY且stderr启动前关闭；GNU重定向stdout后不保留临时输出fd，appending output诊断写失败并返回127，nohup.out保持0600和0字节",
+            "args": ["true"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C", "POSIXLY_CORRECT": "1"},
+                "standardStreams": {
+                    "stdout": "tty",
+                    "stderr": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s' nohup.out",
+                        "expected_exit": 0,
+                        "expected_stdout": "600:0\n"
+                    }
+                ]
+            },
+            "cleanup_commands": ["rm -f nohup.out"]
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C下启动前关闭stdout且仅stderr连接PTY；执行命令向stderr写入redirected。GNU创建0600的nohup.out，将命令stderr写入文件，并先后在原TTY stderr报告appending output和redirecting stderr to stdout",
             "args": [
                 "sh",

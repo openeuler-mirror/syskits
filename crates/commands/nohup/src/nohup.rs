@@ -17,6 +17,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, UClapError, set_ct_exit_code};
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
@@ -24,8 +25,7 @@ use libc::{c_char, dup2, execvp, signal};
 use ctcore::Tool;
 use std::borrow::Cow;
 use std::env;
-use std::ffi::OsString;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsString};
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Error, IsTerminal, Write, stderr};
@@ -148,11 +148,55 @@ fn write_nohup_msg(msg: &str) -> io::Result<()> {
     handle.flush()
 }
 
-fn nohup_append_msg(path: &str, ignoring_input: bool) -> String {
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut libc::wchar_t,
+        bytes: *const libc::c_char,
+        length: usize,
+        state: *mut libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: libc::c_uint) -> libc::c_int;
+}
+
+fn nohup_quote_path(path: &Path) -> String {
+    let bytes = path.as_os_str().as_bytes();
+    let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+        let mut state: libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (length, is_utf8 && iswprint(wide as libc::c_uint) != 0)
+    });
+
+    if quoted.as_slice() == bytes {
+        quoted.insert(0, b'\'');
+        quoted.push(b'\'');
+    }
+
+    String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
+}
+
+fn nohup_append_msg(path: &Path, ignoring_input: bool) -> String {
     if ignoring_input {
-        format!("ignoring input and appending output to {}", path.quote())
+        format!(
+            "ignoring input and appending output to {}",
+            nohup_quote_path(path)
+        )
     } else {
-        format!("appending output to {}", path.quote())
+        format!("appending output to {}", nohup_quote_path(path))
     }
 }
 
@@ -409,23 +453,22 @@ fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
 
     match open_nohup_out(Path::new(NOHUP_OUT)) {
         Ok(file) => {
-            let msg = nohup_append_msg(NOHUP_OUT, ignoring_input);
+            let msg = nohup_append_msg(Path::new(NOHUP_OUT), ignoring_input);
             if write_nohup_msg(&msg).is_err() {
                 std::process::exit(125);
             }
             Ok(file)
         }
         Err(err1) => {
-            let home = match env::var("HOME") {
-                Err(_) => return Err(NohupError::OpenFailed(internal_failure_code, err1).into()),
-                Ok(h) => h,
+            let home = match env::var_os("HOME") {
+                None => return Err(NohupError::OpenFailed(internal_failure_code, err1).into()),
+                Some(home) => home,
             };
             let mut path_buf = PathBuf::from(home);
             path_buf.push(NOHUP_OUT);
-            let path_buf_str = path_buf.to_str().unwrap();
             match open_nohup_out(&path_buf) {
                 Ok(file) => {
-                    let msg = nohup_append_msg(path_buf_str, ignoring_input);
+                    let msg = nohup_append_msg(&path_buf, ignoring_input);
                     if write_nohup_msg(&msg).is_err() {
                         std::process::exit(125);
                     }
@@ -434,7 +477,7 @@ fn nohup_find_stdout(ignoring_input: bool) -> CTResult<File> {
                 Err(err2) => Err(NohupError::OpenFailed2(
                     internal_failure_code,
                     err1,
-                    path_buf_str.to_string(),
+                    path_buf.to_string_lossy().into_owned(),
                     err2,
                 )
                 .into()),
@@ -472,18 +515,25 @@ mod tests {
             nohup_validate_standard_options, save_stderr_for_exec_failure,
             should_open_nohup_output,
         };
+        use std::ffi::OsStr;
         use std::io::Error;
         use std::os::fd::AsRawFd;
+        use std::os::unix::ffi::OsStrExt;
+        use std::path::Path;
 
         #[test]
         fn test_nohup_append_msg_uses_actual_path() {
             assert_eq!(
-                nohup_append_msg("/tmp/home/nohup.out", true),
+                nohup_append_msg(Path::new("/tmp/home/nohup.out"), true),
                 "ignoring input and appending output to '/tmp/home/nohup.out'"
             );
             assert_eq!(
-                nohup_append_msg("nohup.out", false),
+                nohup_append_msg(Path::new("nohup.out"), false),
                 "appending output to 'nohup.out'"
+            );
+            assert_eq!(
+                nohup_append_msg(Path::new(OsStr::from_bytes(b"home-\xff/nohup.out")), true),
+                "ignoring input and appending output to 'home-'$'\\377''/nohup.out'"
             );
         }
 

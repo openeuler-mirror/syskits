@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, File, Permissions};
 use std::io::{Read, Write};
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::os::unix::process::CommandExt;
@@ -212,6 +213,8 @@ pub struct IsolatedSandbox {
     resource_limiter: Option<ResourceLimiter>,
     /// 当前环境变量
     current_env: HashMap<String, String>,
+    /// 以原始字节传递的环境变量，覆盖同名的 UTF-8 环境变量。
+    raw_env: HashMap<OsString, OsString>,
     /// 当前工作目录
     current_dir: PathBuf,
     /// 当前 umask
@@ -288,6 +291,7 @@ impl IsolatedSandbox {
             temp_dir: Some(temp_dir),
             resource_limiter: Some(ResourceLimiter::new()),
             current_env: std::env::vars().collect(),
+            raw_env: HashMap::new(),
             current_dir: temp_path,
             umask: 0o022,
             exit_code: 0,
@@ -307,6 +311,16 @@ impl IsolatedSandbox {
 
         self.current_env
             .extend(test_case.environment.env_vars.clone());
+        for (name, value) in &test_case.environment.env_bytes {
+            let value = hex::decode(value).map_err(|error| {
+                TestError::TestCaseError(format!(
+                    "Invalid hexadecimal value for environment variable {name}: {error}"
+                ))
+            })?;
+            self.current_env.remove(name);
+            self.raw_env
+                .insert(OsString::from(name), OsString::from_vec(value));
+        }
 
         // 创建测试所需的文件和目录
         for file in &test_case.environment.files {
@@ -526,6 +540,7 @@ impl IsolatedSandbox {
         for arg in args {
             if let Some((key, value)) = arg.split_once('=') {
                 self.current_env.insert(key.to_string(), value.to_string());
+                self.raw_env.remove(&OsString::from(key));
             }
         }
         Ok(CommandResult::default())
@@ -545,6 +560,7 @@ impl IsolatedSandbox {
         };
         for key in args {
             self.current_env.remove(&key);
+            self.raw_env.remove(&OsString::from(key));
         }
         Ok(CommandResult::default())
     }
@@ -557,6 +573,7 @@ impl IsolatedSandbox {
     /// 添加环境变量
     pub fn add_env(&mut self, key: &str, value: &str) {
         self.current_env.insert(key.to_string(), value.to_string());
+        self.raw_env.remove(&OsString::from(key));
     }
 
     /// 获取当前环境变量集合
@@ -750,7 +767,8 @@ impl IsolatedSandbox {
             .stdout(stdout)
             .stderr(stderr)
             .current_dir(&self.current_dir)
-            .envs(&self.current_env);
+            .envs(&self.current_env)
+            .envs(&self.raw_env);
 
         let sigpipe = streams.sigpipe;
         unsafe {
@@ -1001,7 +1019,8 @@ impl IsolatedSandbox {
         command
             .args(args)
             .current_dir(&self.current_dir)
-            .envs(&self.current_env);
+            .envs(&self.current_env)
+            .envs(&self.raw_env);
 
         unsafe {
             command.pre_exec(move || {
@@ -1236,6 +1255,7 @@ impl IsolatedSandbox {
             .arg(command)
             .current_dir(&self.current_dir)
             .envs(&self.current_env)
+            .envs(&self.raw_env)
             // 设置标准输入/输出/错误
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -1284,6 +1304,7 @@ mod tests {
         CommandExecution, IgnoreFields, OutputStream, SignalDisposition, StandardStreams, TestCase,
         TestEnvironment, TestExpectation,
     };
+    use std::ffi::OsString;
     use std::fs;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
@@ -1912,6 +1933,10 @@ mod tests {
             .environment
             .env_vars
             .insert("TEST_ENV_VAR".to_string(), "test_value".to_string());
+        test_case
+            .environment
+            .env_bytes
+            .insert("TEST_RAW_ENV".to_string(), "7261772dff".to_string());
 
         // 设置工作目录
         let work_dir = "work_dir";
@@ -1948,6 +1973,20 @@ mod tests {
 
         // 验证环境变量
         assert_eq!(sandbox.get_env("TEST_ENV_VAR"), Some("test_value"));
+
+        let raw_environment = sandbox.execute_command_bytes(
+            "sh",
+            &[
+                OsString::from("-c"),
+                OsString::from("printf %s \"$TEST_RAW_ENV\""),
+            ],
+            None,
+            false,
+            None,
+            true,
+        )?;
+        assert_eq!(raw_environment.exit_code, 0);
+        assert_eq!(raw_environment.stdout, "7261772dff");
 
         // 验证文件是否创建
         assert!(sandbox.path().join(work_dir).join("test_file.txt").exists());

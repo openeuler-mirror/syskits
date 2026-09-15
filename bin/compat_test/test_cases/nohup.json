@@ -311,6 +311,49 @@
         },
         {
             "tstdin": "",
+            "byteMode": true,
+            "tty": true,
+            "command": "nohup",
+            "description": "原始字节HOME回退用例：LC_ALL=C下将HOME设为字节686f6d652dff（home-加0xff），当前目录nohup.out为目录；GNU需回退创建该HOME/nohup.out并写入字节6f7574707574（output），而不能因HOME非UTF-8拒绝回退。",
+            "args": [
+                "2f62696e2f7368",
+                "2d63",
+                "7072696e7466206f7574707574"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "mkdir nohup.out \"$(printf 'home-\\377')\""
+            ],
+            "environment": {
+                "envBytes": {"HOME": "686f6d652dff"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "python3 -c 'import os, stat; result = os.stat(b\"home-\\xff/nohup.out\"); print(f\"{stat.S_IMODE(result.st_mode):o}:{result.st_size}\")'",
+                        "expected_exit": 0,
+                        "expected_stdout": "600:6\n",
+                        "expected_stderr": ""
+                    },
+                    {
+                        "command": "python3 -c 'print(open(b\"home-\\xff/nohup.out\", \"rb\").read().hex())'",
+                        "expected_exit": 0,
+                        "expected_stdout": "6f7574707574\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "timeout": 5
+        },
+        {
+            "tstdin": "",
             "tty": true,
             "command": "nohup",
             "description": "LC_ALL=C的TTY环境执行nohup /bin/sh -c 'printf output'；输入fixture为权限0640且内容existing的nohup.out；预期RC=0、追加为existingoutput并保留0640权限；迁移原Cargo用例nohup_preserves_existing_output_permissions",

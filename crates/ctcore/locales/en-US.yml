@@ -2,6 +2,7 @@ ctcore:
   chown:
     changed_ownership: "changed ownership of %{file} from %{old} to %{new}"
     retained_ownership: "ownership of %{file} retained as %{old}"
+    retained_ownership_no_change: "ownership of %{file} retained"
     failed_change: "failed to change ownership of %{file} from %{old} to %{new}"
   chgrp:
     changed_group: "changed group of %{file} from %{old} to %{new}"

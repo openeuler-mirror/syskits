@@ -396,20 +396,26 @@ impl CtChownExecutor {
         while let Some(entry) = iterator.next() {
             let entry = match entry {
                 Err(e) => {
+                    // GNU FTS skips symlink-induced directory cycles.
+                    if e.loop_ancestor().is_some() {
+                        continue;
+                    }
                     ret = 1;
-                    if let Some(path) = e.path() {
-                        ct_show_error!(
-                            "cannot {} {}: {}",
-                            metadata_failure_action(path, self.dereference),
-                            path.quote(),
-                            if let Some(error) = e.io_error() {
-                                strip_errno(error)
-                            } else {
-                                "Too many levels of symbolic links".into()
-                            }
-                        );
-                    } else {
-                        ct_show_error!("{}", e);
+                    if self.verbosity.level != CtVerbosityLevel::Silent {
+                        if let Some(path) = e.path() {
+                            ct_show_error!(
+                                "cannot {} {}: {}",
+                                metadata_failure_action(path, self.dereference),
+                                path.quote(),
+                                if let Some(error) = e.io_error() {
+                                    strip_errno(error)
+                                } else {
+                                    "Too many levels of symbolic links".into()
+                                }
+                            );
+                        } else {
+                            ct_show_error!("{}", e);
+                        }
                     }
                     continue;
                 }
@@ -826,6 +832,35 @@ mod tests {
         };
 
         assert!(executor.exec().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_recursive_followed_symlink_cycle_is_skipped() {
+        let temp_dir = tempdir().unwrap();
+        let tree = temp_dir.path().join("tree");
+        fs::create_dir(&tree).unwrap();
+        unix::fs::symlink("../tree", tree.join("loop")).unwrap();
+
+        let executor = CtChownExecutor {
+            dest_uid: Some(unsafe { libc::geteuid() }),
+            dest_gid: Some(unsafe { libc::getegid() }),
+            dest_user_name: None,
+            dest_group_name: None,
+            raw_owner: "current".to_string(),
+            traverse_symlinks: CtTraverseSymlinks::All,
+            verbosity: Verbosity {
+                groups_only: false,
+                level: CtVerbosityLevel::Normal,
+            },
+            filter: CtIfFrom::All,
+            files: vec![tree.into_os_string()],
+            recursive: true,
+            preserve_root: false,
+            dereference: true,
+        };
+
+        assert!(executor.exec().is_ok());
     }
 
     #[cfg(unix)]

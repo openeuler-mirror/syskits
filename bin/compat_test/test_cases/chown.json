@@ -1158,6 +1158,33 @@
     },
     {
       "command": "chown",
+      "description": "LC_ALL=C；-R -L遇到目录循环时，-f必须抑制GNU的循环诊断且保持成功退出状态",
+      "args": [
+        "-R",
+        "-L",
+        "-f",
+        "0",
+        "chown-silent-cycle"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "mkdir chown-silent-cycle",
+        "ln -s ../chown-silent-cycle chown-silent-cycle/loop"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf -- chown-silent-cycle"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
       "description": "LC_ALL=C；递归verbose模式按GNU后序处理目录，先输出子文件再输出父目录",
       "args": [
         "-R",

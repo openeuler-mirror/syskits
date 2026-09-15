@@ -1143,10 +1143,7 @@ fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffse
 }
 
 fn validate_date_source_options(args_match: &ArgMatches) -> CTResult<()> {
-    let print_source_count = usize::from(args_match.contains_id(DATE_OPT_DATE))
-        + usize::from(args_match.contains_id(DATE_OPT_FILE))
-        + usize::from(args_match.contains_id(DATE_OPT_REFERENCE))
-        + usize::from(args_match.get_flag(DATE_OPT_RESOLUTION));
+    let print_source_count = print_date_source_count(args_match);
 
     if print_source_count > 1 {
         return Err(CtSimpleError::new(
@@ -1165,6 +1162,17 @@ fn validate_date_source_options(args_match: &ArgMatches) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+fn print_date_source_count(args_match: &ArgMatches) -> usize {
+    usize::from(args_match.contains_id(DATE_OPT_DATE))
+        + usize::from(args_match.contains_id(DATE_OPT_FILE))
+        + usize::from(args_match.contains_id(DATE_OPT_REFERENCE))
+        + usize::from(args_match.get_flag(DATE_OPT_RESOLUTION))
+}
+
+fn has_time_source_option(args_match: &ArgMatches) -> bool {
+    args_match.contains_id(DATE_OPT_SET) || print_date_source_count(args_match) != 0
 }
 
 fn get_date_source(args_match: &ArgMatches) -> DateSource {
@@ -1241,6 +1249,15 @@ fn get_date_format(args_match: &ArgMatches) -> Result<DateFormat, CTResult<()>> 
         #[cfg(not(target_os = "linux"))]
         let form_bytes = form.to_string_lossy().as_bytes();
         if !form_bytes.starts_with(b"+") {
+            if has_time_source_option(args_match) {
+                return Err(Err(CtSimpleError::new(
+                    1,
+                    format!(
+                        "the argument {} lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'\nTry 'date --help' for more information.",
+                        form.quote()
+                    ),
+                )));
+            }
             return Err(Err(CtSimpleError::new(
                 1,
                 format!("invalid date {}", form.quote()),
@@ -5594,6 +5611,22 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "the options to specify dates for printing are mutually exclusive\nTry 'date --help' for more information."
+        );
+    }
+
+    #[test]
+    fn test_format_operand_after_date_option_requires_leading_plus() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-d", "@0", "010100002024"])
+            .unwrap();
+
+        let error = match get_date_format(&matches) {
+            Err(Err(error)) => error,
+            _ => panic!("expected leading-plus format diagnostic"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "the argument '010100002024' lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'\nTry 'date --help' for more information."
         );
     }
 

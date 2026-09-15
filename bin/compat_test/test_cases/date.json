@@ -3,6 +3,24 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--date后出现未以加号开头的位置参数时，GNU date拒绝将其作为日期设置操作数，并输出FORMAT前导加号诊断及帮助提示",
+      "args": ["-d", "@0", "010100002024"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "date: the argument '010100002024' lacks a leading '+';\nwhen using an option to specify date(s), any non-option\nargument must be a format string beginning with '+'\nTry 'date --help' for more information.\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--date与--reference同用时，GNU date拒绝多个打印时间来源，并输出专用互斥诊断及帮助提示",
       "args": ["-d", "@0", "-r", "/dev/null"],
       "environment": {

@@ -219,6 +219,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                     old = old_str
                 )
                 .to_string()
+            } else if dest_uid.is_none() && dest_gid.is_none() {
+                t!("ctcore.chown.retained_ownership_no_change", file = path_str).to_string()
             } else {
                 t!(
                     "ctcore.chown.retained_ownership",
@@ -547,11 +549,15 @@ impl CtChownExecutor {
                 };
                 println!(
                     "{}",
-                    t!(
-                        "ctcore.chown.retained_ownership",
-                        file = path_str,
-                        old = old_str
-                    )
+                    if self.dest_uid.is_none() && self.dest_gid.is_none() {
+                        t!("ctcore.chown.retained_ownership_no_change", file = path_str)
+                    } else {
+                        t!(
+                            "ctcore.chown.retained_ownership",
+                            file = path_str,
+                            old = old_str
+                        )
+                    }
                 );
             }
         }
@@ -879,6 +885,31 @@ mod tests {
             .collect();
 
         assert_eq!(paths, vec![child, directory]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_verbose_no_owner_or_group_change_reports_retained_ownership() {
+        let temp_dir = tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, b"").unwrap();
+        let meta = file.metadata().unwrap();
+
+        let output = wrap_chown(
+            &file,
+            &meta,
+            None,
+            None,
+            CtChownOutputNames::default(),
+            true,
+            Verbosity {
+                groups_only: false,
+                level: CtVerbosityLevel::Verbose,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(output, format!("ownership of {} retained", file.quote()));
     }
 
     #[test]

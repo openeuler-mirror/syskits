@@ -1092,6 +1092,33 @@
         "rm -f -- posix-stop-file"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；递归-L解引用悬空符号链接时，GNU报告cannot dereference并使用单引号引用相对路径",
+      "args": [
+        "-R",
+        "-L",
+        "0",
+        "chown-deref-error"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "mkdir chown-deref-error",
+        "ln -s missing chown-deref-error/dangle",
+        "touch chown-deref-error/regular"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: cannot dereference 'chown-deref-error/dangle': No such file or directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf -- chown-deref-error"
+      ],
+      "requires_root": true
     }
   ]
 }

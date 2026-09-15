@@ -299,6 +299,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
+fn metadata_failure_action(path: &Path, dereference: bool) -> &'static str {
+    if dereference && path.is_symlink() {
+        "dereference"
+    } else {
+        "access"
+    }
+}
+
 impl CtChownExecutor {
     pub fn exec(&self) -> CTResult<()> {
         let mut ret = 0;
@@ -395,8 +403,9 @@ impl CtChownExecutor {
                     ret = 1;
                     if let Some(path) = e.path() {
                         ct_show_error!(
-                            "cannot access '{}': {}",
-                            path.display(),
+                            "cannot {} {}: {}",
+                            metadata_failure_action(path, self.dereference),
+                            path.quote(),
                             if let Some(error) = e.io_error() {
                                 strip_errno(error)
                             } else {
@@ -439,7 +448,7 @@ impl CtChownExecutor {
                 continue;
             }
 
-            ret = match wrap_chown(
+            ret |= match wrap_chown(
                 path,
                 &meta,
                 self.dest_uid,
@@ -477,7 +486,7 @@ impl CtChownExecutor {
                     CtVerbosityLevel::Silent => (),
                     _ => ct_show_error!(
                         "cannot {} {}: {}",
-                        if follow { "dereference" } else { "access" },
+                        metadata_failure_action(path, follow),
                         path.quote(),
                         strip_errno(&e)
                     ),
@@ -765,6 +774,48 @@ mod tests {
         assert!(!is_root(&symlink_path, false));
         assert!(is_root(&symlink_path, true));
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_metadata_failure_action_only_dereferences_symlinks() {
+        let temp_dir = tempdir().unwrap();
+        let dangling = temp_dir.path().join("dangling");
+        unix::fs::symlink("missing", &dangling).unwrap();
+        let missing = temp_dir.path().join("missing");
+
+        assert_eq!(metadata_failure_action(&dangling, true), "dereference");
+        assert_eq!(metadata_failure_action(&dangling, false), "access");
+        assert_eq!(metadata_failure_action(&missing, true), "access");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_recursive_failure_is_not_hidden_by_later_success() {
+        let temp_dir = tempdir().unwrap();
+        let tree = temp_dir.path().join("tree");
+        fs::create_dir(&tree).unwrap();
+        unix::fs::symlink("missing", tree.join("dangle")).unwrap();
+        fs::write(tree.join("regular"), b"").unwrap();
+
+        let executor = CtChownExecutor {
+            dest_uid: Some(unsafe { libc::geteuid() }),
+            dest_gid: Some(unsafe { libc::getegid() }),
+            raw_owner: "current".to_string(),
+            traverse_symlinks: CtTraverseSymlinks::All,
+            verbosity: Verbosity {
+                groups_only: false,
+                level: CtVerbosityLevel::Normal,
+            },
+            filter: CtIfFrom::All,
+            files: vec![tree.into_os_string()],
+            recursive: true,
+            preserve_root: false,
+            dereference: true,
+        };
+
+        assert!(executor.exec().is_err());
+    }
+
     #[test]
     fn test_check_root_valid_cases() {
         // Test case 1: root path is "/", would_traverse_symlink is true

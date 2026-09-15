@@ -90,6 +90,24 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--debug解析显式日期加相对天数时，GNU date报告相对项、午间建议和日期调整过程",
+      "args": ["--debug", "-d", "2024-01-01 +1 day", "+%F"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-02\n",
+          "stderr": "date: parsed date part: (Y-M-D) 2024-01-01\ndate: parsed relative part: +1 day(s)\ndate: input timezone: TZ=\"UTC0\" environment value or -u\ndate: warning: using midnight as starting time: 00:00:00\ndate: starting date/time: '(Y-M-D) 2024-01-01 00:00:00'\ndate: warning: when adding relative days, it is recommended to specify noon\ndate: after date adjustment (+0 years, +0 months, +1 days),\ndate:     new date/time = '(Y-M-D) 2024-01-02 00:00:00'\ndate: '(Y-M-D) 2024-01-02 00:00:00' = 1704153600 epoch-seconds\ndate: timezone: Universal Time\ndate: final: 1704153600.000000000 (epoch-seconds)\ndate: final: (Y-M-D) 2024-01-02 00:00:00 (UTC)\ndate: final: (Y-M-D) 2024-01-02 00:00:00 (UTC+00)\ndate: output format: '%F'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--debug解析负小数@timespec时，GNU date使用Epoch秒专用诊断，不输出普通日期的起始时间诊断",
       "args": ["--debug", "-d", "@-1.5", "+%s.%N"],
       "environment": {

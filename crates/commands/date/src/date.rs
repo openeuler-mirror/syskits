@@ -472,11 +472,17 @@ struct DateDebugZone {
     separate_part: bool,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct DateDebugRelativeDays {
+    days: i64,
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 struct DateDebugParts {
     date: Option<String>,
     time: Option<DateDebugTime>,
     zone: Option<DateDebugZone>,
+    relative_days: Option<DateDebugRelativeDays>,
     embedded_timezone: Option<String>,
 }
 
@@ -576,6 +582,14 @@ fn split_embedded_timezone(input: &str) -> (Option<String>, &str) {
     (Some(timezone), remaining)
 }
 
+fn parse_debug_relative_days(tokens: &[&str]) -> Option<DateDebugRelativeDays> {
+    tokens.windows(2).find_map(|pair| {
+        let value = pair[0].parse::<i64>().ok()?;
+        matches!(pair[1].to_ascii_lowercase().as_str(), "day" | "days")
+            .then_some(DateDebugRelativeDays { days: value })
+    })
+}
+
 fn analyze_date_debug_input(input: &str) -> DateDebugParts {
     let (embedded_timezone, input) = split_embedded_timezone(input.trim());
     let mut parts = DateDebugParts {
@@ -586,6 +600,7 @@ fn analyze_date_debug_input(input: &str) -> DateDebugParts {
     let Some(first) = tokens.first() else {
         return parts;
     };
+    parts.relative_days = parse_debug_relative_days(&tokens);
 
     if let Some((date, time_and_zone)) = first.split_once('T') {
         parts.date = parse_debug_date(date);
@@ -603,8 +618,10 @@ fn analyze_date_debug_input(input: &str) -> DateDebugParts {
         parts.date = parse_debug_date(first);
         if let Some(time) = tokens.get(1).and_then(|value| parse_debug_time(value)) {
             parts.time = Some(time);
-            parts.zone = tokens.get(2).and_then(|value| parse_debug_timezone(value));
-        } else {
+            if parts.relative_days.is_none() {
+                parts.zone = tokens.get(2).and_then(|value| parse_debug_timezone(value));
+            }
+        } else if parts.relative_days.is_none() {
             parts.zone = tokens.get(1).and_then(|value| parse_debug_timezone(value));
         }
     }
@@ -737,6 +754,13 @@ fn date_debug_text(
             debug_timezone_offset(zone.offset)
         );
     }
+    if let Some(relative) = &parts.relative_days {
+        let _ = writeln!(
+            output,
+            "date: parsed relative part: {:+} day(s)",
+            relative.days
+        );
+    }
     let _ = writeln!(
         output,
         "date: input timezone: {}",
@@ -773,9 +797,31 @@ fn date_debug_text(
         .unwrap_or_default();
     let starting_label = format!("{starting_date} {starting_time}{starting_zone}");
     let _ = writeln!(output, "date: starting date/time: '{starting_label}'");
+    if let Some(relative) = &parts.relative_days {
+        if relative.days != 0 && date.hour() != 12 {
+            output.push_str(
+                "date: warning: when adding relative days, it is recommended to specify noon\n",
+            );
+        }
+        let _ = writeln!(
+            output,
+            "date: after date adjustment (+0 years, +0 months, {:+} days),",
+            relative.days
+        );
+        let _ = writeln!(
+            output,
+            "date:     new date/time = '{}'",
+            date_ymd_hms_label(date)
+        );
+    }
+    let epoch_label = parts
+        .relative_days
+        .as_ref()
+        .map(|_| date_ymd_hms_label(date))
+        .unwrap_or(starting_label);
     let _ = writeln!(
         output,
-        "date: '{starting_label}' = {} epoch-seconds",
+        "date: '{epoch_label}' = {} epoch-seconds",
         date.timestamp()
     );
     let _ = writeln!(
@@ -2962,6 +3008,7 @@ mod tests {
                     offset: 0,
                     separate_part: true,
                 }),
+                relative_days: None,
                 embedded_timezone: None,
             }
         );
@@ -2983,6 +3030,33 @@ mod tests {
                  {}: output format: {}\n",
                 ctcore::ct_util_name(),
                 locale_quote("%s.%N"),
+            )
+        );
+    }
+
+    #[test]
+    fn test_date_debug_relative_days_reports_adjustment() {
+        let date = DateTime::parse_from_rfc3339("2024-01-02T00:00:00+00:00").unwrap();
+
+        assert_eq!(
+            date_debug_text("2024-01-01 +1 day", &date, "%F", Some("UTC0")),
+            format!(
+                "date: parsed date part: (Y-M-D) 2024-01-01\n\
+                 date: parsed relative part: +1 day(s)\n\
+                 date: input timezone: TZ=\"UTC0\" environment value or -u\n\
+                 date: warning: using midnight as starting time: 00:00:00\n\
+                 date: starting date/time: '(Y-M-D) 2024-01-01 00:00:00'\n\
+                 date: warning: when adding relative days, it is recommended to specify noon\n\
+                 date: after date adjustment (+0 years, +0 months, +1 days),\n\
+                 date:     new date/time = '(Y-M-D) 2024-01-02 00:00:00'\n\
+                 date: '(Y-M-D) 2024-01-02 00:00:00' = 1704153600 epoch-seconds\n\
+                 date: timezone: Universal Time\n\
+                 date: final: 1704153600.000000000 (epoch-seconds)\n\
+                 date: final: (Y-M-D) 2024-01-02 00:00:00 (UTC)\n\
+                 date: final: (Y-M-D) 2024-01-02 00:00:00 (UTC+00)\n\
+                 {}: output format: {}\n",
+                ctcore::ct_util_name(),
+                locale_quote("%F"),
             )
         );
     }

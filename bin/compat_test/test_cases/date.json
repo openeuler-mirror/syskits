@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU E修饰年份按文本字段应用宽度；默认和下划线使用空格填充，加号使用零填充但不增加正号，连字符禁用填充",
+      "args": ["-d", "2024-01-02 03:04:05 UTC", "+%EY|%6EY|%+6EY|%_6EY|%-6EY"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024|  2024|002024|  2024|2024\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU date将无效的O修饰符与季度和年份字段原样输出，而不是忽略修饰符后继续格式化",
       "args": ["-d", "2024-01-02 03:04:05 UTC", "+%Oq|%OY|%4OY"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

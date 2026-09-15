@@ -1904,13 +1904,6 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
             let width_bytes = &fmt[width_start..index];
             let width_str = std::str::from_utf8(width_bytes).unwrap_or_default();
 
-            // 专门为 %z 提取冒号 (兼容 GNU 的 %8:z 语法)
-            while index < fmt.len() && fmt[index] == b':' {
-                colons += 1;
-                flags.push(b':');
-                index += 1;
-            }
-
             // 提取修饰符 (E 或 O)
             let modifier = (index < fmt.len() && matches!(fmt[index], b'E' | b'O')).then(|| {
                 let modifier = fmt[index];
@@ -1918,11 +1911,31 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                 modifier
             });
 
+            // 专门为 %z 提取冒号。GNU nstrftime 先识别 E/O 修饰符，
+            // 再将 :, :: 或 ::: 作为时区格式的一部分。
+            while index < fmt.len() && fmt[index] == b':' {
+                colons += 1;
+                flags.push(b':');
+                index += 1;
+            }
+
             // 提取指令符
             if index < fmt.len() {
                 let spec = fmt[index];
                 index += 1;
                 match spec {
+                    b'E' | b'O' if colons != 0 && modifier.is_none() => {
+                        let field = format_gnu_invalid_field(
+                            &fmt[percent_start..index - colons],
+                            &flags,
+                            parse_strftime_width(width_str),
+                            pad,
+                            None,
+                            spec,
+                        );
+                        append_strftime_literal(&mut fmt_adjusted, &field);
+                        index -= colons;
+                    }
                     _ if gnu_invalid_format_modifier(spec, modifier) => {
                         let field = format_gnu_invalid_field(
                             &fmt[percent_start..index],
@@ -2024,13 +2037,26 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
                     }
                     b'z' => {
                         if modifier == Some(b'O') {
-                            let field = format_gnu_timezone(dt, colons, None, StrftimePad::Default);
-                            fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
-                                field.as_bytes(),
-                                parse_strftime_width(width_str),
-                                pad,
-                                StrftimePad::Space,
-                            ));
+                            if colons != 0 {
+                                let field = format_gnu_invalid_field(
+                                    b"%O:",
+                                    &flags,
+                                    parse_strftime_width(width_str),
+                                    pad,
+                                    None,
+                                    b'z',
+                                );
+                                append_strftime_literal(&mut fmt_adjusted, &field);
+                            } else {
+                                let field =
+                                    format_gnu_timezone(dt, colons, None, StrftimePad::Default);
+                                fmt_adjusted.extend_from_slice(&format_gnu_field_bytes(
+                                    field.as_bytes(),
+                                    parse_strftime_width(width_str),
+                                    pad,
+                                    StrftimePad::Space,
+                                ));
+                            }
                         } else {
                             fmt_adjusted.extend_from_slice(
                                 format_gnu_timezone(
@@ -2674,6 +2700,36 @@ mod tests {
             )
             .unwrap(),
             "+0000|+0000|+0000|0+0000|0+0000| +0000|0+0000|0+0000|+0000"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_timezone_modifier_precedes_colons() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%E:z|%:Ez|%O:z|%:Oz").unwrap(),
+            "+00:00|%:Ez|%O:|%:Oz"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_timezone_modifier_after_colons_is_literal() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%4:Ez|%+10:Oz|%-6::Ez|%_10:::Oz|%^+10:Ez").unwrap(),
+            " %4:Ez|00000%+10:Oz|%-6::Ez|     %_10:::Oz|0000%^+10:Ez"
         );
     }
 

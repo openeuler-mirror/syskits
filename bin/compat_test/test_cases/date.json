@@ -3,6 +3,36 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下时区冒号后的E/O修饰符为无效格式；GNU仅将冒号前缀纳入字段宽度和填充，E/O及z随后按字面输出",
+      "args": ["-d", "2024-01-02 15:04:05 UTC", "+%4:Ez|%+10:Oz|%-6::Ez|%_10:::Oz|%^+10:Ez"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": " %4:Ez|00000%+10:Oz|%-6::Ez|     %_10:::Oz|0000%^+10:Ez\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU date先解析E/O修饰符再解析时区冒号；E:z为有效偏移，冒号后的修饰符保持字面量，O:z按GNU字面截断规则输出",
+      "args": ["-d", "2024-01-02 15:04:05 UTC", "+%E:z|%:Ez|%O:z|%:Oz"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "+00:00|%:Ez|%O:|%:Oz\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU O修饰的时区偏移按文本字段应用宽度，零或空格在符号前填充，连字符禁用填充",
       "args": ["-d", "2024-01-02 15:04:05 UTC", "+%Oz|%4Oz|%+4Oz|%+6Oz|%_+6Oz|%+_6Oz|%0+6Oz|%+06Oz|%-6Oz"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

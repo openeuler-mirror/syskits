@@ -52,6 +52,23 @@ pub struct CtChownOutputNames<'a> {
     pub group: Option<&'a str>,
 }
 
+#[derive(Debug)]
+struct ChownFailure {
+    stderr: Option<String>,
+    stdout: Option<String>,
+}
+
+impl ChownFailure {
+    fn into_error_message(self) -> String {
+        match (self.stderr, self.stdout) {
+            (Some(stderr), Some(stdout)) => format!("{stderr}\n{stdout}"),
+            (Some(stderr), None) => stderr,
+            (None, Some(stdout)) => stdout,
+            (None, None) => String::new(),
+        }
+    }
+}
+
 /// Actually perform the change of owner on a path
 fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
@@ -82,6 +99,27 @@ pub fn wrap_chown<P: AsRef<Path>>(
     follow: bool,
     verbosity: Verbosity,
 ) -> Result<String, String> {
+    wrap_chown_with_diagnostics(
+        path,
+        meta,
+        dest_uid,
+        dest_gid,
+        output_names,
+        follow,
+        verbosity,
+    )
+    .map_err(ChownFailure::into_error_message)
+}
+
+fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
+    path: P,
+    meta: &Metadata,
+    dest_uid: Option<u32>,
+    dest_gid: Option<u32>,
+    output_names: CtChownOutputNames<'_>,
+    follow: bool,
+    verbosity: Verbosity,
+) -> Result<String, ChownFailure> {
     let dest_uid_val = dest_uid.unwrap_or_else(|| meta.uid());
     let dest_gid_val = dest_gid.unwrap_or_else(|| meta.gid());
     let path = path.as_ref();
@@ -150,45 +188,39 @@ pub fn wrap_chown<P: AsRef<Path>>(
     let path_str = path.quote().to_string();
 
     if let Err(e) = chown(path, dest_uid_val, dest_gid_val, follow) {
-        match verbosity.level {
-            CtVerbosityLevel::Silent => (),
-            level => {
-                let verbose_output = if group_only {
-                    t!(
-                        "ctcore.chgrp.failed_change",
-                        file = path_str,
-                        old = old_str,
-                        new = new_str
-                    )
-                    .to_string()
-                } else {
-                    t!(
-                        "ctcore.chown.failed_change",
-                        file = path_str,
-                        old = old_str,
-                        new = new_str
-                    )
-                    .to_string()
-                };
-
-                if verbosity.force_silent {
-                    if level == CtVerbosityLevel::Verbose {
-                        out = verbose_output;
-                    }
-                } else {
-                    out = format!(
-                        "changing {} of {}: {}",
-                        if group_only { "group" } else { "ownership" },
-                        path_str,
-                        e
-                    );
-                    if level == CtVerbosityLevel::Verbose {
-                        out = format!("{out}\n{verbose_output}");
-                    }
-                }
+        let verbose_output = (verbosity.level == CtVerbosityLevel::Verbose).then(|| {
+            if group_only {
+                t!(
+                    "ctcore.chgrp.failed_change",
+                    file = path_str,
+                    old = old_str,
+                    new = new_str
+                )
+                .to_string()
+            } else {
+                t!(
+                    "ctcore.chown.failed_change",
+                    file = path_str,
+                    old = old_str,
+                    new = new_str
+                )
+                .to_string()
             }
-        }
-        return Err(out);
+        });
+        let stderr =
+            (!verbosity.force_silent && verbosity.level != CtVerbosityLevel::Silent).then(|| {
+                format!(
+                    "changing {} of {}: {}",
+                    if group_only { "group" } else { "ownership" },
+                    path_str,
+                    strip_errno(&e)
+                )
+            });
+
+        return Err(ChownFailure {
+            stderr,
+            stdout: verbose_output,
+        });
     } else {
         let changed = dest_uid_val != meta.uid() || dest_gid_val != meta.gid();
         if changed {
@@ -486,7 +518,7 @@ impl CtChownExecutor {
 
     fn change_path(&self, path: &Path, meta: &Metadata) -> i32 {
         if self.matched(meta.uid(), meta.gid()) {
-            match wrap_chown(
+            match wrap_chown_with_diagnostics(
                 path,
                 meta,
                 self.dest_uid,
@@ -505,12 +537,11 @@ impl CtChownExecutor {
                     0
                 }
                 Err(error) => {
-                    if self.verbosity.force_silent {
-                        if self.verbosity.level == CtVerbosityLevel::Verbose && !error.is_empty() {
-                            println!("{error}");
-                        }
-                    } else {
-                        ct_show_error!("{error}");
+                    if let Some(stderr) = error.stderr {
+                        ct_show_error!("{stderr}");
+                    }
+                    if let Some(stdout) = error.stdout {
+                        println!("{stdout}");
                     }
                     1
                 }
@@ -927,6 +958,47 @@ mod tests {
         .unwrap();
 
         assert_eq!(output, format!("ownership of {} retained", file.quote()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_verbose_chown_failure_keeps_diagnostics_on_separate_streams() {
+        let temp_dir = tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, b"").unwrap();
+        let meta = file.metadata().unwrap();
+        fs::remove_file(&file).unwrap();
+
+        let failure = wrap_chown_with_diagnostics(
+            &file,
+            &meta,
+            Some(1),
+            None,
+            CtChownOutputNames::default(),
+            true,
+            Verbosity {
+                groups_only: false,
+                force_silent: false,
+                level: CtVerbosityLevel::Verbose,
+            },
+        )
+        .unwrap_err();
+
+        let old_owner = ct_entries::uid2usr(meta.uid()).unwrap_or_else(|_| meta.uid().to_string());
+        assert_eq!(
+            failure.stderr,
+            Some(format!(
+                "changing ownership of {}: No such file or directory",
+                file.quote()
+            ))
+        );
+        assert_eq!(
+            failure.stdout,
+            Some(format!(
+                "failed to change ownership of {} from {old_owner} to 1",
+                file.quote()
+            ))
+        );
     }
 
     #[test]

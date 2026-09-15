@@ -17,6 +17,7 @@ use ctcore::Tool;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use sys_locale::get_locale;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -149,6 +150,7 @@ pub fn ct_app() -> Command {
         .disable_version_flag(true)
         .args_override_self(true)
         .args(&args)
+        .gnu_getopt()
 }
 
 /**
@@ -548,6 +550,46 @@ mod tests {
 
         fs::remove_dir_all(&directory).unwrap();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_posixly_correct_stops_option_parsing_after_owner() {
+        use std::sync::Mutex;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_posixly_correct_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("file");
+        File::create(&path).unwrap();
+
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                current_uid_arg(),
+                path.into_os_string(),
+                OsString::from("-v"),
+            ]
+            .into_iter(),
+        );
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_err());
     }
 
     #[test]

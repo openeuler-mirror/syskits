@@ -204,8 +204,10 @@ fn ct_reopen_fd(fd: libc::c_int, path: &std::ffi::CStr, flags: libc::c_int) -> b
 unsafe extern "C" fn ct_probe_standard_fds_before_runtime() {
     let stdin_closed = ct_fd_is_closed(libc::STDIN_FILENO);
     let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
+    let stderr_closed = ct_fd_is_closed(libc::STDERR_FILENO);
     STDIN_CLOSED_AT_START.store(stdin_closed, Ordering::Relaxed);
     STDOUT_CLOSED_AT_START.store(stdout_closed, Ordering::Relaxed);
+    STDERR_CLOSED_AT_START.store(stderr_closed, Ordering::Relaxed);
 }
 
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
@@ -226,6 +228,11 @@ fn ct_stdin_closed_before_main() -> bool {
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 fn ct_stdout_closed_before_main() -> bool {
     STDOUT_CLOSED_AT_START.load(Ordering::Relaxed)
+}
+
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+fn ct_stderr_closed_before_main() -> bool {
+    STDERR_CLOSED_AT_START.load(Ordering::Relaxed)
 }
 
 #[cfg(all(unix, feature = "libc", not(target_os = "linux")))]
@@ -255,6 +262,11 @@ fn ct_stdout_closed_before_main() -> bool {
     ct_stdout_is_sanitized_dev_null()
 }
 
+#[cfg(all(unix, feature = "libc", not(target_os = "linux")))]
+fn ct_stderr_closed_before_main() -> bool {
+    ct_fd_is_closed(libc::STDERR_FILENO)
+}
+
 #[cfg(all(unix, feature = "libc"))]
 pub fn ct_ensure_standard_fds() {
     use std::ffi::CString;
@@ -265,8 +277,12 @@ pub fn ct_ensure_standard_fds() {
     let stdout_closed = ct_fd_is_closed(libc::STDOUT_FILENO);
     let stdout_closed_before_main = ct_stdout_closed_before_main();
     let stdout_missing = stdout_closed || stdout_closed_before_main;
+    let stderr_closed = ct_fd_is_closed(libc::STDERR_FILENO);
+    let stderr_closed_before_main = ct_stderr_closed_before_main();
+    let stderr_missing = stderr_closed || stderr_closed_before_main;
     STDIN_WAS_CLOSED.store(stdin_missing, Ordering::Relaxed);
     STDOUT_WAS_CLOSED.store(stdout_missing, Ordering::Relaxed);
+    STDERR_WAS_CLOSED.store(stderr_missing, Ordering::Relaxed);
 
     let dev_null = CString::new("/dev/null").expect("literal has no NUL");
     let dev_full = CString::new("/dev/full").expect("literal has no NUL");
@@ -279,7 +295,7 @@ pub fn ct_ensure_standard_fds() {
         let _ = ct_reopen_fd(libc::STDOUT_FILENO, &dev_null, libc::O_WRONLY);
     }
 
-    if ct_fd_is_closed(libc::STDERR_FILENO) {
+    if stderr_missing {
         let _ = ct_reopen_fd(libc::STDERR_FILENO, &dev_null, libc::O_WRONLY);
     }
 }
@@ -288,6 +304,7 @@ pub fn ct_ensure_standard_fds() {
 pub fn ct_ensure_standard_fds() {
     STDIN_WAS_CLOSED.store(false, Ordering::Relaxed);
     STDOUT_WAS_CLOSED.store(false, Ordering::Relaxed);
+    STDERR_WAS_CLOSED.store(false, Ordering::Relaxed);
 }
 
 pub fn ct_stdin_was_closed() -> bool {
@@ -306,6 +323,10 @@ pub fn ct_stdout_is_closed() -> bool {
 
 pub fn ct_stdout_was_closed() -> bool {
     STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+pub fn ct_stderr_was_closed() -> bool {
+    STDERR_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
 /// 为 clap 生成使用说明字符串。
@@ -343,10 +364,13 @@ pub fn ct_set_utility_is_second_arg() {
 static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
 static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 static STDIN_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 static STDOUT_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+static STDERR_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
     let base_index = if ct_get_utility_is_second_arg() { 1 } else { 0 };

@@ -502,6 +502,80 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C下启动前关闭stdin；GNU nohup不应把关闭的描述符替换为/dev/null，子命令read需报告Bad file descriptor并返回1",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "read value; printf \"read=%s\\n\" \"$?\" >&2"
+            ],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {
+                    "stdin": "closed",
+                    "stderr": "capture"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "/bin/sh: line 1: read: read error: 0: Bad file descriptor\nread=1\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C下启动前关闭stdout；stdout不是TTY时GNU nohup需保持该描述符关闭，子命令写入应报告Bad file descriptor而非/dev/full的ENOSPC",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "printf x; printf \"write=%s\\n\" \"$?\" >&2"
+            ],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {
+                    "stdout": "closed",
+                    "stderr": "capture"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "/bin/sh: line 1: printf: write error: Bad file descriptor\nwrite=1\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
+            "description": "LC_ALL=C下启动前关闭stderr；GNU nohup需保持描述符2关闭，子命令通过/proc/self/fd确认fd2不存在",
+            "args": [
+                "/bin/sh",
+                "-c",
+                "test -e /proc/self/fd/2; printf \"fd2=%s\\n\" \"$?\""
+            ],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {
+                    "stderr": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "fd2=1\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C下启动前关闭stdout且仅stderr连接PTY；执行命令向stderr写入redirected。GNU创建0600的nohup.out，将命令stderr写入文件，并先后在原TTY stderr报告appending output和redirecting stderr to stdout",
             "args": [
                 "sh",

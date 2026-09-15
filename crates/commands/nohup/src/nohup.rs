@@ -384,6 +384,7 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         .with_exit_code(arg_error_code)?;
     let command_args = nohup_command_args(&args_match, arg_error_code)?;
 
+    restore_initially_closed_standard_fds();
     let exec_failure_stderr = nohup_replace_fds()?;
 
     unsafe { signal(SIGHUP, SIG_IGN) }; // 忽略SIGHUP信号
@@ -415,6 +416,24 @@ pub fn nohup_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     }
     Ok(())
+}
+
+fn restore_initially_closed_standard_fds() {
+    for (fd, was_closed) in [
+        (libc::STDIN_FILENO, ctcore::ct_stdin_was_closed()),
+        (libc::STDOUT_FILENO, ctcore::ct_stdout_was_closed()),
+        (libc::STDERR_FILENO, ctcore::ct_stderr_was_closed()),
+    ] {
+        close_fd_if_initially_closed(fd, was_closed);
+    }
+}
+
+fn close_fd_if_initially_closed(fd: RawFd, was_closed: bool) {
+    if was_closed {
+        unsafe {
+            libc::close(fd);
+        }
+    }
 }
 
 // 构建命令行解析器
@@ -587,15 +606,15 @@ impl Tool for Nohup {
 mod tests {
     mod tests_messages {
         use crate::{
-            ExecFailureStderr, NohupError, can_report_exec_failure, exec_failure_message,
-            nohup_append_msg, nohup_command_args, nohup_stderr_redirect_msg,
+            ExecFailureStderr, NohupError, can_report_exec_failure, close_fd_if_initially_closed,
+            exec_failure_message, nohup_append_msg, nohup_command_args, nohup_stderr_redirect_msg,
             nohup_validate_standard_options, redirect_stdout_from_fd, save_stderr_for_exec_failure,
             should_open_nohup_output,
         };
         use ctcore::ct_error::CTError;
         use std::ffi::{OsStr, OsString};
         use std::io::Error;
-        use std::os::fd::AsRawFd;
+        use std::os::fd::{AsRawFd, IntoRawFd};
         use std::os::unix::ffi::OsStrExt;
         use std::path::Path;
         use std::path::PathBuf;
@@ -765,6 +784,24 @@ mod tests {
         fn test_exec_failure_reporting_requires_a_saved_tty_stderr() {
             assert!(can_report_exec_failure(&ExecFailureStderr::NotRedirected));
             assert!(!can_report_exec_failure(&ExecFailureStderr::Unavailable));
+        }
+
+        #[test]
+        fn test_close_fd_if_initially_closed_only_closes_marked_descriptor() {
+            let retained = std::fs::File::open("/dev/null").unwrap().into_raw_fd();
+            close_fd_if_initially_closed(retained, false);
+            assert_ne!(unsafe { libc::fcntl(retained, libc::F_GETFD) }, -1);
+            unsafe {
+                libc::close(retained);
+            }
+
+            let closed = std::fs::File::open("/dev/null").unwrap().into_raw_fd();
+            close_fd_if_initially_closed(closed, true);
+            assert_eq!(unsafe { libc::fcntl(closed, libc::F_GETFD) }, -1);
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::EBADF)
+            );
         }
 
         #[test]

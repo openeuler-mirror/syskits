@@ -90,6 +90,25 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--debug与--reference组合时，GNU date为非解析的参考文件时间输出FORMAT诊断",
+      "setup_commands": ["touch -d '2024-01-02 03:04:05 UTC' date-debug-reference"],
+      "args": ["--debug", "-r", "date-debug-reference", "+%F"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2024-01-02\n",
+          "stderr": "date: output format: '%F'\n"
+        }
+      },
+      "cleanup_commands": ["rm -f date-debug-reference"]
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下DATEFILE成功打开后读取失败时，GNU date报告输入文件读错误并以状态1退出，不得静默忽略BufRead错误",
       "args": ["-f", "/proc/self/mem", "+%F"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

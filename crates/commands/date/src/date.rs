@@ -645,6 +645,14 @@ fn final_timezone_debug_label(parts: &DateDebugParts, env_timezone: Option<&str>
     }
 }
 
+fn date_output_format_debug_text(format_string: &str) -> String {
+    format!(
+        "{}: output format: {}\n",
+        ctcore::ct_util_name(),
+        locale_quote(format_string)
+    )
+}
+
 fn date_debug_text(
     input: &str,
     date: &DateTime<FixedOffset>,
@@ -747,12 +755,7 @@ fn date_debug_text(
         date_ymd_hms_label(date),
         date_offset_label(date)
     );
-    let _ = writeln!(
-        output,
-        "{}: output format: {}",
-        ctcore::ct_util_name(),
-        locale_quote(format_string)
-    );
+    output.push_str(&date_output_format_debug_text(format_string));
     output
 }
 
@@ -905,6 +908,9 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
                 now.with_timezone(now.offset())
             };
             let row = date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+            if date_set.debug {
+                stderr_text.push_str(&date_output_format_debug_text(&format_string));
+            }
             classic_text.push_str(&row.formatted);
             classic_text.push('\n');
             rows.push(row);
@@ -918,6 +924,9 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
                 dt.with_timezone(&Local).into()
             };
             let row = date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+            if date_set.debug {
+                stderr_text.push_str(&date_output_format_debug_text(&format_string));
+            }
             classic_text.push_str(&row.formatted);
             classic_text.push('\n');
             rows.push(row);
@@ -936,6 +945,9 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
                 dt.with_timezone(dt.offset())
             };
             let row = date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
+            if date_set.debug {
+                stderr_text.push_str(&date_output_format_debug_text(&format_string));
+            }
             classic_text.push_str(&row.formatted);
             classic_text.push('\n');
             rows.push(row);
@@ -1114,6 +1126,12 @@ fn date_processing<W: Write>(
         for date in dates_iterator {
             match date {
                 Ok(date) => {
+                    if date_set.debug {
+                        eprint!(
+                            "{}",
+                            date_output_format_debug_text(&format_string.to_string_lossy())
+                        );
+                    }
                     write_formatted_date(output, &date, &format_string)?;
                 }
                 Err(err) => ct_show!(err),
@@ -2998,6 +3016,29 @@ mod tests {
                 &parse_date(input).unwrap(),
                 "%F",
                 env_timezone.as_deref(),
+            )
+        );
+    }
+
+    #[test]
+    fn test_reference_debug_reports_output_format() {
+        let reference = tempfile::NamedTempFile::new().unwrap();
+        let args = [
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("--debug"),
+            OsString::from("-r"),
+            reference.path().as_os_str().to_owned(),
+            OsString::from("+%F"),
+        ];
+
+        let result = date_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(
+            result.stderr_text,
+            format!(
+                "{}: output format: {}\n",
+                ctcore::ct_util_name(),
+                locale_quote("%F")
             )
         );
     }

@@ -1923,6 +1923,22 @@ fn format_using_strftime_bytes(dt: &DateTime<FixedOffset>, fmt: &[u8]) -> CTResu
             if index < fmt.len() {
                 let spec = fmt[index];
                 index += 1;
+                // GNU nstrftime only accepts :, ::, and ::: for %z.
+                // Four or more colons make the complete field invalid.  It
+                // retains that field's text, but still applies its width and
+                // final padding flag to the complete invalid field.
+                if spec == b'z' && colons > 3 {
+                    let field = format_gnu_invalid_field(
+                        &fmt[percent_start..index],
+                        &flags,
+                        parse_strftime_width(width_str),
+                        pad,
+                        modifier,
+                        spec,
+                    );
+                    append_strftime_literal(&mut fmt_adjusted, &field);
+                    continue;
+                }
                 match spec {
                     b'E' | b'O' if colons != 0 && modifier.is_none() => {
                         let field = format_gnu_invalid_field(
@@ -2730,6 +2746,22 @@ mod tests {
         assert_eq!(
             format_using_strftime(&dt, "%4:Ez|%+10:Oz|%-6::Ez|%_10:::Oz|%^+10:Ez").unwrap(),
             " %4:Ez|00000%+10:Oz|%-6::Ez|     %_10:::Oz|0000%^+10:Ez"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gnu_timezone_rejects_more_than_three_colons() {
+        use chrono::TimeZone;
+
+        let dt = FixedOffset::east_opt(0)
+            .unwrap()
+            .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
+            .unwrap();
+        assert_eq!(
+            format_using_strftime(&dt, "%::::z|%+10::::z|%_10::::z|%-10::::z|%E::::z|%O::::z",)
+                .unwrap(),
+            "%::::z|0%+10::::z| %_10::::z|%-10::::z|%E::::z|%O::::z"
         );
     }
 

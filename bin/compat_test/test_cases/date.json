@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU date仅接受最多三个冒号作为%z的时区精度；四个及以上冒号的格式字段保持原样输出，并按原字段总长度应用宽度和最后一个填充标志",
+      "args": ["-d", "2024-01-02 15:04:05 UTC", "+%::::z|%+10::::z|%_10::::z|%-10::::z|%E::::z|%O::::z"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "%::::z|0%+10::::z| %_10::::z|%-10::::z|%E::::z|%O::::z\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下时区冒号后的E/O修饰符为无效格式；GNU仅将冒号前缀纳入字段宽度和填充，E/O及z随后按字面输出",
       "args": ["-d", "2024-01-02 15:04:05 UTC", "+%4:Ez|%+10:Oz|%-6::Ez|%_10:::Oz|%^+10:Ez"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

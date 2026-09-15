@@ -3,6 +3,21 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下GNU date对文本和复合时间字段应用+填充标志；默认加号零填充，随后下划线覆盖为空格，随后零覆盖回零填充",
+      "args": ["-d", "2024-01-02 15:04:05 UTC", "+%+10a|%+10B|%+10p|%+10Z|%+10R|%+_10a|%+010a|%+10%"],
+      "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "0000000Tue|000January|00000000PM|0000000UTC|0000015:04|       Tue|0000000Tue|000000%+10%\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下GNU E修饰年份按文本字段应用宽度；默认和下划线使用空格填充，加号使用零填充但不增加正号，连字符禁用填充",
       "args": ["-d", "2024-01-02 03:04:05 UTC", "+%EY|%6EY|%+6EY|%_6EY|%-6EY"],
       "environment": {"env_vars": {"LC_ALL": "C", "TZ": "UTC0"}},

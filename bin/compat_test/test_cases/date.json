@@ -90,6 +90,24 @@
     {
       "tstdin": "",
       "command": "date",
+      "description": "LC_ALL=C、TZ=UTC0下--debug解析8位紧凑日期时，GNU date将其标记为number part并保留其余日期解析诊断",
+      "args": ["-u", "--debug", "-d", "20130101", "+%F"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "TZ": "UTC0"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "2013-01-01\n",
+          "stderr": "date: parsed number part: (Y-M-D) 2013-01-01\ndate: input timezone: TZ=\"UTC0\" environment value or -u\ndate: warning: using midnight as starting time: 00:00:00\ndate: starting date/time: '(Y-M-D) 2013-01-01 00:00:00'\ndate: '(Y-M-D) 2013-01-01 00:00:00' = 1356998400 epoch-seconds\ndate: timezone: Universal Time\ndate: final: 1356998400.000000000 (epoch-seconds)\ndate: final: (Y-M-D) 2013-01-01 00:00:00 (UTC)\ndate: final: (Y-M-D) 2013-01-01 00:00:00 (UTC+00)\ndate: output format: '%F'\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "date",
       "description": "LC_ALL=C、TZ=UTC0下--debug同时解析UTC时区和相对天数时，GNU date保留时区诊断并将其附加到调整后时间",
       "args": ["--debug", "-d", "2013-10-30 00:00:00 UTC -8 days", "+%F"],
       "environment": {

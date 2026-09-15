@@ -901,6 +901,7 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
             }
         }
         DateSource::File(path) => {
+            let env_timezone = std::env::var("TZ").ok();
             for line in date_file_lines(date_file_reader(path)?, path) {
                 let line = match line {
                     Ok(line) => line,
@@ -917,6 +918,14 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
                         } else {
                             dt
                         };
+                        if date_set.debug {
+                            stderr_text.push_str(&date_debug_text(
+                                &line,
+                                &dt,
+                                &format_string,
+                                env_timezone.as_deref(),
+                            ));
+                        }
                         let row =
                             date_row_from_datetime(&dt, source_kind, format_kind, &format_string)?;
                         classic_text.push_str(&row.formatted);
@@ -1058,6 +1067,42 @@ fn date_processing<W: Write>(
             return Ok(());
         }
 
+        if let DateSource::File(ref path) = date_set.date_source {
+            if path != Path::new("-") && path.is_dir() {
+                return Err(CtSimpleError::new(
+                    2,
+                    format!("expected file, got directory {}", path.quote()),
+                ));
+            }
+
+            for line in date_file_lines(date_file_reader(path)?, path) {
+                match line {
+                    Ok(line) => match parse_date(&line) {
+                        Ok(date) => {
+                            let date = if date_set.utc {
+                                date.with_timezone(&Utc).into()
+                            } else {
+                                date
+                            };
+                            if date_set.debug {
+                                emit_date_debug(&line, &date, &format_string.to_string_lossy());
+                            }
+                            write_formatted_date(output, &date, &format_string)?;
+                        }
+                        Err(_) => ct_show!(CtSimpleError::new(
+                            1,
+                            format!("invalid date {}", line.quote())
+                        )),
+                    },
+                    Err(error) => {
+                        ct_show!(error);
+                        break;
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         // 获取当前时间，根据设置确定是否使用UTC
         let now: DateTime<FixedOffset> = if date_set.utc {
             let now = Utc::now();
@@ -1069,61 +1114,44 @@ fn date_processing<W: Write>(
 
         // 根据日期来源生成日期的迭代器
         // 创建一个动态分发的迭代器Box<dyn Iterator<Item = _>>，用于根据不同的DateSource枚举值生成对应的日期迭代
-        let dates_iterator: Box<dyn Iterator<Item = _>> = match date_set.date_source {
-            DateSource::Custom(_) => unreachable!("custom dates are handled before iterator setup"),
-            DateSource::File(ref path) => {
-                if path != Path::new("-") && path.is_dir() {
-                    return Err(CtSimpleError::new(
-                        2,
-                        format!("expected file, got directory {}", path.quote()),
-                    ));
+        let dates_iterator: Box<dyn Iterator<Item = CTResult<DateTime<FixedOffset>>>> =
+            match date_set.date_source {
+                DateSource::Custom(_) => {
+                    unreachable!("custom dates are handled before iterator setup")
                 }
-                let lines = date_file_lines(date_file_reader(path)?, path);
-                let mut iter: Box<dyn Iterator<Item = _>> = Box::new(lines.map(|line| {
-                    line.and_then(|line| {
-                        parse_date(&line).map_err(|_| {
-                            CtSimpleError::new(1, format!("invalid date {}", line.quote()))
-                        })
-                    })
-                }));
-
-                if date_set.utc {
-                    iter = Box::new(iter.map(|res| res.map(|dt| dt.with_timezone(&Utc).into())));
+                DateSource::File(_) => unreachable!("file dates are handled before iterator setup"),
+                DateSource::Now => {
+                    let iter = std::iter::once(Ok(now));
+                    Box::new(iter)
                 }
-                iter
-            }
-            DateSource::Now => {
-                let iter = std::iter::once(Ok(now));
-                Box::new(iter)
-            }
-            DateSource::Resolution => {
-                let (sec, nsec) = get_clock_resolution();
-                let dt = DateTime::from_timestamp(sec, nsec as u32).unwrap();
-                let dt: DateTime<FixedOffset> = if date_set.utc {
-                    dt.with_timezone(&Utc).into()
-                } else {
-                    dt.with_timezone(&Local).into()
-                };
-                let iter = std::iter::once(Ok(dt));
-                Box::new(iter)
-            }
-            DateSource::Reference(ref path) => {
-                let metadata = std::fs::metadata(path)
-                    .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
-                let time = metadata
-                    .modified()
-                    .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
-                let dt: DateTime<FixedOffset> = if date_set.utc {
-                    let dt: DateTime<Utc> = time.into();
-                    dt.with_timezone(&dt.offset().fix())
-                } else {
-                    let dt: DateTime<Local> = time.into();
-                    dt.with_timezone(dt.offset())
-                };
-                let iter = std::iter::once(Ok(dt));
-                Box::new(iter)
-            }
-        };
+                DateSource::Resolution => {
+                    let (sec, nsec) = get_clock_resolution();
+                    let dt = DateTime::from_timestamp(sec, nsec as u32).unwrap();
+                    let dt: DateTime<FixedOffset> = if date_set.utc {
+                        dt.with_timezone(&Utc).into()
+                    } else {
+                        dt.with_timezone(&Local).into()
+                    };
+                    let iter = std::iter::once(Ok(dt));
+                    Box::new(iter)
+                }
+                DateSource::Reference(ref path) => {
+                    let metadata = std::fs::metadata(path)
+                        .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
+                    let time = metadata
+                        .modified()
+                        .map_err(|e| CtSimpleError::new(1, format!("{}: {}", path.quote(), e)))?;
+                    let dt: DateTime<FixedOffset> = if date_set.utc {
+                        let dt: DateTime<Utc> = time.into();
+                        dt.with_timezone(&dt.offset().fix())
+                    } else {
+                        let dt: DateTime<Local> = time.into();
+                        dt.with_timezone(dt.offset())
+                    };
+                    let iter = std::iter::once(Ok(dt));
+                    Box::new(iter)
+                }
+            };
 
         // 格式化并打印所有日期
         for date in dates_iterator {
@@ -2930,6 +2958,33 @@ mod tests {
 
         assert_eq!(result.classic_text, "1709164800\n0\n");
         assert_eq!(result.rows.len(), 2);
+    }
+
+    #[test]
+    fn test_file_debug_reports_parsed_line() {
+        let input = "2024-02-29 12:34:56 UTC";
+        let result = ctcore::ct_io::with_injected_stdin(format!("{input}\n").into_bytes(), || {
+            let args = [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--debug"),
+                OsString::from("-f"),
+                OsString::from("-"),
+                OsString::from("+%F"),
+            ];
+            date_native_semantic(args.into_iter()).unwrap()
+        });
+
+        assert_eq!(result.classic_text, "2024-02-29\n");
+        let env_timezone = std::env::var("TZ").ok();
+        assert_eq!(
+            result.stderr_text,
+            date_debug_text(
+                input,
+                &parse_date(input).unwrap(),
+                "%F",
+                env_timezone.as_deref(),
+            )
+        );
     }
 
     #[cfg(target_os = "linux")]

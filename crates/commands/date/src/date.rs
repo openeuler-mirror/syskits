@@ -241,29 +241,7 @@ pub fn date_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
 
-    let mut sources_count = 0;
-    if args_match.contains_id(DATE_OPT_DATE) {
-        sources_count += 1;
-    }
-    if args_match.contains_id(DATE_OPT_FILE) {
-        sources_count += 1;
-    }
-    if args_match.contains_id(DATE_OPT_REFERENCE) {
-        sources_count += 1;
-    }
-    if args_match.contains_id(DATE_OPT_SET) {
-        sources_count += 1;
-    }
-    if args_match.get_flag(DATE_OPT_RESOLUTION) {
-        sources_count += 1;
-    }
-
-    if sources_count > 1 {
-        return Err(CtSimpleError::new(
-            1,
-            "multiple time sources specified".to_string(),
-        ));
-    }
+    validate_date_source_options(&args_match)?;
 
     for warning in discarded_source_warnings(&args_match) {
         ctcore::ct_show_error!("{warning}");
@@ -796,28 +774,7 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
 
     let args_match = ct_app().try_get_matches_from(args)?;
 
-    let mut sources_count = 0;
-    if args_match.contains_id(DATE_OPT_DATE) {
-        sources_count += 1;
-    }
-    if args_match.contains_id(DATE_OPT_FILE) {
-        sources_count += 1;
-    }
-    if args_match.contains_id(DATE_OPT_REFERENCE) {
-        sources_count += 1;
-    }
-    if args_match.contains_id(DATE_OPT_SET) {
-        sources_count += 1;
-    }
-    if args_match.get_flag(DATE_OPT_RESOLUTION) {
-        sources_count += 1;
-    }
-    if sources_count > 1 {
-        return Err(CtSimpleError::new(
-            1,
-            "multiple time sources specified".to_string(),
-        ));
-    }
+    validate_date_source_options(&args_match)?;
 
     if args_match.get_flag(DATE_OPT_UNIVERSAL) {
         unsafe {
@@ -1183,6 +1140,30 @@ fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffse
         },
     };
     Ok(set_to_params)
+}
+
+fn validate_date_source_options(args_match: &ArgMatches) -> CTResult<()> {
+    let print_source_count = usize::from(args_match.contains_id(DATE_OPT_DATE))
+        + usize::from(args_match.contains_id(DATE_OPT_FILE))
+        + usize::from(args_match.contains_id(DATE_OPT_REFERENCE))
+        + usize::from(args_match.get_flag(DATE_OPT_RESOLUTION));
+
+    if print_source_count > 1 {
+        return Err(CtSimpleError::new(
+            1,
+            "multiple time sources specified".to_string(),
+        ));
+    }
+
+    if args_match.contains_id(DATE_OPT_SET) && print_source_count != 0 {
+        return Err(CtSimpleError::new(
+            1,
+            "the options to print and set the time may not be used together\nTry 'date --help' for more information."
+                .to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn get_date_source(args_match: &ArgMatches) -> DateSource {
@@ -5586,6 +5567,19 @@ mod tests {
         assert_eq!(
             discarded_source_warnings(&set_matches),
             vec!["only using last of multiple -s options"]
+        );
+    }
+
+    #[test]
+    fn test_set_and_print_source_conflict_uses_gnu_diagnostic() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-s", "@0", "-d", "@1"])
+            .unwrap();
+
+        let error = validate_date_source_options(&matches).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "the options to print and set the time may not be used together\nTry 'date --help' for more information."
         );
     }
 

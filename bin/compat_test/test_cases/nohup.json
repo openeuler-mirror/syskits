@@ -643,6 +643,24 @@
         {
             "tstdin": "",
             "command": "nohup",
+            "description": "LC_ALL=C下stderr启动前关闭时执行不存在命令；GNU抑制failed to run command诊断，但保留ENOENT的127退出状态",
+            "args": ["no-such-command"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"},
+                "standardStreams": {"stderr": "closed"}
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "nohup",
             "description": "LC_ALL=C、POSIXLY_CORRECT=1下stdout连接TTY且stderr启动前关闭；GNU重定向stdout后不保留临时输出fd，appending output诊断写失败并返回127，nohup.out保持0600和0字节",
             "args": ["true"],
             "environment": {

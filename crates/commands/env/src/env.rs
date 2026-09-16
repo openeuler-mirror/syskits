@@ -1036,9 +1036,6 @@ fn apply_signal_handlers_to_process(
         let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
         unsafe { libc::sigemptyset(&mut set) };
         for &sig in &signal_masks.block {
-            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
-                continue;
-            }
             unsafe { libc::sigaddset(&mut set, sig) };
             mask_changes.push((sig, "BLOCK"));
         }
@@ -1048,9 +1045,6 @@ fn apply_signal_handlers_to_process(
         let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
         unsafe { libc::sigemptyset(&mut set) };
         for &sig in &signal_masks.unblock {
-            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
-                continue;
-            }
             unsafe { libc::sigaddset(&mut set, sig) };
             mask_changes.push((sig, "UNBLOCK"));
         }
@@ -1538,6 +1532,8 @@ mod tests {
         let blocked = get_signal_masks(&matches).unwrap().unwrap();
         assert!(blocked.block.contains(&libc::SIGRTMIN()));
         assert!(blocked.block.contains(&libc::SIGRTMAX()));
+        assert!(blocked.block.contains(&libc::SIGKILL));
+        assert!(blocked.block.contains(&libc::SIGSTOP));
 
         let matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "--ignore-signal", "true"])

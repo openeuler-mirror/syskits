@@ -41,8 +41,13 @@ use std::borrow::Cow;
 use std::env;
 use std::ffi::OsStr;
 use std::ffi::OsString;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::ops::Deref;
+
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
@@ -53,6 +58,7 @@ use ctcore::ct_error::ExitCode;
 
 use ctcore::Tool;
 use ctcore::ct_line_ending::CtLineEnding;
+#[cfg(not(target_os = "linux"))]
 use ctcore::ct_show_warning;
 
 #[cfg(unix)]
@@ -63,6 +69,11 @@ use std::process::{self};
 
 #[cfg(unix)]
 type SignalDispositions = (Option<Vec<Signal>>, Option<Vec<Signal>>);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    static mut environ: *mut *mut libc::c_char;
+}
 
 #[derive(Debug, PartialEq)]
 struct EnvOptions<'a> {
@@ -102,6 +113,21 @@ fn print_env(line_ending: CtLineEnding) {
     let mut stdout = stdout_raw.lock();
     for (n, v) in env::vars() {
         write!(stdout, "{n}={v}{line_ending}").unwrap();
+    }
+    #[cfg(target_os = "linux")]
+    print_empty_name_env_entries(&mut stdout, line_ending);
+}
+
+#[cfg(target_os = "linux")]
+fn print_empty_name_env_entries(stdout: &mut impl Write, line_ending: CtLineEnding) {
+    let mut entry = unsafe { environ };
+    while unsafe { !(*entry).is_null() } {
+        let bytes = unsafe { CStr::from_ptr(*entry).to_bytes() };
+        if bytes.starts_with(b"=") {
+            stdout.write_all(bytes).unwrap();
+            stdout.write_all(&[line_ending.into()]).unwrap();
+        }
+        entry = unsafe { entry.add(1) };
     }
 }
 
@@ -518,7 +544,7 @@ impl EnvAppData {
 
         env_apply_unset_env_vars(&options)?;
 
-        env_apply_specified_env_vars(&options, is_debug_printing);
+        env_apply_specified_env_vars(&options, is_debug_printing)?;
 
         if options.program.is_empty() {
             print_env(options.line_ending);
@@ -1008,9 +1034,39 @@ fn env_apply_change_directory(options: &EnvOptions<'_>) -> Result<(), Box<dyn CT
     Ok(())
 }
 
-fn env_apply_specified_env_vars(options: &EnvOptions<'_>, is_debug_printing: bool) {
+#[cfg(target_os = "linux")]
+fn env_set_empty_name_value(value: &OsStr) -> CTResult<()> {
+    let mut assignment = Vec::with_capacity(value.as_bytes().len() + 1);
+    assignment.push(b'=');
+    assignment.extend_from_slice(value.as_bytes());
+    let assignment = CString::new(assignment).expect("environment value must not contain NUL");
+    let assignment = assignment.into_raw();
+
+    if unsafe { libc::putenv(assignment) } == 0 {
+        return Ok(());
+    }
+
+    unsafe {
+        drop(CString::from_raw(assignment));
+    }
+    Err(CtSimpleError::new(
+        125,
+        format!(
+            "cannot set empty environment variable name: {}",
+            io::Error::last_os_error()
+        ),
+    ))
+}
+
+fn env_apply_specified_env_vars(options: &EnvOptions<'_>, is_debug_printing: bool) -> CTResult<()> {
     for (name, val) in &options.sets {
         if name.is_empty() {
+            if is_debug_printing {
+                eprintln!("setenv:   ={}", val.to_string_lossy());
+            }
+            #[cfg(target_os = "linux")]
+            env_set_empty_name_value(val)?;
+            #[cfg(not(target_os = "linux"))]
             ct_show_warning!("no name specified for value {}", val.quote());
             continue;
         }
@@ -1023,6 +1079,7 @@ fn env_apply_specified_env_vars(options: &EnvOptions<'_>, is_debug_printing: boo
         }
         unsafe { env::set_var(name, val) };
     }
+    Ok(())
 }
 
 fn env_line_ending_string(line_ending: CtLineEnding) -> String {
@@ -1100,9 +1157,15 @@ fn env_collect_snapshot_semantic(options: &EnvOptions<'_>) -> CTResult<EnvSemant
         env_snapshot_remove(&mut vars, opt_name);
     }
 
+    #[cfg(target_os = "linux")]
+    let stderr_text = String::new();
+    #[cfg(not(target_os = "linux"))]
     let mut stderr_text = String::new();
     for (name, val) in &options.sets {
         if name.is_empty() {
+            #[cfg(target_os = "linux")]
+            env_snapshot_upsert(&mut vars, name, val);
+            #[cfg(not(target_os = "linux"))]
             stderr_text.push_str(&format!(
                 "env: warning: no name specified for value {}\n",
                 val.quote()
@@ -1201,6 +1264,19 @@ mod tests {
         };
 
         assert!(env_apply_unset_env_vars(&options).is_ok());
+    }
+
+    #[test]
+    fn test_semantic_accepts_empty_environment_name() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-i", "=value"])
+            .unwrap();
+        let options = env_make_options(&matches).unwrap();
+
+        let semantic = env_collect_snapshot_semantic(&options).unwrap();
+
+        assert_eq!(semantic.classic_text, "=value\n");
+        assert_eq!(semantic.stderr_text, "");
     }
 
     #[cfg(unix)]

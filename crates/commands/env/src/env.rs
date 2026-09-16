@@ -48,7 +48,7 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use std::ops::Deref;
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
 use ctcore::ct_display::Quotable;
@@ -460,6 +460,9 @@ struct EnvAppData {
 impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, program: &OsStr) -> Box<dyn CTError> {
         ctcore::ct_show_error!("{}: No such file or directory", program.quote());
+        if env_contains_c_whitespace(program) {
+            ctcore::ct_show_error!("use -[v]S to pass options in shebang lines");
+        }
         ExitCode::new(127)
     }
 
@@ -727,6 +730,24 @@ impl EnvAppData {
             }
             _ => unreachable!("command execution errors map only to 126 or 127"),
         }
+    }
+}
+
+fn env_contains_c_whitespace(value: &OsStr) -> bool {
+    #[cfg(unix)]
+    {
+        value
+            .as_bytes()
+            .iter()
+            .any(|byte| matches!(*byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r'))
+    }
+
+    #[cfg(not(unix))]
+    {
+        value
+            .to_string_lossy()
+            .bytes()
+            .any(|byte| matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r'))
     }
 }
 
@@ -1745,6 +1766,15 @@ mod tests {
             command_execution_error_exit_code(&io::Error::from(io::ErrorKind::PermissionDenied)),
             126
         );
+    }
+
+    #[test]
+    fn test_command_name_c_whitespace_detection() {
+        assert!(env_contains_c_whitespace(OsStr::new("command with space")));
+        assert!(env_contains_c_whitespace(OsStr::new("command\twith-tab")));
+        assert!(!env_contains_c_whitespace(OsStr::new(
+            "command-without-whitespace"
+        )));
     }
 
     #[cfg(unix)]

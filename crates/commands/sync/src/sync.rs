@@ -23,6 +23,7 @@ use ctcore::ct_display::Quotable;
 #[cfg(not(target_os = "linux"))]
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 
 use std::ffi::OsString;
 #[cfg(not(target_os = "linux"))]
@@ -137,6 +138,7 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args_override_self(true)
         .args(args)
+        .gnu_getopt()
 }
 
 fn sync() -> isize {
@@ -185,6 +187,10 @@ impl Tool for Sync {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::sync::Mutex;
+
+    #[cfg(unix)]
+    static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_tool_implementation() {
@@ -208,6 +214,31 @@ mod tests {
         assert_eq!(select_sync_mode(false, false, true), SyncMode::File);
         assert_eq!(select_sync_mode(true, false, true), SyncMode::Data);
         assert_eq!(select_sync_mode(false, true, true), SyncMode::FileSystem);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_posixly_correct_stops_option_parsing_after_file_operand() {
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+
+        let matches = ct_app()
+            .try_get_matches_from(["sync", "valid", "-d"])
+            .unwrap();
+        let files: Vec<_> = matches
+            .get_many::<String>(SYNC_ARG_FILES)
+            .unwrap()
+            .map(String::as_str)
+            .collect();
+
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        assert!(!matches.get_flag(sync_flags::SYNC_DATA));
+        assert_eq!(files, ["valid", "-d"]);
     }
 
     #[cfg(test)]

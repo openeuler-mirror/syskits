@@ -703,22 +703,49 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
     if !args_match.contains_id(name) {
         return Ok(None);
     }
+
+    let mut operations = Vec::new();
+    if let (Some(indices), Some(values)) = (
+        args_match.indices_of(name),
+        args_match.get_many::<String>(name),
+    ) {
+        operations.extend(
+            indices
+                .zip(values)
+                .map(|(index, value)| (index, false, value)),
+        );
+    }
+    if name == "block-signal"
+        && let (Some(indices), Some(values)) = (
+            args_match.indices_of("default-signal"),
+            args_match.get_many::<String>("default-signal"),
+        )
+    {
+        operations.extend(
+            indices
+                .zip(values)
+                .map(|(index, value)| (index, true, value)),
+        );
+    }
+    operations.sort_unstable_by_key(|(index, _, _)| *index);
+
     let mut sigs = Vec::new();
-    let mut all = false;
-    if let Some(vals) = args_match.get_many::<String>(name) {
-        for v in vals {
-            if v == MISSING_SIGNAL_ARGUMENT {
-                all = true;
-            } else {
-                sigs.extend(parse_signal_list(v)?);
+    for (_, unblock, value) in operations {
+        let signals = if value == MISSING_SIGNAL_ARGUMENT {
+            Signal::iterator().collect()
+        } else {
+            parse_signal_list(value)?
+        };
+
+        for signal in signals {
+            if unblock {
+                sigs.retain(|candidate| *candidate != signal);
+            } else if !sigs.contains(&signal) {
+                sigs.push(signal);
             }
         }
     }
-    if all {
-        Ok(Some(Signal::iterator().collect()))
-    } else {
-        Ok(Some(sigs))
-    }
+    Ok(Some(sigs))
 }
 
 #[cfg(unix)]
@@ -822,6 +849,23 @@ fn apply_signal_handlers_to_process(
         }
         let _ = nix::sys::signal::sigprocmask(
             nix::sys::signal::SigmaskHow::SIG_BLOCK,
+            Some(&set),
+            None,
+        );
+    }
+    if let Some(sigs) = default_signals {
+        let mut set = SigSet::empty();
+        for &sig in sigs {
+            if sig == Signal::SIGKILL
+                || sig == Signal::SIGSTOP
+                || block_signals.is_some_and(|blocked| blocked.contains(&sig))
+            {
+                continue;
+            }
+            set.add(sig);
+        }
+        let _ = nix::sys::signal::sigprocmask(
+            nix::sys::signal::SigmaskHow::SIG_UNBLOCK,
             Some(&set),
             None,
         );
@@ -1263,6 +1307,21 @@ mod tests {
 
         let matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "--block-signal=", "true"])
+            .unwrap();
+
+        assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_default_signal_removes_prior_signal_from_block_mask() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--block-signal=HUP",
+                "--default-signal=HUP",
+                "true",
+            ])
             .unwrap();
 
         assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));

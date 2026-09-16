@@ -101,7 +101,7 @@
                 "execution": {
                     "exit_code": 2,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": "tty: extra operand 'extra_arg'\nTry 'tty --help' for more information.\n"
                 },
                 "verifications": [],
                 "ignore_fields": {
@@ -109,6 +109,12 @@
                     "ignore_stdout": false,
                     "ignore_stderr": false,
                     "ignore_function": false
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
                 }
             },
             "cleanup_commands": []
@@ -125,7 +131,7 @@
                 "execution": {
                     "exit_code": 2,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": "tty: extra operand 'extra_arg'\nTry 'tty --help' for more information.\n"
                 },
                 "verifications": [],
                 "ignore_fields": {
@@ -133,6 +139,12 @@
                     "ignore_stdout": false,
                     "ignore_stderr": false,
                     "ignore_function": false
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
                 }
             },
             "cleanup_commands": []
@@ -148,7 +160,7 @@
                 "execution": {
                     "exit_code": 2,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": "tty: unrecognized option '--badFlag'\nTry 'tty --help' for more information.\n"
                 },
                 "verifications": [],
                 "ignore_fields": {
@@ -158,7 +170,120 @@
                     "ignore_function": false
                 }
             },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
             "cleanup_commands": []
+        },
+        {
+            "command": "tty",
+            "description": "GNU 无参长选项附带值：--quiet=value 必须使用 quiet 别名诊断。",
+            "args": [
+                "--quiet=value"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "tty: option '--quiet' doesn't allow an argument\nTry 'tty --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "GNU 短选项组扫描：-sfoo 必须报告首个非法选项 f。",
+            "args": [
+                "-sfoo"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "tty: invalid option -- 'f'\nTry 'tty --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "GNU getopt 默认重排选项：操作数后的 --help 必须直接显示帮助并成功退出。",
+            "args": [
+                "extra_arg",
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "GNU getopt 默认重排选项：操作数后的未知选项必须优先报告未知选项。",
+            "args": [
+                "extra_arg",
+                "--badFlag"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "tty: unrecognized option '--badFlag'\nTry 'tty --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "原始字节操作数诊断：LC_ALL=C、LANG=C；参数完整十六进制=6e6f6e7574662dff，对应 nonutf-\\xff；预期 RC=2、stdout 为 0 字节、stderr 完整十六进制=7474793a206578747261206f706572616e6420276e6f6e7574662d5c333737270a5472792027747479202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a，对应 GNU 的 'nonutf-\\377' 引用。",
+            "args": [
+                "6e6f6e7574662dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "7474793a206578747261206f706572616e6420276e6f6e7574662d5c333737270a5472792027747479202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "tstdin": "",
+            "byteMode": true
         },
         {
             "command": "tty",

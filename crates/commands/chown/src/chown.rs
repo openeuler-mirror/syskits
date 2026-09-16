@@ -86,7 +86,8 @@ pub fn ct_app() -> Command {
                      Either may be omitted, in which case a match is not required \
                      for the omitted attribute",
             )
-            .value_name("CURRENT_OWNER:CURRENT_GROUP"),
+            .value_name("CURRENT_OWNER:CURRENT_GROUP")
+            .num_args(1),
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
             .help(t!("chown.clap.preserve"))
@@ -416,6 +417,9 @@ mod tests {
     use std::fs::File;
 
     use std::io::Write;
+    use std::sync::Mutex;
+
+    static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
 
     fn current_uid_arg() -> OsString {
         OsString::from(unsafe { ctcore::libc::geteuid() }.to_string())
@@ -690,10 +694,8 @@ mod tests {
 
     #[test]
     fn test_posixly_correct_stops_option_parsing_after_owner() {
-        use std::sync::Mutex;
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
         let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -726,6 +728,87 @@ mod tests {
 
         fs::remove_dir_all(&directory).unwrap();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_posixly_correct_treats_late_reference_as_a_file() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_posixly_correct_reference_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("file");
+        let reference = directory.join("reference");
+        File::create(&path).unwrap();
+        File::create(&reference).unwrap();
+
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                current_uid_arg(),
+                path.into_os_string(),
+                OsString::from(format!("--reference={}", reference.display())),
+            ]
+            .into_iter(),
+        );
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_posixly_correct_skips_from_value_before_reference() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_posixly_correct_from_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let reference = directory.join("reference");
+        let target = directory.join("target");
+        File::create(&reference).unwrap();
+        File::create(&target).unwrap();
+
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--from"),
+                current_uid_arg(),
+                OsString::from(format!("--reference={}", reference.display())),
+                target.into_os_string(),
+            ]
+            .into_iter(),
+        );
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_ok());
     }
 
     #[test]

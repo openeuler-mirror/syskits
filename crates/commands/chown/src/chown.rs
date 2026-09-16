@@ -918,6 +918,18 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn test_recursive_dereference_requires_a_traversal_option() {
+        let args = ["chown", "-R", "--dereference", "0", "file"];
+
+        let error = chown_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "-R --dereference requires either -H or -L"
+        );
+    }
+
     // 对于布尔选项，例如 --verbose
     #[test]
     fn test_verbose_ctmain() {

@@ -188,6 +188,27 @@
     },
     {
       "command": "sync",
+      "description": "首个文件不存在且后续文件有效时，sync 仍必须尝试同步后续文件，并以失败状态退出。",
+      "args": ["missing_first", "valid_after_error"],
+      "setup_commands": [
+        "printf data > valid_after_error"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "ignore_fields": {
+          "ignore_stderr": true
+        }
+      },
+      "cleanup_commands": [
+        "rm -f valid_after_error"
+      ]
+    },
+    {
+      "command": "sync",
       "description": "同步目录",
       "args": ["test_dir"],
       "setup_commands": [

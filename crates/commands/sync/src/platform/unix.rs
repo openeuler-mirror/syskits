@@ -19,6 +19,8 @@ use std::fs::File;
 use std::os::fd::{AsRawFd, FromRawFd};
 
 use ctcore::ct_display::Quotable;
+#[cfg(all(test, target_os = "linux"))]
+use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::{CTResult, FromIo};
 
 #[cfg(target_os = "linux")]
@@ -30,6 +32,7 @@ pub unsafe fn do_sync() -> isize {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
 enum SyncOperation {
     File,
     Data,
@@ -65,22 +68,45 @@ fn open_sync_file(path: &str) -> CTResult<File> {
 
 #[cfg(target_os = "linux")]
 fn sync_paths(files: &[String], operation: SyncOperation) -> CTResult<()> {
+    sync_all_paths(files, |path| sync_path(path, operation))
+}
+
+#[cfg(target_os = "linux")]
+fn sync_all_paths<F>(files: &[String], mut sync_path: F) -> CTResult<()>
+where
+    F: FnMut(&str) -> CTResult<()>,
+{
+    let mut first_error = None;
+
     for path in files {
-        let file = open_sync_file(path)?;
-        let result = match operation {
-            SyncOperation::File => file.sync_all(),
-            SyncOperation::Data => file.sync_data(),
-            SyncOperation::FileSystem => {
-                if unsafe { libc::syncfs(file.as_raw_fd()) } == 0 {
-                    Ok(())
-                } else {
-                    Err(std::io::Error::last_os_error())
-                }
+        if let Err(error) = sync_path(path) {
+            if first_error.is_none() {
+                first_error = Some(error);
             }
-        };
-        result.map_err_context(|| format!("error syncing {}", path.quote()))?;
+        }
     }
-    Ok(())
+
+    match first_error {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn sync_path(path: &str, operation: SyncOperation) -> CTResult<()> {
+    let file = open_sync_file(path)?;
+    let result = match operation {
+        SyncOperation::File => file.sync_all(),
+        SyncOperation::Data => file.sync_data(),
+        SyncOperation::FileSystem => {
+            if unsafe { libc::syncfs(file.as_raw_fd()) } == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        }
+    };
+    result.map_err_context(|| format!("error syncing {}", path.quote()))
 }
 
 #[cfg(target_os = "linux")]
@@ -132,5 +158,24 @@ mod tests {
             .into_owned();
 
         assert!(sync_files(&[missing]).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sync_all_paths_continues_after_error() {
+        let files = vec!["missing".to_string(), "good".to_string()];
+        let mut calls = Vec::new();
+
+        let result = sync_all_paths(&files, |path| {
+            calls.push(path.to_string());
+            if path == "missing" {
+                Err(CtSimpleError::new(1, "missing"))
+            } else {
+                Ok(())
+            }
+        });
+
+        assert!(result.is_err());
+        assert_eq!(calls, ["missing", "good"]);
     }
 }

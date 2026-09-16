@@ -103,6 +103,32 @@ fn env_debug_reports_signal_handling_before_execution() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn env_default_signal_unblocks_even_when_ignore_signal_overrides_disposition() {
+    let syskits = env!("CARGO_BIN_EXE_syskits");
+    let output = Command::new(syskits)
+        .args([
+            "env",
+            "--block-signal=HUP",
+            syskits,
+            "env",
+            "--default-signal=HUP",
+            "--ignore-signal=HUP",
+            "/bin/sh",
+            "-c",
+            "awk '/SigBlk/ { print $2 }' /proc/self/status",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run nested syskits env with default and ignore signal options");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"0000000000000000\n");
+    assert_eq!(output.stderr, b"");
+}
+
 #[test]
 fn env_split_string_requires_argument() {
     for args in [["env", "-S"], ["env", "--split-string"]] {

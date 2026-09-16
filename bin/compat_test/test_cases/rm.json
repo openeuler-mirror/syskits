@@ -414,6 +414,36 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "rm",
+            "description": "路径中间节点为普通文件时，执行 rm not_directory/child；输入 fixture 为 file not_directory、mode=644、内容=data；预期 RC=1，stderr 报 Not a directory。",
+            "args": [
+                "not_directory/child"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf data > not_directory",
+                "chmod 644 not_directory"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rm: cannot remove 'not_directory/child': Not a directory\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test -f not_directory && printf retained",
+                        "expected_exit": 0,
+                        "expected_stdout": "retained"
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

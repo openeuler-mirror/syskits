@@ -13,7 +13,7 @@
 /* synced with: sync (GNU coreutils) 8.13 */
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
@@ -65,9 +65,19 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
     let arg_matches = ct_app().try_get_matches_from(args)?;
     let is_has_data = arg_matches.get_flag(sync_flags::SYNC_DATA);
     let is_file_system = arg_matches.get_flag(sync_flags::SYNC_FILE_SYSTEM);
+    #[cfg(target_os = "linux")]
+    let files: Vec<OsString> = arg_matches
+        .get_many::<OsString>(SYNC_ARG_FILES)
+        .map(|values| values.cloned().collect())
+        .unwrap_or_default();
+    #[cfg(not(target_os = "linux"))]
     let files: Vec<String> = arg_matches
-        .get_many::<String>(SYNC_ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+        .get_many::<OsString>(SYNC_ARG_FILES)
+        .map(|values| {
+            values
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect()
+        })
         .unwrap_or_default();
 
     // Check for conflicting options - must match coreutils error message
@@ -128,6 +138,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(SYNC_ARG_FILES)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
     ];
 
@@ -218,6 +229,22 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn test_sync_main_accepts_non_utf8_file_operand() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir
+            .path()
+            .join(OsString::from_vec(b"file-\xff".to_vec()));
+        std::fs::File::create(&file).unwrap();
+
+        let result = sync_main([OsString::from("sync"), file.into_os_string()].into_iter());
+
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_posixly_correct_stops_option_parsing_after_file_operand() {
         let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
         let previous = std::env::var_os("POSIXLY_CORRECT");
@@ -227,9 +254,9 @@ mod tests {
             .try_get_matches_from(["sync", "valid", "-d"])
             .unwrap();
         let files: Vec<_> = matches
-            .get_many::<String>(SYNC_ARG_FILES)
+            .get_many::<OsString>(SYNC_ARG_FILES)
             .unwrap()
-            .map(String::as_str)
+            .map(OsString::as_os_str)
             .collect();
 
         match previous {

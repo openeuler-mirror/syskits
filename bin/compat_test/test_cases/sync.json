@@ -338,6 +338,30 @@
         "chmod 0644 test_file",
         "rm -f test_file"
       ]
+    },
+    {
+      "command": "sync",
+      "description": "原始字节路径用例：LC_ALL=C、LANG=C；参数完整十六进制=6e6f6e7574662dff，对应文件名 nonutf-\\xff；创建该文件后执行 sync；stdin、stdout 和 stderr 均为 0 字节（完整十六进制为空），预期 RC=0。",
+      "args": [
+        "6e6f6e7574662dff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "p=$(printf '%b' '\\156\\157\\156\\165\\164\\146\\055\\377'); printf data > \"$p\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- \"$(printf '\\156\\157\\156\\165\\164\\146\\055\\377')\""
+      ],
+      "tstdin": "",
+      "byteMode": true
     }
   ]
 }

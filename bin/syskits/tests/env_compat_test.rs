@@ -235,6 +235,29 @@ fn env_explicit_empty_ignore_signal_argument_is_a_noop() {
     assert_eq!(output.stderr, b"");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn env_default_signal_unblocks_a_previously_blocked_signal() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--block-signal=HUP",
+            "--default-signal=HUP",
+            "/bin/sh",
+            "-c",
+            "kill -HUP $$; printf survived",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env that defaults and unblocks SIGHUP");
+
+    assert_eq!(output.status.code(), None);
+    assert_eq!(output.status.signal(), Some(libc::SIGHUP));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
 #[cfg(unix)]
 #[test]
 fn env_list_signal_handling_omits_internal_handlers() {

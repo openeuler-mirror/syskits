@@ -127,6 +127,24 @@ fn env_debug_reports_assignment_before_null_command_conflict() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn env_suggests_split_string_after_whitespace_command_is_not_found() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "true -x"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with a whitespace command name");
+
+    assert_eq!(output.status.code(), Some(127));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"env: 'true -x': No such file or directory\nenv: use -[v]S to pass options in shebang lines\n"
+    );
+}
+
 #[test]
 fn env_expands_split_string_in_combined_short_options() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))

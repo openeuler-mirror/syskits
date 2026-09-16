@@ -186,6 +186,29 @@ fn env_debug_reports_ignored_immutable_signal_failures_for_all_signals() {
 
 #[cfg(unix)]
 #[test]
+fn env_debug_reports_requested_immutable_signal_mask_changes() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--debug",
+            "--block-signal=KILL,STOP",
+            "/usr/bin/true",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --debug --block-signal=KILL,STOP");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"signal KILL (9) mask set to BLOCK\nsignal STOP (19) mask set to BLOCK\nexecuting: /usr/bin/true\n   arg[0]= '/usr/bin/true'\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn env_debug_reports_signal_handling_before_execution() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args([

@@ -444,6 +444,37 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "rm",
+            "description": "POSIXLY_CORRECT=1 时，执行 rm target -f；输入 fixture 为 file target、mode=644、内容=data；首个操作数后的 -f 必须按文件名处理，预期 target 删除、-f 缺失导致 RC=1。",
+            "args": [
+                "target",
+                "-f"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT=1",
+                "printf data > target",
+                "chmod 644 target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rm: cannot remove '-f': No such file or directory\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target && printf removed",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

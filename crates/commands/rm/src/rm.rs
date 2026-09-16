@@ -467,14 +467,22 @@ fn is_ignorable_missing_error(error: &std::io::Error) -> bool {
 fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     let mut had_err = false;
 
-    let is_root = path.has_root() && path.parent().is_none();
+    let is_root = is_root_directory(path);
     if options.recursive && (!is_root || !options.preserve_root) {
         // 使用跨平台的、防御 ENAMETOOLONG 长路径异常的单轨递归引擎
         had_err = remove_dir_tree(path, path, options, top_dev, true);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, path, options).bitor(had_err);
     } else if options.recursive {
-        ct_show_error!("could not remove directory {}", path.quote());
+        if path.as_os_str() == OsStr::new("/") {
+            ct_show_error!("it is dangerous to operate recursively on {}", path.quote());
+        } else {
+            ct_show_error!(
+                "it is dangerous to operate recursively on {} (same as '/')",
+                path.quote()
+            );
+        }
+        ct_show_error!("use --no-preserve-root to override this failsafe");
         had_err = true;
     } else {
         ct_show_error!("cannot remove {}: Is a directory", path.quote());
@@ -482,6 +490,27 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     }
 
     had_err
+}
+
+#[cfg(unix)]
+fn is_root_directory(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    let Ok(root_metadata) = fs::symlink_metadata("/") else {
+        return false;
+    };
+
+    metadata.is_dir()
+        && metadata.dev() == root_metadata.dev()
+        && metadata.ino() == root_metadata.ino()
+}
+
+#[cfg(not(unix))]
+fn is_root_directory(path: &Path) -> bool {
+    path.has_root() && path.parent().is_none()
 }
 
 struct DirRestorer {
@@ -1207,6 +1236,12 @@ mod tests {
             verbose_display_path(Path::new("./file")),
             Path::new("./file")
         );
+    }
+
+    #[test]
+    fn test_is_root_directory_recognizes_redundant_slashes() {
+        assert!(is_root_directory(Path::new("/")));
+        assert!(is_root_directory(Path::new("//")));
     }
 
     #[test]

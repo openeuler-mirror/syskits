@@ -257,10 +257,10 @@ fn determine_interactive_mode(
             .unwrap()
             .as_str()
         {
-            "never" => InteractiveMode::Never,
+            "never" | "no" | "none" => InteractiveMode::Never,
             "once" => InteractiveMode::Once,
-            "always" => InteractiveMode::Always,
-            val => panic!("Invalid argument to interactive ({val})"),
+            "always" | "yes" => InteractiveMode::Always,
+            _ => unreachable!("the --interactive value parser accepts only GNU aliases"),
         }
     } else {
         // 遵循 POSIX 规范：如果输入不是 TTY，受保护文件直接删除不提示
@@ -312,6 +312,7 @@ pub fn ct_app() -> Command {
             .num_args(0..=1)
             .require_equals(true)
             .default_missing_value("always")
+            .value_parser(["never", "no", "none", "once", "always", "yes"])
             .overrides_with_all([rm_flags::RM_PROMPT, rm_flags::RM_PROMPT_MORE]),
         Arg::new(rm_flags::RM_ONE_FILE_SYSTEM)
             .long(rm_flags::RM_ONE_FILE_SYSTEM)
@@ -1003,6 +1004,20 @@ mod tests {
             .unwrap();
         let opts = RMOptions::new(&matches).unwrap();
         assert!(matches!(opts.interactive, InteractiveMode::Never));
+
+        for alias in ["no", "none"] {
+            let matches = ct_app()
+                .try_get_matches_from(vec!["rm", &format!("--interactive={alias}"), "target"])
+                .unwrap();
+            let opts = RMOptions::new(&matches).unwrap();
+            assert!(matches!(opts.interactive, InteractiveMode::Never));
+        }
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["rm", "--interactive=yes", "target"])
+            .unwrap();
+        let opts = RMOptions::new(&matches).unwrap();
+        assert!(matches!(opts.interactive, InteractiveMode::Always));
     }
 
     #[test]

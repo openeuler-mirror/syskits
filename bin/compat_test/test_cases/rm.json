@@ -352,6 +352,37 @@
             },
             "cleanup_commands": [],
             "tstdin": "n\n"
+        },
+        {
+            "command": "rm",
+            "description": "GNU --interactive 的 no、none、yes 别名中，以 no 为例：执行 rm --interactive=no victim.bin；输入 fixture 为 file victim.bin、mode=644、内容=data；预期不提示、RC=0，文件被删除。",
+            "args": [
+                "--interactive=no",
+                "victim.bin"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf data > victim.bin",
+                "chmod 644 victim.bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e victim.bin && printf removed",
+                        "expected_exit": 0,
+                        "expected_stdout": "removed"
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
-} 
+}

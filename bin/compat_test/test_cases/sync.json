@@ -395,6 +395,26 @@
       "cleanup_commands": [],
       "tstdin": "",
       "byteMode": true
+    },
+    {
+      "command": "sync",
+      "description": "UTF-8 locale 路径诊断用例：LC_ALL=C.UTF-8、LANG=C.UTF-8；参数为不存在的有效 UTF-8 文件名 missing-中；预期 RC=1、stdout 为空，stderr 原样保留 UTF-8 文件名并以单引号引用。",
+      "args": [
+        "missing-中"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: error opening 'missing-中': No such file or directory\n"
+        }
+      },
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C.UTF-8",
+          "LANG": "C.UTF-8"
+        }
+      }
     }
   ]
 }

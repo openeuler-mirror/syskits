@@ -59,7 +59,17 @@ fn select_sync_mode(has_data: bool, has_file_system: bool, has_files: bool) -> S
     }
 }
 
+#[cfg(target_os = "linux")]
+fn initialize_c_locale() {
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+}
+
 pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(target_os = "linux")]
+    initialize_c_locale();
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;

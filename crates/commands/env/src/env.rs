@@ -788,9 +788,7 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
     let mut sigs = Vec::new();
     for (_, unblock, value) in operations {
         let signals = if value == MISSING_SIGNAL_ARGUMENT {
-            Signal::iterator()
-                .map(|signal| signal as EnvSignal)
-                .collect()
+            known_env_signals()
         } else {
             parse_signal_list(value)?
         };
@@ -831,9 +829,7 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
     for (_, set_default, value) in operations {
         let ignore_immutable_signal_errors = value == MISSING_SIGNAL_ARGUMENT;
         let signals = if ignore_immutable_signal_errors {
-            Signal::iterator()
-                .map(|signal| signal as EnvSignal)
-                .collect()
+            known_env_signals()
         } else {
             parse_signal_list(value)?
         };
@@ -1378,6 +1374,25 @@ mod tests {
             .unwrap();
 
         assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_signal_options_without_arguments_include_realtime_signals() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--block-signal", "true"])
+            .unwrap();
+        let blocked = get_signals(&matches, "block-signal").unwrap().unwrap();
+        assert!(blocked.contains(&libc::SIGRTMIN()));
+        assert!(blocked.contains(&libc::SIGRTMAX()));
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--ignore-signal", "true"])
+            .unwrap();
+        let (_, ignored) = get_signal_dispositions(&matches).unwrap();
+        let ignored = ignored.unwrap();
+        assert!(ignored.contains(&libc::SIGRTMIN()));
+        assert!(ignored.contains(&libc::SIGRTMAX()));
     }
 
     #[cfg(unix)]

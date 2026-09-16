@@ -281,6 +281,27 @@ fn env_blocks_linux_realtime_signals() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn env_block_signal_without_argument_blocks_linux_realtime_signals() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--block-signal",
+            "/bin/sh",
+            "-c",
+            "kill -RTMIN $$; printf survived",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env blocking all known signals");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"survived");
+    assert_eq!(output.stderr, b"");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn env_rejects_explicit_immutable_signal_actions() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "--ignore-signal=KILL", "/usr/bin/true"])

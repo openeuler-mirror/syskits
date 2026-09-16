@@ -572,8 +572,6 @@ impl EnvAppData {
 
         let mut options = env_make_options(&matches)?;
 
-        env_apply_change_directory(&options)?;
-
         apply_removal_of_all_env_vars(&options, is_debug_printing);
 
         env_load_config_file(&mut options)?;
@@ -583,6 +581,7 @@ impl EnvAppData {
         env_apply_specified_env_vars(&options, is_debug_printing)?;
 
         if options.program.is_empty() {
+            env_apply_change_directory(&options)?;
             print_env(options.line_ending);
         } else {
             #[cfg(unix)]
@@ -624,6 +623,13 @@ impl EnvAppData {
                 apply_signal_handlers(&options, is_do_debug_printing)?;
             }
         }
+
+        if let Some(directory) = options.running_directory
+            && is_do_debug_printing
+        {
+            eprintln!("{}", env_change_directory_debug_message(directory));
+        }
+        env_apply_change_directory(&options)?;
 
         if is_do_debug_printing {
             eprintln!("executing: {}", prog.to_string_lossy());
@@ -1125,13 +1131,23 @@ fn env_apply_unset_env_vars(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTEr
     Ok(())
 }
 
-fn env_apply_change_directory(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTError>> {
+fn env_validate_change_directory(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTError>> {
     if options.program.is_empty() && options.running_directory.is_some() {
         return Err(CTsageError::new(
             125,
             "must specify command with --chdir (-C)".to_string(),
         ));
     }
+
+    Ok(())
+}
+
+fn env_change_directory_debug_message(directory: &OsStr) -> String {
+    format!("chdir:    {}", directory.quote())
+}
+
+fn env_apply_change_directory(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTError>> {
+    env_validate_change_directory(options)?;
 
     if let Some(d) = options.running_directory {
         match env::set_current_dir(d) {
@@ -1364,6 +1380,14 @@ mod tests {
         write_environment_entry(&mut output, entry, CtLineEnding::Newline).unwrap();
 
         assert_eq!(output, b"GOOD=value\xff\n");
+    }
+
+    #[test]
+    fn test_chdir_debug_message_uses_gnu_quote_layout() {
+        assert_eq!(
+            env_change_directory_debug_message(OsStr::new("/tmp/env-directory")),
+            "chdir:    '/tmp/env-directory'"
+        );
     }
 
     #[cfg(target_os = "linux")]

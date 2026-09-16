@@ -812,6 +812,47 @@ mod tests {
     }
 
     #[test]
+    fn test_posixly_correct_treats_late_help_as_a_file() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_posixly_correct_help_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let reference = directory.join("reference");
+        let target = directory.join("target");
+        File::create(&reference).unwrap();
+        File::create(&target).unwrap();
+
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from(format!("--reference={}", reference.display())),
+                target.into_os_string(),
+                OsString::from("--help"),
+            ]
+            .into_iter(),
+        );
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), 1);
+    }
+
+    #[test]
     fn test_ct_app_execution_help() {
         let command = ct_app();
 

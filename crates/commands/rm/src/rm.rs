@@ -137,6 +137,8 @@ impl Tool for Rm {
 pub fn rm_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    reject_abbreviated_no_preserve_root(&args)?;
     let matches = ct_app()
         .after_help(t!("rm.after_help"))
         .try_get_matches_from(args)?;
@@ -239,6 +241,34 @@ fn validate_input(files: &[&OsStr], force_flag: bool) -> CTResult<()> {
     } else {
         Ok(())
     }
+}
+
+fn reject_abbreviated_no_preserve_root(args: &[OsString]) -> CTResult<()> {
+    const OPTION: &str = "--no-preserve-root";
+    let posixly_correct = ctcore::ct_posix::posixly_correct();
+
+    for argument in args.iter().skip(1) {
+        let Some(argument) = argument.to_str() else {
+            continue;
+        };
+
+        if argument == "--" {
+            break;
+        }
+
+        if posixly_correct && (argument == "-" || !argument.starts_with('-')) {
+            break;
+        }
+
+        if argument != OPTION && OPTION.starts_with(argument) {
+            return Err(CTsageError::new(
+                1,
+                "you may not abbreviate the --no-preserve-root option",
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn determine_interactive_mode(
@@ -1048,6 +1078,25 @@ mod tests {
                 .try_get_matches_from(vec!["rm", "--preserve-root=invalid", "target"])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn test_abbreviated_no_preserve_root_is_rejected_before_removal() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target");
+        fs::write(&target, b"data").unwrap();
+
+        let result = rm_main(
+            [
+                OsString::from("rm"),
+                OsString::from("--no-preserve-roo"),
+                target.clone().into_os_string(),
+            ]
+            .into_iter(),
+        );
+
+        assert_eq!(result.unwrap_err().code(), 1);
+        assert!(target.exists());
     }
 
     #[test]

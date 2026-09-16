@@ -17,10 +17,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 use std::ffi::OsString;
-use std::io::IsTerminal;
-use std::io::Write;
+use std::io::{self, IsTerminal, Write};
 use sys_locale::get_locale;
 
 mod tty_flags {
@@ -66,13 +65,26 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
 
-    if tty_write_result.is_err() || stdout.flush().is_err() {
-        // 避免返回以防止稍后在尝试另一次刷新时引发panic
-        // 因为`ctcore_procs::main`宏在每个实用程序执行后都会插入一次刷新。
-        std::process::exit(3);
-    };
+    if let Err(error) = tty_write_result.and_then(|()| stdout.flush()) {
+        exit_tty_write_error(&error);
+    }
 
     Ok(())
+}
+
+fn tty_write_error_message(error: &io::Error) -> String {
+    format!("write error: {}", strip_errno(error))
+}
+
+fn exit_tty_write_error(error: &io::Error) -> ! {
+    let mut stderr = io::stderr().lock();
+    let _ = writeln!(
+        stderr,
+        "{}: {}",
+        ctcore::ct_util_name(),
+        tty_write_error_message(error)
+    );
+    std::process::exit(3);
 }
 
 fn tty_handle_silent(matches: ArgMatches) -> Option<CTResult<()>> {
@@ -161,6 +173,7 @@ impl Tool for Tty {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::io;
 
     #[test]
     fn test_tool_implementation() {
@@ -176,6 +189,17 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("tty"), OsString::from("--version")];
         assert!(tool.execute(&args).is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_tty_write_error_message_preserves_linux_errno() {
+        let error = io::Error::from_raw_os_error(nix::libc::ENOSPC);
+
+        assert_eq!(
+            tty_write_error_message(&error),
+            "write error: No space left on device"
+        );
     }
 
     #[cfg(test)]

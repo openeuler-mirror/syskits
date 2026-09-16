@@ -68,6 +68,9 @@ use std::process::{self};
 #[cfg(unix)]
 type SignalDispositions = (Option<Vec<Signal>>, Option<Vec<Signal>>);
 
+#[cfg(unix)]
+const MISSING_SIGNAL_ARGUMENT: &str = "\0";
+
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
     static mut environ: *mut *mut libc::c_char;
@@ -256,7 +259,7 @@ fn env_args_init() -> Vec<Arg> {
             .value_name("SIG")
             .num_args(0..=1)
             .require_equals(true)
-            .default_missing_value("")
+            .default_missing_value(MISSING_SIGNAL_ARGUMENT)
             .action(ArgAction::Append)
             .help("reset handling of SIG to its default"),
         Arg::new("ignore-signal")
@@ -264,7 +267,7 @@ fn env_args_init() -> Vec<Arg> {
             .value_name("SIG")
             .num_args(0..=1)
             .require_equals(true)
-            .default_missing_value("")
+            .default_missing_value(MISSING_SIGNAL_ARGUMENT)
             .action(ArgAction::Append)
             .help("set handling of SIG to do nothing"),
         Arg::new("block-signal")
@@ -272,7 +275,7 @@ fn env_args_init() -> Vec<Arg> {
             .value_name("SIG")
             .num_args(0..=1)
             .require_equals(true)
-            .default_missing_value("")
+            .default_missing_value(MISSING_SIGNAL_ARGUMENT)
             .action(ArgAction::Append)
             .help("block delivery of SIG"),
         Arg::new("list-signal-handling")
@@ -704,7 +707,7 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
     let mut all = false;
     if let Some(vals) = args_match.get_many::<String>(name) {
         for v in vals {
-            if v.is_empty() {
+            if v == MISSING_SIGNAL_ARGUMENT {
                 all = true;
             } else {
                 sigs.extend(parse_signal_list(v)?);
@@ -741,7 +744,7 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
     let mut ignore_signals = Vec::new();
 
     for (_, set_default, value) in operations {
-        let signals = if value.is_empty() {
+        let signals = if value == MISSING_SIGNAL_ARGUMENT {
             Signal::iterator().collect()
         } else {
             parse_signal_list(value)?
@@ -1245,6 +1248,24 @@ mod tests {
 
         assert_eq!(error.code(), 125);
         assert_eq!(error.to_string(), "invalid signal ' INT'");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_explicit_empty_signal_arguments_are_noops() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--ignore-signal=", "true"])
+            .unwrap();
+        let (default_signals, ignore_signals) = get_signal_dispositions(&matches).unwrap();
+
+        assert_eq!(default_signals, None);
+        assert_eq!(ignore_signals, Some(vec![]));
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--block-signal=", "true"])
+            .unwrap();
+
+        assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));
     }
 
     #[test]

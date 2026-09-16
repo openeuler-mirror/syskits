@@ -76,7 +76,12 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     Ok(())
 }
 
-const TTY_LONG_OPTIONS: &[&str] = &["silent", "quiet", "help", "version"];
+const TTY_LONG_OPTIONS: &[(&str, u8)] = &[
+    ("silent", b's'),
+    ("quiet", b's'),
+    ("help", b'h'),
+    ("version", b'v'),
+];
 // Keep the syskits -h/-V extensions outside GNU tty compatibility handling.
 const TTY_SHORT_OPTIONS: &[u8] = b"shV";
 
@@ -142,18 +147,25 @@ fn prepare_tty_args_with_mode(
 }
 
 fn match_tty_long_option(name: &[u8]) -> TtyLongOptionMatch {
-    if let Some(option) = TTY_LONG_OPTIONS
+    if let Some((option, _)) = TTY_LONG_OPTIONS
         .iter()
-        .find(|option| option.as_bytes() == name)
+        .find(|(option, _)| option.as_bytes() == name)
     {
         return TtyLongOptionMatch::Recognized(option);
     }
 
-    let matches = TTY_LONG_OPTIONS
+    let mut option_values = Vec::new();
+    let mut matches = Vec::new();
+    for (option, value) in TTY_LONG_OPTIONS
         .iter()
-        .copied()
-        .filter(|option| option.as_bytes().starts_with(name))
-        .collect::<Vec<_>>();
+        .filter(|(option, _)| option.as_bytes().starts_with(name))
+    {
+        if !option_values.contains(value) {
+            option_values.push(*value);
+            matches.push(*option);
+        }
+    }
+
     match matches.as_slice() {
         [] => TtyLongOptionMatch::None,
         [option] => TtyLongOptionMatch::Recognized(option),
@@ -516,6 +528,20 @@ mod tests {
             assert_eq!(error.code(), 2);
             assert!(error.usage());
         }
+    }
+
+    #[test]
+    fn test_prepare_tty_args_deduplicates_long_option_aliases_in_ambiguity() {
+        let error = prepare_tty_args_with_mode(
+            [OsString::from("tty"), OsString::from("--=")].into_iter(),
+            false,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"option '--=' is ambiguous; possibilities: '--silent' '--help' '--version'"
+        );
     }
 
     #[test]

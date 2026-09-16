@@ -388,7 +388,9 @@ fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDi
     WalkDir::new(root)
         .follow_links(traverse_symlinks == &CtTraverseSymlinks::All)
         .min_depth(1)
-        .contents_first(true)
+        // Followed directories must be yielded before their contents so
+        // --preserve-root can reject a link to / before reading its hierarchy.
+        .contents_first(traverse_symlinks != &CtTraverseSymlinks::All)
 }
 
 impl CtChownExecutor {
@@ -447,8 +449,20 @@ impl CtChownExecutor {
         let mut ret = 0;
         let mut iterator = traversal_walk(root, &self.traverse_symlinks).into_iter();
         let mut unreadable_directories = HashSet::<PathBuf>::new();
+        let mut deferred_directories = Vec::<(usize, PathBuf, Metadata)>::new();
+        let defer_directories = self.traverse_symlinks == CtTraverseSymlinks::All;
         // 我们不能使用 for 循环，因为在循环内部我们需要操作迭代器。
         while let Some(entry) = iterator.next() {
+            if defer_directories {
+                let depth = entry
+                    .as_ref()
+                    .map_or_else(|error| error.depth(), |entry| entry.depth());
+                ret |= self.change_deferred_directories(
+                    &mut deferred_directories,
+                    &unreadable_directories,
+                    depth,
+                );
+            }
             let entry = match entry {
                 Err(e) => {
                     // GNU FTS skips symlink-induced directory cycles.
@@ -503,11 +517,43 @@ impl CtChownExecutor {
             if self.preserve_root
                 && is_root(path, self.traverse_symlinks == CtTraverseSymlinks::All)
             {
-                // 快速失败，不再递归深入。
-                return 1;
+                // Pre-order traversal lets us avoid entering a symlinked /.
+                iterator.skip_current_dir();
+                ret = 1;
+                continue;
             }
 
-            ret |= self.change_path(path, &meta);
+            if defer_directories && entry.file_type().is_dir() {
+                deferred_directories.push((entry.depth(), path.to_path_buf(), meta));
+            } else {
+                ret |= self.change_path(path, &meta);
+            }
+        }
+        if defer_directories {
+            ret |= self.change_deferred_directories(
+                &mut deferred_directories,
+                &unreadable_directories,
+                0,
+            );
+        }
+        ret
+    }
+
+    fn change_deferred_directories(
+        &self,
+        deferred_directories: &mut Vec<(usize, PathBuf, Metadata)>,
+        unreadable_directories: &HashSet<PathBuf>,
+        next_depth: usize,
+    ) -> i32 {
+        let mut ret = 0;
+        while deferred_directories
+            .last()
+            .is_some_and(|(depth, _, _)| *depth >= next_depth)
+        {
+            let (_, path, meta) = deferred_directories.pop().unwrap();
+            if !unreadable_directories.contains(&path) {
+                ret |= self.change_path(&path, &meta);
+            }
         }
         ret
     }
@@ -961,6 +1007,27 @@ mod tests {
             .collect();
 
         assert_eq!(paths, vec![child, directory]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_recursive_walk_visits_followed_directory_before_its_contents() {
+        let temp_dir = tempdir().unwrap();
+        let tree = temp_dir.path().join("tree");
+        let target = temp_dir.path().join("target");
+        let child = target.join("child");
+        let link = tree.join("link");
+        fs::create_dir(&tree).unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::write(&child, b"").unwrap();
+        unix::fs::symlink(&target, &link).unwrap();
+
+        let paths: Vec<_> = traversal_walk(&tree, &CtTraverseSymlinks::All)
+            .into_iter()
+            .map(|entry| entry.unwrap().into_path())
+            .collect();
+
+        assert_eq!(paths, vec![link.clone(), link.join("child")]);
     }
 
     #[cfg(unix)]

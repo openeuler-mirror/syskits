@@ -32,7 +32,7 @@ use native_int_str::{
     from_native_int_representation_owned, get_single_native_int_value,
 };
 #[cfg(unix)]
-use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
+use nix::sys::signal::{SigSet, Signal};
 
 #[cfg(unix)]
 use nix::libc;
@@ -68,7 +68,10 @@ use std::os::unix::process::CommandExt;
 use std::process::{self};
 
 #[cfg(unix)]
-type SignalDispositions = (Option<Vec<Signal>>, Option<Vec<Signal>>);
+type EnvSignal = libc::c_int;
+
+#[cfg(unix)]
+type SignalDispositions = (Option<Vec<EnvSignal>>, Option<Vec<EnvSignal>>);
 
 #[cfg(unix)]
 const MISSING_SIGNAL_ARGUMENT: &str = "\0";
@@ -88,11 +91,11 @@ struct EnvOptions<'a> {
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
     #[cfg(unix)]
-    default_signals: Option<Vec<Signal>>,
+    default_signals: Option<Vec<EnvSignal>>,
     #[cfg(unix)]
-    ignore_signals: Option<Vec<Signal>>,
+    ignore_signals: Option<Vec<EnvSignal>>,
     #[cfg(unix)]
-    block_signals: Option<Vec<Signal>>,
+    block_signals: Option<Vec<EnvSignal>>,
     #[cfg(unix)]
     list_signal_handling: bool,
 }
@@ -658,14 +661,14 @@ fn apply_removal_of_all_env_vars(options: &EnvOptions<'_>, is_debug_printing: bo
 
 // --- Unix 系统下的核心信号解析器 ---
 #[cfg(unix)]
-fn parse_signal(sig_str: &str) -> CTResult<Signal> {
+fn parse_signal(sig_str: &str) -> CTResult<EnvSignal> {
     let sig_str = sig_str.to_uppercase();
     #[cfg(target_os = "linux")]
     if let Some(signal_number) = ctcore::ct_signals::get_ct_signal_by_name_or_value(&sig_str)
         && let Ok(signal_number) = i32::try_from(signal_number)
-        && let Ok(signal) = Signal::try_from(signal_number)
+        && signal_number > 0
     {
-        return Ok(signal);
+        return Ok(signal_number);
     }
 
     let s = if sig_str.starts_with("SIG") {
@@ -675,12 +678,12 @@ fn parse_signal(sig_str: &str) -> CTResult<Signal> {
     };
     for sig in Signal::iterator() {
         if sig.as_str() == s {
-            return Ok(sig);
+            return Ok(sig as EnvSignal);
         }
     }
     if let Ok(num) = sig_str.parse::<i32>() {
         if let Ok(sig) = Signal::try_from(num) {
-            return Ok(sig);
+            return Ok(sig as EnvSignal);
         }
     }
     Err(CtSimpleError::new(
@@ -690,7 +693,7 @@ fn parse_signal(sig_str: &str) -> CTResult<Signal> {
 }
 
 #[cfg(unix)]
-fn parse_signal_list(val: &str) -> CTResult<Vec<Signal>> {
+fn parse_signal_list(val: &str) -> CTResult<Vec<EnvSignal>> {
     let mut sigs = Vec::new();
     for p in val.split(',') {
         if !p.is_empty() {
@@ -708,7 +711,7 @@ fn invalid_argument_message() -> String {
 }
 
 #[cfg(unix)]
-fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec<Signal>>> {
+fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec<EnvSignal>>> {
     if !args_match.contains_id(name) {
         return Ok(None);
     }
@@ -741,7 +744,9 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
     let mut sigs = Vec::new();
     for (_, unblock, value) in operations {
         let signals = if value == MISSING_SIGNAL_ARGUMENT {
-            Signal::iterator().collect()
+            Signal::iterator()
+                .map(|signal| signal as EnvSignal)
+                .collect()
         } else {
             parse_signal_list(value)?
         };
@@ -782,19 +787,21 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
     for (_, set_default, value) in operations {
         let ignore_immutable_signal_errors = value == MISSING_SIGNAL_ARGUMENT;
         let signals = if ignore_immutable_signal_errors {
-            Signal::iterator().collect()
+            Signal::iterator()
+                .map(|signal| signal as EnvSignal)
+                .collect()
         } else {
             parse_signal_list(value)?
         };
 
         for signal in signals {
-            if signal == Signal::SIGKILL || signal == Signal::SIGSTOP {
+            if signal == libc::SIGKILL || signal == libc::SIGSTOP {
                 if !ignore_immutable_signal_errors {
                     return Err(CtSimpleError::new(
                         125,
                         format!(
                             "failed to set signal action for signal {}: {}",
-                            signal as i32,
+                            signal,
                             invalid_argument_message()
                         ),
                     ));
@@ -832,66 +839,62 @@ fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
 
 #[cfg(unix)]
 fn apply_signal_handlers_to_process(
-    default_signals: Option<&[Signal]>,
-    ignore_signals: Option<&[Signal]>,
-    block_signals: Option<&[Signal]>,
+    default_signals: Option<&[EnvSignal]>,
+    ignore_signals: Option<&[EnvSignal]>,
+    block_signals: Option<&[EnvSignal]>,
 ) {
     if let Some(sigs) = default_signals {
         for &sig in sigs {
-            if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
                 continue;
             }
             unsafe {
-                let _ = sigaction(
-                    sig,
-                    &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty()),
-                );
+                let mut action: libc::sigaction = std::mem::zeroed();
+                if libc::sigaction(sig, std::ptr::null(), &mut action) == 0 {
+                    action.sa_sigaction = libc::SIG_DFL;
+                    let _ = libc::sigaction(sig, &action, std::ptr::null_mut());
+                }
             }
         }
     }
     if let Some(sigs) = ignore_signals {
         for &sig in sigs {
-            if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
                 continue;
             }
             unsafe {
-                let _ = sigaction(
-                    sig,
-                    &SigAction::new(SigHandler::SigIgn, SaFlags::empty(), SigSet::empty()),
-                );
+                let mut action: libc::sigaction = std::mem::zeroed();
+                if libc::sigaction(sig, std::ptr::null(), &mut action) == 0 {
+                    action.sa_sigaction = libc::SIG_IGN;
+                    let _ = libc::sigaction(sig, &action, std::ptr::null_mut());
+                }
             }
         }
     }
     if let Some(sigs) = block_signals {
-        let mut set = SigSet::empty();
+        let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
+        unsafe { libc::sigemptyset(&mut set) };
         for &sig in sigs {
-            if sig == Signal::SIGKILL || sig == Signal::SIGSTOP {
+            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
                 continue;
             }
-            set.add(sig);
+            unsafe { libc::sigaddset(&mut set, sig) };
         }
-        let _ = nix::sys::signal::sigprocmask(
-            nix::sys::signal::SigmaskHow::SIG_BLOCK,
-            Some(&set),
-            None,
-        );
+        unsafe { libc::sigprocmask(libc::SIG_BLOCK, &set, std::ptr::null_mut()) };
     }
     if let Some(sigs) = default_signals {
-        let mut set = SigSet::empty();
+        let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
+        unsafe { libc::sigemptyset(&mut set) };
         for &sig in sigs {
-            if sig == Signal::SIGKILL
-                || sig == Signal::SIGSTOP
+            if sig == libc::SIGKILL
+                || sig == libc::SIGSTOP
                 || block_signals.is_some_and(|blocked| blocked.contains(&sig))
             {
                 continue;
             }
-            set.add(sig);
+            unsafe { libc::sigaddset(&mut set, sig) };
         }
-        let _ = nix::sys::signal::sigprocmask(
-            nix::sys::signal::SigmaskHow::SIG_UNBLOCK,
-            Some(&set),
-            None,
-        );
+        unsafe { libc::sigprocmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut()) };
     }
 }
 
@@ -957,7 +960,7 @@ fn list_signal_handling(options: &EnvOptions<'_>) {
                 && !options
                     .ignore_signals
                     .as_ref()
-                    .is_some_and(|sigs| sigs.contains(&Signal::SIGPIPE))
+                    .is_some_and(|sigs| sigs.contains(&(Signal::SIGPIPE as EnvSignal)))
             {
                 is_ignored = false;
                 if !is_blocked {
@@ -1304,8 +1307,17 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn test_parse_signal_accepts_poll_alias() {
-        assert_eq!(parse_signal("POLL").unwrap(), Signal::SIGIO);
-        assert_eq!(parse_signal("SIGPOLL").unwrap(), Signal::SIGIO);
+        assert_eq!(parse_signal("POLL").unwrap(), libc::SIGIO);
+        assert_eq!(parse_signal("SIGPOLL").unwrap(), libc::SIGIO);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_signal_accepts_linux_realtime_signal_names() {
+        assert_eq!(parse_signal("RTMIN").unwrap(), libc::SIGRTMIN());
+        assert_eq!(parse_signal("SIGRTMIN+1").unwrap(), libc::SIGRTMIN() + 1);
+        assert_eq!(parse_signal("RTMAX").unwrap(), libc::SIGRTMAX());
+        assert_eq!(parse_signal("SIGRTMAX-1").unwrap(), libc::SIGRTMAX() - 1);
     }
 
     #[cfg(unix)]
@@ -1489,7 +1501,7 @@ mod tests {
             ])
             .unwrap();
         let (default_signals, ignore_signals) = get_signal_dispositions(&matches).unwrap();
-        assert_eq!(default_signals, Some(vec![Signal::SIGHUP]));
+        assert_eq!(default_signals, Some(vec![libc::SIGHUP]));
         assert_eq!(ignore_signals, Some(vec![]));
 
         let matches = ct_app()
@@ -1502,7 +1514,7 @@ mod tests {
             .unwrap();
         let (default_signals, ignore_signals) = get_signal_dispositions(&matches).unwrap();
         assert_eq!(default_signals, Some(vec![]));
-        assert_eq!(ignore_signals, Some(vec![Signal::SIGHUP]));
+        assert_eq!(ignore_signals, Some(vec![libc::SIGHUP]));
     }
 
     #[test]

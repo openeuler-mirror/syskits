@@ -506,6 +506,30 @@
             },
             "cleanup_commands": [],
             "tstdin": "n\n"
+        },
+        {
+            "command": "rm",
+            "description": "执行 rm -v ./verbose_file；输入 fixture 为 file verbose_file、mode=644、内容=data；预期 RC=0，verbose 输出保留用户传入的 ./ 路径前缀。",
+            "args": [
+                "-v",
+                "./verbose_file"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf data > verbose_file",
+                "chmod 644 verbose_file"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "removed './verbose_file'\\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

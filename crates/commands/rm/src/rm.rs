@@ -620,7 +620,10 @@ fn remove_dir_tree(
         // 退而求其次：尝试将其作为空目录直接删除
         if fs::remove_dir(local_path).is_ok() {
             if options.verbose {
-                println!("removed directory {}", normalize(display_path).quote());
+                println!(
+                    "removed directory {}",
+                    verbose_display_path(display_path).quote()
+                );
             }
             return false;
         }
@@ -706,7 +709,10 @@ fn remove_dir(local_path: &Path, display_path: &Path, options: &RMOptions) -> bo
             match fs::remove_dir(local_path) {
                 Ok(_) => {
                     if options.verbose {
-                        println!("removed directory {}", normalize(display_path).quote());
+                        println!(
+                            "removed directory {}",
+                            verbose_display_path(display_path).quote()
+                        );
                     }
                     return false;
                 }
@@ -739,7 +745,7 @@ fn remove_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
         match fs::remove_file(local_path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed {}", normalize(display_path).quote());
+                    println!("removed {}", verbose_display_path(display_path).quote());
                 }
                 return false;
             }
@@ -923,8 +929,8 @@ fn prompt_descend(display_path: &Path) -> bool {
     ct_prompt_yes!("descend into directory {}?", display_path.quote())
 }
 
-fn normalize(path: &Path) -> PathBuf {
-    ctcore::ct_fs::normalize_path(path)
+fn verbose_display_path(path: &Path) -> &Path {
+    path
 }
 
 #[cfg(unix)]
@@ -1193,6 +1199,14 @@ mod tests {
 
         let metadata = fs::symlink_metadata(fifo.to_str().unwrap()).unwrap();
         assert_eq!(interactive_file_type(&metadata), "fifo");
+    }
+
+    #[test]
+    fn test_verbose_display_path_preserves_user_spelling() {
+        assert_eq!(
+            verbose_display_path(Path::new("./file")),
+            Path::new("./file")
+        );
     }
 
     #[test]

@@ -123,6 +123,9 @@ pub struct StandardStreams {
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct TestEnvironment {
+    /// 是否清除运行compat_test进程继承的环境变量。
+    #[serde(default, rename = "clearEnv", alias = "clear_env")]
+    pub clear_env: bool,
     /// 测试前要创建的文件和目录
     pub files: Vec<TestFile>,
     /// 要设置的环境变量

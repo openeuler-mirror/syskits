@@ -109,26 +109,37 @@ pub struct EnvSemantic {
 }
 
 fn print_env(line_ending: CtLineEnding) {
-    let stdout_raw = io::stdout();
-    let mut stdout = stdout_raw.lock();
-    for (n, v) in env::vars() {
-        write!(stdout, "{n}={v}{line_ending}").unwrap();
-    }
     #[cfg(target_os = "linux")]
-    print_empty_name_env_entries(&mut stdout, line_ending);
+    {
+        let stdout_raw = io::stdout();
+        let mut stdout = stdout_raw.lock();
+        let mut entry_ptr = unsafe { environ };
+        while !entry_ptr.is_null() && unsafe { !(*entry_ptr).is_null() } {
+            let entry = unsafe { CStr::from_ptr(*entry_ptr) };
+            write_environment_entry(&mut stdout, entry, line_ending)
+                .expect("write environment entry");
+            entry_ptr = unsafe { entry_ptr.add(1) };
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let stdout_raw = io::stdout();
+        let mut stdout = stdout_raw.lock();
+        for (n, v) in env::vars() {
+            write!(stdout, "{n}={v}{line_ending}").unwrap();
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
-fn print_empty_name_env_entries(stdout: &mut impl Write, line_ending: CtLineEnding) {
-    let mut entry = unsafe { environ };
-    while unsafe { !(*entry).is_null() } {
-        let bytes = unsafe { CStr::from_ptr(*entry).to_bytes() };
-        if bytes.starts_with(b"=") {
-            stdout.write_all(bytes).unwrap();
-            stdout.write_all(&[line_ending.into()]).unwrap();
-        }
-        entry = unsafe { entry.add(1) };
-    }
+fn write_environment_entry(
+    stdout: &mut impl Write,
+    entry: &CStr,
+    line_ending: CtLineEnding,
+) -> io::Result<()> {
+    stdout.write_all(entry.to_bytes())?;
+    stdout.write_all(&[line_ending.into()])
 }
 
 fn env_parse_name_value_opt<'a>(options: &mut EnvOptions<'a>, option: &'a OsStr) -> CTResult<bool> {
@@ -1239,6 +1250,17 @@ pub fn env_native_semantic(args: impl ctcore::Args) -> CTResult<EnvSemantic> {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_write_environment_entry_preserves_non_utf8_bytes() {
+        let entry = c"GOOD=value\xff";
+        let mut output = Vec::new();
+
+        write_environment_entry(&mut output, entry, CtLineEnding::Newline).unwrap();
+
+        assert_eq!(output, b"GOOD=value\xff\n");
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

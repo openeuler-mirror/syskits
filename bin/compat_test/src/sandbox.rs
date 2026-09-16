@@ -215,6 +215,8 @@ pub struct IsolatedSandbox {
     current_env: HashMap<String, String>,
     /// 以原始字节传递的环境变量，覆盖同名的 UTF-8 环境变量。
     raw_env: HashMap<OsString, OsString>,
+    /// 子进程是否不继承compat_test进程的环境变量。
+    clear_environment: bool,
     /// 当前工作目录
     current_dir: PathBuf,
     /// 当前 umask
@@ -292,6 +294,7 @@ impl IsolatedSandbox {
             resource_limiter: Some(ResourceLimiter::new()),
             current_env: std::env::vars().collect(),
             raw_env: HashMap::new(),
+            clear_environment: false,
             current_dir: temp_path,
             umask: 0o022,
             exit_code: 0,
@@ -309,6 +312,11 @@ impl IsolatedSandbox {
         self.debug_fmt(format_args!("Starting sandbox environment setup"));
         self.debug_fmt(format_args!("Sandbox root directory: {:?}", self.path()));
 
+        if test_case.environment.clear_env {
+            self.current_env.clear();
+            self.raw_env.clear();
+        }
+        self.clear_environment = test_case.environment.clear_env;
         self.current_env
             .extend(test_case.environment.env_vars.clone());
         for (name, value) in &test_case.environment.env_bytes {
@@ -762,6 +770,9 @@ impl IsolatedSandbox {
             command.args(args);
             command
         };
+        if self.clear_environment {
+            command.env_clear();
+        }
         command
             .stdin(stdin)
             .stdout(stdout)
@@ -1015,6 +1026,9 @@ impl IsolatedSandbox {
                 .stdin(Stdio::from_raw_fd(stdin_fd))
                 .stdout(Stdio::from_raw_fd(stdout_fd))
                 .stderr(Stdio::from_raw_fd(stderr_fd));
+        }
+        if self.clear_environment {
+            command.env_clear();
         }
         command
             .args(args)
@@ -1937,6 +1951,7 @@ mod tests {
             .environment
             .env_bytes
             .insert("TEST_RAW_ENV".to_string(), "7261772dff".to_string());
+        test_case.environment.clear_env = true;
 
         // 设置工作目录
         let work_dir = "work_dir";
@@ -1973,6 +1988,7 @@ mod tests {
 
         // 验证环境变量
         assert_eq!(sandbox.get_env("TEST_ENV_VAR"), Some("test_value"));
+        assert_eq!(sandbox.get_env("PATH"), None);
 
         let raw_environment = sandbox.execute_command_bytes(
             "sh",
@@ -1987,6 +2003,21 @@ mod tests {
         )?;
         assert_eq!(raw_environment.exit_code, 0);
         assert_eq!(raw_environment.stdout, "7261772dff");
+
+        let printed_environment =
+            sandbox.execute_command_bytes("/usr/bin/env", &[], None, false, None, true)?;
+        assert_eq!(printed_environment.exit_code, 0);
+        assert!(
+            printed_environment
+                .stdout
+                .contains("544553545f454e565f5641523d746573745f76616c75650a")
+        );
+        assert!(
+            printed_environment
+                .stdout
+                .contains("544553545f5241575f454e563d7261772dff0a")
+        );
+        assert!(!printed_environment.stdout.contains("504154483d"));
 
         // 验证文件是否创建
         assert!(sandbox.path().join(work_dir).join("test_file.txt").exists());

@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+use std::os::unix::ffi::OsStringExt;
 use std::process::Command;
 
 #[test]
@@ -15,6 +17,21 @@ fn env_verbose_without_changes_does_not_dump_input_args() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(output.stdout, b"PATH=/usr/bin:/bin\n");
+    assert_eq!(output.stderr, b"");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn env_prints_non_utf8_environment_values_as_raw_bytes() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env"])
+        .env_clear()
+        .env("GOOD", OsString::from_vec(b"value\xff".to_vec()))
+        .output()
+        .expect("run syskits env with a non-UTF-8 environment value");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"GOOD=value\xff\n");
     assert_eq!(output.stderr, b"");
 }
 

@@ -475,6 +475,37 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "rm",
+            "description": "执行 rm -i fifo；输入 fixture 为 FIFO fifo、mode=644；stdin 为 n\\n；预期 RC=0、FIFO 保留，提示对象类型为 fifo。",
+            "args": [
+                "-i",
+                "fifo"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "mkfifo fifo",
+                "chmod 644 fifo"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "rm: remove fifo 'fifo'? "
+                },
+                "verifications": [
+                    {
+                        "command": "test -p fifo && printf retained",
+                        "expected_exit": 0,
+                        "expected_stdout": "retained"
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "tstdin": "n\n"
         }
     ]
 }

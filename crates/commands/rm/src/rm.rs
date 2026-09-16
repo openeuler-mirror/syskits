@@ -777,9 +777,14 @@ fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
     }
     if options.interactive == InteractiveMode::Always {
         if let Ok(metadata) = fs::symlink_metadata(local_path) {
-            if metadata.is_symlink() {
+            if metadata.file_type().is_symlink() {
                 return ct_prompt_yes!("remove symbolic link {}?", display_path.quote());
             }
+            return ct_prompt_yes!(
+                "remove {} {}?",
+                interactive_file_type(&metadata),
+                display_path.quote()
+            );
         }
     }
     match File::options().read(true).write(true).open(local_path) {
@@ -804,6 +809,26 @@ fn prompt_file(local_path: &Path, display_path: &Path, options: &RMOptions) -> b
         }
     }
     prompt_file_permission_readonly(local_path, display_path)
+}
+
+#[cfg(unix)]
+fn interactive_file_type(metadata: &Metadata) -> &'static str {
+    use std::os::unix::fs::MetadataExt;
+
+    ctcore::ct_fsext::pretty_filetype(metadata.mode(), metadata.size())
+}
+
+#[cfg(not(unix))]
+fn interactive_file_type(metadata: &Metadata) -> &'static str {
+    if metadata.is_file() {
+        if metadata.len() == 0 {
+            "regular empty file"
+        } else {
+            "regular file"
+        }
+    } else {
+        "file"
+    }
 }
 
 fn prompt_file_permission_readonly(local_path: &Path, display_path: &Path) -> bool {
@@ -944,6 +969,7 @@ mod tests {
     use super::*;
     use std::ffi::{OsStr, OsString};
     use std::fs;
+    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::MetadataExt;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -1156,6 +1182,17 @@ mod tests {
 
         assert_eq!(result.unwrap_err().code(), 1);
         assert!(!target.exists());
+    }
+
+    #[test]
+    fn test_interactive_file_type_reports_fifo() {
+        let temp = tempfile::tempdir().unwrap();
+        let fifo = temp.path().join("fifo");
+        let fifo = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+
+        let metadata = fs::symlink_metadata(fifo.to_str().unwrap()).unwrap();
+        assert_eq!(interactive_file_type(&metadata), "fifo");
     }
 
     #[test]

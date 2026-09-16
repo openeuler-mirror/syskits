@@ -1330,6 +1330,11 @@ mod tests {
         assert_eq!(options.program, vec![OsStr::new("-")]);
     }
 
+    #[test]
+    fn test_split_string_rejects_unbraced_variable_expansion() {
+        assert!(env_parse_args_from_str(&NCvt::convert("A=$FOO")).is_err());
+    }
+
     #[cfg(unix)]
     #[test]
     fn test_signal_dispositions_follow_argument_order() {

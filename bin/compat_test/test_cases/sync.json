@@ -259,6 +259,18 @@
     },
     {
       "command": "sync",
+      "description": "Linux 对 /dev/null 执行 fsync 返回 EINVAL；预期状态 1、stdout 为空，stderr 使用 GNU errno 文本 Invalid argument。",
+      "args": ["/dev/null"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: error syncing '/dev/null': Invalid argument\n"
+        }
+      }
+    },
+    {
+      "command": "sync",
       "description": "-f 选项无文件参数 - 应成功（等效于 sync）",
       "args": ["-f"],
       "expectation": {

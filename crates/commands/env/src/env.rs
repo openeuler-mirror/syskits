@@ -174,15 +174,18 @@ fn env_parse_name_value_opt<'a>(options: &mut EnvOptions<'a>, option: &'a OsStr)
 }
 
 fn env_parse_program_opt<'a>(options: &mut EnvOptions<'a>, option: &'a OsStr) -> CTResult<()> {
-    if options.line_ending == CtLineEnding::Nul {
-        Err(CTsageError::new(
+    options.program.push(option);
+    Ok(())
+}
+
+fn env_validate_null_output(options: &EnvOptions<'_>) -> CTResult<()> {
+    if options.line_ending == CtLineEnding::Nul && !options.program.is_empty() {
+        return Err(CTsageError::new(
             125,
             "cannot specify --null (-0) with command".to_string(),
-        ))
-    } else {
-        options.program.push(option);
-        Ok(())
+        ));
     }
+    Ok(())
 }
 
 fn env_load_config_file(options: &mut EnvOptions) -> CTResult<()> {
@@ -632,6 +635,8 @@ impl EnvAppData {
         env_apply_unset_env_vars(&options)?;
 
         env_apply_specified_env_vars(&options, is_debug_printing)?;
+
+        env_validate_null_output(&options)?;
 
         if options.program.is_empty() {
             env_apply_change_directory(&options)?;
@@ -1440,6 +1445,25 @@ mod tests {
             env_change_directory_debug_message(OsStr::new("/tmp/env-directory")),
             "chdir:    '/tmp/env-directory'"
         );
+    }
+
+    #[test]
+    fn test_null_with_command_is_validated_after_option_parsing() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-0", "A=1", "/usr/bin/true"])
+            .unwrap();
+
+        let options = env_make_options(&matches).unwrap();
+
+        assert_eq!(options.line_ending, CtLineEnding::Nul);
+        assert_eq!(
+            options.sets,
+            vec![(
+                Cow::Borrowed(OsStr::new("A")),
+                Cow::Borrowed(OsStr::new("1"))
+            )]
+        );
+        assert_eq!(options.program, vec![OsStr::new("/usr/bin/true")]);
     }
 
     #[test]

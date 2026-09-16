@@ -111,6 +111,23 @@ fn env_debug_reports_chdir_before_execution() {
 }
 
 #[test]
+fn env_debug_reports_assignment_before_null_command_conflict() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "--debug", "-0", "A=1", "/usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --debug -0 with a command");
+
+    assert_eq!(output.status.code(), Some(125));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"setenv:   A=1\nenv: cannot specify --null (-0) with command\nTry 'env --help' for more information.\n"
+    );
+}
+
+#[test]
 fn env_expands_split_string_in_combined_short_options() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "-iS", "A=1"])

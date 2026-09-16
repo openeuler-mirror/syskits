@@ -48,7 +48,7 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use std::ops::Deref;
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
 
 use ctcore::ct_display::Quotable;
@@ -414,6 +414,27 @@ fn env_short_options_enable_debug(arg: &OsStr) -> bool {
     debug_enabled
 }
 
+fn env_is_c_whitespace_byte(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+fn env_shebang_whitespace_option(arg: &OsStr) -> Option<u8> {
+    let bytes = arg.as_encoded_bytes();
+    if !bytes.starts_with(b"-") || bytes.get(1) == Some(&b'-') {
+        return None;
+    }
+
+    for &option in &bytes[1..] {
+        if env_is_c_whitespace_byte(option) {
+            return Some(option);
+        }
+        if !matches!(option, b'i' | b'v' | b'0') {
+            return None;
+        }
+    }
+    None
+}
+
 fn env_split_string_argument(
     split_arg: &OsStr,
     all_args: &mut Vec<OsString>,
@@ -528,6 +549,14 @@ impl EnvAppData {
                     next_args.push(arg.clone());
                     next_args.extend(iter.cloned());
                     break;
+                }
+
+                if let Some(option) = env_shebang_whitespace_option(arg) {
+                    ctcore::ct_show_error!("invalid option -- '{}'", char::from(option));
+                    return Err(CTsageError::new(
+                        125,
+                        "use -[v]S to pass options in shebang lines".to_string(),
+                    ));
                 }
 
                 if arg == "--debug" || env_short_options_enable_debug(arg) {
@@ -734,21 +763,11 @@ impl EnvAppData {
 }
 
 fn env_contains_c_whitespace(value: &OsStr) -> bool {
-    #[cfg(unix)]
-    {
-        value
-            .as_bytes()
-            .iter()
-            .any(|byte| matches!(*byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r'))
-    }
-
-    #[cfg(not(unix))]
-    {
-        value
-            .to_string_lossy()
-            .bytes()
-            .any(|byte| matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r'))
-    }
+    value
+        .as_encoded_bytes()
+        .iter()
+        .copied()
+        .any(env_is_c_whitespace_byte)
 }
 
 fn command_execution_error_exit_code(error: &io::Error) -> i32 {
@@ -1494,6 +1513,20 @@ mod tests {
         assert!(env_short_options_enable_debug(OsStr::new("-vuNAME")));
         assert!(!env_short_options_enable_debug(OsStr::new("-S")));
         assert!(!env_short_options_enable_debug(OsStr::new("-vinvalid")));
+    }
+
+    #[test]
+    fn test_shebang_whitespace_option_detection() {
+        assert_eq!(
+            env_shebang_whitespace_option(OsStr::new("-iv /usr/bin/true")),
+            Some(b' ')
+        );
+        assert_eq!(
+            env_shebang_whitespace_option(OsStr::new("-0\t/usr/bin/true")),
+            Some(b'\t')
+        );
+        assert_eq!(env_shebang_whitespace_option(OsStr::new("-S arg")), None);
+        assert_eq!(env_shebang_whitespace_option(OsStr::new("-q arg")), None);
     }
 
     #[cfg(target_os = "linux")]

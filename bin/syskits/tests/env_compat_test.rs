@@ -79,6 +79,30 @@ fn env_debug_reports_gnu_execution_diagnostics() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn env_debug_reports_signal_handling_before_execution() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--debug",
+            "--ignore-signal=HUP",
+            "--block-signal=PIPE",
+            "/usr/bin/true",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --debug with signal options");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"Reset signal HUP (1) to IGNORE\nsignal PIPE (13) mask set to BLOCK\nexecuting: /usr/bin/true\n   arg[0]= '/usr/bin/true'\n"
+    );
+}
+
 #[test]
 fn env_split_string_requires_argument() {
     for args in [["env", "-S"], ["env", "--split-string"]] {

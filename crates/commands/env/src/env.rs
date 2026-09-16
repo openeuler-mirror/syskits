@@ -580,7 +580,9 @@ impl EnvAppData {
         } else {
             #[cfg(unix)]
             if options.list_signal_handling {
-                list_signal_handling_with_options(&options);
+                apply_signal_handlers(&options, is_debug_printing)?;
+                list_signal_handling(&options);
+                return self.run_program_with_signal_handling(options, is_debug_printing, false);
             }
 
             return self.run_program(options, is_debug_printing);
@@ -594,8 +596,27 @@ impl EnvAppData {
         options: EnvOptions<'_>,
         is_do_debug_printing: bool,
     ) -> Result<(), Box<dyn CTError>> {
+        self.run_program_with_signal_handling(options, is_do_debug_printing, true)
+    }
+
+    fn run_program_with_signal_handling(
+        &mut self,
+        options: EnvOptions<'_>,
+        is_do_debug_printing: bool,
+        apply_signal_handling: bool,
+    ) -> Result<(), Box<dyn CTError>> {
         let prog = Cow::from(options.program[0]);
         let args = &options.program[1..];
+
+        let mut command = process::Command::new(&*prog);
+        command.args(args);
+
+        #[cfg(unix)]
+        {
+            if apply_signal_handling {
+                apply_signal_handlers(&options, is_do_debug_printing)?;
+            }
+        }
 
         if is_do_debug_printing {
             eprintln!("executing: {}", prog.to_string_lossy());
@@ -604,18 +625,15 @@ impl EnvAppData {
             }
         }
 
-        let mut command = process::Command::new(&*prog);
-        command.args(args);
-
         #[cfg(unix)]
         {
-            apply_signal_handlers(&options)?;
             let error = command.exec();
             Err(self.command_execution_error(prog.deref(), error))
         }
 
         #[cfg(not(unix))]
         {
+            let _ = apply_signal_handling;
             match command.status() {
                 Ok(exit) if !exit.success() => return Err(exit.code().unwrap_or(1).into()),
                 Err(error) => return Err(self.command_execution_error(prog.deref(), error)),
@@ -755,6 +773,18 @@ fn signal_name(signal: EnvSignal) -> Option<String> {
 }
 
 #[cfg(unix)]
+fn signal_disposition_debug_message(signal: EnvSignal, action: &str) -> String {
+    let name = signal_name(signal).expect("known signal has a display name");
+    format!("Reset signal {name} ({signal}) to {action}")
+}
+
+#[cfg(unix)]
+fn signal_mask_debug_message(signal: EnvSignal, action: &str) -> String {
+    let name = signal_name(signal).expect("known signal has a display name");
+    format!("signal {name} ({signal}) mask set to {action}")
+}
+
+#[cfg(unix)]
 fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec<EnvSignal>>> {
     if !args_match.contains_id(name) {
         return Ok(None);
@@ -868,11 +898,12 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
 
 // --- 处理和打印系统级信号状态 ---
 #[cfg(unix)]
-fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
+fn apply_signal_handlers(options: &EnvOptions, is_debug_printing: bool) -> CTResult<()> {
     apply_signal_handlers_to_process(
         options.default_signals.as_deref(),
         options.ignore_signals.as_deref(),
         options.block_signals.as_deref(),
+        is_debug_printing,
     );
     Ok(())
 }
@@ -882,7 +913,9 @@ fn apply_signal_handlers_to_process(
     default_signals: Option<&[EnvSignal]>,
     ignore_signals: Option<&[EnvSignal]>,
     block_signals: Option<&[EnvSignal]>,
+    is_debug_printing: bool,
 ) {
+    let mut disposition_changes = Vec::new();
     if let Some(sigs) = default_signals {
         for &sig in sigs {
             if sig == libc::SIGKILL || sig == libc::SIGSTOP {
@@ -892,7 +925,9 @@ fn apply_signal_handlers_to_process(
                 let mut action: libc::sigaction = std::mem::zeroed();
                 if libc::sigaction(sig, std::ptr::null(), &mut action) == 0 {
                     action.sa_sigaction = libc::SIG_DFL;
-                    let _ = libc::sigaction(sig, &action, std::ptr::null_mut());
+                    if libc::sigaction(sig, &action, std::ptr::null_mut()) == 0 {
+                        disposition_changes.push((sig, "DEFAULT"));
+                    }
                 }
             }
         }
@@ -906,11 +941,21 @@ fn apply_signal_handlers_to_process(
                 let mut action: libc::sigaction = std::mem::zeroed();
                 if libc::sigaction(sig, std::ptr::null(), &mut action) == 0 {
                     action.sa_sigaction = libc::SIG_IGN;
-                    let _ = libc::sigaction(sig, &action, std::ptr::null_mut());
+                    if libc::sigaction(sig, &action, std::ptr::null_mut()) == 0 {
+                        disposition_changes.push((sig, "IGNORE"));
+                    }
                 }
             }
         }
     }
+    if is_debug_printing {
+        disposition_changes.sort_unstable_by_key(|(sig, _)| *sig);
+        for (sig, action) in disposition_changes {
+            eprintln!("{}", signal_disposition_debug_message(sig, action));
+        }
+    }
+
+    let mut mask_changes = Vec::new();
     if let Some(sigs) = block_signals {
         let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
         unsafe { libc::sigemptyset(&mut set) };
@@ -919,6 +964,7 @@ fn apply_signal_handlers_to_process(
                 continue;
             }
             unsafe { libc::sigaddset(&mut set, sig) };
+            mask_changes.push((sig, "BLOCK"));
         }
         unsafe { libc::sigprocmask(libc::SIG_BLOCK, &set, std::ptr::null_mut()) };
     }
@@ -933,38 +979,16 @@ fn apply_signal_handlers_to_process(
                 continue;
             }
             unsafe { libc::sigaddset(&mut set, sig) };
+            mask_changes.push((sig, "UNBLOCK"));
         }
         unsafe { libc::sigprocmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut()) };
     }
-}
-
-#[cfg(unix)]
-fn list_signal_handling_with_options(options: &EnvOptions<'_>) {
-    let saved_actions: Vec<(EnvSignal, libc::sigaction)> = known_env_signals()
-        .into_iter()
-        .filter(|&sig| sig != libc::SIGKILL && sig != libc::SIGSTOP)
-        .filter_map(|sig| {
-            let mut old_act: libc::sigaction = unsafe { std::mem::zeroed() };
-            if unsafe { libc::sigaction(sig, std::ptr::null(), &mut old_act) } == 0 {
-                Some((sig, old_act))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let mut saved_mask: libc::sigset_t = unsafe { std::mem::zeroed() };
-    unsafe { libc::sigprocmask(0, std::ptr::null(), &mut saved_mask) };
-
-    let _ = apply_signal_handlers(options);
-    list_signal_handling(options);
-
-    for (sig, old_act) in saved_actions {
-        unsafe {
-            libc::sigaction(sig, &old_act, std::ptr::null_mut());
+    if is_debug_printing {
+        mask_changes.sort_unstable_by_key(|(sig, _)| *sig);
+        for (sig, action) in mask_changes {
+            eprintln!("{}", signal_mask_debug_message(sig, action));
         }
     }
-    unsafe { libc::sigprocmask(libc::SIG_SETMASK, &saved_mask, std::ptr::null_mut()) };
 }
 
 #[cfg(unix)]
@@ -1347,6 +1371,19 @@ mod tests {
         assert_eq!(parse_signal("SIGRTMIN+1").unwrap(), libc::SIGRTMIN() + 1);
         assert_eq!(parse_signal("RTMAX").unwrap(), libc::SIGRTMAX());
         assert_eq!(parse_signal("SIGRTMAX-1").unwrap(), libc::SIGRTMAX() - 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_signal_debug_messages_use_gnu_signal_names() {
+        assert_eq!(
+            signal_disposition_debug_message(libc::SIGHUP, "IGNORE"),
+            "Reset signal HUP (1) to IGNORE"
+        );
+        assert_eq!(
+            signal_mask_debug_message(libc::SIGRTMIN(), "BLOCK"),
+            format!("signal RTMIN ({}) mask set to BLOCK", libc::SIGRTMIN())
+        );
     }
 
     #[cfg(unix)]

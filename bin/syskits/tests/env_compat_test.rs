@@ -174,6 +174,28 @@ fn env_split_string_after_command_is_not_env_option() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn env_exec_replaces_the_env_process() {
+    let expected_parent =
+        std::fs::read("/proc/self/comm").expect("read integration test process name");
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "/usr/bin/python3",
+            "-c",
+            "import os; print(open(f'/proc/{os.getppid()}/comm').read(), end='')",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with a child that prints its parent name");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, expected_parent);
+    assert_eq!(output.stderr, b"");
+}
+
 #[cfg(unix)]
 #[test]
 fn env_list_signal_handling_omits_internal_handlers() {

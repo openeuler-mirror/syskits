@@ -32,7 +32,7 @@ use native_int_str::{
     from_native_int_representation_owned, get_single_native_int_value,
 };
 #[cfg(unix)]
-use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, raise, sigaction};
+use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
 
 #[cfg(unix)]
 use nix::libc;
@@ -63,8 +63,6 @@ use ctcore::ct_show_warning;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
 use std::process::{self};
 
 #[cfg(unix)]
@@ -602,49 +600,43 @@ impl EnvAppData {
         command.args(args);
 
         #[cfg(unix)]
-        ensure_child_status_is_waitable();
-
-        #[cfg(unix)]
-        configure_command_signal_handling(&mut command, &options)?;
-
-        match command.status() {
-            Ok(exit) if !exit.success() => {
-                #[cfg(unix)]
-                if let Some(exit_code) = exit.code() {
-                    return Err(exit_code.into());
-                } else {
-                    let signal_code = exit.signal().unwrap();
-                    let signal = Signal::try_from(signal_code).unwrap();
-
-                    let _ = unsafe {
-                        sigaction(
-                            signal,
-                            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::all()),
-                        )
-                    };
-
-                    let _ = raise(signal);
-                }
-                return Err(exit.code().unwrap().into());
-            }
-            Err(ref err) if err.kind() == io::ErrorKind::PermissionDenied => {
-                ctcore::ct_show_error!("{}: Permission denied", prog.quote());
-                return Err(126.into());
-            }
-            Err(ref err)
-                if (err.kind() == io::ErrorKind::NotFound)
-                    || (err.kind() == io::ErrorKind::InvalidInput) =>
-            {
-                return Err(self.make_error_no_such_file_or_dir(prog.deref()));
-            }
-
-            Err(e) => {
-                ctcore::ct_show_error!("unknown error: {:?}", e);
-                return Err(126.into());
-            }
-            Ok(_) => (),
+        {
+            apply_signal_handlers(&options)?;
+            let error = command.exec();
+            Err(self.command_execution_error(prog.deref(), error))
         }
-        Ok(())
+
+        #[cfg(not(unix))]
+        {
+            match command.status() {
+                Ok(exit) if !exit.success() => return Err(exit.code().unwrap_or(1).into()),
+                Err(error) => return Err(self.command_execution_error(prog.deref(), error)),
+                Ok(_) => {}
+            }
+            Ok(())
+        }
+    }
+
+    fn command_execution_error(&self, program: &OsStr, error: io::Error) -> Box<dyn CTError> {
+        match command_execution_error_exit_code(&error) {
+            127 => self.make_error_no_such_file_or_dir(program),
+            126 if error.kind() == io::ErrorKind::PermissionDenied => {
+                ctcore::ct_show_error!("{}: Permission denied", program.quote());
+                126.into()
+            }
+            126 => {
+                ctcore::ct_show_error!("unknown error: {:?}", error);
+                126.into()
+            }
+            _ => unreachable!("command execution errors map only to 126 or 127"),
+        }
+    }
+}
+
+fn command_execution_error_exit_code(error: &io::Error) -> i32 {
+    match error.kind() {
+        io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => 127,
+        _ => 126,
     }
 }
 
@@ -775,16 +767,6 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
     ))
 }
 
-#[cfg(unix)]
-fn ensure_child_status_is_waitable() {
-    unsafe {
-        let _ = sigaction(
-            Signal::SIGCHLD,
-            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty()),
-        );
-    }
-}
-
 // --- 处理和打印系统级信号状态 ---
 #[cfg(unix)]
 fn apply_signal_handlers(options: &EnvOptions) -> CTResult<()> {
@@ -842,29 +824,6 @@ fn apply_signal_handlers_to_process(
             None,
         );
     }
-}
-
-#[cfg(unix)]
-fn configure_command_signal_handling(
-    command: &mut process::Command,
-    options: &EnvOptions<'_>,
-) -> CTResult<()> {
-    let default_signals = options.default_signals.clone();
-    let ignore_signals = options.ignore_signals.clone();
-    let block_signals = options.block_signals.clone();
-
-    unsafe {
-        command.pre_exec(move || {
-            apply_signal_handlers_to_process(
-                default_signals.as_deref(),
-                ignore_signals.as_deref(),
-                block_signals.as_deref(),
-            );
-            Ok(())
-        });
-    }
-
-    Ok(())
 }
 
 #[cfg(unix)]
@@ -1371,6 +1330,22 @@ mod tests {
                 "{input}"
             );
         }
+    }
+
+    #[test]
+    fn test_command_execution_error_exit_codes() {
+        assert_eq!(
+            command_execution_error_exit_code(&io::Error::from(io::ErrorKind::NotFound)),
+            127
+        );
+        assert_eq!(
+            command_execution_error_exit_code(&io::Error::from(io::ErrorKind::InvalidInput)),
+            127
+        );
+        assert_eq!(
+            command_execution_error_exit_code(&io::Error::from(io::ErrorKind::PermissionDenied)),
+            126
+        );
     }
 
     #[cfg(unix)]
@@ -7838,6 +7813,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(unix))]
     mod tests_run_program {
         use crate::EnvAppData;
         use crate::EnvOptions;

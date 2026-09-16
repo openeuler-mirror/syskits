@@ -629,6 +629,21 @@ fn env_rejects_explicit_immutable_signal_actions() {
 
 #[cfg(unix)]
 #[test]
+fn env_does_not_apply_explicit_immutable_signal_action_without_command() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "-i", "--ignore-signal=KILL"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env without a command");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[cfg(unix)]
+#[test]
 fn env_list_signal_handling_omits_internal_handlers() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "--list-signal-handling"])

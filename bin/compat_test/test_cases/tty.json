@@ -262,6 +262,50 @@
         },
         {
             "command": "tty",
+            "description": "默认 SIGPIPE 且 stdout 无读端：输入为非终端；预期 GNU 默认信号终止，RC=141、stdout 与 stderr 均为空。",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "调用方忽略 SIGPIPE 且 stdout 无读端：输入为非终端；预期写入返回 EPIPE，RC=3、stderr 为 write error: Broken pipe。",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 3,
+                    "stdout": "",
+                    "stderr": "tty: write error: Broken pipe\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore"
+                }
+            }
+        },
+        {
+            "command": "tty",
             "description": "GNU 短选项组扫描：-sfoo 必须报告首个非法选项 f。",
             "args": [
                 "-sfoo"

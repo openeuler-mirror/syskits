@@ -1,5 +1,7 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::process::ExitStatusExt;
 use std::process::Command;
 
 #[test]
@@ -209,6 +211,28 @@ fn env_rejects_whitespace_in_signal_list_operand() {
     assert_eq!(output.status.code(), Some(125));
     assert_eq!(output.stdout, b"");
     assert_eq!(output.stderr, b"env: invalid signal ' INT'\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn env_explicit_empty_ignore_signal_argument_is_a_noop() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--ignore-signal=",
+            "/bin/sh",
+            "-c",
+            "kill -TERM $$; printf survived",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with explicit empty ignore-signal argument");
+
+    assert_eq!(output.status.code(), None);
+    assert_eq!(output.status.signal(), Some(libc::SIGTERM));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
 }
 
 #[cfg(unix)]

@@ -768,17 +768,32 @@ impl EnvAppData {
     fn command_execution_error(&self, program: &OsStr, error: io::Error) -> Box<dyn CTError> {
         match command_execution_error_exit_code(&error) {
             127 => self.make_error_no_such_file_or_dir(program),
-            126 if error.kind() == io::ErrorKind::PermissionDenied => {
-                ctcore::ct_show_error!("{}: Permission denied", program.quote());
-                126.into()
-            }
             126 => {
-                ctcore::ct_show_error!("unknown error: {:?}", error);
+                ctcore::ct_show_error!("{}", command_execution_error_message(program, &error));
                 126.into()
             }
             _ => unreachable!("command execution errors map only to 126 or 127"),
         }
     }
+}
+
+fn command_execution_error_message(program: &OsStr, error: &io::Error) -> String {
+    format!(
+        "{}: {}",
+        program.quote(),
+        command_execution_error_text(error)
+    )
+}
+
+fn command_execution_error_text(error: &io::Error) -> String {
+    #[cfg(unix)]
+    if let Some(errno) = error.raw_os_error() {
+        return unsafe { CStr::from_ptr(libc::strerror(errno)) }
+            .to_string_lossy()
+            .into_owned();
+    }
+
+    error.to_string()
 }
 
 fn env_contains_c_whitespace(value: &OsStr) -> bool {
@@ -1892,6 +1907,16 @@ mod tests {
         assert_eq!(
             command_execution_error_exit_code(&io::Error::from(io::ErrorKind::PermissionDenied)),
             126
+        );
+    }
+
+    #[test]
+    fn test_command_execution_error_message_uses_errno_text() {
+        let error = io::Error::from_raw_os_error(libc::ENOTDIR);
+
+        assert_eq!(
+            command_execution_error_message(OsStr::new("/tmp/not-a-directory/command"), &error),
+            "'/tmp/not-a-directory/command': Not a directory"
         );
     }
 

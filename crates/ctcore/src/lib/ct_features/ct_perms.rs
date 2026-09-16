@@ -24,7 +24,8 @@ use std::io::Error as IOError;
 use std::io::Result as IOResult;
 
 use std::ffi::{CString, OsString};
-use std::fs::Metadata;
+use std::fs::{File, Metadata};
+use std::os::fd::{FromRawFd, IntoRawFd};
 use std::os::unix::fs::MetadataExt;
 
 use std::collections::HashSet;
@@ -52,6 +53,17 @@ pub struct CtChownOutputNames<'a> {
     pub user: Option<&'a str>,
     pub group: Option<&'a str>,
 }
+
+struct CtChownRequest<'a> {
+    dest_uid: Option<u32>,
+    dest_gid: Option<u32>,
+    output_names: CtChownOutputNames<'a>,
+    filter: &'a CtIfFrom,
+    follow: bool,
+    verbosity: Verbosity,
+}
+
+static ALL_FILTER: CtIfFrom = CtIfFrom::All;
 
 #[derive(Debug)]
 struct ChownFailure {
@@ -88,6 +100,79 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum RestrictedChownResult {
+    Applied,
+    Skipped,
+}
+
+fn matches_filter(filter: &CtIfFrom, uid: uid_t, gid: gid_t) -> bool {
+    match filter {
+        CtIfFrom::All => true,
+        CtIfFrom::User(user) => *user == uid,
+        CtIfFrom::Group(group) => *group == gid,
+        CtIfFrom::UserGroup(user, group) => *user == uid && *group == gid,
+    }
+}
+
+fn restricted_chown<P: AsRef<Path>>(
+    path: P,
+    original_meta: &Metadata,
+    uid: uid_t,
+    gid: gid_t,
+    filter: &CtIfFrom,
+) -> IOResult<RestrictedChownResult> {
+    let path = path.as_ref();
+    if !original_meta.is_file() && !original_meta.is_dir() {
+        chown(path, uid, gid, true)?;
+        return Ok(RestrictedChownResult::Applied);
+    }
+
+    let path_c = CString::new(path.as_os_str().as_bytes()).unwrap();
+    let mut flags = libc::O_RDONLY | libc::O_NONBLOCK | libc::O_NOCTTY | libc::O_CLOEXEC;
+    if original_meta.is_dir() {
+        flags |= libc::O_DIRECTORY;
+    }
+    let mut fd = unsafe { libc::open(path_c.as_ptr(), flags) };
+    if fd < 0
+        && IOError::last_os_error().raw_os_error() == Some(libc::EACCES)
+        && original_meta.is_file()
+    {
+        flags |= libc::O_WRONLY;
+        fd = unsafe { libc::open(path_c.as_ptr(), flags) };
+    }
+
+    if fd < 0 {
+        let error = IOError::last_os_error();
+        if error.raw_os_error() == Some(libc::EACCES) {
+            chown(path, uid, gid, true)?;
+            return Ok(RestrictedChownResult::Applied);
+        }
+        return Err(error);
+    }
+
+    let file = unsafe { File::from_raw_fd(fd) };
+    let current_meta = file.metadata()?;
+    if current_meta.dev() != original_meta.dev() || current_meta.ino() != original_meta.ino() {
+        return Ok(RestrictedChownResult::Skipped);
+    }
+    if !matches_filter(filter, current_meta.uid(), current_meta.gid()) {
+        return Ok(RestrictedChownResult::Skipped);
+    }
+
+    let fd = file.into_raw_fd();
+    let chown_result = unsafe { libc::fchown(fd, uid, gid) };
+    let chown_error = (chown_result < 0).then(IOError::last_os_error);
+    let close_result = unsafe { libc::close(fd) };
+    if let Some(error) = chown_error {
+        return Err(error);
+    }
+    if close_result < 0 {
+        return Err(IOError::last_os_error());
+    }
+    Ok(RestrictedChownResult::Applied)
+}
+
 fn chown_ids_for_syscall(dest_uid: Option<u32>, dest_gid: Option<u32>) -> (uid_t, gid_t) {
     (
         dest_uid.unwrap_or(uid_t::MAX),
@@ -110,11 +195,14 @@ pub fn wrap_chown<P: AsRef<Path>>(
     wrap_chown_with_diagnostics(
         path,
         meta,
-        dest_uid,
-        dest_gid,
-        output_names,
-        follow,
-        verbosity,
+        CtChownRequest {
+            dest_uid,
+            dest_gid,
+            output_names,
+            filter: &ALL_FILTER,
+            follow,
+            verbosity,
+        },
     )
     .map_err(ChownFailure::into_error_message)
 }
@@ -122,12 +210,16 @@ pub fn wrap_chown<P: AsRef<Path>>(
 fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
-    dest_uid: Option<u32>,
-    dest_gid: Option<u32>,
-    output_names: CtChownOutputNames<'_>,
-    follow: bool,
-    verbosity: Verbosity,
+    request: CtChownRequest<'_>,
 ) -> Result<String, ChownFailure> {
+    let CtChownRequest {
+        dest_uid,
+        dest_gid,
+        output_names,
+        filter,
+        follow,
+        verbosity,
+    } = request;
     let dest_uid_val = dest_uid.unwrap_or_else(|| meta.uid());
     let dest_gid_val = dest_gid.unwrap_or_else(|| meta.gid());
     let (uid_for_syscall, gid_for_syscall) = chown_ids_for_syscall(dest_uid, dest_gid);
@@ -196,83 +288,118 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
     };
     let path_str = path.quote().to_string();
 
-    if let Err(e) = chown(path, uid_for_syscall, gid_for_syscall, follow) {
-        let verbose_output = (verbosity.level == CtVerbosityLevel::Verbose).then(|| {
-            if group_only {
-                t!(
-                    "ctcore.chgrp.failed_change",
-                    file = path_str,
-                    old = old_str,
-                    new = new_str
-                )
-                .to_string()
-            } else {
-                t!(
-                    "ctcore.chown.failed_change",
-                    file = path_str,
-                    old = old_str,
-                    new = new_str
-                )
-                .to_string()
-            }
-        });
-        let stderr =
-            (!verbosity.force_silent && verbosity.level != CtVerbosityLevel::Silent).then(|| {
-                format!(
-                    "changing {} of {}: {}",
-                    if group_only { "group" } else { "ownership" },
-                    path_str,
-                    strip_errno(&e)
-                )
-            });
-
-        return Err(ChownFailure {
-            stderr,
-            stdout: verbose_output,
-        });
+    let chown_result = if follow && !matches!(filter, CtIfFrom::All) {
+        restricted_chown(path, meta, uid_for_syscall, gid_for_syscall, filter)
     } else {
-        let changed = dest_uid_val != meta.uid() || dest_gid_val != meta.gid();
-        if changed {
-            match verbosity.level {
-                CtVerbosityLevel::Changes | CtVerbosityLevel::Verbose => {
-                    out = if group_only {
-                        t!(
-                            "ctcore.chgrp.changed_group",
-                            file = path_str,
-                            old = old_str,
-                            new = new_str
-                        )
-                        .to_string()
-                    } else {
-                        t!(
-                            "ctcore.chown.changed_ownership",
-                            file = path_str,
-                            old = old_str,
-                            new = new_str
-                        )
-                        .to_string()
-                    };
+        chown(path, uid_for_syscall, gid_for_syscall, follow)
+            .map(|_| RestrictedChownResult::Applied)
+    };
+
+    match chown_result {
+        Err(e) => {
+            let verbose_output = (verbosity.level == CtVerbosityLevel::Verbose).then(|| {
+                if group_only {
+                    t!(
+                        "ctcore.chgrp.failed_change",
+                        file = path_str,
+                        old = old_str,
+                        new = new_str
+                    )
+                    .to_string()
+                } else {
+                    t!(
+                        "ctcore.chown.failed_change",
+                        file = path_str,
+                        old = old_str,
+                        new = new_str
+                    )
+                    .to_string()
                 }
-                _ => (),
-            };
-        } else if verbosity.level == CtVerbosityLevel::Verbose {
-            out = if group_only {
-                t!(
-                    "ctcore.chgrp.retained_group",
-                    file = path_str,
-                    old = old_str
-                )
-                .to_string()
-            } else if dest_uid.is_none() && dest_gid.is_none() {
-                t!("ctcore.chown.retained_ownership_no_change", file = path_str).to_string()
-            } else {
-                t!(
-                    "ctcore.chown.retained_ownership",
-                    file = path_str,
-                    old = old_str
-                )
-                .to_string()
-            };
+            });
+            let stderr = (!verbosity.force_silent && verbosity.level != CtVerbosityLevel::Silent)
+                .then(|| {
+                    format!(
+                        "changing {} of {}: {}",
+                        if group_only { "group" } else { "ownership" },
+                        path_str,
+                        strip_errno(&e)
+                    )
+                });
+
+            return Err(ChownFailure {
+                stderr,
+                stdout: verbose_output,
+            });
+        }
+        Ok(RestrictedChownResult::Skipped) => {
+            let stdout = (verbosity.level == CtVerbosityLevel::Verbose).then(|| {
+                if group_only {
+                    t!(
+                        "ctcore.chgrp.failed_change",
+                        file = path_str,
+                        old = old_str,
+                        new = new_str
+                    )
+                    .to_string()
+                } else {
+                    t!(
+                        "ctcore.chown.failed_change",
+                        file = path_str,
+                        old = old_str,
+                        new = new_str
+                    )
+                    .to_string()
+                }
+            });
+            return Err(ChownFailure {
+                stderr: None,
+                stdout,
+            });
+        }
+        Ok(RestrictedChownResult::Applied) => {
+            let changed = dest_uid_val != meta.uid() || dest_gid_val != meta.gid();
+            if changed {
+                match verbosity.level {
+                    CtVerbosityLevel::Changes | CtVerbosityLevel::Verbose => {
+                        out = if group_only {
+                            t!(
+                                "ctcore.chgrp.changed_group",
+                                file = path_str,
+                                old = old_str,
+                                new = new_str
+                            )
+                            .to_string()
+                        } else {
+                            t!(
+                                "ctcore.chown.changed_ownership",
+                                file = path_str,
+                                old = old_str,
+                                new = new_str
+                            )
+                            .to_string()
+                        };
+                    }
+                    _ => (),
+                };
+            } else if verbosity.level == CtVerbosityLevel::Verbose {
+                out = if group_only {
+                    t!(
+                        "ctcore.chgrp.retained_group",
+                        file = path_str,
+                        old = old_str
+                    )
+                    .to_string()
+                } else if dest_uid.is_none() && dest_gid.is_none() {
+                    t!("ctcore.chown.retained_ownership_no_change", file = path_str).to_string()
+                } else {
+                    t!(
+                        "ctcore.chown.retained_ownership",
+                        file = path_str,
+                        old = old_str
+                    )
+                    .to_string()
+                };
+            }
         }
     }
     Ok(out)
@@ -583,12 +710,7 @@ impl CtChownExecutor {
 
     #[inline]
     fn matched(&self, uid: uid_t, gid: gid_t) -> bool {
-        match self.filter {
-            CtIfFrom::All => true,
-            CtIfFrom::User(u) => u == uid,
-            CtIfFrom::Group(g) => g == gid,
-            CtIfFrom::UserGroup(u, g) => u == uid && g == gid,
-        }
+        matches_filter(&self.filter, uid, gid)
     }
 
     fn change_path(&self, path: &Path, meta: &Metadata) -> i32 {
@@ -596,14 +718,17 @@ impl CtChownExecutor {
             match wrap_chown_with_diagnostics(
                 path,
                 meta,
-                self.dest_uid,
-                self.dest_gid,
-                CtChownOutputNames {
-                    user: self.dest_user_name.as_deref(),
-                    group: self.dest_group_name.as_deref(),
+                CtChownRequest {
+                    dest_uid: self.dest_uid,
+                    dest_gid: self.dest_gid,
+                    output_names: CtChownOutputNames {
+                        user: self.dest_user_name.as_deref(),
+                        group: self.dest_group_name.as_deref(),
+                    },
+                    filter: &self.filter,
+                    follow: self.dereference,
+                    verbosity: self.verbosity.clone(),
                 },
-                self.dereference,
-                self.verbosity.clone(),
             ) {
                 Ok(output) => {
                     if !output.is_empty() {
@@ -1071,14 +1196,17 @@ mod tests {
         let failure = wrap_chown_with_diagnostics(
             &file,
             &meta,
-            Some(1),
-            None,
-            CtChownOutputNames::default(),
-            true,
-            Verbosity {
-                groups_only: false,
-                force_silent: false,
-                level: CtVerbosityLevel::Verbose,
+            CtChownRequest {
+                dest_uid: Some(1),
+                dest_gid: None,
+                output_names: CtChownOutputNames::default(),
+                filter: &ALL_FILTER,
+                follow: true,
+                verbosity: Verbosity {
+                    groups_only: false,
+                    force_silent: false,
+                    level: CtVerbosityLevel::Verbose,
+                },
             },
         )
         .unwrap_err();
@@ -1171,6 +1299,75 @@ mod tests {
     fn test_unspecified_ownership_uses_chown_sentinel_values() {
         assert_eq!(chown_ids_for_syscall(Some(1000), None), (1000, gid_t::MAX));
         assert_eq!(chown_ids_for_syscall(None, Some(1000)), (uid_t::MAX, 1000));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_restricted_chown_rejects_replaced_symlink_referent() {
+        let temp_dir = tempdir().unwrap();
+        let safe = temp_dir.path().join("safe");
+        let protected = temp_dir.path().join("protected");
+        let victim = temp_dir.path().join("victim");
+        fs::write(&safe, b"").unwrap();
+        fs::write(&protected, b"").unwrap();
+        unix::fs::symlink("safe", &victim).unwrap();
+
+        let safe_meta = safe.metadata().unwrap();
+        let protected_uid = protected.metadata().unwrap().uid();
+        fs::remove_file(&victim).unwrap();
+        unix::fs::symlink("protected", &victim).unwrap();
+
+        assert_eq!(
+            restricted_chown(
+                &victim,
+                &safe_meta,
+                uid_t::MAX,
+                gid_t::MAX,
+                &CtIfFrom::User(safe_meta.uid()),
+            )
+            .unwrap(),
+            RestrictedChownResult::Skipped
+        );
+        assert_eq!(protected.metadata().unwrap().uid(), protected_uid);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_filtered_chown_rejects_replaced_symlink_referent() {
+        let temp_dir = tempdir().unwrap();
+        let safe = temp_dir.path().join("safe");
+        let protected = temp_dir.path().join("protected");
+        let victim = temp_dir.path().join("victim");
+        fs::write(&safe, b"").unwrap();
+        fs::write(&protected, b"").unwrap();
+        unix::fs::symlink("safe", &victim).unwrap();
+
+        let safe_meta = safe.metadata().unwrap();
+        let protected_uid = protected.metadata().unwrap().uid();
+        fs::remove_file(&victim).unwrap();
+        unix::fs::symlink("protected", &victim).unwrap();
+
+        let executor = CtChownExecutor {
+            dest_uid: Some(safe_meta.uid()),
+            dest_gid: None,
+            dest_user_name: None,
+            dest_group_name: None,
+            raw_owner: safe_meta.uid().to_string(),
+            traverse_symlinks: CtTraverseSymlinks::None,
+            verbosity: Verbosity {
+                groups_only: false,
+                force_silent: false,
+                level: CtVerbosityLevel::Normal,
+            },
+            filter: CtIfFrom::User(safe_meta.uid()),
+            files: Vec::new(),
+            recursive: false,
+            preserve_root: false,
+            dereference: true,
+        };
+
+        assert_eq!(executor.change_path(&victim, &safe_meta), 1);
+        assert_eq!(protected.metadata().unwrap().uid(), protected_uid);
     }
 
     #[test]

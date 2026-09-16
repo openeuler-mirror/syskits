@@ -18,6 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, strip_errno};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
@@ -398,6 +399,7 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args_override_self(true)
         .args(args)
+        .gnu_getopt()
 }
 
 pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
@@ -944,6 +946,9 @@ mod tests {
     use std::fs;
     use std::os::unix::fs::MetadataExt;
     use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
 
     fn base_options() -> RMOptions {
         RMOptions {
@@ -1124,6 +1129,33 @@ mod tests {
             let error = std::io::Error::from_raw_os_error(errno);
             assert!(is_ignorable_missing_error(&error));
         }
+    }
+
+    #[test]
+    fn test_posixly_correct_stops_option_parsing_after_first_operand() {
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target");
+        fs::write(&target, b"data").unwrap();
+        let result = rm_main(
+            [
+                OsString::from("rm"),
+                target.clone().into_os_string(),
+                OsString::from("-f"),
+            ]
+            .into_iter(),
+        );
+
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        assert_eq!(result.unwrap_err().code(), 1);
+        assert!(!target.exists());
     }
 
     #[test]

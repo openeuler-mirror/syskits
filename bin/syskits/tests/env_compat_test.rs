@@ -159,6 +159,28 @@ fn env_suggests_split_string_after_whitespace_command_is_not_found() {
     );
 }
 
+#[test]
+fn env_reports_exec_not_a_directory_with_gnu_error_layout() {
+    let temp_dir = TempDir::new().expect("create temporary directory");
+    let non_directory = temp_dir.path().join("not-a-directory");
+    std::fs::write(&non_directory, b"file").expect("create non-directory path component");
+    let command = non_directory.join("command");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", command.to_str().expect("UTF-8 command path")])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env through a non-directory component");
+
+    assert_eq!(output.status.code(), Some(126));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("UTF-8 stderr"),
+        format!("env: '{}': Not a directory\n", command.display())
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn env_suggests_split_string_for_whitespace_in_shebang_option() {

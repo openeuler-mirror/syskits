@@ -242,11 +242,16 @@ pub fn sync_file_systems(files: &[OsString]) -> CTResult<()> {
 mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
+    use std::ffi::CStr;
+    #[cfg(target_os = "linux")]
     use std::os::fd::AsRawFd;
     use std::sync::Mutex;
 
     #[cfg(target_os = "linux")]
     static EXIT_CODE_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(target_os = "linux")]
+    static LOCALE_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -300,6 +305,27 @@ mod tests {
         let path = OsString::from_vec(b"missing-\xff".to_vec());
 
         assert_eq!(sync_quote_path(&path), "'missing-'$'\\377'");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sync_quote_path_initializes_utf8_locale_from_environment() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let previous_env = std::env::var_os("LC_ALL");
+        let previous_locale =
+            unsafe { CStr::from_ptr(libc::setlocale(libc::LC_ALL, std::ptr::null())).to_owned() };
+
+        unsafe { std::env::set_var("LC_ALL", "C.UTF-8") };
+        crate::initialize_c_locale();
+        let quoted = sync_quote_path(OsStr::new("missing-中"));
+
+        match previous_env {
+            Some(value) => unsafe { std::env::set_var("LC_ALL", value) },
+            None => unsafe { std::env::remove_var("LC_ALL") },
+        }
+        unsafe { libc::setlocale(libc::LC_ALL, previous_locale.as_ptr()) };
+
+        assert_eq!(quoted, "'missing-中'");
     }
 
     #[cfg(target_os = "linux")]

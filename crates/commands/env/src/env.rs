@@ -39,10 +39,12 @@ use nix::libc;
 
 use std::borrow::Cow;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CStr;
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 use std::ffi::OsStr;
 use std::ffi::OsString;
-#[cfg(target_os = "linux")]
-use std::ffi::{CStr, CString};
 use std::io::{self, Write};
 use std::ops::Deref;
 
@@ -699,6 +701,13 @@ fn parse_signal_list(val: &str) -> CTResult<Vec<Signal>> {
 }
 
 #[cfg(unix)]
+fn invalid_argument_message() -> String {
+    unsafe { CStr::from_ptr(libc::strerror(libc::EINVAL)) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[cfg(unix)]
 fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec<Signal>>> {
     if !args_match.contains_id(name) {
         return Ok(None);
@@ -771,13 +780,27 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
     let mut ignore_signals = Vec::new();
 
     for (_, set_default, value) in operations {
-        let signals = if value == MISSING_SIGNAL_ARGUMENT {
+        let ignore_immutable_signal_errors = value == MISSING_SIGNAL_ARGUMENT;
+        let signals = if ignore_immutable_signal_errors {
             Signal::iterator().collect()
         } else {
             parse_signal_list(value)?
         };
 
         for signal in signals {
+            if signal == Signal::SIGKILL || signal == Signal::SIGSTOP {
+                if !ignore_immutable_signal_errors {
+                    return Err(CtSimpleError::new(
+                        125,
+                        format!(
+                            "failed to set signal action for signal {}: {}",
+                            signal as i32,
+                            invalid_argument_message()
+                        ),
+                    ));
+                }
+                continue;
+            }
             let (selected, overridden) = if set_default {
                 (&mut default_signals, &mut ignore_signals)
             } else {
@@ -1325,6 +1348,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_explicit_immutable_signal_actions_fail() {
+        for (option, number) in [("--ignore-signal=KILL", 9), ("--default-signal=STOP", 19)] {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), option, "true"])
+                .unwrap();
+            let error = get_signal_dispositions(&matches).unwrap_err();
+
+            assert_eq!(error.code(), 125, "{option}");
+            assert_eq!(
+                error.to_string(),
+                format!("failed to set signal action for signal {number}: Invalid argument"),
+                "{option}"
+            );
+        }
     }
 
     #[test]

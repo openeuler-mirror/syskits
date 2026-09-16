@@ -258,6 +258,24 @@ fn env_default_signal_unblocks_a_previously_blocked_signal() {
     assert_eq!(output.stderr, b"");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn env_rejects_explicit_immutable_signal_actions() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "--ignore-signal=KILL", "/usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with an explicit immutable signal action");
+
+    assert_eq!(output.status.code(), Some(125));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"env: failed to set signal action for signal 9: Invalid argument\n"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn env_list_signal_handling_omits_internal_handlers() {

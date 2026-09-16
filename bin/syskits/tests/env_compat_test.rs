@@ -1,10 +1,24 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 #[cfg(target_os = "linux")]
 use std::os::unix::process::ExitStatusExt;
 use std::process::Command;
 
 use tempfile::TempDir;
+
+#[cfg(unix)]
+fn set_child_sigpipe_disposition(command: &mut Command, disposition: libc::sighandler_t) {
+    unsafe {
+        command.pre_exec(move || {
+            if libc::signal(libc::SIGPIPE, disposition) == libc::SIG_ERR {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
 
 #[test]
 fn env_verbose_without_changes_does_not_dump_input_args() {
@@ -215,7 +229,8 @@ fn env_debug_reports_split_string_expansion() {
 #[cfg(target_os = "linux")]
 #[test]
 fn env_list_signal_handling_uses_gnu_poll_signal_name() {
-    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command
         .args([
             "env",
             "--block-signal=IO",
@@ -223,13 +238,36 @@ fn env_list_signal_handling_uses_gnu_poll_signal_name() {
             "/usr/bin/true",
         ])
         .env_clear()
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", "/usr/bin:/bin");
+    set_child_sigpipe_disposition(&mut command, libc::SIG_DFL);
+
+    let output = command
         .output()
         .expect("run syskits env --list-signal-handling for IO");
 
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"");
     assert_eq!(output.stderr, b"POLL       (29): BLOCK\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn env_list_signal_handling_reports_inherited_ignored_sigpipe() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command
+        .args(["env", "--list-signal-handling", "/usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin");
+
+    set_child_sigpipe_disposition(&mut command, libc::SIG_IGN);
+
+    let output = command
+        .output()
+        .expect("run syskits env with inherited ignored SIGPIPE");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"PIPE       (13): IGNORE\n");
 }
 
 #[cfg(unix)]
@@ -642,7 +680,8 @@ fn env_list_signal_handling_reports_explicit_ignore_for_command() {
 #[cfg(unix)]
 #[test]
 fn env_list_signal_handling_reports_explicit_block_for_command() {
-    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command
         .args([
             "env",
             "--block-signal=PIPE",
@@ -650,7 +689,10 @@ fn env_list_signal_handling_reports_explicit_block_for_command() {
             "true",
         ])
         .env_clear()
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", "/usr/bin:/bin");
+    set_child_sigpipe_disposition(&mut command, libc::SIG_DFL);
+
+    let output = command
         .output()
         .expect("run syskits env --block-signal=PIPE --list-signal-handling true");
 
@@ -666,7 +708,8 @@ fn env_list_signal_handling_reports_explicit_block_for_command() {
 #[cfg(target_os = "linux")]
 #[test]
 fn env_list_signal_handling_reports_blocked_realtime_signal() {
-    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command
         .args([
             "env",
             "--block-signal=RTMIN",
@@ -674,7 +717,10 @@ fn env_list_signal_handling_reports_blocked_realtime_signal() {
             "/usr/bin/true",
         ])
         .env_clear()
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", "/usr/bin:/bin");
+    set_child_sigpipe_disposition(&mut command, libc::SIG_DFL);
+
+    let output = command
         .output()
         .expect("run syskits env listing a blocked realtime signal");
 

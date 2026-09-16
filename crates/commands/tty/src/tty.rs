@@ -17,9 +17,13 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
-use std::ffi::OsString;
+use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code, strip_errno};
+use std::borrow::Cow;
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::io::{self, IsTerminal, Write};
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 mod tty_flags {
@@ -38,7 +42,7 @@ pub struct TtySemantic {
 pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = match ct_app().try_get_matches_from(args) {
+    let matches = match ct_app().try_get_matches_from(prepare_tty_args(args)?) {
         Ok(m) => m,
         Err(e) => {
             e.print().ok();
@@ -70,6 +74,275 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+const TTY_LONG_OPTIONS: &[&str] = &["silent", "quiet", "help", "version"];
+// Keep the syskits -h/-V extensions outside GNU tty compatibility handling.
+const TTY_SHORT_OPTIONS: &[u8] = b"shV";
+
+enum TtyLongOptionMatch {
+    None,
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn prepare_tty_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    prepare_tty_args_with_mode(args, ctcore::ct_posix::posixly_correct())
+}
+
+fn prepare_tty_args_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut parse_options = true;
+    let mut first_operand = None;
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_bytes();
+        if parse_options && bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+
+        if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            let terminal = if bytes.starts_with(b"--") {
+                validate_tty_long_option(bytes)?
+            } else if bytes == b"-h" || bytes == b"-V" {
+                true
+            } else {
+                validate_tty_short_options(bytes)?;
+                false
+            };
+
+            if terminal {
+                let mut terminal_args = Vec::with_capacity(2);
+                if let Some(program) = args.first() {
+                    terminal_args.push(program.clone());
+                }
+                terminal_args.push(argument.clone());
+                return Ok(terminal_args);
+            }
+            continue;
+        }
+
+        first_operand.get_or_insert(argument);
+        if posixly_correct {
+            parse_options = false;
+        }
+    }
+
+    if let Some(operand) = first_operand {
+        let mut message = b"extra operand ".to_vec();
+        message.extend_from_slice(&tty_quote_operand(operand));
+        return Err(TtyUsageError::boxed(message));
+    }
+
+    Ok(args)
+}
+
+fn match_tty_long_option(name: &[u8]) -> TtyLongOptionMatch {
+    if let Some(option) = TTY_LONG_OPTIONS
+        .iter()
+        .find(|option| option.as_bytes() == name)
+    {
+        return TtyLongOptionMatch::Recognized(option);
+    }
+
+    let matches = TTY_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => TtyLongOptionMatch::None,
+        [option] => TtyLongOptionMatch::Recognized(option),
+        _ => TtyLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn validate_tty_long_option(argument: &[u8]) -> CTResult<bool> {
+    let long = &argument[2..];
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match match_tty_long_option(name) {
+        TtyLongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(TtyUsageError::boxed(message))
+        }
+        TtyLongOptionMatch::Ambiguous(matches) => {
+            let possibilities = matches
+                .into_iter()
+                .map(|option| format!("'--{option}'"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut message = b"option '".to_vec();
+            message.extend_from_slice(argument);
+            message.extend_from_slice(b"' is ambiguous; possibilities: ");
+            message.extend_from_slice(possibilities.as_bytes());
+            Err(TtyUsageError::boxed(message))
+        }
+        TtyLongOptionMatch::Recognized(canonical) if separator.is_some() => {
+            Err(TtyUsageError::boxed(
+                format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+            ))
+        }
+        TtyLongOptionMatch::Recognized("help" | "version") => Ok(true),
+        TtyLongOptionMatch::Recognized(_) => Ok(false),
+    }
+}
+
+fn validate_tty_short_options(argument: &[u8]) -> CTResult<()> {
+    if let Some(unknown) = argument[1..]
+        .iter()
+        .find(|option| !TTY_SHORT_OPTIONS.contains(option))
+    {
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(*unknown);
+        message.push(b'\'');
+        return Err(TtyUsageError::boxed(message));
+    }
+    Ok(())
+}
+
+fn tty_quote_operand(operand: &OsStr) -> Vec<u8> {
+    if tty_locale_is_utf8() {
+        tty_quote_utf8_operand(operand)
+    } else {
+        tty_quote_c_operand(operand)
+    }
+}
+
+fn tty_locale_is_utf8() -> bool {
+    for name in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        let Some(value) = std::env::var_os(name) else {
+            continue;
+        };
+        if value.is_empty() {
+            continue;
+        }
+        let value = value.to_string_lossy().to_ascii_uppercase();
+        return value.contains("UTF-8") || value.contains("UTF8");
+    }
+    false
+}
+
+fn tty_quote_c_operand(operand: &OsStr) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(operand.as_bytes().len() + 2);
+    quoted.push(b'\'');
+    for byte in operand.as_bytes() {
+        tty_push_quoted_ascii(&mut quoted, *byte, Some(b'\''));
+    }
+    quoted.push(b'\'');
+    quoted
+}
+
+fn tty_quote_utf8_operand(operand: &OsStr) -> Vec<u8> {
+    let input = operand.as_bytes();
+    let left_quote = "‘".as_bytes();
+    let right_quote = "’".as_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        if input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        if input[index].is_ascii() {
+            tty_push_quoted_ascii(&mut quoted, input[index], None);
+            index += 1;
+            continue;
+        }
+
+        match std::str::from_utf8(&input[index..]) {
+            Ok(_) => {
+                quoted.extend_from_slice(&input[index..]);
+                break;
+            }
+            Err(error) if error.valid_up_to() > 0 => {
+                let end = index + error.valid_up_to();
+                quoted.extend_from_slice(&input[index..end]);
+                index = end;
+            }
+            Err(error) => {
+                let invalid_length = error.error_len().unwrap_or(input.len() - index);
+                for byte in &input[index..index + invalid_length] {
+                    tty_push_octal_escape(&mut quoted, *byte);
+                }
+                index += invalid_length;
+            }
+        }
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn tty_push_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
+    match byte {
+        b'\x07' => output.extend_from_slice(b"\\a"),
+        b'\x08' => output.extend_from_slice(b"\\b"),
+        b'\t' => output.extend_from_slice(b"\\t"),
+        b'\n' => output.extend_from_slice(b"\\n"),
+        b'\x0b' => output.extend_from_slice(b"\\v"),
+        b'\x0c' => output.extend_from_slice(b"\\f"),
+        b'\r' => output.extend_from_slice(b"\\r"),
+        b'\\' => output.extend_from_slice(b"\\\\"),
+        escaped if quote_to_escape == Some(escaped) => {
+            output.push(b'\\');
+            output.push(escaped);
+        }
+        b' '..=b'~' => output.push(byte),
+        _ => tty_push_octal_escape(output, byte),
+    }
+}
+
+fn tty_push_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 7));
+    output.push(b'0' + (byte & 7));
+}
+
+#[derive(Debug)]
+struct TtyUsageError {
+    message: Vec<u8>,
+}
+
+impl TtyUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for TtyUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for TtyUsageError {}
+
+impl CTError for TtyUsageError {
+    fn code(&self) -> i32 {
+        2
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 fn tty_write_error_message(error: &io::Error) -> String {
@@ -174,6 +447,9 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use std::io;
+    use std::sync::Mutex;
+
+    static LOCALE_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_tool_implementation() {
@@ -200,6 +476,69 @@ mod tests {
             tty_write_error_message(&error),
             "write error: No space left on device"
         );
+    }
+
+    #[test]
+    fn test_tty_main_reports_extra_operand_like_gnu() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let previous = std::env::var_os("LC_ALL");
+        unsafe { std::env::set_var("LC_ALL", "C") };
+        let error =
+            tty_main([OsString::from("tty"), OsString::from("extra")].into_iter()).unwrap_err();
+
+        match previous {
+            Some(value) => unsafe { std::env::set_var("LC_ALL", value) },
+            None => unsafe { std::env::remove_var("LC_ALL") },
+        }
+
+        assert_eq!(error.to_string(), "extra operand 'extra'");
+    }
+
+    #[test]
+    fn test_prepare_tty_args_reports_gnu_option_errors() {
+        let cases = [
+            (
+                "--quiet=value",
+                b"option '--quiet' doesn't allow an argument".as_slice(),
+            ),
+            ("--unknown", b"unrecognized option '--unknown'".as_slice()),
+            ("-sfoo", b"invalid option -- 'f'".as_slice()),
+        ];
+
+        for (argument, expected) in cases {
+            let error = prepare_tty_args_with_mode(
+                [OsString::from("tty"), OsString::from(argument)].into_iter(),
+                false,
+            )
+            .unwrap_err();
+
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+            assert_eq!(error.code(), 2);
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn test_prepare_tty_args_recognizes_late_help_like_gnu_getopt() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let previous = std::env::var_os("LC_ALL");
+        unsafe { std::env::set_var("LC_ALL", "C") };
+        let args = [
+            OsString::from("tty"),
+            OsString::from("extra"),
+            OsString::from("--help"),
+        ];
+
+        let prepared = prepare_tty_args_with_mode(args.clone().into_iter(), false).unwrap();
+        assert_eq!(prepared, [OsString::from("tty"), OsString::from("--help")]);
+
+        let error = prepare_tty_args_with_mode(args.into_iter(), true).unwrap_err();
+        match previous {
+            Some(value) => unsafe { std::env::set_var("LC_ALL", value) },
+            None => unsafe { std::env::remove_var("LC_ALL") },
+        }
+
+        assert_eq!(error.to_string(), "extra operand 'extra'");
     }
 
     #[cfg(test)]

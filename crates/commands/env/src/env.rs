@@ -28,8 +28,8 @@ use sys_locale::get_locale;
 
 use ini::Ini;
 use native_int_str::{
-    EnvConvert, NCvt, NativeIntStr, NativeIntString, NativeStr,
-    from_native_int_representation_owned,
+    EnvConvert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
+    from_native_int_representation_owned, get_single_native_int_value,
 };
 #[cfg(unix)]
 use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, raise, sigaction};
@@ -303,8 +303,19 @@ pub fn env_parse_args_from_str(native_text: &NativeIntStr) -> CTResult<Vec<Nativ
         parse_error::EnvParseError::MissingClosingQuote { pos: _, c: _ } => {
             CtSimpleError::new(125, "no terminating quote in -S string")
         }
-        parse_error::EnvParseError::ParsingOfVariableNameFailed { pos, msg } => {
-            CtSimpleError::new(125, format!("variable name issue (at {pos}): {msg}"))
+        parse_error::EnvParseError::ParsingOfVariableNameFailed { pos, msg: _ } => {
+            let scan_end = pos.min(native_text.len());
+            let dollar = get_single_native_int_value(&'$').expect("dollar has native encoding");
+            let start = native_text[..scan_end]
+                .iter()
+                .rposition(|character| *character == dollar)
+                .unwrap_or_else(|| scan_end.saturating_sub(1));
+            let fragment_os = from_native_int_representation(Cow::Borrowed(&native_text[start..]));
+            let fragment = fragment_os.to_string_lossy();
+            CtSimpleError::new(
+                125,
+                format!("only ${{VARNAME}} expansion is supported, error at: {fragment}"),
+            )
         }
         _ => CtSimpleError::new(125, format!("Error: {e:?}")),
     })
@@ -1353,8 +1364,13 @@ mod tests {
     }
 
     #[test]
-    fn test_split_string_rejects_unbraced_variable_expansion() {
-        assert!(env_parse_args_from_str(&NCvt::convert("A=$FOO")).is_err());
+    fn test_split_string_rejects_invalid_gnu_variable_syntax() {
+        for input in ["A=$FOO", "A=${MISSING:default}", "A=${}", "A=${é}"] {
+            assert!(
+                env_parse_args_from_str(&NCvt::convert(input)).is_err(),
+                "{input}"
+            );
+        }
     }
 
     #[cfg(unix)]

@@ -128,6 +128,31 @@ fn env_split_string_separate_argument_is_split() {
 }
 
 #[test]
+fn env_split_string_rejects_invalid_braced_variable_syntax() {
+    for (split_string, fragment) in [
+        ("A=${MISSING:default}", "${MISSING:default}"),
+        ("A=${}", "${}"),
+        ("A=${é}", "${é}"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .args(["env", "-i", "-S", split_string])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .expect("run syskits env with invalid -S variable syntax");
+
+        assert_eq!(output.status.code(), Some(125), "{split_string}");
+        assert_eq!(output.stdout, b"", "{split_string}");
+        assert_eq!(
+            output.stderr,
+            format!("env: only ${{VARNAME}} expansion is supported, error at: {fragment}\n")
+                .as_bytes(),
+            "{split_string}"
+        );
+    }
+}
+
+#[test]
 fn env_split_string_after_command_is_not_env_option() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "/usr/bin/printf", "-S", "ok"])

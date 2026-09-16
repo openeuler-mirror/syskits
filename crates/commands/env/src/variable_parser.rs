@@ -9,8 +9,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ops::Range;
-
 use crate::{
     native_int_str::NativeIntStr, parse_error::EnvParseError, string_parser::StringParser,
 };
@@ -25,19 +23,15 @@ impl<'a> VariableParser<'a, '_> {
         self.parser.peek().ok()
     }
 
-    /// 检查变量名是否以数字开头，这是不允许的。
+    /// GNU env accepts only ASCII letters or underscore as the first name character.
     fn check_variable_name_start(&self) -> Result<(), EnvParseError> {
-        if let Some(c) = self.get_current_char() {
-            if c.is_ascii_digit() {
-                return Err(EnvParseError::ParsingOfVariableNameFailed {
-                    pos: self.parser.get_peek_position(),
-                    msg: format!(
-                        "Unexpected character: '{c}', expected variable name must not start with 0..9"
-                    ),
-                });
-            }
+        match self.get_current_char() {
+            Some(c) if c.is_ascii_alphabetic() || c == '_' => Ok(()),
+            _ => Err(EnvParseError::ParsingOfVariableNameFailed {
+                pos: self.parser.get_peek_position(),
+                msg: "expected an ASCII letter or underscore".into(),
+            }),
         }
-        Ok(())
     }
 
     /// 跳过一个字符。
@@ -46,15 +40,12 @@ impl<'a> VariableParser<'a, '_> {
         Ok(())
     }
 
-    /// 解析用花括号包围的变量名及其可能的默认值。
-    fn parse_braced_variable_name(
-        &mut self,
-    ) -> Result<(&'a NativeIntStr, Option<&'a NativeIntStr>), EnvParseError> {
+    /// Parse GNU env -S's ${VARNAME} syntax.
+    fn parse_braced_variable_name(&mut self) -> Result<&'a NativeIntStr, EnvParseError> {
         let position_start = self.parser.get_peek_position();
 
         self.check_variable_name_start()?;
 
-        let (var_name_end, default_end);
         loop {
             match self.get_current_char() {
                 None => {
@@ -63,64 +54,22 @@ impl<'a> VariableParser<'a, '_> {
                         msg: "Missing closing brace".into(),
                     });
                 }
-                Some(c) if !c.is_ascii() || c.is_ascii_alphanumeric() || c == '_' => {
+                Some(c) if c.is_ascii_alphanumeric() || c == '_' => {
                     self.skip_one()?;
-                }
-                Some(':') => {
-                    var_name_end = self.parser.get_peek_position();
-                    loop {
-                        match self.get_current_char() {
-                            None => {
-                                return Err(EnvParseError::ParsingOfVariableNameFailed {
-                                    pos: self.parser.get_peek_position(),
-                                    msg: "Missing closing brace after default value".into(),
-                                });
-                            }
-                            Some('}') => {
-                                default_end = Some(self.parser.get_peek_position());
-                                self.skip_one()?;
-                                break;
-                            }
-                            Some(_) => {
-                                self.skip_one()?;
-                            }
-                        }
-                    }
-                    break;
                 }
                 Some('}') => {
-                    var_name_end = self.parser.get_peek_position();
-                    default_end = None;
+                    let var_name_end = self.parser.get_peek_position();
                     self.skip_one()?;
-                    break;
+                    return Ok(self.parser.substring(&(position_start..var_name_end)));
                 }
                 Some(c) => {
                     return Err(EnvParseError::ParsingOfVariableNameFailed {
                         pos: self.parser.get_peek_position(),
-                        msg: format!(
-                            "Unexpected character: '{c}', expected a closing brace ('}}') or colon (':')"
-                        ),
+                        msg: format!("unexpected character: '{c}'"),
                     });
                 }
             };
         }
-
-        // 根据是否有默认值结束位置，来决定是否解析默认值。
-        let default_option = if let Some(default_end) = default_end {
-            Some(self.parser.substring(&Range {
-                start: var_name_end + 1,
-                end: default_end,
-            }))
-        } else {
-            None
-        };
-
-        let varname = self.parser.substring(&Range {
-            start: position_start,
-            end: var_name_end,
-        });
-
-        Ok((varname, default_option))
     }
 
     /// GNU env -S仅支持${VARNAME}形式的变量展开。
@@ -138,7 +87,7 @@ impl<'a> VariableParser<'a, '_> {
             }
             Some('{') => {
                 self.skip_one()?;
-                self.parse_braced_variable_name()?
+                (self.parse_braced_variable_name()?, None)
             }
             Some(_) => {
                 return Err(EnvParseError::ParsingOfVariableNameFailed {

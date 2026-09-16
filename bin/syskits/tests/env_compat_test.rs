@@ -124,6 +124,23 @@ fn env_expands_split_string_in_combined_short_options() {
     assert_eq!(output.stderr, b"");
 }
 
+#[test]
+fn env_debug_reports_split_string_expansion() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "-ivS", "A=1"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env -ivS A=1");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"A=1\n");
+    assert_eq!(
+        output.stderr,
+        b"split -S:  'A=1'\n into:    'A=1'\ncleaning environ\nsetenv:   A=1\n"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn env_debug_reports_signal_handling_before_execution() {

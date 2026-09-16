@@ -334,38 +334,6 @@ pub fn env_parse_args_from_str(native_text: &NativeIntStr) -> CTResult<Vec<Nativ
     })
 }
 
-fn env_debug_print_args(args: &[OsString]) {
-    eprintln!("input args:");
-    for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{}]: {}", i, arg.quote());
-    }
-}
-
-fn env_check_and_handle_string_args(
-    arg_ostr: &OsString,
-    prefix_to_test: &str,
-    all_args: &mut Vec<std::ffi::OsString>,
-    is_debug_print_args: Option<&Vec<OsString>>,
-) -> CTResult<bool> {
-    let native_arg = NCvt::convert(arg_ostr);
-    if let Some(remaining_arg) = native_arg.strip_prefix(&*NCvt::convert(prefix_to_test)) {
-        if let Some(input_args) = is_debug_print_args {
-            env_debug_print_args(input_args);
-        }
-
-        let arg_strings = env_parse_args_from_str(remaining_arg)?;
-        all_args.extend(
-            arg_strings
-                .into_iter()
-                .map(from_native_int_representation_owned),
-        );
-
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
-
 fn env_extract_combined_short_split_string(
     arg: &OsStr,
 ) -> Option<(Option<OsString>, Option<OsString>)> {
@@ -401,21 +369,60 @@ fn env_extract_combined_short_split_string(
     None
 }
 
+fn env_short_options_enable_debug(arg: &OsStr) -> bool {
+    let native_arg = NCvt::convert(arg);
+    let dash = get_single_native_int_value(&'-').expect("dash has native encoding");
+    let debug = get_single_native_int_value(&'v').expect("v has native encoding");
+    let split_string = get_single_native_int_value(&'S').expect("S has native encoding");
+    let no_argument_options = [
+        get_single_native_int_value(&'i').expect("i has native encoding"),
+        debug,
+        get_single_native_int_value(&'0').expect("0 has native encoding"),
+    ];
+    let argument_options = [
+        get_single_native_int_value(&'u').expect("u has native encoding"),
+        get_single_native_int_value(&'C').expect("C has native encoding"),
+    ];
+
+    if native_arg.first() != Some(&dash) {
+        return false;
+    }
+
+    let mut debug_enabled = false;
+    for &option in native_arg.iter().skip(1) {
+        if option == debug {
+            debug_enabled = true;
+        } else if no_argument_options.contains(&option) {
+            continue;
+        } else if option == split_string || argument_options.contains(&option) {
+            return debug_enabled;
+        } else {
+            return false;
+        }
+    }
+
+    debug_enabled
+}
+
 fn env_split_string_argument(
     split_arg: &OsStr,
     all_args: &mut Vec<OsString>,
-    input_args_for_debug: Option<&Vec<OsString>>,
+    is_debug_printing: bool,
 ) -> CTResult<()> {
-    if let Some(input_args) = input_args_for_debug {
-        env_debug_print_args(input_args);
+    let arg_strings = env_parse_args_from_str(&NCvt::convert(split_arg))?
+        .into_iter()
+        .map(from_native_int_representation_owned)
+        .collect::<Vec<_>>();
+
+    if is_debug_printing && !arg_strings.is_empty() {
+        eprintln!("split -S:  {}", split_arg.quote());
+        eprintln!(" into:    {}", arg_strings[0].quote());
+        for argument in arg_strings.iter().skip(1) {
+            eprintln!("     &    {}", argument.quote());
+        }
     }
 
-    let arg_strings = env_parse_args_from_str(&NCvt::convert(split_arg))?;
-    all_args.extend(
-        arg_strings
-            .into_iter()
-            .map(from_native_int_representation_owned),
-    );
+    all_args.extend(arg_strings);
     Ok(())
 }
 
@@ -448,7 +455,7 @@ impl EnvAppData {
 
     fn process_all_string_arguments(
         &mut self,
-        source_args: &Vec<OsString>,
+        source_args: &[OsString],
     ) -> CTResult<Vec<std::ffi::OsString>> {
         let Some(first_arg) = source_args.first() else {
             return Ok(Vec::new());
@@ -458,7 +465,7 @@ impl EnvAppData {
         let mut args = if has_program_name {
             source_args[1..].to_vec()
         } else {
-            source_args.clone()
+            source_args.to_vec()
         };
         loop {
             let mut all_args: Vec<std::ffi::OsString> =
@@ -481,7 +488,7 @@ impl EnvAppData {
                             "option '--split-string' requires an argument".to_string(),
                         ));
                     };
-                    env_split_string_argument(split_arg, &mut next_args, None)?;
+                    env_split_string_argument(split_arg, &mut next_args, self.do_debug_printing)?;
                     self.had_string_argument = true;
                     expanded_split_string = true;
                     next_args.extend(iter.cloned());
@@ -491,7 +498,7 @@ impl EnvAppData {
                 if let Some(split_arg) =
                     NativeStr::new(arg).strip_prefix(OsStr::new("--split-string="))
                 {
-                    env_split_string_argument(&split_arg, &mut next_args, None)?;
+                    env_split_string_argument(&split_arg, &mut next_args, self.do_debug_printing)?;
                     self.had_string_argument = true;
                     expanded_split_string = true;
                     next_args.extend(iter.cloned());
@@ -510,6 +517,10 @@ impl EnvAppData {
                     break;
                 }
 
+                if arg == "--debug" || env_short_options_enable_debug(arg) {
+                    self.do_debug_printing = true;
+                }
+
                 if arg == "-S" {
                     let Some(split_arg) = iter.next() else {
                         return Err(CTsageError::new(
@@ -517,38 +528,15 @@ impl EnvAppData {
                             "option requires an argument -- 'S'".to_string(),
                         ));
                     };
-                    env_split_string_argument(split_arg, &mut next_args, None)?;
+                    env_split_string_argument(split_arg, &mut next_args, self.do_debug_printing)?;
                     self.had_string_argument = true;
                     expanded_split_string = true;
                     next_args.extend(iter.cloned());
                     break;
                 }
 
-                if arg == "-vS" {
-                    let Some(split_arg) = iter.next() else {
-                        return Err(CTsageError::new(
-                            125,
-                            "option requires an argument -- 'S'".to_string(),
-                        ));
-                    };
-                    env_split_string_argument(split_arg, &mut next_args, Some(source_args))?;
-                    self.do_debug_printing = true;
-                    self.had_string_argument = true;
-                    expanded_split_string = true;
-                    next_args.extend(iter.cloned());
-                    break;
-                }
-
-                if env_check_and_handle_string_args(arg, "-vS", &mut next_args, Some(source_args))?
-                {
-                    self.do_debug_printing = true;
-                    self.had_string_argument = true;
-                    expanded_split_string = true;
-                    next_args.extend(iter.cloned());
-                    break;
-                }
-
-                if env_check_and_handle_string_args(arg, "-S", &mut next_args, None)? {
+                if let Some(split_arg) = NativeStr::new(arg).strip_prefix(OsStr::new("-S")) {
+                    env_split_string_argument(&split_arg, &mut next_args, self.do_debug_printing)?;
                     self.had_string_argument = true;
                     expanded_split_string = true;
                     next_args.extend(iter.cloned());
@@ -567,7 +555,11 @@ impl EnvAppData {
                             CTsageError::new(125, "option requires an argument -- 'S'".to_string())
                         })?,
                     };
-                    env_split_string_argument(&split_argument, &mut next_args, None)?;
+                    env_split_string_argument(
+                        &split_argument,
+                        &mut next_args,
+                        self.do_debug_printing,
+                    )?;
                     self.had_string_argument = true;
                     expanded_split_string = true;
                     next_args.extend(iter.cloned());
@@ -1442,6 +1434,15 @@ mod tests {
             env_change_directory_debug_message(OsStr::new("/tmp/env-directory")),
             "chdir:    '/tmp/env-directory'"
         );
+    }
+
+    #[test]
+    fn test_short_options_enable_debug_before_split_string() {
+        assert!(env_short_options_enable_debug(OsStr::new("-vS")));
+        assert!(env_short_options_enable_debug(OsStr::new("-viS")));
+        assert!(env_short_options_enable_debug(OsStr::new("-vuNAME")));
+        assert!(!env_short_options_enable_debug(OsStr::new("-S")));
+        assert!(!env_short_options_enable_debug(OsStr::new("-vinvalid")));
     }
 
     #[cfg(target_os = "linux")]

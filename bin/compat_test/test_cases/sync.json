@@ -136,6 +136,60 @@
     },
     {
       "command": "sync",
+      "description": "GNU 无参长选项附带值：--data=value 必须以 GNU 文案拒绝参数。",
+      "args": ["--data=value"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: option '--data' doesn't allow an argument\nTry 'sync --help' for more information.\n"
+        }
+      },
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "GNU 短选项组扫描：-dfile 在识别 -d 和 -f 后必须报告首个非法选项 i。",
+      "args": ["-dfile"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: invalid option -- 'i'\nTry 'sync --help' for more information.\n"
+        }
+      },
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      }
+    },
+    {
+      "command": "sync",
+      "description": "GNU 未知长选项：--unknown 必须输出 unrecognized option 诊断。",
+      "args": ["--unknown"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: unrecognized option '--unknown'\nTry 'sync --help' for more information.\n"
+        }
+      },
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      }
+    },
+    {
+      "command": "sync",
       "description": "-d 和 -f 互斥 - 应失败",
       "args": ["--data", "--file-system"],
       "expectation": {

@@ -260,6 +260,27 @@ fn env_default_signal_unblocks_a_previously_blocked_signal() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn env_blocks_linux_realtime_signals() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--block-signal=RTMIN",
+            "/bin/sh",
+            "-c",
+            "kill -RTMIN $$; printf survived",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with a blocked realtime signal");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"survived");
+    assert_eq!(output.stderr, b"");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn env_rejects_explicit_immutable_signal_actions() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "--ignore-signal=KILL", "/usr/bin/true"])

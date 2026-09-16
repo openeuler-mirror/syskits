@@ -989,8 +989,16 @@ fn get_signal_masks(args_match: &clap::ArgMatches) -> CTResult<Option<SignalMask
     Ok(Some(SignalMasks { block, unblock }))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, test))]
 fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDispositions> {
+    get_signal_dispositions_for_program(args_match, true)
+}
+
+#[cfg(unix)]
+fn get_signal_dispositions_for_program(
+    args_match: &clap::ArgMatches,
+    program_specified: bool,
+) -> CTResult<SignalDispositions> {
     let mut operations = Vec::new();
     for (name, set_default) in [("default-signal", true), ("ignore-signal", false)] {
         if let (Some(indices), Some(values)) = (
@@ -1020,7 +1028,8 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
         };
 
         for signal in signals {
-            if (signal == libc::SIGKILL || signal == libc::SIGSTOP)
+            if program_specified
+                && (signal == libc::SIGKILL || signal == libc::SIGSTOP)
                 && !ignore_immutable_signal_errors
             {
                 return Err(CtSimpleError::new(
@@ -1219,8 +1228,6 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
     };
 
     #[cfg(unix)]
-    let (default_signals, ignore_signals) = get_signal_dispositions(args_match)?;
-    #[cfg(unix)]
     let block_signals = get_signal_masks(args_match)?;
     #[cfg(unix)]
     let list_signal_handling = args_match.get_count("list-signal-handling") > 0;
@@ -1234,9 +1241,9 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
         sets: vec![],
         program: vec![],
         #[cfg(unix)]
-        default_signals,
+        default_signals: None,
         #[cfg(unix)]
-        ignore_signals,
+        ignore_signals: None,
         #[cfg(unix)]
         block_signals,
         #[cfg(unix)]
@@ -1262,6 +1269,12 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
             env_parse_program_opt(&mut opts, opt)?;
         }
     }
+    #[cfg(unix)]
+    {
+        (opts.default_signals, opts.ignore_signals) =
+            get_signal_dispositions_for_program(args_match, !opts.program.is_empty())?;
+    }
+
     Ok(opts)
 }
 
@@ -1791,6 +1804,18 @@ mod tests {
                 "{option}"
             );
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_immutable_signal_actions_are_ignored_without_a_program() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--ignore-signal=KILL"])
+            .unwrap();
+
+        let (_, ignored) = get_signal_dispositions_for_program(&matches, false).unwrap();
+
+        assert_eq!(ignored, Some(vec![libc::SIGKILL]));
     }
 
     #[test]

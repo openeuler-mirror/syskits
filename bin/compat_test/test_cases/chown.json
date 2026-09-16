@@ -1450,6 +1450,31 @@
         "rm -rf -- chown-follow-order"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；-R与--dereference未指定-H或-L时，GNU拒绝组合并使用完整诊断文本",
+      "args": [
+        "-R",
+        "-P",
+        "--dereference",
+        "0",
+        "chown-dereference-requires-traversal"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-dereference-requires-traversal"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: -R --dereference requires either -H or -L\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-dereference-requires-traversal"
+      ]
     }
   ]
 }

@@ -796,7 +796,10 @@ pub fn chown_base(
     if recursive {
         if traverse_symlinks == CtTraverseSymlinks::None {
             if dereference == Some(true) {
-                return Err(CtSimpleError::new(1, "-R --dereference requires -H or -L"));
+                return Err(CtSimpleError::new(
+                    1,
+                    "-R --dereference requires either -H or -L",
+                ));
             }
             dereference = Some(false);
         }

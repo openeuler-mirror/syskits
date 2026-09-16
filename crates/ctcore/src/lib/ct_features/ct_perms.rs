@@ -88,6 +88,13 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
     }
 }
 
+fn chown_ids_for_syscall(dest_uid: Option<u32>, dest_gid: Option<u32>) -> (uid_t, gid_t) {
+    (
+        dest_uid.unwrap_or(uid_t::MAX),
+        dest_gid.unwrap_or(gid_t::MAX),
+    )
+}
+
 /// Perform the change of owner on a path
 /// with the various options
 /// and error messages management
@@ -123,6 +130,7 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
 ) -> Result<String, ChownFailure> {
     let dest_uid_val = dest_uid.unwrap_or_else(|| meta.uid());
     let dest_gid_val = dest_gid.unwrap_or_else(|| meta.gid());
+    let (uid_for_syscall, gid_for_syscall) = chown_ids_for_syscall(dest_uid, dest_gid);
     let path = path.as_ref();
     let mut out: String = String::new();
 
@@ -188,7 +196,7 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
     };
     let path_str = path.quote().to_string();
 
-    if let Err(e) = chown(path, dest_uid_val, dest_gid_val, follow) {
+    if let Err(e) = chown(path, uid_for_syscall, gid_for_syscall, follow) {
         let verbose_output = (verbosity.level == CtVerbosityLevel::Verbose).then(|| {
             if group_only {
                 t!(
@@ -1087,6 +1095,12 @@ mod tests {
 
         assert_eq!(traversal_failure_action(&directory, true), "read directory");
         assert_eq!(traversal_failure_action(&file, true), "access");
+    }
+
+    #[test]
+    fn test_unspecified_ownership_uses_chown_sentinel_values() {
+        assert_eq!(chown_ids_for_syscall(Some(1000), None), (1000, gid_t::MAX));
+        assert_eq!(chown_ids_for_syscall(None, Some(1000)), (uid_t::MAX, 1000));
     }
 
     #[test]

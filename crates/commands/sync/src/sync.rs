@@ -25,7 +25,10 @@ use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 
+use std::borrow::Cow;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 #[cfg(not(target_os = "linux"))]
 use std::fs::File;
 use sys_locale::get_locale;
@@ -72,7 +75,7 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let arg_matches = ct_app().try_get_matches_from(args)?;
+    let arg_matches = ct_app().try_get_matches_from(prepare_sync_args(args)?)?;
     let is_has_data = arg_matches.get_flag(sync_flags::SYNC_DATA);
     let is_file_system = arg_matches.get_flag(sync_flags::SYNC_FILE_SYSTEM);
     #[cfg(target_os = "linux")]
@@ -128,6 +131,153 @@ pub fn sync_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     }
     Ok(())
+}
+
+const SYNC_LONG_OPTIONS: &[&str] = &["data", "file-system", "help", "version"];
+// Preserve syskits' -h/-V extensions while applying GNU diagnostics to invalid short options.
+const SYNC_SHORT_OPTIONS: &[u8] = b"dfhV";
+
+enum SyncLongOptionMatch {
+    None,
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn prepare_sync_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    prepare_sync_args_with_mode(args, ctcore::ct_posix::posixly_correct())
+}
+
+fn prepare_sync_args_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut parse_options = true;
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if !parse_options {
+            break;
+        }
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                parse_options = false;
+            }
+            continue;
+        }
+
+        let terminal = if bytes.starts_with(b"--") {
+            validate_sync_long_option(bytes)?
+        } else {
+            validate_sync_short_options(bytes)?;
+            false
+        };
+        if terminal {
+            break;
+        }
+    }
+
+    Ok(args)
+}
+
+fn match_sync_long_option(name: &[u8]) -> SyncLongOptionMatch {
+    if let Some(option) = SYNC_LONG_OPTIONS
+        .iter()
+        .find(|option| option.as_bytes() == name)
+    {
+        return SyncLongOptionMatch::Recognized(option);
+    }
+
+    let matches = SYNC_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => SyncLongOptionMatch::None,
+        [option] => SyncLongOptionMatch::Recognized(option),
+        _ => SyncLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn validate_sync_long_option(argument: &[u8]) -> CTResult<bool> {
+    let long = &argument[2..];
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match match_sync_long_option(name) {
+        SyncLongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(SyncUsageError::boxed(message))
+        }
+        SyncLongOptionMatch::Ambiguous(matches) => {
+            let possibilities = matches
+                .into_iter()
+                .map(|option| format!("'--{option}'"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut message = b"option '".to_vec();
+            message.extend_from_slice(argument);
+            message.extend_from_slice(b"' is ambiguous; possibilities: ");
+            message.extend_from_slice(possibilities.as_bytes());
+            Err(SyncUsageError::boxed(message))
+        }
+        SyncLongOptionMatch::Recognized(canonical) if separator.is_some() => {
+            Err(SyncUsageError::boxed(
+                format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+            ))
+        }
+        SyncLongOptionMatch::Recognized("help" | "version") => Ok(true),
+        SyncLongOptionMatch::Recognized(_) => Ok(false),
+    }
+}
+
+fn validate_sync_short_options(argument: &[u8]) -> CTResult<()> {
+    if let Some(unknown) = argument[1..]
+        .iter()
+        .find(|option| !SYNC_SHORT_OPTIONS.contains(option))
+    {
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(*unknown);
+        message.push(b'\'');
+        return Err(SyncUsageError::boxed(message));
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+struct SyncUsageError {
+    message: Vec<u8>,
+}
+
+impl SyncUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn ctcore::ct_error::CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for SyncUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for SyncUsageError {}
+
+impl ctcore::ct_error::CTError for SyncUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -276,6 +426,59 @@ mod tests {
 
         assert!(!matches.get_flag(sync_flags::SYNC_DATA));
         assert_eq!(files, ["valid", "-d"]);
+    }
+
+    #[test]
+    fn test_sync_main_reports_attached_data_value_like_gnu() {
+        let error = sync_main([OsString::from("sync"), OsString::from("--data=value")].into_iter())
+            .unwrap_err();
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"option '--data' doesn't allow an argument"
+        );
+        assert!(error.usage());
+    }
+
+    #[test]
+    fn test_prepare_sync_args_reports_gnu_option_errors() {
+        let cases = [
+            (
+                "--file-system=value",
+                b"option '--file-system' doesn't allow an argument".as_slice(),
+            ),
+            ("--unknown", b"unrecognized option '--unknown'".as_slice()),
+            ("-dfile", b"invalid option -- 'i'".as_slice()),
+        ];
+
+        for (argument, expected) in cases {
+            let error = prepare_sync_args_with_mode(
+                [OsString::from("sync"), OsString::from(argument)].into_iter(),
+                false,
+            )
+            .unwrap_err();
+
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn test_prepare_sync_args_stops_validation_after_posix_operand() {
+        let args = [
+            OsString::from("sync"),
+            OsString::from("file"),
+            OsString::from("--unknown"),
+        ];
+
+        let prepared = prepare_sync_args_with_mode(args.clone().into_iter(), true).unwrap();
+        assert_eq!(prepared, args);
+
+        let error = prepare_sync_args_with_mode(args.into_iter(), false).unwrap_err();
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"unrecognized option '--unknown'"
+        );
     }
 
     #[cfg(test)]

@@ -366,6 +366,41 @@ fn env_check_and_handle_string_args(
     }
 }
 
+fn env_extract_combined_short_split_string(
+    arg: &OsStr,
+) -> Option<(Option<OsString>, Option<OsString>)> {
+    let native_arg = NCvt::convert(arg);
+    let dash = get_single_native_int_value(&'-').expect("dash has native encoding");
+    let split_string = get_single_native_int_value(&'S').expect("S has native encoding");
+    let no_argument_options = [
+        get_single_native_int_value(&'i').expect("i has native encoding"),
+        get_single_native_int_value(&'v').expect("v has native encoding"),
+        get_single_native_int_value(&'0').expect("0 has native encoding"),
+    ];
+
+    if native_arg.first() != Some(&dash) {
+        return None;
+    }
+
+    let mut prefix = vec![dash];
+    for (index, &option) in native_arg.iter().enumerate().skip(1) {
+        if no_argument_options.contains(&option) {
+            prefix.push(option);
+            continue;
+        }
+        if option != split_string {
+            return None;
+        }
+
+        let options = (prefix.len() > 1).then(|| from_native_int_representation_owned(prefix));
+        let split_argument = (index + 1 < native_arg.len())
+            .then(|| from_native_int_representation_owned(native_arg[index + 1..].to_vec()));
+        return Some((options, split_argument));
+    }
+
+    None
+}
+
 fn env_split_string_argument(
     split_arg: &OsStr,
     all_args: &mut Vec<OsString>,
@@ -514,6 +549,25 @@ impl EnvAppData {
                 }
 
                 if env_check_and_handle_string_args(arg, "-S", &mut next_args, None)? {
+                    self.had_string_argument = true;
+                    expanded_split_string = true;
+                    next_args.extend(iter.cloned());
+                    break;
+                }
+
+                if let Some((options, split_argument)) =
+                    env_extract_combined_short_split_string(arg)
+                {
+                    if let Some(options) = options {
+                        next_args.push(options);
+                    }
+                    let split_argument = match split_argument {
+                        Some(split_argument) => split_argument,
+                        None => iter.next().cloned().ok_or_else(|| {
+                            CTsageError::new(125, "option requires an argument -- 'S'".to_string())
+                        })?,
+                    };
+                    env_split_string_argument(&split_argument, &mut next_args, None)?;
                     self.had_string_argument = true;
                     expanded_split_string = true;
                     next_args.extend(iter.cloned());
@@ -3531,6 +3585,19 @@ mod tests {
         use std::io::Write;
 
         use tempfile::Builder;
+
+        #[test]
+        fn test_process_all_string_arguments_combined_i_s() {
+            let mut env_app_data = EnvAppData::default();
+            let original_args = vec![OsString::from("-iS"), OsString::from("A=1")];
+
+            assert_eq!(
+                env_app_data
+                    .process_all_string_arguments(&original_args)
+                    .unwrap(),
+                vec![OsString::from("-i"), OsString::from("A=1")]
+            );
+        }
 
         #[test]
         fn test_process_all_string_arguments_i() {

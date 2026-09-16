@@ -74,6 +74,13 @@ type EnvSignal = libc::c_int;
 type SignalDispositions = (Option<Vec<EnvSignal>>, Option<Vec<EnvSignal>>);
 
 #[cfg(unix)]
+#[derive(Debug, PartialEq)]
+struct SignalMasks {
+    block: Vec<EnvSignal>,
+    unblock: Vec<EnvSignal>,
+}
+
+#[cfg(unix)]
 const MISSING_SIGNAL_ARGUMENT: &str = "\0";
 
 #[cfg(target_os = "linux")]
@@ -95,7 +102,7 @@ struct EnvOptions<'a> {
     #[cfg(unix)]
     ignore_signals: Option<Vec<EnvSignal>>,
     #[cfg(unix)]
-    block_signals: Option<Vec<EnvSignal>>,
+    block_signals: Option<SignalMasks>,
     #[cfg(unix)]
     list_signal_handling: bool,
 }
@@ -785,15 +792,15 @@ fn signal_mask_debug_message(signal: EnvSignal, action: &str) -> String {
 }
 
 #[cfg(unix)]
-fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec<EnvSignal>>> {
-    if !args_match.contains_id(name) {
+fn get_signal_masks(args_match: &clap::ArgMatches) -> CTResult<Option<SignalMasks>> {
+    if !args_match.contains_id("block-signal") && !args_match.contains_id("default-signal") {
         return Ok(None);
     }
 
     let mut operations = Vec::new();
     if let (Some(indices), Some(values)) = (
-        args_match.indices_of(name),
-        args_match.get_many::<String>(name),
+        args_match.indices_of("block-signal"),
+        args_match.get_many::<String>("block-signal"),
     ) {
         operations.extend(
             indices
@@ -801,12 +808,10 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
                 .map(|(index, value)| (index, false, value)),
         );
     }
-    if name == "block-signal"
-        && let (Some(indices), Some(values)) = (
-            args_match.indices_of("default-signal"),
-            args_match.get_many::<String>("default-signal"),
-        )
-    {
+    if let (Some(indices), Some(values)) = (
+        args_match.indices_of("default-signal"),
+        args_match.get_many::<String>("default-signal"),
+    ) {
         operations.extend(
             indices
                 .zip(values)
@@ -815,8 +820,9 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
     }
     operations.sort_unstable_by_key(|(index, _, _)| *index);
 
-    let mut sigs = Vec::new();
-    for (_, unblock, value) in operations {
+    let mut block = Vec::new();
+    let mut unblock = Vec::new();
+    for (_, should_unblock, value) in operations {
         let signals = if value == MISSING_SIGNAL_ARGUMENT {
             known_env_signals()
         } else {
@@ -824,14 +830,20 @@ fn get_signals(args_match: &clap::ArgMatches, name: &str) -> CTResult<Option<Vec
         };
 
         for signal in signals {
-            if unblock {
-                sigs.retain(|candidate| *candidate != signal);
-            } else if !sigs.contains(&signal) {
-                sigs.push(signal);
+            if should_unblock {
+                block.retain(|candidate| *candidate != signal);
+                if !unblock.contains(&signal) {
+                    unblock.push(signal);
+                }
+            } else {
+                unblock.retain(|candidate| *candidate != signal);
+                if !block.contains(&signal) {
+                    block.push(signal);
+                }
             }
         }
     }
-    Ok(Some(sigs))
+    Ok(Some(SignalMasks { block, unblock }))
 }
 
 #[cfg(unix)]
@@ -902,7 +914,7 @@ fn apply_signal_handlers(options: &EnvOptions, is_debug_printing: bool) -> CTRes
     apply_signal_handlers_to_process(
         options.default_signals.as_deref(),
         options.ignore_signals.as_deref(),
-        options.block_signals.as_deref(),
+        options.block_signals.as_ref(),
         is_debug_printing,
     );
     Ok(())
@@ -912,7 +924,7 @@ fn apply_signal_handlers(options: &EnvOptions, is_debug_printing: bool) -> CTRes
 fn apply_signal_handlers_to_process(
     default_signals: Option<&[EnvSignal]>,
     ignore_signals: Option<&[EnvSignal]>,
-    block_signals: Option<&[EnvSignal]>,
+    signal_masks: Option<&SignalMasks>,
     is_debug_printing: bool,
 ) {
     let mut disposition_changes = Vec::new();
@@ -956,10 +968,10 @@ fn apply_signal_handlers_to_process(
     }
 
     let mut mask_changes = Vec::new();
-    if let Some(sigs) = block_signals {
+    if let Some(signal_masks) = signal_masks {
         let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
         unsafe { libc::sigemptyset(&mut set) };
-        for &sig in sigs {
+        for &sig in &signal_masks.block {
             if sig == libc::SIGKILL || sig == libc::SIGSTOP {
                 continue;
             }
@@ -968,14 +980,11 @@ fn apply_signal_handlers_to_process(
         }
         unsafe { libc::sigprocmask(libc::SIG_BLOCK, &set, std::ptr::null_mut()) };
     }
-    if let Some(sigs) = default_signals {
+    if let Some(signal_masks) = signal_masks {
         let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
         unsafe { libc::sigemptyset(&mut set) };
-        for &sig in sigs {
-            if sig == libc::SIGKILL
-                || sig == libc::SIGSTOP
-                || block_signals.is_some_and(|blocked| blocked.contains(&sig))
-            {
+        for &sig in &signal_masks.unblock {
+            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
                 continue;
             }
             unsafe { libc::sigaddset(&mut set, sig) };
@@ -1050,7 +1059,7 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
     #[cfg(unix)]
     let (default_signals, ignore_signals) = get_signal_dispositions(args_match)?;
     #[cfg(unix)]
-    let block_signals = get_signals(args_match, "block-signal")?;
+    let block_signals = get_signal_masks(args_match)?;
     #[cfg(unix)]
     let list_signal_handling = args_match.get_count("list-signal-handling") > 0;
 
@@ -1410,7 +1419,13 @@ mod tests {
             .try_get_matches_from([ctcore::ct_util_name(), "--block-signal=", "true"])
             .unwrap();
 
-        assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));
+        assert_eq!(
+            get_signal_masks(&matches).unwrap(),
+            Some(SignalMasks {
+                block: vec![],
+                unblock: vec![],
+            })
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -1419,9 +1434,9 @@ mod tests {
         let matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "--block-signal", "true"])
             .unwrap();
-        let blocked = get_signals(&matches, "block-signal").unwrap().unwrap();
-        assert!(blocked.contains(&libc::SIGRTMIN()));
-        assert!(blocked.contains(&libc::SIGRTMAX()));
+        let blocked = get_signal_masks(&matches).unwrap().unwrap();
+        assert!(blocked.block.contains(&libc::SIGRTMIN()));
+        assert!(blocked.block.contains(&libc::SIGRTMAX()));
 
         let matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "--ignore-signal", "true"])
@@ -1444,7 +1459,34 @@ mod tests {
             ])
             .unwrap();
 
-        assert_eq!(get_signals(&matches, "block-signal").unwrap(), Some(vec![]));
+        assert_eq!(
+            get_signal_masks(&matches).unwrap(),
+            Some(SignalMasks {
+                block: vec![],
+                unblock: vec![libc::SIGHUP],
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_default_signal_keeps_unblock_mask_when_ignore_overrides_disposition() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--default-signal=HUP",
+                "--ignore-signal=HUP",
+                "true",
+            ])
+            .unwrap();
+
+        assert_eq!(
+            get_signal_masks(&matches).unwrap(),
+            Some(SignalMasks {
+                block: vec![],
+                unblock: vec![libc::SIGHUP],
+            })
+        );
     }
 
     #[cfg(target_os = "linux")]

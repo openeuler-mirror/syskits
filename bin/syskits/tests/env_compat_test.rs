@@ -145,6 +145,24 @@ fn env_suggests_split_string_after_whitespace_command_is_not_found() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn env_suggests_split_string_for_whitespace_in_shebang_option() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "-i /usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with a whitespace shebang option");
+
+    assert_eq!(output.status.code(), Some(125));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"env: invalid option -- ' '\nenv: use -[v]S to pass options in shebang lines\nTry 'env --help' for more information.\n"
+    );
+}
+
 #[test]
 fn env_expands_split_string_in_combined_short_options() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))

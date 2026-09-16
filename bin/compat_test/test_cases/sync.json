@@ -222,6 +222,25 @@
     },
     {
       "command": "sync",
+      "description": "POSIXLY_CORRECT=1 时首个文件后的 -d 按文件名处理，先同步已有文件再报告 -d 不存在。",
+      "args": ["valid", "-d"],
+      "setup_commands": [
+        "export POSIXLY_CORRECT=1",
+        "printf data > valid"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: error opening '-d': No such file or directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f valid"
+      ]
+    },
+    {
+      "command": "sync",
       "description": "同步目录",
       "args": ["test_dir"],
       "setup_commands": [

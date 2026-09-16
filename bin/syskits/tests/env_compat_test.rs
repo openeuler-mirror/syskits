@@ -392,3 +392,26 @@ fn env_list_signal_handling_reports_explicit_block_for_command() {
     assert_eq!(output.stdout, b"");
     assert_eq!(output.stderr, b"PIPE       (13): BLOCK\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn env_list_signal_handling_reports_blocked_realtime_signal() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--block-signal=RTMIN",
+            "--list-signal-handling",
+            "/usr/bin/true",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env listing a blocked realtime signal");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        format!("{:<10} ({:2}): BLOCK\n", "RTMIN", libc::SIGRTMIN()).as_bytes()
+    );
+}

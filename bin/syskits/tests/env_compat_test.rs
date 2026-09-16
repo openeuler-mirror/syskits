@@ -40,6 +40,27 @@ fn env_debug_reports_clean_environment_and_setenv_steps() {
 }
 
 #[test]
+fn env_debug_reports_gnu_execution_diagnostics() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "--debug", "-i", "A=1", "/usr/bin/printf", "ok"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --debug -i A=1 /usr/bin/printf ok");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"ok");
+    assert_eq!(
+        output.stderr,
+        b"cleaning environ\nsetenv:   A=1\nexecuting: /usr/bin/printf\n   arg[0]= '/usr/bin/printf'\n   arg[1]= 'ok'\n"
+    );
+}
+
+#[test]
 fn env_split_string_requires_argument() {
     for args in [["env", "-S"], ["env", "--split-string"]] {
         let output = Command::new(env!("CARGO_BIN_EXE_syskits"))

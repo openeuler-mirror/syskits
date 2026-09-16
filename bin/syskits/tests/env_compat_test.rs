@@ -141,6 +141,26 @@ fn env_debug_reports_split_string_expansion() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn env_list_signal_handling_uses_gnu_poll_signal_name() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--block-signal=IO",
+            "--list-signal-handling",
+            "/usr/bin/true",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --list-signal-handling for IO");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"POLL       (29): BLOCK\n");
+}
+
 #[cfg(unix)]
 #[test]
 fn env_debug_reports_signal_handling_before_execution() {

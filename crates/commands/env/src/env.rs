@@ -799,6 +799,11 @@ fn known_env_signals() -> Vec<EnvSignal> {
 
 #[cfg(unix)]
 fn signal_name(signal: EnvSignal) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    if signal == libc::SIGIO {
+        return Some("POLL".to_owned());
+    }
+
     if let Ok(signal) = Signal::try_from(signal) {
         return Some(
             signal
@@ -1471,6 +1476,16 @@ mod tests {
         assert_eq!(
             signal_mask_debug_message(libc::SIGRTMIN(), "BLOCK"),
             format!("signal RTMIN ({}) mask set to BLOCK", libc::SIGRTMIN())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_signal_name_uses_poll_for_linux_signal_29() {
+        assert_eq!(signal_name(libc::SIGIO), Some("POLL".to_owned()));
+        assert_eq!(
+            signal_disposition_debug_message(libc::SIGIO, "IGNORE"),
+            "Reset signal POLL (29) to IGNORE"
         );
     }
 

@@ -1475,6 +1475,38 @@
       "cleanup_commands": [
         "rm -f -- chown-dereference-requires-traversal"
       ]
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；--from匹配常规文件时，GNU安全验证inode后仍修改指定所有者",
+      "args": [
+        "--from=0",
+        "65534",
+        "chown-filtered-regular"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-filtered-regular"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%u' chown-filtered-regular",
+            "expected_exit": 0,
+            "expected_stdout": "65534\n",
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-filtered-regular"
+      ],
+      "requires_root": true
     }
   ]
 }

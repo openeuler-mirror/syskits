@@ -688,7 +688,6 @@ fn parse_signal(sig_str: &str) -> CTResult<Signal> {
 fn parse_signal_list(val: &str) -> CTResult<Vec<Signal>> {
     let mut sigs = Vec::new();
     for p in val.split(',') {
-        let p = p.trim();
         if !p.is_empty() {
             sigs.push(parse_signal(p)?);
         }
@@ -1237,6 +1236,15 @@ mod tests {
     fn test_parse_signal_accepts_poll_alias() {
         assert_eq!(parse_signal("POLL").unwrap(), Signal::SIGIO);
         assert_eq!(parse_signal("SIGPOLL").unwrap(), Signal::SIGIO);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_parse_signal_list_rejects_whitespace_in_operand() {
+        let error = parse_signal_list("HUP, INT").unwrap_err();
+
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), "invalid signal ' INT'");
     }
 
     #[test]

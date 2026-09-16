@@ -76,20 +76,20 @@ fn sync_all_paths<F>(files: &[String], mut sync_path: F) -> CTResult<()>
 where
     F: FnMut(&str) -> CTResult<()>,
 {
-    let mut first_error = None;
+    let mut failed = false;
 
     for path in files {
         if let Err(error) = sync_path(path) {
-            if first_error.is_none() {
-                first_error = Some(error);
-            }
+            ctcore::ct_show!(error);
+            failed = true;
         }
     }
 
-    match first_error {
-        Some(error) => Err(error),
-        None => Ok(()),
+    if failed {
+        ctcore::ct_error::set_ct_exit_code(1);
     }
+
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -126,6 +126,10 @@ pub fn sync_file_systems(files: &[String]) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    #[cfg(target_os = "linux")]
+    static EXIT_CODE_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -150,6 +154,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn test_sync_missing_file() {
+        let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
+        ctcore::ct_error::set_ct_exit_code(0);
         let temp_dir = tempfile::tempdir().unwrap();
         let missing = temp_dir
             .path()
@@ -157,25 +163,27 @@ mod tests {
             .to_string_lossy()
             .into_owned();
 
-        assert!(sync_files(&[missing]).is_err());
+        assert!(sync_files(&[missing]).is_ok());
+        assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
+        ctcore::ct_error::set_ct_exit_code(0);
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn test_sync_all_paths_continues_after_error() {
-        let files = vec!["missing".to_string(), "good".to_string()];
+    fn test_sync_all_paths_reports_each_error_without_aborting() {
+        let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
+        ctcore::ct_error::set_ct_exit_code(0);
+        let files = vec!["missing-one".to_string(), "missing-two".to_string()];
         let mut calls = Vec::new();
 
         let result = sync_all_paths(&files, |path| {
             calls.push(path.to_string());
-            if path == "missing" {
-                Err(CtSimpleError::new(1, "missing"))
-            } else {
-                Ok(())
-            }
+            Err(CtSimpleError::new(1, format!("{path} failed")))
         });
 
-        assert!(result.is_err());
-        assert_eq!(calls, ["missing", "good"]);
+        assert!(result.is_ok());
+        assert_eq!(calls, ["missing-one", "missing-two"]);
+        assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
+        ctcore::ct_error::set_ct_exit_code(0);
     }
 }

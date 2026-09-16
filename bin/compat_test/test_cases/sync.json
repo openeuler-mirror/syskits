@@ -209,6 +209,19 @@
     },
     {
       "command": "sync",
+      "description": "多个文件同步失败时，按输入顺序输出每个文件的打开错误并以状态 1 退出。",
+      "args": ["missing_one", "missing_two"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "sync: error opening 'missing_one': No such file or directory\nsync: error opening 'missing_two': No such file or directory\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "sync",
       "description": "同步目录",
       "args": ["test_dir"],
       "setup_commands": [

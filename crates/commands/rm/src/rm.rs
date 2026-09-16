@@ -17,7 +17,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError};
+use ctcore::ct_error::{CTResult, CTsageError, strip_errno};
 use ctcore::{ct_prompt_yes, ct_show_error};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
@@ -429,13 +429,14 @@ pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
                     remove_file(file, file, options)
                 }
             }
-            Err(_e) => {
-                if options.force {
+            Err(error) => {
+                if options.force && is_ignorable_missing_error(&error) {
                     false
                 } else {
                     ct_show_error!(
-                        "cannot remove {}: No such file or directory",
-                        filename.quote()
+                        "cannot remove {}: {}",
+                        filename.quote(),
+                        strip_errno(&error)
                     );
                     true
                 }
@@ -445,6 +446,19 @@ pub fn remove(files: &[&OsStr], options: &RMOptions) -> bool {
     }
 
     had_err
+}
+
+#[cfg(unix)]
+fn is_ignorable_missing_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(libc::EILSEQ | libc::EINVAL | libc::ENOENT | libc::ENOTDIR)
+    )
+}
+
+#[cfg(not(unix))]
+fn is_ignorable_missing_error(error: &std::io::Error) -> bool {
+    error.kind() == ErrorKind::NotFound
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1097,6 +1111,19 @@ mod tests {
 
         assert_eq!(result.unwrap_err().code(), 1);
         assert!(target.exists());
+    }
+
+    #[test]
+    fn test_force_does_not_ignore_non_missing_metadata_errors() {
+        for errno in [libc::EACCES, libc::ENAMETOOLONG] {
+            let error = std::io::Error::from_raw_os_error(errno);
+            assert!(!is_ignorable_missing_error(&error));
+        }
+
+        for errno in [libc::EILSEQ, libc::EINVAL, libc::ENOENT, libc::ENOTDIR] {
+            let error = std::io::Error::from_raw_os_error(errno);
+            assert!(is_ignorable_missing_error(&error));
+        }
     }
 
     #[test]

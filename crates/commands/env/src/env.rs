@@ -664,7 +664,7 @@ impl EnvAppData {
 
         env_load_config_file(&mut options)?;
 
-        env_apply_unset_env_vars(&options)?;
+        env_apply_unset_env_vars(&options, is_debug_printing)?;
 
         env_apply_specified_env_vars(&options, is_debug_printing)?;
 
@@ -1206,12 +1206,22 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
     Ok(opts)
 }
 
-fn env_apply_unset_env_vars(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTError>> {
+fn env_unset_debug_message(name: &OsStr) -> String {
+    format!("unset:    {}", name.to_string_lossy())
+}
+
+fn env_apply_unset_env_vars(
+    options: &EnvOptions<'_>,
+    is_debug_printing: bool,
+) -> Result<(), Box<dyn CTError>> {
     if options.ignore_env {
         return Ok(());
     }
 
     for opt_name in &options.unsets {
+        if is_debug_printing {
+            eprintln!("{}", env_unset_debug_message(opt_name));
+        }
         let native_name = NativeStr::new(opt_name);
         if opt_name.is_empty()
             || native_name.contains(&'\0').unwrap()
@@ -1712,7 +1722,15 @@ mod tests {
             list_signal_handling: false,
         };
 
-        assert!(env_apply_unset_env_vars(&options).is_ok());
+        assert!(env_apply_unset_env_vars(&options, false).is_ok());
+    }
+
+    #[test]
+    fn test_unset_debug_message_uses_gnu_layout() {
+        assert_eq!(
+            env_unset_debug_message(OsStr::new("TEST_VAR")),
+            "unset:    TEST_VAR"
+        );
     }
 
     #[test]

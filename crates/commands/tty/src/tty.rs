@@ -43,6 +43,9 @@ pub struct TtySemantic {
 pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    if ctcore::ct_sigpipe_was_default() {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    }
     let matches = match ct_app().try_get_matches_from(prepare_tty_args(args)?) {
         Ok(m) => m,
         Err(e) => {

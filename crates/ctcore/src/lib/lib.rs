@@ -208,6 +208,15 @@ unsafe extern "C" fn ct_probe_standard_fds_before_runtime() {
     STDIN_CLOSED_AT_START.store(stdin_closed, Ordering::Relaxed);
     STDOUT_CLOSED_AT_START.store(stdout_closed, Ordering::Relaxed);
     STDERR_CLOSED_AT_START.store(stderr_closed, Ordering::Relaxed);
+
+    // Preserve the caller's SIGPIPE default/ignore distinction before Rust changes it.
+    let previous = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
+    if previous != libc::SIG_ERR {
+        SIGPIPE_WAS_DEFAULT_AT_START.store(previous == libc::SIG_DFL, Ordering::Relaxed);
+        unsafe {
+            libc::signal(libc::SIGPIPE, previous);
+        }
+    }
 }
 
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
@@ -329,6 +338,16 @@ pub fn ct_stderr_was_closed() -> bool {
     STDERR_WAS_CLOSED.load(Ordering::Relaxed)
 }
 
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+pub fn ct_sigpipe_was_default() -> bool {
+    SIGPIPE_WAS_DEFAULT_AT_START.load(Ordering::Relaxed)
+}
+
+#[cfg(not(all(unix, feature = "libc", target_os = "linux")))]
+pub fn ct_sigpipe_was_default() -> bool {
+    false
+}
+
 /// 为 clap 生成使用说明字符串。
 ///
 /// 本函数执行两件事。它缩进除首行之外的所有行以保持对齐，因为 clap 会在首行添加 "Usage: "
@@ -371,6 +390,8 @@ static STDIN_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 static STDOUT_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
 #[cfg(all(unix, feature = "libc", target_os = "linux"))]
 static STDERR_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
+#[cfg(all(unix, feature = "libc", target_os = "linux"))]
+static SIGPIPE_WAS_DEFAULT_AT_START: AtomicBool = AtomicBool::new(false);
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
     let base_index = if ct_get_utility_is_second_arg() { 1 } else { 0 };

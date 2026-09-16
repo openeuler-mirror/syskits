@@ -967,11 +967,13 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
     };
 
     let mut begin_prog_opts = false;
+    let mut dash_operand_seen = false;
     if let Some(mut iter) = args_match.get_many::<OsString>("vars") {
         while !begin_prog_opts {
             if let Some(opt) = iter.next() {
-                if opt == "-" {
+                if opt == "-" && !dash_operand_seen && opts.sets.is_empty() {
                     opts.ignore_env = true;
+                    dash_operand_seen = true;
                 } else {
                     begin_prog_opts = env_parse_name_value_opt(&mut opts, opt)?;
                 }
@@ -1308,6 +1310,24 @@ mod tests {
         assert_eq!(options.line_ending, CtLineEnding::Nul);
         assert_eq!(options.running_directory, Some(OsStr::new("/tmp")));
         assert!(options.list_signal_handling);
+    }
+
+    #[test]
+    fn test_only_first_dash_operand_clears_environment() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-", "A=B", "-"])
+            .unwrap();
+        let options = env_make_options(&matches).unwrap();
+
+        assert!(options.ignore_env);
+        assert_eq!(
+            options.sets,
+            vec![(
+                Cow::Borrowed(OsStr::new("A")),
+                Cow::Borrowed(OsStr::new("B"))
+            )]
+        );
+        assert_eq!(options.program, vec![OsStr::new("-")]);
     }
 
     #[cfg(unix)]

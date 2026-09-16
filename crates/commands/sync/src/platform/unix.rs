@@ -21,9 +21,7 @@ use std::fs::File;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
 
 use ctcore::ct_display::Quotable;
-#[cfg(all(test, target_os = "linux"))]
-use ctcore::ct_error::CtSimpleError;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 
 #[cfg(target_os = "linux")]
 pub unsafe fn do_sync() -> isize {
@@ -42,6 +40,25 @@ enum SyncOperation {
 }
 
 #[cfg(target_os = "linux")]
+fn sync_errno_text(error: &std::io::Error) -> String {
+    if error.raw_os_error().is_some() {
+        ctcore::ct_error::strip_errno(error)
+    } else {
+        error.to_string()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn sync_io_error(error: std::io::Error, context: String) -> Box<dyn CTError> {
+    CtSimpleError::new(1, format!("{context}: {}", sync_errno_text(&error)))
+}
+
+#[cfg(target_os = "linux")]
+fn sync_nix_error(error: nix::errno::Errno, context: String) -> Box<dyn CTError> {
+    sync_io_error(std::io::Error::from_raw_os_error(error as i32), context)
+}
+
+#[cfg(target_os = "linux")]
 fn open_sync_file(path: &OsStr) -> CTResult<File> {
     let read_flags = OFlag::O_RDONLY | OFlag::O_NONBLOCK;
     let write_flags = OFlag::O_WRONLY | OFlag::O_NONBLOCK;
@@ -50,8 +67,10 @@ fn open_sync_file(path: &OsStr) -> CTResult<File> {
         Err(read_error) => match open(path, write_flags, Mode::empty()) {
             Ok(fd) => fd,
             Err(_) => {
-                return Err(read_error)
-                    .map_err_context(|| format!("error opening {}", path.quote()));
+                return Err(sync_nix_error(
+                    read_error,
+                    format!("error opening {}", path.quote()),
+                ));
             }
         },
     };
@@ -62,11 +81,20 @@ fn open_sync_file(path: &OsStr) -> CTResult<File> {
 fn reset_nonblocking_mode(file: &File, path: &OsStr) -> CTResult<()> {
     let flags = fcntl(file.as_raw_fd(), FcntlArg::F_GETFL)
         .map(OFlag::from_bits_truncate)
-        .map_err_context(|| format!("couldn't reset non-blocking mode {}", path.quote()))?;
+        .map_err(|error| {
+            sync_nix_error(
+                error,
+                format!("couldn't reset non-blocking mode {}", path.quote()),
+            )
+        })?;
     let mut blocking_flags = flags;
     blocking_flags.remove(OFlag::O_NONBLOCK);
-    fcntl(file.as_raw_fd(), FcntlArg::F_SETFL(blocking_flags))
-        .map_err_context(|| format!("couldn't reset non-blocking mode {}", path.quote()))?;
+    fcntl(file.as_raw_fd(), FcntlArg::F_SETFL(blocking_flags)).map_err(|error| {
+        sync_nix_error(
+            error,
+            format!("couldn't reset non-blocking mode {}", path.quote()),
+        )
+    })?;
 
     Ok(())
 }
@@ -77,8 +105,10 @@ fn close_sync_file(file: File, path: &OsStr) -> CTResult<()> {
     if unsafe { libc::close(fd) } == 0 {
         Ok(())
     } else {
-        Err(std::io::Error::last_os_error())
-            .map_err_context(|| format!("failed to close {}", path.quote()))
+        Err(sync_io_error(
+            std::io::Error::last_os_error(),
+            format!("failed to close {}", path.quote()),
+        ))
     }
 }
 
@@ -130,7 +160,10 @@ fn sync_path(path: &OsStr, operation: SyncOperation) -> Vec<Box<dyn CTError>> {
                 }
             };
             if let Err(error) = result {
-                errors.push(error.map_err_context(|| format!("error syncing {}", path.quote())));
+                errors.push(sync_io_error(
+                    error,
+                    format!("error syncing {}", path.quote()),
+                ));
             }
         }
         Err(error) => errors.push(error),
@@ -201,6 +234,14 @@ mod tests {
             error.to_string(),
             format!("failed to close {}: Bad file descriptor", file_path.quote())
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sync_errno_text_preserves_linux_einval_message() {
+        let error = std::io::Error::from_raw_os_error(libc::EINVAL);
+
+        assert_eq!(sync_errno_text(&error), "Invalid argument");
     }
 
     #[cfg(target_os = "linux")]
